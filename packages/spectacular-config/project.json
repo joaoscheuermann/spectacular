@@ -1,0 +1,37 @@
+{
+  "name": "spectacular-config",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "packages/spectacular-config/src",
+  "targets": {
+    "build": {
+      "executor": "@monodon/rust:check",
+      "outputs": ["{options.target-dir}"],
+      "options": {
+        "target-dir": "dist/target/spectacular-config"
+      }
+    },
+    "test": {
+      "cache": true,
+      "executor": "@monodon/rust:test",
+      "outputs": ["{options.target-dir}"],
+      "options": {
+        "target-dir": "dist/target/spectacular-config"
+      },
+      "configurations": {
+        "production": {
+          "release": true
+        }
+      }
+    },
+    "lint": {
+      "cache": true,
+      "executor": "@monodon/rust:lint",
+      "outputs": ["{options.target-dir}"],
+      "options": {
+        "target-dir": "dist/target/spectacular-config"
+      }
+    }
+  },
+  "tags": []
+}
