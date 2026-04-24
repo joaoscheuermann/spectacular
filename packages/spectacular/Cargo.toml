@@ -1,0 +1,11 @@
+[package]
+name = "spectacular"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.5.49", features = ["derive"] }
+spectacular-config = { path = "../spectacular-config" }
+spectacular-core = { path = "../spectacular-core" }
+spectacular-llms = { path = "../spectacular-llms" }
+spectacular-plan = { path = "../spectacular-plan" }
