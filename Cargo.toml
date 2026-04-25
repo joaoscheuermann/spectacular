@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "packages/spectacular",
+    "packages/spectacular-agent",
     "packages/spectacular-core",
     "packages/spectacular-llms",
     "packages/spectacular-config",
