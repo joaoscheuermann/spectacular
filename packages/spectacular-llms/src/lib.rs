@@ -1,6 +1,10 @@
 use serde::Deserialize;
 use std::error::Error;
 use std::fmt::{self, Display};
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 pub const OPENROUTER_PROVIDER_ID: &str = "openrouter";
 pub const OPENAI_PROVIDER_ID: &str = "openai";
@@ -78,20 +82,23 @@ pub fn enabled_provider_name() -> &'static str {
         .unwrap_or("None")
 }
 
-/// Provider capability used by setup flows to validate credentials.
-pub trait LlmProvider {
+/// Provider capability used by setup flows and agent runs.
+pub trait LlmProvider: Send + Sync {
     fn metadata(&self) -> ProviderMetadata;
 
     fn validate(&self, mode: ValidationMode, value: &str) -> Result<(), ProviderError>;
 
     fn models(&self, api_key: &str) -> Result<Vec<Model>, ProviderError>;
 
-    fn stream(
-        &self,
-        api_key: &str,
-        history: &[Message],
-        prompt: &Message,
-    ) -> Result<ProviderStream, ProviderError>;
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities::default()
+    }
+
+    fn stream_completion<'a>(
+        &'a self,
+        request: ProviderRequest,
+        cancellation: Cancellation,
+    ) -> ProviderCall<'a>;
 }
 
 /// Model metadata exposed by a provider.
@@ -118,47 +125,310 @@ impl Model {
     }
 }
 
-/// Chat message used by the future streaming provider seam.
+/// Chat message sent to provider completion calls.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Message {
-    pub role: MessageRole,
+pub struct ProviderMessage {
+    pub role: ProviderMessageRole,
     pub content: String,
+}
+
+impl ProviderMessage {
+    pub fn system(content: impl Into<String>) -> Self {
+        Self {
+            role: ProviderMessageRole::System,
+            content: content.into(),
+        }
+    }
+
+    pub fn user(content: impl Into<String>) -> Self {
+        Self {
+            role: ProviderMessageRole::User,
+            content: content.into(),
+        }
+    }
+
+    pub fn assistant(content: impl Into<String>) -> Self {
+        Self {
+            role: ProviderMessageRole::Assistant,
+            content: content.into(),
+        }
+    }
+
+    pub fn tool(content: impl Into<String>) -> Self {
+        Self {
+            role: ProviderMessageRole::Tool,
+            content: content.into(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum MessageRole {
+pub enum ProviderMessageRole {
     System,
     User,
     Assistant,
+    Tool,
 }
 
-/// Incremental content returned by future provider streams.
+pub use ProviderMessage as Message;
+pub use ProviderMessageRole as MessageRole;
+
+/// Incremental assistant content returned by provider streams.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MessageDelta {
+    pub role: ProviderMessageRole,
     pub content: String,
 }
 
-pub type ProviderStream = Box<dyn Iterator<Item = Result<MessageDelta, ProviderError>> + Send>;
+impl MessageDelta {
+    pub fn assistant(content: impl Into<String>) -> Self {
+        Self {
+            role: ProviderMessageRole::Assistant,
+            content: content.into(),
+        }
+    }
+}
+
+/// Incremental reasoning content returned by providers that expose it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReasoningDelta {
+    pub content: String,
+    pub metadata: Option<ReasoningMetadata>,
+}
+
+/// Provider capabilities advertised before a call.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ProviderCapabilities {
+    pub streaming: bool,
+    pub tool_calls: bool,
+    pub structured_output: bool,
+    pub reasoning: bool,
+    pub cancellation: bool,
+    pub usage_metadata: bool,
+    pub reasoning_metadata: bool,
+    pub context_limits: ProviderContextLimits,
+}
+
+/// Provider-advertised context bounds checked before provider I/O.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ProviderContextLimits {
+    pub max_messages: Option<usize>,
+    pub max_chars: Option<usize>,
+}
+
+/// Per-call flags passed to provider implementations.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProviderCallFlags {
+    pub stream: bool,
+    pub allow_tools: bool,
+    pub include_reasoning: bool,
+}
+
+impl Default for ProviderCallFlags {
+    fn default() -> Self {
+        Self {
+            stream: true,
+            allow_tools: false,
+            include_reasoning: false,
+        }
+    }
+}
+
+/// Provider completion request consumed by async provider implementations.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProviderRequest {
+    pub model: Option<String>,
+    pub messages: Vec<ProviderMessage>,
+    pub capabilities: ProviderCapabilities,
+    pub flags: ProviderCallFlags,
+}
+
+impl ProviderRequest {
+    pub fn new(messages: Vec<ProviderMessage>) -> Self {
+        Self {
+            model: None,
+            messages,
+            capabilities: ProviderCapabilities::default(),
+            flags: ProviderCallFlags::default(),
+        }
+    }
+
+    pub fn with_model(mut self, model: impl Into<String>) -> Self {
+        self.model = Some(model.into());
+        self
+    }
+}
+
+/// Cooperative cancellation input for provider calls.
+#[derive(Clone, Debug, Default)]
+pub struct Cancellation {
+    cancelled: Arc<AtomicBool>,
+}
+
+impl Cancellation {
+    pub fn cancelled() -> Self {
+        let cancellation = Self::default();
+        cancellation.cancel();
+        cancellation
+    }
+
+    pub fn cancel(&self) {
+        self.cancelled.store(true, Ordering::SeqCst);
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::SeqCst)
+    }
+}
+
+impl PartialEq for Cancellation {
+    fn eq(&self, other: &Self) -> bool {
+        self.is_cancelled() == other.is_cancelled()
+    }
+}
+
+impl Eq for Cancellation {}
+
+/// Provider stream terminal reason.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FinishReason {
+    Stop,
+    Length,
+    ToolCalls,
+    Cancelled,
+    Error,
+}
+
+/// Token usage metadata returned when a provider exposes it.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct UsageMetadata {
+    pub input_tokens: Option<u64>,
+    pub output_tokens: Option<u64>,
+    pub total_tokens: Option<u64>,
+}
+
+/// Reasoning metadata returned when a provider exposes it.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ReasoningMetadata {
+    pub effort: Option<String>,
+    pub summary: Option<String>,
+}
+
+/// Tool call requested by a provider before a `ToolCalls` finish.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProviderToolCall {
+    pub id: String,
+    pub name: String,
+    pub arguments: String,
+}
+
+impl ProviderToolCall {
+    pub fn new(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        arguments: impl Into<String>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            name: name.into(),
+            arguments: arguments.into(),
+        }
+    }
+}
+
+/// Terminal provider event.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProviderFinished {
+    pub finish_reason: FinishReason,
+    pub tool_calls: Vec<ProviderToolCall>,
+    pub usage: Option<UsageMetadata>,
+    pub reasoning: Option<ReasoningMetadata>,
+}
+
+impl ProviderFinished {
+    pub fn stopped() -> Self {
+        Self {
+            finish_reason: FinishReason::Stop,
+            tool_calls: Vec::new(),
+            usage: None,
+            reasoning: None,
+        }
+    }
+
+    pub fn tool_calls(tool_calls: Vec<ProviderToolCall>) -> Self {
+        Self {
+            finish_reason: FinishReason::ToolCalls,
+            tool_calls,
+            usage: None,
+            reasoning: None,
+        }
+    }
+}
+
+/// Stream event emitted by async providers.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ProviderStreamEvent {
+    MessageDelta(MessageDelta),
+    ReasoningDelta(ReasoningDelta),
+    Finished(ProviderFinished),
+}
+
+pub type ProviderStream =
+    Box<dyn Iterator<Item = Result<ProviderStreamEvent, ProviderError>> + Send>;
+pub type ProviderCall<'a> =
+    Pin<Box<dyn Future<Output = Result<ProviderStream, ProviderError>> + Send + 'a>>;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ValidationMode {
     ApiKey,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ProviderError {
+    CancellationError,
     InvalidApiKey,
-    ModelFetchFailed { provider_name: String },
-    NoModelsReturned { provider_name: String },
-    ProviderUnavailable { provider_name: String },
-    StreamUnavailable { provider_name: String },
-    UnsupportedProvider { provider_id: String },
+    ModelFetchFailed {
+        provider_name: String,
+    },
+    NoModelsReturned {
+        provider_name: String,
+    },
+    ProviderUnavailable {
+        provider_name: String,
+    },
+    StreamUnavailable {
+        provider_name: String,
+    },
+    MalformedResponse {
+        provider_name: String,
+        reason: String,
+    },
+    ResponseParsingFailed {
+        provider_name: String,
+        reason: String,
+    },
+    NetworkError {
+        provider_name: String,
+        reason: String,
+    },
+    ContextLimitExceeded {
+        provider_name: String,
+        reason: String,
+    },
+    CapabilityMismatch {
+        provider_name: String,
+        capability: String,
+    },
+    UnsupportedProvider {
+        provider_id: String,
+    },
     UnsupportedValidationMode,
 }
 
 impl Display for ProviderError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            ProviderError::CancellationError => formatter.write_str("provider call was cancelled"),
             ProviderError::InvalidApiKey => formatter.write_str("invalid API key"),
             ProviderError::ModelFetchFailed { provider_name } => {
                 write!(formatter, "failed to fetch models from {provider_name}")
@@ -175,6 +445,41 @@ impl Display for ProviderError {
                     "{provider_name} streaming is not implemented yet"
                 )
             }
+            ProviderError::MalformedResponse {
+                provider_name,
+                reason,
+            } => write!(
+                formatter,
+                "{provider_name} returned a malformed response: {reason}"
+            ),
+            ProviderError::ResponseParsingFailed {
+                provider_name,
+                reason,
+            } => write!(
+                formatter,
+                "failed to parse {provider_name} response: {reason}"
+            ),
+            ProviderError::NetworkError {
+                provider_name,
+                reason,
+            } => write!(
+                formatter,
+                "{provider_name} network request failed: {reason}"
+            ),
+            ProviderError::ContextLimitExceeded {
+                provider_name,
+                reason,
+            } => write!(
+                formatter,
+                "{provider_name} context limit exceeded: {reason}"
+            ),
+            ProviderError::CapabilityMismatch {
+                provider_name,
+                capability,
+            } => write!(
+                formatter,
+                "{provider_name} does not support required capability `{capability}`"
+            ),
             ProviderError::UnsupportedProvider { provider_id } => {
                 write!(formatter, "provider `{provider_id}` is not supported")
             }
@@ -214,6 +519,42 @@ pub fn fetch_provider_models(
     }
 }
 
+/// Provider metadata and Agent-facing capabilities that can be inspected without provider I/O.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProviderCapabilityReport {
+    pub metadata: ProviderMetadata,
+    pub capabilities: ProviderCapabilities,
+}
+
+/// Returns the Agent-facing capability report for a supported provider without network access.
+pub fn provider_capability_report(
+    provider_id: &str,
+) -> Result<ProviderCapabilityReport, ProviderError> {
+    match provider_id {
+        OPENROUTER_PROVIDER_ID => {
+            let provider = OpenRouterProvider::default();
+            Ok(ProviderCapabilityReport {
+                metadata: provider.metadata(),
+                capabilities: provider.capabilities(),
+            })
+        }
+        _ => Err(ProviderError::UnsupportedProvider {
+            provider_id: provider_id.to_owned(),
+        }),
+    }
+}
+
+/// Returns the first enabled provider capability report without network access.
+pub fn enabled_provider_capability_report() -> Result<ProviderCapabilityReport, ProviderError> {
+    let Some(provider) = PROVIDERS.iter().find(|provider| provider.enabled) else {
+        return Err(ProviderError::ProviderUnavailable {
+            provider_name: "enabled provider".to_owned(),
+        });
+    };
+
+    provider_capability_report(provider.id)
+}
+
 #[derive(Default)]
 pub struct OpenRouterProvider {
     client: OpenRouterHttpClient,
@@ -236,14 +577,28 @@ impl LlmProvider for OpenRouterProvider {
         fetch_openrouter_models(api_key, |api_key| self.client.models_response(api_key))
     }
 
-    fn stream(
-        &self,
-        _api_key: &str,
-        _history: &[Message],
-        _prompt: &Message,
-    ) -> Result<ProviderStream, ProviderError> {
-        Err(ProviderError::StreamUnavailable {
-            provider_name: "OpenRouter".to_owned(),
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            streaming: false,
+            tool_calls: false,
+            structured_output: false,
+            reasoning: false,
+            cancellation: false,
+            usage_metadata: false,
+            reasoning_metadata: false,
+            context_limits: ProviderContextLimits::default(),
+        }
+    }
+
+    fn stream_completion<'a>(
+        &'a self,
+        _request: ProviderRequest,
+        _cancellation: Cancellation,
+    ) -> ProviderCall<'a> {
+        Box::pin(async {
+            Err(ProviderError::StreamUnavailable {
+                provider_name: "OpenRouter".to_owned(),
+            })
         })
     }
 }
@@ -257,8 +612,9 @@ impl OpenRouterHttpClient {
             .get(OPENROUTER_API_KEY_URL)
             .bearer_auth(api_key)
             .send()
-            .map_err(|_| ProviderError::ProviderUnavailable {
+            .map_err(|error| ProviderError::NetworkError {
                 provider_name: "OpenRouter".to_owned(),
+                reason: error.to_string(),
             })?;
 
         Ok(response.status().as_u16())
@@ -269,14 +625,16 @@ impl OpenRouterHttpClient {
             .get(OPENROUTER_MODELS_URL)
             .bearer_auth(api_key)
             .send()
-            .map_err(|_| ProviderError::ModelFetchFailed {
+            .map_err(|error| ProviderError::NetworkError {
                 provider_name: "OpenRouter".to_owned(),
+                reason: error.to_string(),
             })?;
         let status = response.status().as_u16();
         let body = response
             .text()
-            .map_err(|_| ProviderError::ModelFetchFailed {
+            .map_err(|error| ProviderError::NetworkError {
                 provider_name: "OpenRouter".to_owned(),
+                reason: error.to_string(),
             })?;
 
         Ok((status, body))
@@ -321,9 +679,15 @@ fn fetch_openrouter_models(
 }
 
 fn parse_openrouter_models(body: &str) -> Result<Vec<Model>, ProviderError> {
-    let response: OpenRouterModelsResponse =
-        serde_json::from_str(body).map_err(|_| ProviderError::ModelFetchFailed {
+    let value: serde_json::Value =
+        serde_json::from_str(body).map_err(|error| ProviderError::ResponseParsingFailed {
             provider_name: "OpenRouter".to_owned(),
+            reason: error.to_string(),
+        })?;
+    let response: OpenRouterModelsResponse =
+        serde_json::from_value(value).map_err(|error| ProviderError::MalformedResponse {
+            provider_name: "OpenRouter".to_owned(),
+            reason: error.to_string(),
         })?;
     let models = response
         .data
@@ -479,6 +843,24 @@ mod tests {
     }
 
     #[test]
+    fn openrouter_model_fetch_maps_invalid_json_to_parse_error() {
+        let error = fetch_openrouter_models("sk-or-v1-valid", |_| Ok((200, "not json".to_owned())))
+            .unwrap_err();
+
+        assert!(matches!(error, ProviderError::ResponseParsingFailed { .. }));
+    }
+
+    #[test]
+    fn openrouter_model_fetch_maps_bad_shape_to_malformed_response() {
+        let error = fetch_openrouter_models("sk-or-v1-valid", |_| {
+            Ok((200, r#"{"data":[{"id":5,"name":"bad"}]}"#.to_owned()))
+        })
+        .unwrap_err();
+
+        assert!(matches!(error, ProviderError::MalformedResponse { .. }));
+    }
+
+    #[test]
     fn provider_model_fetch_rejects_unsupported_provider() {
         let error = fetch_provider_models("openai", "sk-test").unwrap_err();
 
@@ -486,17 +868,68 @@ mod tests {
     }
 
     #[test]
-    fn openrouter_exposes_stream_seam() {
+    fn openrouter_exposes_async_stream_seam() {
         let provider = OpenRouterProvider::default();
-        let prompt = Message {
-            role: MessageRole::User,
-            content: "hello".to_owned(),
-        };
-        let error = match provider.stream("sk-or-v1-test", &[], &prompt) {
+        let request = ProviderRequest::new(vec![ProviderMessage::user("hello")]);
+        let error = match futures::executor::block_on(
+            provider.stream_completion(request, Cancellation::default()),
+        ) {
             Ok(_) => panic!("stream should not be implemented yet"),
             Err(error) => error,
         };
 
         assert!(matches!(error, ProviderError::StreamUnavailable { .. }));
+    }
+
+    #[test]
+    fn provider_request_defaults_to_no_tool_streaming_call() {
+        let request = ProviderRequest::new(vec![ProviderMessage::user("hello")]);
+
+        assert_eq!(request.messages[0].role, ProviderMessageRole::User);
+        assert!(request.flags.stream);
+        assert!(!request.flags.allow_tools);
+        assert!(!request.flags.include_reasoning);
+    }
+
+    #[test]
+    fn provider_messages_support_tool_role() {
+        let message = ProviderMessage::tool("tool output");
+
+        assert_eq!(message.role, ProviderMessageRole::Tool);
+        assert_eq!(message.content, "tool output");
+    }
+
+    #[test]
+    fn provider_capabilities_default_to_no_optional_features_or_limits() {
+        let capabilities = ProviderCapabilities::default();
+
+        assert!(!capabilities.streaming);
+        assert!(!capabilities.tool_calls);
+        assert!(!capabilities.structured_output);
+        assert!(!capabilities.usage_metadata);
+        assert!(!capabilities.reasoning_metadata);
+        assert_eq!(
+            capabilities.context_limits,
+            ProviderContextLimits::default()
+        );
+    }
+
+    #[test]
+    fn enabled_provider_capability_report_is_no_network_openrouter_metadata() {
+        let report = enabled_provider_capability_report().unwrap();
+
+        assert_eq!(report.metadata.id(), OPENROUTER_PROVIDER_ID);
+        assert_eq!(report.metadata.display_name(), "OpenRouter");
+        assert_eq!(
+            report.capabilities,
+            OpenRouterProvider::default().capabilities()
+        );
+    }
+
+    #[test]
+    fn provider_capability_report_rejects_unsupported_provider() {
+        let error = provider_capability_report(OPENAI_PROVIDER_ID).unwrap_err();
+
+        assert!(matches!(error, ProviderError::UnsupportedProvider { .. }));
     }
 }
