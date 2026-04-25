@@ -5,7 +5,8 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4.5.49", features = ["derive"] }
+crossterm = "0.28.1"
+ratatui = "0.29.0"
 spectacular-config = { path = "../spectacular-config" }
-spectacular-core = { path = "../spectacular-core" }
 spectacular-llms = { path = "../spectacular-llms" }
 spectacular-plan = { path = "../spectacular-plan" }

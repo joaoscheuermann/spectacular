@@ -1,6 +1,6 @@
-use crate::keys::is_cancel_key;
-use crate::terminal::TerminalSession;
-use crate::widgets::input::Input;
+use crate::core::keys::is_cancel_key;
+use crate::core::terminal::TerminalSession;
+use crate::core::widgets::input::Input;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
     layout::{Constraint, Direction, Layout},

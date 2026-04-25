@@ -41,11 +41,6 @@ impl<'a> Input<'a> {
         self
     }
 
-    pub fn cursor_style(mut self, style: Style) -> Self {
-        self.cursor_style = style;
-        self
-    }
-
     pub fn cursor_visible(mut self, visible: bool) -> Self {
         self.cursor_visible = visible;
         self
@@ -61,10 +56,6 @@ impl<'a> Input<'a> {
         self
     }
 
-    pub fn style(mut self, style: Style) -> Self {
-        self.style = style;
-        self
-    }
 }
 
 impl Widget for Input<'_> {
