@@ -1,6 +1,6 @@
-use crate::keys::is_cancel_key;
-use crate::navigation::{next_index, previous_index};
-use crate::terminal::TerminalSession;
+use crate::core::keys::is_cancel_key;
+use crate::core::navigation::{next_index, previous_index};
+use crate::core::terminal::TerminalSession;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
     layout::{Constraint, Direction, Layout},
@@ -46,10 +46,6 @@ impl ProviderOption {
 
     pub fn id(&self) -> &str {
         &self.id
-    }
-
-    pub fn display_name(&self) -> &str {
-        &self.display_name
     }
 
     pub fn is_enabled(&self) -> bool {

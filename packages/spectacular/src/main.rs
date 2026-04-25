@@ -1,9 +1,11 @@
-use clap::{Args, Parser, Subcommand};
-use spectacular_config::{ConfigError, SpectacularConfig, TaskModels};
-use spectacular_core::{
+mod core;
+
+use crate::core::{
     ApiKeyInputError, ModelAssignmentError, ModelOption, ProviderOption, ProviderSelectionError,
     TaskModelSelection,
 };
+use clap::{Args, Parser, Subcommand};
+use spectacular_config::{ConfigError, SpectacularConfig, TaskModels};
 use spectacular_llms::{Model, ProviderError, ProviderMetadata, ValidationMode};
 use spectacular_plan::PlanError;
 use std::process::ExitCode;
@@ -90,7 +92,7 @@ fn handle_api_key_config() -> Result<String, AppError> {
         spectacular_config::read_config_or_default,
         spectacular_config::write_config,
         |provider, current_api_key| {
-            spectacular_core::run_api_key_screen(
+            crate::core::run_api_key_screen(
                 provider.display_name(),
                 current_api_key,
                 |api_key| {
@@ -152,7 +154,7 @@ fn handle_provider_config() -> Result<String, AppError> {
     handle_provider_config_with_selection(
         spectacular_config::read_config_or_default,
         spectacular_config::write_config,
-        spectacular_core::run_provider_selection_screen,
+        crate::core::run_provider_selection_screen,
     )
 }
 
@@ -169,7 +171,7 @@ fn handle_models_config() -> Result<String, AppError> {
             spectacular_llms::fetch_provider_models(provider.id(), api_key)
         },
         |provider, models, current_selection| {
-            spectacular_core::run_model_assignment_screen(
+            crate::core::run_model_assignment_screen(
                 provider.display_name(),
                 models,
                 current_selection,
@@ -429,6 +431,7 @@ fn user_facing_error(error: &AppError) -> String {
 
 fn format_provider_error(error: &ProviderError) -> String {
     match error {
+        ProviderError::CancellationError => "Provider call was cancelled.".to_owned(),
         ProviderError::InvalidApiKey => "Invalid API key.".to_owned(),
         ProviderError::ModelFetchFailed { provider_name } => {
             format!("Failed to fetch models from {provider_name}.")
@@ -442,6 +445,26 @@ fn format_provider_error(error: &ProviderError) -> String {
         ProviderError::StreamUnavailable { provider_name } => {
             format!("{provider_name} streaming is not available yet.")
         }
+        ProviderError::MalformedResponse {
+            provider_name,
+            reason,
+        } => format!("{provider_name} returned a malformed response: {reason}."),
+        ProviderError::ResponseParsingFailed {
+            provider_name,
+            reason,
+        } => format!("Failed to parse {provider_name} response: {reason}."),
+        ProviderError::NetworkError {
+            provider_name,
+            reason,
+        } => format!("{provider_name} network request failed: {reason}."),
+        ProviderError::ContextLimitExceeded {
+            provider_name,
+            reason,
+        } => format!("{provider_name} context limit exceeded: {reason}."),
+        ProviderError::CapabilityMismatch {
+            provider_name,
+            capability,
+        } => format!("{provider_name} does not support required capability `{capability}`."),
         ProviderError::UnsupportedProvider { provider_id } => {
             format!("Provider `{provider_id}` is not available.")
         }

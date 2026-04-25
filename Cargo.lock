@@ -1538,8 +1538,9 @@ name = "spectacular"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "crossterm",
+ "ratatui",
  "spectacular-config",
- "spectacular-core",
  "spectacular-llms",
  "spectacular-plan",
 ]
@@ -1561,14 +1562,6 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "spectacular-core"
-version = "0.1.0"
-dependencies = [
- "crossterm",
- "ratatui",
 ]
 
 [[package]]
