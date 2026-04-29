@@ -1,0 +1,4 @@
+interface:
+  display_name: "Project Index"
+  short_description: "Use the Spectacular repository index."
+  default_prompt: "Use the project index to understand the Spectacular repository before answering."

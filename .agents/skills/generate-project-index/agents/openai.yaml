@@ -1,0 +1,4 @@
+interface:
+  display_name: "Generate Project Index"
+  short_description: "Regenerate the Spectacular repository index skill."
+  default_prompt: "Regenerate the project index skill for this repository."
