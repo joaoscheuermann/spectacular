@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 use std::env;
 use std::error::Error;
@@ -7,26 +7,125 @@ use std::fmt::{self, Display};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 const APP_CONFIG_DIR_NAME: &str = "spectacular";
 const CONFIG_FILE_NAME: &str = "config.json";
+
+/// Reasoning effort persisted for a task model assignment.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ReasoningLevel {
+    #[default]
+    None,
+    Low,
+    Medium,
+    High,
+}
+
+impl ReasoningLevel {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ReasoningLevel::None => "none",
+            ReasoningLevel::Low => "low",
+            ReasoningLevel::Medium => "medium",
+            ReasoningLevel::High => "high",
+        }
+    }
+}
+
+impl FromStr for ReasoningLevel {
+    type Err = ConfigParseError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "none" => Ok(ReasoningLevel::None),
+            "low" => Ok(ReasoningLevel::Low),
+            "medium" => Ok(ReasoningLevel::Medium),
+            "high" => Ok(ReasoningLevel::High),
+            _ => Err(ConfigParseError::InvalidReasoning {
+                value: value.to_owned(),
+            }),
+        }
+    }
+}
+
+impl Display for ReasoningLevel {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
 
 /// Task model identifiers required before commands can use LLM-backed behavior.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(default)]
 pub struct TaskModels {
-    pub planning: Option<String>,
-    pub labeling: Option<String>,
-    pub coding: Option<String>,
+    pub planning: Option<TaskModelConfig>,
+    pub labeling: Option<TaskModelConfig>,
+    pub coding: Option<TaskModelConfig>,
+}
+
+/// Persisted model and reasoning assignment for a task slot.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default)]
+pub struct TaskModelConfig {
+    pub model: String,
+    pub reasoning: ReasoningLevel,
+}
+
+impl TaskModelConfig {
+    pub fn new(model: impl Into<String>, reasoning: ReasoningLevel) -> Self {
+        Self {
+            model: model.into(),
+            reasoning,
+        }
+    }
+}
+
+impl Default for TaskModelConfig {
+    fn default() -> Self {
+        Self {
+            model: String::new(),
+            reasoning: ReasoningLevel::None,
+        }
+    }
+}
+
+/// Persisted configuration for one provider.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default)]
+pub struct ProviderConfig {
+    pub key: Option<String>,
+    pub tasks: TaskModels,
+}
+
+/// Persisted provider configuration namespace.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default)]
+pub struct ProvidersConfig {
+    pub selected: Option<String>,
+    pub available: BTreeMap<String, ProviderConfig>,
 }
 
 /// Persisted Spectacular CLI configuration.
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(default)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize)]
 pub struct SpectacularConfig {
-    pub selected_provider: Option<String>,
-    pub provider_api_keys: BTreeMap<String, String>,
-    pub task_models: TaskModels,
+    pub providers: ProvidersConfig,
+}
+
+impl<'de> Deserialize<'de> for SpectacularConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let wire = SpectacularConfigWire::deserialize(deserializer)?;
+
+        if let Some(providers) = wire.providers {
+            return Ok(Self { providers });
+        }
+
+        Ok(Self::from_legacy(wire))
+    }
 }
 
 /// Returns the platform-specific Spectacular configuration directory.
@@ -59,6 +158,14 @@ pub fn read_config_or_default() -> Result<SpectacularConfig, ConfigError> {
 pub fn write_config(config: &SpectacularConfig) -> Result<(), ConfigError> {
     let path = config_path()?;
     write_config_to_path(&path, config)
+}
+
+/// Formats config as pretty JSON using the persisted schema.
+pub fn to_pretty_json(config: &SpectacularConfig) -> Result<String, ConfigError> {
+    serde_json::to_string_pretty(config).map_err(|source| ConfigError::SerializeFailed {
+        path: config_path().unwrap_or_else(|_| PathBuf::from(CONFIG_FILE_NAME)),
+        source,
+    })
 }
 
 /// Reads config from a caller-provided path. Useful for tests and future setup flows.
@@ -107,8 +214,17 @@ pub fn write_config_to_path(path: &Path, config: &SpectacularConfig) -> Result<(
 
 impl SpectacularConfig {
     /// Updates the active provider identifier persisted by the CLI.
-    pub fn select_provider(&mut self, provider_id: impl Into<String>) {
-        self.selected_provider = Some(provider_id.into());
+    pub fn select_provider(&mut self, provider_id: impl Into<String>) -> Result<(), ConfigError> {
+        let provider_id = provider_id.into();
+
+        if !self.providers.available.contains_key(&provider_id) {
+            return Err(ConfigError::ProviderNotConfigured {
+                provider: provider_id,
+            });
+        }
+
+        self.providers.selected = Some(provider_id);
+        Ok(())
     }
 
     /// Replaces the stored API key for a provider without touching other provider keys.
@@ -117,35 +233,38 @@ impl SpectacularConfig {
         provider_id: impl Into<String>,
         api_key: impl Into<String>,
     ) {
-        self.provider_api_keys
-            .insert(provider_id.into(), api_key.into());
+        self.provider_entry(provider_id.into()).key = Some(api_key.into());
     }
 
-    /// Saves all task model assignments together.
-    pub fn set_task_models(
+    /// Saves one task model assignment for a provider.
+    pub fn set_provider_task_model(
         &mut self,
-        planning: impl Into<String>,
-        labeling: impl Into<String>,
-        coding: impl Into<String>,
+        provider_id: impl Into<String>,
+        slot: TaskModelSlot,
+        model: impl Into<String>,
+        reasoning: ReasoningLevel,
     ) {
-        self.task_models = TaskModels {
-            planning: Some(planning.into()),
-            labeling: Some(labeling.into()),
-            coding: Some(coding.into()),
-        };
+        let task_model = TaskModelConfig::new(model, reasoning);
+        let provider = self.provider_entry(provider_id.into());
+
+        match slot {
+            TaskModelSlot::Planning => provider.tasks.planning = Some(task_model),
+            TaskModelSlot::Labeling => provider.tasks.labeling = Some(task_model),
+            TaskModelSlot::Coding => provider.tasks.coding = Some(task_model),
+        }
     }
 
     /// Validates that all required configuration fields are present and non-empty.
     pub fn validate_complete(&self) -> Result<(), ConfigError> {
-        let provider = required_text(self.selected_provider.as_deref())
+        let provider = required_text(self.providers.selected.as_deref())
             .ok_or(ConfigError::NoSelectedProvider)?;
+        let provider_config = self.providers.available.get(provider).ok_or_else(|| {
+            ConfigError::ProviderNotConfigured {
+                provider: provider.to_owned(),
+            }
+        })?;
 
-        let api_key = self
-            .provider_api_keys
-            .get(provider)
-            .and_then(|value| required_text(Some(value.as_str())));
-
-        if api_key.is_none() {
+        if required_text(provider_config.key.as_deref()).is_none() {
             return Err(ConfigError::MissingProviderApiKey {
                 provider: provider.to_owned(),
             });
@@ -153,13 +272,13 @@ impl SpectacularConfig {
 
         require_task_model(
             TaskModelSlot::Planning,
-            self.task_models.planning.as_deref(),
+            provider_config.tasks.planning.as_ref(),
         )?;
         require_task_model(
             TaskModelSlot::Labeling,
-            self.task_models.labeling.as_deref(),
+            provider_config.tasks.labeling.as_ref(),
         )?;
-        require_task_model(TaskModelSlot::Coding, self.task_models.coding.as_deref())?;
+        require_task_model(TaskModelSlot::Coding, provider_config.tasks.coding.as_ref())?;
 
         Ok(())
     }
@@ -167,6 +286,64 @@ impl SpectacularConfig {
     /// Returns true when all required setup values are present and non-empty.
     pub fn is_complete(&self) -> bool {
         self.validate_complete().is_ok()
+    }
+
+    fn provider_entry(&mut self, provider_id: String) -> &mut ProviderConfig {
+        self.providers.available.entry(provider_id).or_default()
+    }
+
+    fn from_legacy(wire: SpectacularConfigWire) -> Self {
+        let mut config = SpectacularConfig::default();
+
+        for (provider_id, api_key) in wire.provider_api_keys {
+            config.set_provider_api_key(provider_id, api_key);
+        }
+
+        if let Some(provider_id) = wire.selected_provider {
+            config.providers.selected = Some(provider_id.clone());
+            config.provider_entry(provider_id.clone());
+
+            if let Some(planning) = wire
+                .task_models
+                .planning
+                .and_then(LegacyTaskModel::into_config)
+            {
+                config.set_provider_task_model(
+                    provider_id.clone(),
+                    TaskModelSlot::Planning,
+                    planning.model,
+                    planning.reasoning,
+                );
+            }
+
+            if let Some(labeling) = wire
+                .task_models
+                .labeling
+                .and_then(LegacyTaskModel::into_config)
+            {
+                config.set_provider_task_model(
+                    provider_id.clone(),
+                    TaskModelSlot::Labeling,
+                    labeling.model,
+                    labeling.reasoning,
+                );
+            }
+
+            if let Some(coding) = wire
+                .task_models
+                .coding
+                .and_then(LegacyTaskModel::into_config)
+            {
+                config.set_provider_task_model(
+                    provider_id,
+                    TaskModelSlot::Coding,
+                    coding.model,
+                    coding.reasoning,
+                );
+            }
+        }
+
+        config
     }
 }
 
@@ -194,10 +371,16 @@ pub enum ConfigError {
         source: serde_json::Error,
     },
     NoSelectedProvider,
+    ProviderNotConfigured {
+        provider: String,
+    },
     MissingProviderApiKey {
         provider: String,
     },
     MissingTaskModel {
+        slot: TaskModelSlot,
+    },
+    InvalidTaskModel {
         slot: TaskModelSlot,
     },
 }
@@ -219,11 +402,49 @@ impl TaskModelSlot {
     }
 }
 
+impl FromStr for TaskModelSlot {
+    type Err = ConfigParseError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "planning" => Ok(TaskModelSlot::Planning),
+            "labeling" => Ok(TaskModelSlot::Labeling),
+            "coding" => Ok(TaskModelSlot::Coding),
+            _ => Err(ConfigParseError::InvalidTask {
+                value: value.to_owned(),
+            }),
+        }
+    }
+}
+
 impl Display for TaskModelSlot {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(self.as_str())
     }
 }
+
+#[derive(Debug)]
+pub enum ConfigParseError {
+    InvalidReasoning { value: String },
+    InvalidTask { value: String },
+}
+
+impl Display for ConfigParseError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ConfigParseError::InvalidReasoning { value } => write!(
+                formatter,
+                "invalid reasoning `{value}`; expected one of: none, low, medium, high"
+            ),
+            ConfigParseError::InvalidTask { value } => write!(
+                formatter,
+                "invalid task `{value}`; expected one of: planning, labeling, coding"
+            ),
+        }
+    }
+}
+
+impl Error for ConfigParseError {}
 
 impl Display for ConfigError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -267,11 +488,17 @@ impl Display for ConfigError {
                 )
             }
             ConfigError::NoSelectedProvider => formatter.write_str("no provider is selected"),
+            ConfigError::ProviderNotConfigured { provider } => {
+                write!(formatter, "provider `{provider}` is not configured")
+            }
             ConfigError::MissingProviderApiKey { provider } => {
                 write!(formatter, "provider `{provider}` does not have an API key")
             }
             ConfigError::MissingTaskModel { slot } => {
                 write!(formatter, "missing `{slot}` model assignment")
+            }
+            ConfigError::InvalidTaskModel { slot } => {
+                write!(formatter, "`{slot}` model assignment is invalid")
             }
         }
     }
@@ -288,18 +515,27 @@ impl Error for ConfigError {
             ConfigError::ConfigDirUnavailable
             | ConfigError::MissingConfigFile { .. }
             | ConfigError::NoSelectedProvider
+            | ConfigError::ProviderNotConfigured { .. }
             | ConfigError::MissingProviderApiKey { .. }
-            | ConfigError::MissingTaskModel { .. } => None,
+            | ConfigError::MissingTaskModel { .. }
+            | ConfigError::InvalidTaskModel { .. } => None,
         }
     }
 }
 
-fn require_task_model(slot: TaskModelSlot, value: Option<&str>) -> Result<(), ConfigError> {
-    if required_text(value).is_some() {
+fn require_task_model(
+    slot: TaskModelSlot,
+    value: Option<&TaskModelConfig>,
+) -> Result<(), ConfigError> {
+    let Some(task_model) = value else {
+        return Err(ConfigError::MissingTaskModel { slot });
+    };
+
+    if required_text(Some(task_model.model.as_str())).is_some() {
         return Ok(());
     }
 
-    Err(ConfigError::MissingTaskModel { slot })
+    Err(ConfigError::InvalidTaskModel { slot })
 }
 
 fn required_text(value: Option<&str>) -> Option<&str> {
@@ -333,6 +569,45 @@ fn platform_config_base(get_env: impl Fn(&str) -> Option<OsString>) -> Option<Pa
     })
 }
 
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct SpectacularConfigWire {
+    providers: Option<ProvidersConfig>,
+    selected_provider: Option<String>,
+    provider_api_keys: BTreeMap<String, String>,
+    task_models: LegacyTaskModels,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct LegacyTaskModels {
+    planning: Option<LegacyTaskModel>,
+    labeling: Option<LegacyTaskModel>,
+    coding: Option<LegacyTaskModel>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum LegacyTaskModel {
+    Model(String),
+    Config(TaskModelConfig),
+}
+
+impl LegacyTaskModel {
+    fn into_config(self) -> Option<TaskModelConfig> {
+        match self {
+            LegacyTaskModel::Model(model) => {
+                if required_text(Some(model.as_str())).is_some() {
+                    return Some(TaskModelConfig::new(model, ReasoningLevel::None));
+                }
+
+                None
+            }
+            LegacyTaskModel::Config(config) => Some(config),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -348,11 +623,30 @@ mod tests {
     }
 
     #[test]
-    fn selected_provider_requires_matching_api_key() {
+    fn selected_provider_must_be_configured() {
         let config = SpectacularConfig {
-            selected_provider: Some("openrouter".to_owned()),
-            ..SpectacularConfig::default()
+            providers: ProvidersConfig {
+                selected: Some("openrouter".to_owned()),
+                available: BTreeMap::new(),
+            },
         };
+
+        let error = config.validate_complete().unwrap_err();
+
+        assert!(matches!(
+            error,
+            ConfigError::ProviderNotConfigured { provider } if provider == "openrouter"
+        ));
+    }
+
+    #[test]
+    fn selected_provider_requires_matching_api_key() {
+        let mut config = SpectacularConfig::default();
+        config
+            .providers
+            .available
+            .insert("openrouter".to_owned(), ProviderConfig::default());
+        config.providers.selected = Some("openrouter".to_owned());
 
         let error = config.validate_complete().unwrap_err();
 
@@ -365,7 +659,13 @@ mod tests {
     #[test]
     fn completeness_requires_all_task_model_slots() {
         let mut config = complete_config();
-        config.task_models.labeling = None;
+        config
+            .providers
+            .available
+            .get_mut("openrouter")
+            .unwrap()
+            .tasks
+            .labeling = None;
 
         let error = config.validate_complete().unwrap_err();
 
@@ -381,12 +681,36 @@ mod tests {
     fn blank_values_do_not_count_as_complete() {
         let mut config = complete_config();
         config
-            .provider_api_keys
-            .insert("openrouter".to_owned(), "   ".to_owned());
+            .providers
+            .available
+            .get_mut("openrouter")
+            .unwrap()
+            .key = Some("   ".to_owned());
 
         let error = config.validate_complete().unwrap_err();
 
         assert!(matches!(error, ConfigError::MissingProviderApiKey { .. }));
+    }
+
+    #[test]
+    fn blank_model_values_are_invalid() {
+        let mut config = complete_config();
+        config
+            .providers
+            .available
+            .get_mut("openrouter")
+            .unwrap()
+            .tasks
+            .planning = Some(TaskModelConfig::new(" ", ReasoningLevel::High));
+
+        let error = config.validate_complete().unwrap_err();
+
+        assert!(matches!(
+            error,
+            ConfigError::InvalidTaskModel {
+                slot: TaskModelSlot::Planning
+            }
+        ));
     }
 
     #[test]
@@ -398,7 +722,7 @@ mod tests {
     }
 
     #[test]
-    fn config_round_trips_as_json() {
+    fn config_round_trips_as_new_json() {
         let path = temp_config_path("round-trip");
         let config = complete_config();
 
@@ -406,6 +730,11 @@ mod tests {
         let loaded = read_config_from_path(&path).unwrap();
 
         assert_eq!(loaded, config);
+
+        let content = fs::read_to_string(&path).unwrap();
+        assert!(content.contains("\"providers\""));
+        assert!(!content.contains("\"selected_provider\""));
+        assert!(!content.contains("\"provider_api_keys\""));
 
         let _ = fs::remove_file(path);
     }
@@ -443,6 +772,59 @@ mod tests {
         let _ = fs::remove_file(path);
     }
 
+    #[test]
+    fn legacy_config_migrates_on_read() {
+        let path = temp_config_path("legacy");
+        write_text(
+            &path,
+            r#"{
+  "selected_provider": "openrouter",
+  "provider_api_keys": {
+    "openrouter": "sk-or-v1-test"
+  },
+  "task_models": {
+    "planning": "openrouter/planning",
+    "labeling": "openrouter/labeling",
+    "coding": "openrouter/coding"
+  }
+}"#,
+        );
+
+        let loaded = read_config_from_path(&path).unwrap();
+        let provider = loaded.providers.available.get("openrouter").unwrap();
+
+        assert_eq!(loaded.providers.selected.as_deref(), Some("openrouter"));
+        assert_eq!(provider.key.as_deref(), Some("sk-or-v1-test"));
+        assert_eq!(
+            provider.tasks.planning.as_ref().unwrap(),
+            &TaskModelConfig::new("openrouter/planning", ReasoningLevel::None)
+        );
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn legacy_selected_provider_without_key_migrates_as_configured_provider() {
+        let path = temp_config_path("legacy-selected-only");
+        write_text(
+            &path,
+            r#"{
+  "selected_provider": "openrouter"
+}"#,
+        );
+
+        let loaded = read_config_from_path(&path).unwrap();
+        let error = loaded.validate_complete().unwrap_err();
+
+        assert!(loaded.providers.available.contains_key("openrouter"));
+        assert!(matches!(
+            error,
+            ConfigError::MissingProviderApiKey { provider } if provider == "openrouter"
+        ));
+
+        let _ = fs::remove_file(path);
+    }
+
     #[cfg(windows)]
     #[test]
     fn windows_config_dir_uses_appdata() {
@@ -459,28 +841,25 @@ mod tests {
         assert_eq!(config_dir, appdata.join(APP_CONFIG_DIR_NAME));
     }
 
-    fn complete_config() -> SpectacularConfig {
-        let mut provider_api_keys = BTreeMap::new();
-        provider_api_keys.insert("openrouter".to_owned(), "sk-or-v1-test".to_owned());
+    #[test]
+    fn select_provider_updates_active_provider_when_configured() {
+        let mut config = SpectacularConfig::default();
+        config.set_provider_api_key("openrouter", "sk-or-v1-test");
 
-        SpectacularConfig {
-            selected_provider: Some("openrouter".to_owned()),
-            provider_api_keys,
-            task_models: TaskModels {
-                planning: Some("openrouter/planning".to_owned()),
-                labeling: Some("openrouter/labeling".to_owned()),
-                coding: Some("openrouter/coding".to_owned()),
-            },
-        }
+        config.select_provider("openrouter").unwrap();
+
+        assert_eq!(config.providers.selected.as_deref(), Some("openrouter"));
     }
 
     #[test]
-    fn select_provider_updates_active_provider() {
+    fn select_provider_rejects_unconfigured_provider() {
         let mut config = SpectacularConfig::default();
+        let error = config.select_provider("openrouter").unwrap_err();
 
-        config.select_provider("openrouter");
-
-        assert_eq!(config.selected_provider.as_deref(), Some("openrouter"));
+        assert!(matches!(
+            error,
+            ConfigError::ProviderNotConfigured { provider } if provider == "openrouter"
+        ));
     }
 
     #[test]
@@ -493,35 +872,94 @@ mod tests {
 
         assert_eq!(
             config
-                .provider_api_keys
+                .providers
+                .available
                 .get("openrouter")
-                .map(String::as_str),
+                .and_then(|provider| provider.key.as_deref()),
             Some("new-openrouter-key")
         );
         assert_eq!(
-            config.provider_api_keys.get("openai").map(String::as_str),
+            config
+                .providers
+                .available
+                .get("openai")
+                .and_then(|provider| provider.key.as_deref()),
             Some("existing-openai-key")
         );
     }
 
     #[test]
-    fn set_task_models_replaces_assignments_together() {
+    fn set_provider_task_model_replaces_only_one_slot() {
         let mut config = SpectacularConfig::default();
-
-        config.set_task_models(
+        config.set_provider_task_model(
+            "openrouter",
+            TaskModelSlot::Planning,
             "openrouter/planning",
-            "openrouter/labeling",
-            "openrouter/coding",
+            ReasoningLevel::High,
         );
 
         assert_eq!(
-            config.task_models,
-            TaskModels {
-                planning: Some("openrouter/planning".to_owned()),
-                labeling: Some("openrouter/labeling".to_owned()),
-                coding: Some("openrouter/coding".to_owned()),
-            }
+            config
+                .providers
+                .available
+                .get("openrouter")
+                .unwrap()
+                .tasks
+                .planning,
+            Some(TaskModelConfig::new(
+                "openrouter/planning",
+                ReasoningLevel::High
+            ))
         );
+        assert!(config
+            .providers
+            .available
+            .get("openrouter")
+            .unwrap()
+            .tasks
+            .labeling
+            .is_none());
+    }
+
+    #[test]
+    fn parsing_rejects_unknown_tasks() {
+        let error = "reviewing".parse::<TaskModelSlot>().unwrap_err();
+
+        assert!(matches!(error, ConfigParseError::InvalidTask { .. }));
+    }
+
+    #[test]
+    fn parsing_rejects_unknown_reasoning() {
+        let error = "hight".parse::<ReasoningLevel>().unwrap_err();
+
+        assert!(matches!(error, ConfigParseError::InvalidReasoning { .. }));
+    }
+
+    fn complete_config() -> SpectacularConfig {
+        let mut config = SpectacularConfig::default();
+        config.set_provider_api_key("openrouter", "sk-or-v1-test");
+        config
+            .select_provider("openrouter")
+            .expect("provider should be configured");
+        config.set_provider_task_model(
+            "openrouter",
+            TaskModelSlot::Planning,
+            "openrouter/planning",
+            ReasoningLevel::High,
+        );
+        config.set_provider_task_model(
+            "openrouter",
+            TaskModelSlot::Labeling,
+            "openrouter/labeling",
+            ReasoningLevel::Low,
+        );
+        config.set_provider_task_model(
+            "openrouter",
+            TaskModelSlot::Coding,
+            "openrouter/coding",
+            ReasoningLevel::Medium,
+        );
+        config
     }
 
     fn temp_config_path(name: &str) -> PathBuf {

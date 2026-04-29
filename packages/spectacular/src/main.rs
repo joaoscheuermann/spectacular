@@ -1,12 +1,9 @@
-mod core;
-
-use crate::core::{
-    ApiKeyInputError, ModelAssignmentError, ModelOption, ProviderOption, ProviderSelectionError,
-    TaskModelSelection,
-};
+use anstyle::{AnsiColor, Style};
 use clap::{Args, Parser, Subcommand};
-use spectacular_config::{ConfigError, SpectacularConfig, TaskModels};
-use spectacular_llms::{Model, ProviderError, ProviderMetadata, ValidationMode};
+use spectacular_config::{
+    ConfigError, ProviderConfig, ReasoningLevel, SpectacularConfig, TaskModelConfig, TaskModelSlot,
+};
+use spectacular_llms::{ProviderError, ProviderMetadata};
 use spectacular_plan::PlanError;
 use std::process::ExitCode;
 
@@ -20,7 +17,7 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Configure Spectacular.
+    /// Inspect or update Spectacular configuration.
     Config(ConfigArgs),
     /// Run the first SDD planning step.
     Plan {
@@ -31,23 +28,42 @@ enum Command {
 
 #[derive(Debug, Args)]
 struct ConfigArgs {
-    /// Configure the active provider.
-    #[arg(long)]
-    provider: bool,
-    /// Configure the API key for the active provider.
-    #[arg(long)]
-    apikey: bool,
-    /// Configure task model assignments.
-    #[arg(long)]
-    models: bool,
+    /// Select an already configured provider for runtime commands.
+    #[arg(long = "use", value_name = "PROVIDER")]
+    use_provider: Option<String>,
+    /// Provider identifier for the update.
+    #[arg(long, value_name = "PROVIDER")]
+    provider: Option<String>,
+    /// API key to store for the provider.
+    #[arg(long, value_name = "API_KEY")]
+    key: Option<String>,
+    /// Required task slot to configure.
+    #[arg(long, value_name = "TASK", value_parser = parse_task_model_slot)]
+    task: Option<TaskModelSlot>,
+    /// Model identifier to store for the task.
+    #[arg(long, value_name = "MODEL_ID")]
+    model: Option<String>,
+    /// Reasoning effort for the task model assignment.
+    #[arg(long, value_name = "LEVEL", value_parser = parse_reasoning_level)]
+    reasoning: Option<ReasoningLevel>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum ConfigRoute {
-    FullSetup,
-    Provider,
-    ApiKey,
-    Models,
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum ConfigOperation {
+    Show,
+    UseProvider {
+        provider_id: String,
+    },
+    SaveProviderKey {
+        provider_id: String,
+        key: String,
+    },
+    SaveTaskModel {
+        provider_id: String,
+        slot: TaskModelSlot,
+        model: String,
+        reasoning: ReasoningLevel,
+    },
 }
 
 fn main() -> ExitCode {
@@ -72,293 +88,371 @@ fn handle(cli: Cli) -> Result<String, AppError> {
 }
 
 fn handle_config(args: ConfigArgs) -> Result<String, AppError> {
-    if config_route(&args) == ConfigRoute::Provider {
-        return handle_provider_config();
-    }
-
-    if config_route(&args) == ConfigRoute::ApiKey {
-        return handle_api_key_config();
-    }
-
-    if config_route(&args) == ConfigRoute::Models {
-        return handle_models_config();
-    }
-
-    handle_full_config()
-}
-
-fn handle_api_key_config() -> Result<String, AppError> {
-    handle_api_key_config_with_input(
+    handle_config_with_io(
+        args,
         spectacular_config::read_config_or_default,
         spectacular_config::write_config,
-        |provider, current_api_key| {
-            crate::core::run_api_key_screen(
+    )
+}
+
+fn handle_config_with_io(
+    args: ConfigArgs,
+    load_config: impl FnOnce() -> Result<SpectacularConfig, ConfigError>,
+    write_config: impl FnOnce(&SpectacularConfig) -> Result<(), ConfigError>,
+) -> Result<String, AppError> {
+    let operation = config_operation(args)?;
+
+    match operation {
+        ConfigOperation::Show => {
+            let config = load_config()?;
+            Ok(format_config_report(&config))
+        }
+        ConfigOperation::UseProvider { provider_id } => {
+            let provider = supported_provider(&provider_id)?;
+            let mut config = load_config()?;
+            config.select_provider(provider.id())?;
+            write_config(&config)?;
+
+            Ok(format_selected_provider_output(provider.display_name()))
+        }
+        ConfigOperation::SaveProviderKey { provider_id, key } => {
+            let provider = supported_provider(&provider_id)?;
+            let mut config = load_config()?;
+            config.set_provider_api_key(provider.id(), key);
+            write_config(&config)?;
+
+            Ok(format_api_key_saved_output(provider.display_name()))
+        }
+        ConfigOperation::SaveTaskModel {
+            provider_id,
+            slot,
+            model,
+            reasoning,
+        } => {
+            let provider = supported_provider(&provider_id)?;
+            let mut config = load_config()?;
+            config.set_provider_task_model(provider.id(), slot, model.as_str(), reasoning);
+            write_config(&config)?;
+
+            Ok(format_task_model_saved_output(
                 provider.display_name(),
-                current_api_key,
-                |api_key| {
-                    spectacular_llms::validate_provider_value(
-                        provider.id(),
-                        ValidationMode::ApiKey,
-                        api_key,
-                    )
-                    .map_err(|error| error.to_string())
-                },
-            )
-        },
-    )
+                slot,
+                &model,
+                reasoning,
+            ))
+        }
+    }
 }
 
-fn handle_api_key_config_with_input(
-    load_config: impl FnOnce() -> Result<SpectacularConfig, ConfigError>,
-    write_config: impl FnOnce(&SpectacularConfig) -> Result<(), ConfigError>,
-    read_validated_api_key: impl FnOnce(
-        &ProviderMetadata,
-        Option<&str>,
-    ) -> Result<String, ApiKeyInputError>,
-) -> Result<String, AppError> {
-    let mut config = load_config()?;
-    let selected_provider_id = config
-        .selected_provider
-        .as_deref()
-        .filter(|provider_id| !provider_id.trim().is_empty())
-        .ok_or(ConfigError::NoSelectedProvider)?;
+fn config_operation(args: ConfigArgs) -> Result<ConfigOperation, AppError> {
+    if let Some(provider_id) = args.use_provider {
+        if args.provider.is_some()
+            || args.key.is_some()
+            || args.task.is_some()
+            || args.model.is_some()
+            || args.reasoning.is_some()
+        {
+            return Err(AppError::InvalidConfigCommand(
+                "`--use <provider>` cannot be combined with other config options.".to_owned(),
+            ));
+        }
 
-    let selected_provider =
-        spectacular_llms::provider_by_id(selected_provider_id).ok_or_else(|| {
-            ProviderError::UnsupportedProvider {
-                provider_id: selected_provider_id.to_owned(),
-            }
-        })?;
-
-    if !selected_provider.is_enabled() {
-        return Err(AppError::Provider(ProviderError::UnsupportedProvider {
-            provider_id: selected_provider.id().to_owned(),
-        }));
+        return require_non_empty("provider", provider_id)
+            .map(|provider_id| ConfigOperation::UseProvider { provider_id });
     }
 
-    let current_api_key = config
-        .provider_api_keys
-        .get(selected_provider.id())
-        .map(String::as_str);
-    let api_key = read_validated_api_key(&selected_provider, current_api_key)?;
-    config.set_provider_api_key(selected_provider.id(), api_key);
-    write_config(&config)?;
+    let has_updates = args.provider.is_some()
+        || args.key.is_some()
+        || args.task.is_some()
+        || args.model.is_some()
+        || args.reasoning.is_some();
 
-    Ok(format!(
-        "Saved API key for {}.",
-        selected_provider.display_name()
-    ))
-}
+    if !has_updates {
+        return Ok(ConfigOperation::Show);
+    }
 
-fn handle_provider_config() -> Result<String, AppError> {
-    handle_provider_config_with_selection(
-        spectacular_config::read_config_or_default,
-        spectacular_config::write_config,
-        crate::core::run_provider_selection_screen,
-    )
-}
+    let Some(provider_id) = args.provider else {
+        return Err(AppError::InvalidConfigCommand(
+            "`--provider <provider>` is required when setting keys or task models.".to_owned(),
+        ));
+    };
+    let provider_id = require_non_empty("provider", provider_id)?;
 
-fn handle_models_config() -> Result<String, AppError> {
-    handle_models_config_with_selection(
-        spectacular_config::read_config_or_default,
-        spectacular_config::write_config,
-        |provider, api_key| {
-            spectacular_llms::validate_provider_value(
-                provider.id(),
-                ValidationMode::ApiKey,
-                api_key,
-            )?;
-            spectacular_llms::fetch_provider_models(provider.id(), api_key)
-        },
-        |provider, models, current_selection| {
-            crate::core::run_model_assignment_screen(
-                provider.display_name(),
-                models,
-                current_selection,
-            )
-        },
-    )
-}
+    if let Some(key) = args.key {
+        if args.task.is_some() || args.model.is_some() || args.reasoning.is_some() {
+            return Err(AppError::InvalidConfigCommand(
+                "Configure provider keys and task models with separate commands.".to_owned(),
+            ));
+        }
 
-fn handle_models_config_with_selection(
-    load_config: impl FnOnce() -> Result<SpectacularConfig, ConfigError>,
-    write_config: impl FnOnce(&SpectacularConfig) -> Result<(), ConfigError>,
-    fetch_models: impl FnOnce(&ProviderMetadata, &str) -> Result<Vec<Model>, ProviderError>,
-    assign_models: impl FnOnce(
-        &ProviderMetadata,
-        &[ModelOption],
-        Option<TaskModelSelection>,
-    ) -> Result<TaskModelSelection, ModelAssignmentError>,
-) -> Result<String, AppError> {
-    let mut config = load_config()?;
-    let (selected_provider, api_key) = selected_provider_and_api_key(&config)?;
-    let models = fetch_models(&selected_provider, &api_key)?;
-    let model_options = model_options_from_models(&models);
-    let selection = assign_models(
-        &selected_provider,
-        &model_options,
-        current_task_model_selection(&config.task_models),
-    )?;
+        return require_non_empty("key", key)
+            .map(|key| ConfigOperation::SaveProviderKey { provider_id, key });
+    }
 
-    config.set_task_models(
-        selection.planning(),
-        selection.labeling(),
-        selection.coding(),
-    );
-    write_config(&config)?;
-
-    Ok(format!(
-        "Saved model assignments for {}.",
-        selected_provider.display_name()
-    ))
-}
-
-fn handle_full_config() -> Result<String, AppError> {
-    handle_full_config_with_steps(
-        handle_provider_config,
-        handle_api_key_config,
-        handle_models_config,
-    )
-}
-
-fn handle_full_config_with_steps(
-    configure_provider: impl FnOnce() -> Result<String, AppError>,
-    configure_api_key: impl FnOnce() -> Result<String, AppError>,
-    configure_models: impl FnOnce() -> Result<String, AppError>,
-) -> Result<String, AppError> {
-    let provider_output = configure_provider()?;
-    let api_key_output = configure_api_key()?;
-    let models_output = configure_models()?;
-
-    Ok(format!(
-        "{provider_output}\n{api_key_output}\n{models_output}"
-    ))
-}
-
-fn handle_provider_config_with_selection(
-    load_config: impl FnOnce() -> Result<SpectacularConfig, ConfigError>,
-    write_config: impl FnOnce(&SpectacularConfig) -> Result<(), ConfigError>,
-    select_provider: impl FnOnce(&[ProviderOption]) -> Result<String, ProviderSelectionError>,
-) -> Result<String, AppError> {
-    let mut config = load_config()?;
-    let providers = spectacular_llms::provider_registry();
-    let options = provider_options_from_config(providers, &config);
-    let selected_provider_id = select_provider(&options)?;
-    let selected_provider =
-        spectacular_llms::provider_by_id(&selected_provider_id).ok_or_else(|| {
-            ProviderSelectionError::UnknownProvider {
-                provider_id: selected_provider_id.clone(),
-            }
-        })?;
-
-    if !selected_provider.is_enabled() {
-        return Err(AppError::ProviderSelection(
-            ProviderSelectionError::DisabledProvider {
-                provider_name: selected_provider.display_name().to_owned(),
-            },
+    if args.task.is_none() && args.model.is_none() && args.reasoning.is_none() {
+        return Err(AppError::InvalidConfigCommand(
+            "`--provider` must be paired with `--key` or `--task` and `--model`.".to_owned(),
         ));
     }
 
-    config.select_provider(selected_provider.id());
-    write_config(&config)?;
+    let Some(slot) = args.task else {
+        return Err(AppError::InvalidConfigCommand(
+            "`--task <task>` is required when setting a task model.".to_owned(),
+        ));
+    };
+    let Some(model) = args.model else {
+        return Err(AppError::InvalidConfigCommand(
+            "`--model <model-id>` is required when setting a task model.".to_owned(),
+        ));
+    };
 
-    Ok(format!(
-        "Selected provider: {}",
-        selected_provider.display_name()
-    ))
+    Ok(ConfigOperation::SaveTaskModel {
+        provider_id,
+        slot,
+        model: require_non_empty("model", model)?,
+        reasoning: args.reasoning.unwrap_or_default(),
+    })
 }
 
-fn provider_options_from_config(
-    providers: &[ProviderMetadata],
-    config: &SpectacularConfig,
-) -> Vec<ProviderOption> {
-    providers
-        .iter()
-        .copied()
-        .map(|provider| {
-            ProviderOption::new(
-                provider.id(),
-                provider.display_name(),
-                provider.is_enabled(),
-                config
-                    .provider_api_keys
-                    .get(provider.id())
-                    .map(String::as_str),
-                config.selected_provider.as_deref() == Some(provider.id()),
+fn supported_provider(provider_id: &str) -> Result<ProviderMetadata, AppError> {
+    let provider =
+        spectacular_llms::provider_by_id(provider_id).ok_or_else(|| AppError::Provider {
+            source: ProviderError::UnsupportedProvider {
+                provider_id: provider_id.to_owned(),
+            },
+        })?;
+
+    if provider.is_enabled() {
+        return Ok(provider);
+    }
+
+    Err(AppError::Provider {
+        source: ProviderError::UnsupportedProvider {
+            provider_id: provider.id().to_owned(),
+        },
+    })
+}
+
+fn require_non_empty(name: &'static str, value: String) -> Result<String, AppError> {
+    if !value.trim().is_empty() {
+        return Ok(value);
+    }
+
+    Err(AppError::InvalidConfigCommand(format!(
+        "`--{name}` cannot be empty."
+    )))
+}
+
+fn parse_task_model_slot(value: &str) -> Result<TaskModelSlot, String> {
+    value
+        .parse::<TaskModelSlot>()
+        .map_err(|error| error.to_string())
+}
+
+fn parse_reasoning_level(value: &str) -> Result<ReasoningLevel, String> {
+    value
+        .parse::<ReasoningLevel>()
+        .map_err(|error| error.to_string())
+}
+
+fn format_config_report(config: &SpectacularConfig) -> String {
+    let mut lines = Vec::new();
+    let selected_provider = config.providers.selected.as_deref().unwrap_or("none");
+
+    lines.push(paint(title_style(), "Spectacular config"));
+    lines.push(format!(
+        "{} {}",
+        paint(label_style(), "Selected provider:"),
+        format_optional_value(selected_provider)
+    ));
+    lines.push(String::new());
+    lines.push(paint(section_style(), "Configured providers"));
+
+    if config.providers.available.is_empty() {
+        lines.push(format!("  {}", paint(missing_style(), "None")));
+        return lines.join("\n");
+    }
+
+    for (provider_id, provider_config) in &config.providers.available {
+        let provider_line = if Some(provider_id.as_str()) == config.providers.selected.as_deref() {
+            format!(
+                "  {} {}",
+                paint(provider_style(), provider_id),
+                paint(success_style(), "(selected)")
             )
-        })
-        .collect()
+        } else {
+            format!("  {}", paint(provider_style(), provider_id))
+        };
+
+        lines.push(provider_line);
+        append_provider_config(&mut lines, provider_config);
+    }
+
+    lines.join("\n")
 }
 
-fn selected_provider_and_api_key(
-    config: &SpectacularConfig,
-) -> Result<(ProviderMetadata, String), AppError> {
-    let selected_provider_id = config
-        .selected_provider
-        .as_deref()
-        .filter(|provider_id| !provider_id.trim().is_empty())
-        .ok_or(ConfigError::NoSelectedProvider)?;
-    let selected_provider =
-        spectacular_llms::provider_by_id(selected_provider_id).ok_or_else(|| {
-            ProviderError::UnsupportedProvider {
-                provider_id: selected_provider_id.to_owned(),
-            }
-        })?;
-
-    if !selected_provider.is_enabled() {
-        return Err(AppError::Provider(ProviderError::UnsupportedProvider {
-            provider_id: selected_provider.id().to_owned(),
-        }));
-    }
-
-    let api_key = config
-        .provider_api_keys
-        .get(selected_provider.id())
-        .map(String::as_str)
-        .filter(|api_key| !api_key.trim().is_empty())
-        .ok_or_else(|| ConfigError::MissingProviderApiKey {
-            provider: selected_provider.id().to_owned(),
-        })?;
-
-    Ok((selected_provider, api_key.to_owned()))
+fn append_provider_config(lines: &mut Vec<String>, provider_config: &ProviderConfig) {
+    lines.push(format!(
+        "    {} {}",
+        paint(label_style(), "API key:"),
+        match provider_config.key.as_deref() {
+            Some(key) if !key.trim().is_empty() => paint(secret_style(), key),
+            _ => paint(missing_style(), "not configured"),
+        }
+    ));
+    lines.push(format!("    {}", paint(section_style(), "Tasks")));
+    append_task_config(
+        lines,
+        TaskModelSlot::Planning,
+        provider_config.tasks.planning.as_ref(),
+    );
+    append_task_config(
+        lines,
+        TaskModelSlot::Labeling,
+        provider_config.tasks.labeling.as_ref(),
+    );
+    append_task_config(
+        lines,
+        TaskModelSlot::Coding,
+        provider_config.tasks.coding.as_ref(),
+    );
 }
 
-fn model_options_from_models(models: &[Model]) -> Vec<ModelOption> {
-    models
-        .iter()
-        .map(|model| ModelOption::new(model.id(), model.display_name()))
-        .collect()
+fn append_task_config(
+    lines: &mut Vec<String>,
+    slot: TaskModelSlot,
+    task_config: Option<&TaskModelConfig>,
+) {
+    let Some(task_config) = task_config else {
+        lines.push(format!(
+            "      {} {}",
+            paint(task_style(), format!("{slot}:")),
+            paint(missing_style(), "not configured")
+        ));
+        return;
+    };
+
+    if task_config.model.trim().is_empty() {
+        lines.push(format!(
+            "      {} {}",
+            paint(task_style(), format!("{slot}:")),
+            paint(missing_style(), "not configured")
+        ));
+        return;
+    }
+
+    lines.push(format!(
+        "      {} {} {} {}",
+        paint(task_style(), format!("{slot}:")),
+        paint(model_style(), task_config.model.as_str()),
+        paint(label_style(), "(reasoning:"),
+        paint_reasoning(task_config.reasoning, ")")
+    ));
 }
 
-fn current_task_model_selection(task_models: &TaskModels) -> Option<TaskModelSelection> {
-    if task_models.planning.is_none()
-        && task_models.labeling.is_none()
-        && task_models.coding.is_none()
-    {
-        return None;
-    }
-
-    Some(TaskModelSelection::new(
-        task_models.planning.as_deref().unwrap_or_default(),
-        task_models.labeling.as_deref().unwrap_or_default(),
-        task_models.coding.as_deref().unwrap_or_default(),
-    ))
+fn format_selected_provider_output(provider_name: &str) -> String {
+    format!(
+        "{} {}\n  {} {}",
+        paint(success_style(), "[selected]"),
+        paint(title_style(), "Active provider updated"),
+        paint(label_style(), "Provider:"),
+        paint(provider_style(), provider_name)
+    )
 }
 
-fn config_route(args: &ConfigArgs) -> ConfigRoute {
-    if args.provider {
-        return ConfigRoute::Provider;
+fn format_api_key_saved_output(provider_name: &str) -> String {
+    format!(
+        "{} {}\n  {} {}\n  {} {}",
+        paint(success_style(), "[saved]"),
+        paint(title_style(), "API key configured"),
+        paint(label_style(), "Provider:"),
+        paint(provider_style(), provider_name),
+        paint(label_style(), "State:"),
+        paint(success_style(), "configured")
+    )
+}
+
+fn format_task_model_saved_output(
+    provider_name: &str,
+    slot: TaskModelSlot,
+    model: &str,
+    reasoning: ReasoningLevel,
+) -> String {
+    format!(
+        "{} {}\n  {} {}\n  {} {}\n  {} {}\n  {} {}",
+        paint(success_style(), "[saved]"),
+        paint(title_style(), "Task model configured"),
+        paint(label_style(), "Provider:"),
+        paint(provider_style(), provider_name),
+        paint(label_style(), "Task:"),
+        paint(task_style(), slot.as_str()),
+        paint(label_style(), "Model:"),
+        paint(model_style(), model),
+        paint(label_style(), "Reasoning:"),
+        paint_reasoning(reasoning, "")
+    )
+}
+
+fn format_optional_value(value: &str) -> String {
+    if value == "none" || value.trim().is_empty() {
+        return paint(missing_style(), value);
     }
 
-    if args.apikey {
-        return ConfigRoute::ApiKey;
-    }
+    paint(provider_style(), value)
+}
 
-    if args.models {
-        return ConfigRoute::Models;
-    }
+fn paint(style: Style, value: impl AsRef<str>) -> String {
+    let value = value.as_ref();
+    format!("{style}{value}{style:#}")
+}
 
-    ConfigRoute::FullSetup
+fn paint_reasoning(reasoning: ReasoningLevel, suffix: &str) -> String {
+    paint(reasoning_style(reasoning), format!("{reasoning}{suffix}"))
+}
+
+fn title_style() -> Style {
+    AnsiColor::BrightCyan.on_default().bold()
+}
+
+fn section_style() -> Style {
+    AnsiColor::BrightWhite.on_default().bold()
+}
+
+fn label_style() -> Style {
+    AnsiColor::BrightBlack.on_default()
+}
+
+fn success_style() -> Style {
+    AnsiColor::BrightGreen.on_default().bold()
+}
+
+fn provider_style() -> Style {
+    AnsiColor::Cyan.on_default().bold()
+}
+
+fn task_style() -> Style {
+    AnsiColor::Magenta.on_default().bold()
+}
+
+fn model_style() -> Style {
+    AnsiColor::BrightWhite.on_default()
+}
+
+fn secret_style() -> Style {
+    AnsiColor::Yellow.on_default()
+}
+
+fn missing_style() -> Style {
+    AnsiColor::BrightYellow.on_default().bold()
+}
+
+fn reasoning_style(reasoning: ReasoningLevel) -> Style {
+    match reasoning {
+        ReasoningLevel::None => AnsiColor::BrightBlack.on_default(),
+        ReasoningLevel::Low => AnsiColor::Blue.on_default(),
+        ReasoningLevel::Medium => AnsiColor::Yellow.on_default(),
+        ReasoningLevel::High => AnsiColor::BrightRed.on_default().bold(),
+    }
 }
 
 fn handle_plan(prompt: &str) -> Result<String, AppError> {
@@ -377,40 +471,14 @@ fn handle_plan_with_loader(
 #[derive(Debug)]
 enum AppError {
     Config(ConfigError),
-    ApiKeyInput(ApiKeyInputError),
-    ModelAssignment(ModelAssignmentError),
+    InvalidConfigCommand(String),
     Plan(PlanError),
-    Provider(ProviderError),
-    ProviderSelection(ProviderSelectionError),
+    Provider { source: ProviderError },
 }
 
 impl From<ConfigError> for AppError {
     fn from(error: ConfigError) -> Self {
         Self::Config(error)
-    }
-}
-
-impl From<ProviderSelectionError> for AppError {
-    fn from(error: ProviderSelectionError) -> Self {
-        Self::ProviderSelection(error)
-    }
-}
-
-impl From<ApiKeyInputError> for AppError {
-    fn from(error: ApiKeyInputError) -> Self {
-        Self::ApiKeyInput(error)
-    }
-}
-
-impl From<ProviderError> for AppError {
-    fn from(error: ProviderError) -> Self {
-        Self::Provider(error)
-    }
-}
-
-impl From<ModelAssignmentError> for AppError {
-    fn from(error: ModelAssignmentError) -> Self {
-        Self::ModelAssignment(error)
     }
 }
 
@@ -422,10 +490,8 @@ fn user_facing_error(error: &AppError) -> String {
         AppError::Plan(PlanError::Config(config_error)) | AppError::Config(config_error) => {
             format_config_error(config_error)
         }
-        AppError::ApiKeyInput(error) => error.to_string(),
-        AppError::ModelAssignment(error) => error.to_string(),
-        AppError::Provider(error) => format_provider_error(error),
-        AppError::ProviderSelection(error) => error.to_string(),
+        AppError::InvalidConfigCommand(message) => message.to_owned(),
+        AppError::Provider { source } => format_provider_error(source),
     }
 }
 
@@ -475,7 +541,8 @@ fn format_provider_error(error: &ProviderError) -> String {
 }
 
 fn format_config_error(error: &ConfigError) -> String {
-    let setup_instruction = "Run `spectacular config` to complete setup.";
+    let setup_instruction =
+        "Run `spectacular config --provider <provider> --key <api-key>` to configure a provider.";
 
     match error {
         ConfigError::MissingConfigFile { .. } => {
@@ -486,13 +553,19 @@ fn format_config_error(error: &ConfigError) -> String {
             path.display()
         ),
         ConfigError::NoSelectedProvider => {
-            format!("Configuration is incomplete: no provider is selected. {setup_instruction}")
+            "Configuration is incomplete: no provider is selected. Run `spectacular config --use <provider>`.".to_owned()
         }
+        ConfigError::ProviderNotConfigured { provider } => format!(
+            "Configuration is incomplete: provider `{provider}` is not configured. {setup_instruction}"
+        ),
         ConfigError::MissingProviderApiKey { provider } => format!(
             "Configuration is incomplete: provider `{provider}` has no API key. {setup_instruction}"
         ),
         ConfigError::MissingTaskModel { slot } => format!(
-            "Configuration is incomplete: missing `{slot}` model assignment. {setup_instruction}"
+            "Configuration is incomplete: missing `{slot}` model assignment. Run `spectacular config --provider <provider> --task {slot} --model <model-id>`."
+        ),
+        ConfigError::InvalidTaskModel { slot } => format!(
+            "Configuration is incomplete: `{slot}` model assignment is blank. Run `spectacular config --provider <provider> --task {slot} --model <model-id>`."
         ),
         ConfigError::ConfigDirUnavailable => {
             "Could not resolve the Spectacular config directory.".to_owned()
@@ -513,7 +586,7 @@ fn format_config_error(error: &ConfigError) -> String {
 mod tests {
     use super::*;
     use clap::CommandFactory;
-    use spectacular_config::TaskModels;
+    use spectacular_config::{ProviderConfig, ProvidersConfig, TaskModelConfig, TaskModels};
     use std::cell::RefCell;
     use std::collections::BTreeMap;
 
@@ -530,7 +603,7 @@ mod tests {
     }
 
     #[test]
-    fn config_help_lists_setup_flags() {
+    fn config_help_lists_non_interactive_flags() {
         let mut command = Cli::command();
         let config = command
             .find_subcommand_mut("config")
@@ -540,316 +613,376 @@ mod tests {
         config.write_long_help(&mut buffer).unwrap();
         let help = String::from_utf8(buffer).unwrap();
 
+        assert!(help.contains("--use"));
         assert!(help.contains("--provider"));
-        assert!(help.contains("--apikey"));
-        assert!(help.contains("--models"));
+        assert!(help.contains("--key"));
+        assert!(help.contains("--task"));
+        assert!(help.contains("--model"));
+        assert!(help.contains("--reasoning"));
+        assert!(!help.contains("--apikey"));
+        assert!(!help.contains("--models"));
     }
 
     #[test]
-    fn config_routes_to_provider_placeholder() {
+    fn config_defaults_to_show_operation() {
         let args = ConfigArgs {
-            provider: true,
-            apikey: false,
-            models: false,
+            use_provider: None,
+            provider: None,
+            key: None,
+            task: None,
+            model: None,
+            reasoning: None,
         };
 
-        assert_eq!(config_route(&args), ConfigRoute::Provider);
+        assert_eq!(config_operation(args).unwrap(), ConfigOperation::Show);
     }
 
     #[test]
-    fn config_routes_to_api_key_flow() {
+    fn config_uses_provider_only_through_use_flag() {
         let args = ConfigArgs {
-            provider: false,
-            apikey: true,
-            models: false,
+            use_provider: Some("openrouter".to_owned()),
+            provider: None,
+            key: None,
+            task: None,
+            model: None,
+            reasoning: None,
         };
 
-        assert_eq!(config_route(&args), ConfigRoute::ApiKey);
-    }
-
-    #[test]
-    fn config_defaults_to_full_setup_route() {
-        let args = ConfigArgs {
-            provider: false,
-            apikey: false,
-            models: false,
-        };
-
-        assert_eq!(config_route(&args), ConfigRoute::FullSetup);
-    }
-
-    #[test]
-    fn full_setup_runs_provider_api_key_and_models_in_order() {
-        let calls = RefCell::new(Vec::new());
-
-        let output = handle_full_config_with_steps(
-            || {
-                calls.borrow_mut().push("provider");
-                Ok("provider done".to_owned())
-            },
-            || {
-                calls.borrow_mut().push("apikey");
-                Ok("apikey done".to_owned())
-            },
-            || {
-                calls.borrow_mut().push("models");
-                Ok("models done".to_owned())
-            },
-        )
-        .unwrap();
-
-        assert_eq!(calls.into_inner(), ["provider", "apikey", "models"]);
-        assert_eq!(output, "provider done\napikey done\nmodels done");
-    }
-
-    #[test]
-    fn provider_config_saves_enabled_provider_selection() {
-        let saved_config = RefCell::new(None);
-
-        let output = handle_provider_config_with_selection(
-            || Ok(SpectacularConfig::default()),
-            |config| {
-                saved_config.replace(Some(config.clone()));
-                Ok(())
-            },
-            |_| Ok("openrouter".to_owned()),
-        )
-        .unwrap();
-
-        let saved_config = saved_config.into_inner().unwrap();
-        assert_eq!(output, "Selected provider: OpenRouter");
         assert_eq!(
-            saved_config.selected_provider.as_deref(),
-            Some("openrouter")
-        );
-    }
-
-    #[test]
-    fn provider_config_rejects_disabled_provider_selection() {
-        let output = handle_provider_config_with_selection(
-            || Ok(SpectacularConfig::default()),
-            |_| panic!("disabled provider must not be written"),
-            |_| Ok("openai".to_owned()),
-        )
-        .unwrap_err();
-
-        assert!(matches!(
-            output,
-            AppError::ProviderSelection(ProviderSelectionError::DisabledProvider { .. })
-        ));
-        assert!(user_facing_error(&output).contains("disabled"));
-    }
-
-    #[test]
-    fn provider_config_options_mask_stored_keys() {
-        let mut config = SpectacularConfig::default();
-        config.provider_api_keys.insert(
-            "openrouter".to_owned(),
-            "sk-or-v1-1de08abcdefghijklmnopqrstuvwxyz".to_owned(),
-        );
-
-        let options = provider_options_from_config(spectacular_llms::provider_registry(), &config);
-        let openrouter = options
-            .iter()
-            .find(|provider| provider.id() == "openrouter")
-            .unwrap();
-
-        assert!(openrouter
-            .masked_api_key()
-            .unwrap()
-            .starts_with("sk-or-v1-1de"));
-        assert!(!openrouter
-            .masked_api_key()
-            .unwrap()
-            .contains("abcdefghijklmnopqrstuvwxyz"));
-    }
-
-    #[test]
-    fn api_key_config_requires_selected_provider() {
-        let output = handle_api_key_config_with_input(
-            || Ok(SpectacularConfig::default()),
-            |_| panic!("missing provider must not be written"),
-            |_, _| panic!("missing provider must not open input screen"),
-        )
-        .unwrap_err();
-
-        assert!(matches!(
-            output,
-            AppError::Config(ConfigError::NoSelectedProvider)
-        ));
-        assert!(user_facing_error(&output).contains("spectacular config"));
-    }
-
-    #[test]
-    fn api_key_config_saves_validated_key_for_selected_provider_only() {
-        let saved_config = RefCell::new(None);
-        let mut config = SpectacularConfig {
-            selected_provider: Some("openrouter".to_owned()),
-            ..SpectacularConfig::default()
-        };
-        config.set_provider_api_key("openrouter", "old-openrouter-key");
-        config.set_provider_api_key("openai", "existing-openai-key");
-
-        let output = handle_api_key_config_with_input(
-            || Ok(config),
-            |config| {
-                saved_config.replace(Some(config.clone()));
-                Ok(())
-            },
-            |provider, current_api_key| {
-                assert_eq!(provider.id(), "openrouter");
-                assert_eq!(current_api_key, Some("old-openrouter-key"));
-                Ok("sk-or-v1-new-secret".to_owned())
-            },
-        )
-        .unwrap();
-
-        let saved_config = saved_config.into_inner().unwrap();
-        assert_eq!(output, "Saved API key for OpenRouter.");
-        assert!(!output.contains("sk-or-v1-new-secret"));
-        assert_eq!(
-            saved_config
-                .provider_api_keys
-                .get("openrouter")
-                .map(String::as_str),
-            Some("sk-or-v1-new-secret")
-        );
-        assert_eq!(
-            saved_config
-                .provider_api_keys
-                .get("openai")
-                .map(String::as_str),
-            Some("existing-openai-key")
-        );
-    }
-
-    #[test]
-    fn api_key_config_does_not_save_when_input_is_cancelled() {
-        let config = SpectacularConfig {
-            selected_provider: Some("openrouter".to_owned()),
-            ..SpectacularConfig::default()
-        };
-
-        let output = handle_api_key_config_with_input(
-            || Ok(config),
-            |_| panic!("cancelled input must not be written"),
-            |_, _| Err(ApiKeyInputError::Cancelled),
-        )
-        .unwrap_err();
-
-        assert!(matches!(
-            output,
-            AppError::ApiKeyInput(ApiKeyInputError::Cancelled)
-        ));
-    }
-
-    #[test]
-    fn models_config_requires_selected_provider() {
-        let output = handle_models_config_with_selection(
-            || Ok(SpectacularConfig::default()),
-            |_| panic!("missing provider must not be written"),
-            |_, _| panic!("missing provider must not fetch models"),
-            |_, _, _| panic!("missing provider must not open model assignment"),
-        )
-        .unwrap_err();
-
-        assert!(matches!(
-            output,
-            AppError::Config(ConfigError::NoSelectedProvider)
-        ));
-        assert!(user_facing_error(&output).contains("spectacular config"));
-    }
-
-    #[test]
-    fn models_config_requires_selected_provider_api_key() {
-        let config = SpectacularConfig {
-            selected_provider: Some("openrouter".to_owned()),
-            ..SpectacularConfig::default()
-        };
-
-        let output = handle_models_config_with_selection(
-            || Ok(config),
-            |_| panic!("missing API key must not be written"),
-            |_, _| panic!("missing API key must not fetch models"),
-            |_, _, _| panic!("missing API key must not open model assignment"),
-        )
-        .unwrap_err();
-
-        assert!(matches!(
-            output,
-            AppError::Config(ConfigError::MissingProviderApiKey { .. })
-        ));
-        assert!(user_facing_error(&output).contains("spectacular config"));
-    }
-
-    #[test]
-    fn models_config_fetches_models_and_saves_all_assignments() {
-        let saved_config = RefCell::new(None);
-        let mut config = SpectacularConfig {
-            selected_provider: Some("openrouter".to_owned()),
-            ..SpectacularConfig::default()
-        };
-        config.set_provider_api_key("openrouter", "sk-or-v1-valid");
-
-        let output = handle_models_config_with_selection(
-            || Ok(config),
-            |config| {
-                saved_config.replace(Some(config.clone()));
-                Ok(())
-            },
-            |provider, api_key| {
-                assert_eq!(provider.id(), "openrouter");
-                assert_eq!(api_key, "sk-or-v1-valid");
-                Ok(vec![
-                    Model::new("openai/gpt-4o", "GPT-4o"),
-                    Model::new("anthropic/claude-sonnet-4.5", "Claude Sonnet"),
-                ])
-            },
-            |provider, models, current_selection| {
-                assert_eq!(provider.display_name(), "OpenRouter");
-                assert_eq!(models[0].id(), "openai/gpt-4o");
-                assert!(current_selection.is_none());
-                Ok(TaskModelSelection::new(
-                    "openai/gpt-4o",
-                    "anthropic/claude-sonnet-4.5",
-                    "openai/gpt-4o",
-                ))
-            },
-        )
-        .unwrap();
-
-        let saved_config = saved_config.into_inner().unwrap();
-        assert_eq!(output, "Saved model assignments for OpenRouter.");
-        assert_eq!(
-            saved_config.task_models,
-            TaskModels {
-                planning: Some("openai/gpt-4o".to_owned()),
-                labeling: Some("anthropic/claude-sonnet-4.5".to_owned()),
-                coding: Some("openai/gpt-4o".to_owned()),
+            config_operation(args).unwrap(),
+            ConfigOperation::UseProvider {
+                provider_id: "openrouter".to_owned()
             }
         );
     }
 
     #[test]
-    fn models_config_does_not_save_when_assignment_is_cancelled() {
-        let mut config = SpectacularConfig {
-            selected_provider: Some("openrouter".to_owned()),
-            ..SpectacularConfig::default()
+    fn config_rejects_use_with_other_flags() {
+        let args = ConfigArgs {
+            use_provider: Some("openrouter".to_owned()),
+            provider: Some("openrouter".to_owned()),
+            key: None,
+            task: None,
+            model: None,
+            reasoning: None,
         };
-        config.set_provider_api_key("openrouter", "sk-or-v1-valid");
 
-        let output = handle_models_config_with_selection(
-            || Ok(config),
-            |_| panic!("cancelled assignment must not be written"),
-            |_, _| Ok(vec![Model::new("openai/gpt-4o", "GPT-4o")]),
-            |_, _, _| Err(ModelAssignmentError::Cancelled),
+        assert!(matches!(
+            config_operation(args).unwrap_err(),
+            AppError::InvalidConfigCommand(_)
+        ));
+    }
+
+    #[test]
+    fn config_saves_provider_key_operation() {
+        let args = ConfigArgs {
+            use_provider: None,
+            provider: Some("openrouter".to_owned()),
+            key: Some("sk-or-v1-test".to_owned()),
+            task: None,
+            model: None,
+            reasoning: None,
+        };
+
+        assert_eq!(
+            config_operation(args).unwrap(),
+            ConfigOperation::SaveProviderKey {
+                provider_id: "openrouter".to_owned(),
+                key: "sk-or-v1-test".to_owned()
+            }
+        );
+    }
+
+    #[test]
+    fn config_saves_task_model_with_default_reasoning() {
+        let args = ConfigArgs {
+            use_provider: None,
+            provider: Some("openrouter".to_owned()),
+            key: None,
+            task: Some(TaskModelSlot::Planning),
+            model: Some("deepseek/deepseek-v4-pro".to_owned()),
+            reasoning: None,
+        };
+
+        assert_eq!(
+            config_operation(args).unwrap(),
+            ConfigOperation::SaveTaskModel {
+                provider_id: "openrouter".to_owned(),
+                slot: TaskModelSlot::Planning,
+                model: "deepseek/deepseek-v4-pro".to_owned(),
+                reasoning: ReasoningLevel::None,
+            }
+        );
+    }
+
+    #[test]
+    fn config_saves_task_model_with_explicit_reasoning() {
+        let args = ConfigArgs {
+            use_provider: None,
+            provider: Some("openrouter".to_owned()),
+            key: None,
+            task: Some(TaskModelSlot::Planning),
+            model: Some("deepseek/deepseek-v4-pro".to_owned()),
+            reasoning: Some(ReasoningLevel::High),
+        };
+
+        assert_eq!(
+            config_operation(args).unwrap(),
+            ConfigOperation::SaveTaskModel {
+                provider_id: "openrouter".to_owned(),
+                slot: TaskModelSlot::Planning,
+                model: "deepseek/deepseek-v4-pro".to_owned(),
+                reasoning: ReasoningLevel::High,
+            }
+        );
+    }
+
+    #[test]
+    fn config_requires_provider_for_key_updates() {
+        let args = ConfigArgs {
+            use_provider: None,
+            provider: None,
+            key: Some("sk-or-v1-test".to_owned()),
+            task: None,
+            model: None,
+            reasoning: None,
+        };
+
+        assert!(matches!(
+            config_operation(args).unwrap_err(),
+            AppError::InvalidConfigCommand(_)
+        ));
+    }
+
+    #[test]
+    fn config_requires_model_for_task_updates() {
+        let args = ConfigArgs {
+            use_provider: None,
+            provider: Some("openrouter".to_owned()),
+            key: None,
+            task: Some(TaskModelSlot::Planning),
+            model: None,
+            reasoning: Some(ReasoningLevel::High),
+        };
+
+        assert!(matches!(
+            config_operation(args).unwrap_err(),
+            AppError::InvalidConfigCommand(_)
+        ));
+    }
+
+    #[test]
+    fn config_rejects_key_and_task_in_same_command() {
+        let args = ConfigArgs {
+            use_provider: None,
+            provider: Some("openrouter".to_owned()),
+            key: Some("sk-or-v1-test".to_owned()),
+            task: Some(TaskModelSlot::Planning),
+            model: Some("deepseek/deepseek-v4-pro".to_owned()),
+            reasoning: None,
+        };
+
+        assert!(matches!(
+            config_operation(args).unwrap_err(),
+            AppError::InvalidConfigCommand(_)
+        ));
+    }
+
+    #[test]
+    fn config_show_prints_human_readable_config_with_raw_key() {
+        let output = handle_config_with_io(
+            ConfigArgs {
+                use_provider: None,
+                provider: None,
+                key: None,
+                task: None,
+                model: None,
+                reasoning: None,
+            },
+            || Ok(complete_config()),
+            |_| panic!("show must not write config"),
+        )
+        .unwrap();
+        let output = strip_ansi_codes(&output);
+
+        assert!(output.contains("Spectacular config"));
+        assert!(output.contains("Selected provider: openrouter"));
+        assert!(output.contains("  openrouter (selected)"));
+        assert!(output.contains("    API key: sk-or-v1-test"));
+        assert!(output.contains("      planning: openrouter/planning (reasoning: high)"));
+        assert!(output.contains("      labeling: openrouter/labeling (reasoning: low)"));
+        assert!(output.contains("      coding: openrouter/coding (reasoning: medium)"));
+        assert!(!output.contains("\"providers\""));
+    }
+
+    #[test]
+    fn config_show_prints_empty_config_clearly() {
+        let output = strip_ansi_codes(&format_config_report(&SpectacularConfig::default()));
+
+        assert_eq!(
+            output,
+            "Spectacular config\nSelected provider: none\n\nConfigured providers\n  None"
+        );
+    }
+
+    #[test]
+    fn use_provider_requires_provider_to_be_configured() {
+        let output = handle_config_with_io(
+            ConfigArgs {
+                use_provider: Some("openrouter".to_owned()),
+                provider: None,
+                key: None,
+                task: None,
+                model: None,
+                reasoning: None,
+            },
+            || Ok(SpectacularConfig::default()),
+            |_| panic!("unconfigured provider must not be written"),
         )
         .unwrap_err();
 
         assert!(matches!(
             output,
-            AppError::ModelAssignment(ModelAssignmentError::Cancelled)
+            AppError::Config(ConfigError::ProviderNotConfigured { .. })
         ));
+    }
+
+    #[test]
+    fn use_provider_saves_selected_provider_without_requiring_complete_tasks() {
+        let saved_config = RefCell::new(None);
+        let mut config = SpectacularConfig::default();
+        config.set_provider_api_key("openrouter", "sk-or-v1-test");
+
+        let output = handle_config_with_io(
+            ConfigArgs {
+                use_provider: Some("openrouter".to_owned()),
+                provider: None,
+                key: None,
+                task: None,
+                model: None,
+                reasoning: None,
+            },
+            || Ok(config),
+            |config| {
+                saved_config.replace(Some(config.clone()));
+                Ok(())
+            },
+        )
+        .unwrap();
+        let output = strip_ansi_codes(&output);
+
+        assert_eq!(
+            output,
+            "[selected] Active provider updated\n  Provider: OpenRouter"
+        );
+        assert_eq!(
+            saved_config
+                .into_inner()
+                .unwrap()
+                .providers
+                .selected
+                .as_deref(),
+            Some("openrouter")
+        );
+    }
+
+    #[test]
+    fn provider_key_update_validates_provider_locally_without_key_validation() {
+        let saved_config = RefCell::new(None);
+
+        let output = handle_config_with_io(
+            ConfigArgs {
+                use_provider: None,
+                provider: Some("openrouter".to_owned()),
+                key: Some("not-validated".to_owned()),
+                task: None,
+                model: None,
+                reasoning: None,
+            },
+            || Ok(SpectacularConfig::default()),
+            |config| {
+                saved_config.replace(Some(config.clone()));
+                Ok(())
+            },
+        )
+        .unwrap();
+        let output = strip_ansi_codes(&output);
+
+        let saved_config = saved_config.into_inner().unwrap();
+        assert_eq!(
+            output,
+            "[saved] API key configured\n  Provider: OpenRouter\n  State: configured"
+        );
+        assert_eq!(
+            saved_config
+                .providers
+                .available
+                .get("openrouter")
+                .and_then(|provider| provider.key.as_deref()),
+            Some("not-validated")
+        );
+    }
+
+    #[test]
+    fn provider_key_update_rejects_unknown_provider() {
+        let output = handle_config_with_io(
+            ConfigArgs {
+                use_provider: None,
+                provider: Some("unknown".to_owned()),
+                key: Some("key".to_owned()),
+                task: None,
+                model: None,
+                reasoning: None,
+            },
+            || Ok(SpectacularConfig::default()),
+            |_| panic!("unknown provider must not be written"),
+        )
+        .unwrap_err();
+
+        assert!(matches!(output, AppError::Provider { .. }));
+    }
+
+    #[test]
+    fn task_model_update_saves_under_provider() {
+        let saved_config = RefCell::new(None);
+
+        let output = handle_config_with_io(
+            ConfigArgs {
+                use_provider: None,
+                provider: Some("openrouter".to_owned()),
+                key: None,
+                task: Some(TaskModelSlot::Planning),
+                model: Some("deepseek/deepseek-v4-pro".to_owned()),
+                reasoning: Some(ReasoningLevel::High),
+            },
+            || Ok(SpectacularConfig::default()),
+            |config| {
+                saved_config.replace(Some(config.clone()));
+                Ok(())
+            },
+        )
+        .unwrap();
+        let output = strip_ansi_codes(&output);
+
+        let saved_config = saved_config.into_inner().unwrap();
+        assert_eq!(
+            output,
+            "[saved] Task model configured\n  Provider: OpenRouter\n  Task: planning\n  Model: deepseek/deepseek-v4-pro\n  Reasoning: high"
+        );
+        assert_eq!(
+            saved_config
+                .providers
+                .available
+                .get("openrouter")
+                .unwrap()
+                .tasks
+                .planning,
+            Some(TaskModelConfig::new(
+                "deepseek/deepseek-v4-pro",
+                ReasoningLevel::High
+            ))
+        );
+        assert!(saved_config.providers.selected.is_none());
     }
 
     #[test]
@@ -886,24 +1019,63 @@ mod tests {
     }
 
     #[test]
-    fn incomplete_config_errors_tell_user_to_run_config() {
+    fn incomplete_config_errors_tell_user_to_run_new_config_commands() {
         let error = AppError::Plan(PlanError::Config(ConfigError::NoSelectedProvider));
 
-        assert!(user_facing_error(&error).contains("spectacular config"));
+        assert!(user_facing_error(&error).contains("spectacular config --use"));
     }
 
     fn complete_config() -> SpectacularConfig {
-        let mut provider_api_keys = BTreeMap::new();
-        provider_api_keys.insert("openrouter".to_owned(), "sk-or-v1-test".to_owned());
+        let mut available = BTreeMap::new();
+        available.insert(
+            "openrouter".to_owned(),
+            ProviderConfig {
+                key: Some("sk-or-v1-test".to_owned()),
+                tasks: TaskModels {
+                    planning: Some(TaskModelConfig::new(
+                        "openrouter/planning",
+                        ReasoningLevel::High,
+                    )),
+                    labeling: Some(TaskModelConfig::new(
+                        "openrouter/labeling",
+                        ReasoningLevel::Low,
+                    )),
+                    coding: Some(TaskModelConfig::new(
+                        "openrouter/coding",
+                        ReasoningLevel::Medium,
+                    )),
+                },
+            },
+        );
 
         SpectacularConfig {
-            selected_provider: Some("openrouter".to_owned()),
-            provider_api_keys,
-            task_models: TaskModels {
-                planning: Some("openrouter/planning".to_owned()),
-                labeling: Some("openrouter/labeling".to_owned()),
-                coding: Some("openrouter/coding".to_owned()),
+            providers: ProvidersConfig {
+                selected: Some("openrouter".to_owned()),
+                available,
             },
         }
+    }
+
+    fn strip_ansi_codes(value: &str) -> String {
+        let mut output = String::new();
+        let mut chars = value.chars().peekable();
+
+        while let Some(character) = chars.next() {
+            if character != '\u{1b}' {
+                output.push(character);
+                continue;
+            }
+
+            if chars.peek() == Some(&'[') {
+                chars.next();
+                for code_character in chars.by_ref() {
+                    if code_character.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            }
+        }
+
+        output
     }
 }
