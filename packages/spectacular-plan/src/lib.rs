@@ -53,7 +53,9 @@ impl Error for PlanError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use spectacular_config::{TaskModelSlot, TaskModels};
+    use spectacular_config::{
+        ProviderConfig, ProvidersConfig, ReasoningLevel, TaskModelConfig, TaskModelSlot, TaskModels,
+    };
     use std::collections::BTreeMap;
 
     #[test]
@@ -81,7 +83,13 @@ mod tests {
     fn rejects_incomplete_config() {
         let output = run("Create a login flow", || {
             let mut config = complete_config();
-            config.task_models.coding = None;
+            config
+                .providers
+                .available
+                .get_mut("openrouter")
+                .unwrap()
+                .tasks
+                .coding = None;
             Ok(config)
         });
 
@@ -101,16 +109,32 @@ mod tests {
     }
 
     fn complete_config() -> SpectacularConfig {
-        let mut provider_api_keys = BTreeMap::new();
-        provider_api_keys.insert("openrouter".to_owned(), "sk-or-v1-test".to_owned());
+        let mut available = BTreeMap::new();
+        available.insert(
+            "openrouter".to_owned(),
+            ProviderConfig {
+                key: Some("sk-or-v1-test".to_owned()),
+                tasks: TaskModels {
+                    planning: Some(TaskModelConfig::new(
+                        "openrouter/planning",
+                        ReasoningLevel::None,
+                    )),
+                    labeling: Some(TaskModelConfig::new(
+                        "openrouter/labeling",
+                        ReasoningLevel::None,
+                    )),
+                    coding: Some(TaskModelConfig::new(
+                        "openrouter/coding",
+                        ReasoningLevel::None,
+                    )),
+                },
+            },
+        );
 
         SpectacularConfig {
-            selected_provider: Some("openrouter".to_owned()),
-            provider_api_keys,
-            task_models: TaskModels {
-                planning: Some("openrouter/planning".to_owned()),
-                labeling: Some("openrouter/labeling".to_owned()),
-                coding: Some("openrouter/coding".to_owned()),
+            providers: ProvidersConfig {
+                selected: Some("openrouter".to_owned()),
+                available,
             },
         }
     }
