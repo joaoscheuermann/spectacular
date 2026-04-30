@@ -1,3 +1,5 @@
+mod chat;
+
 use anstyle::{AnsiColor, Style};
 use clap::{Args, Parser, Subcommand};
 use spectacular_config::{
@@ -17,6 +19,8 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Start an Aider-style terminal chat session.
+    Chat,
     /// Inspect or update Spectacular configuration.
     Config(ConfigArgs),
     /// Run the first SDD planning step.
@@ -66,13 +70,17 @@ enum ConfigOperation {
     },
 }
 
-fn main() -> ExitCode {
+#[tokio::main]
+async fn main() -> ExitCode {
     let cli = Cli::parse();
-    match handle(cli) {
-        Ok(output) => {
-            println!("{output}");
+    match handle(cli).await {
+        Ok(Some(output)) => {
+            if !output.is_empty() {
+                println!("{output}");
+            }
             ExitCode::SUCCESS
         }
+        Ok(None) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("{}", user_facing_error(&error));
             ExitCode::FAILURE
@@ -80,10 +88,14 @@ fn main() -> ExitCode {
     }
 }
 
-fn handle(cli: Cli) -> Result<String, AppError> {
+async fn handle(cli: Cli) -> Result<Option<String>, AppError> {
     match cli.command {
-        Command::Config(args) => handle_config(args),
-        Command::Plan { prompt } => handle_plan(&prompt),
+        Command::Chat => match chat::run().await {
+            Ok(()) | Err(chat::ChatError::Exit) => Ok(None),
+            Err(error) => Err(error.into()),
+        },
+        Command::Config(args) => handle_config(args).map(Some),
+        Command::Plan { prompt } => handle_plan(&prompt).map(Some),
     }
 }
 
@@ -470,6 +482,7 @@ fn handle_plan_with_loader(
 
 #[derive(Debug)]
 enum AppError {
+    Chat(chat::ChatError),
     Config(ConfigError),
     InvalidConfigCommand(String),
     Plan(PlanError),
@@ -482,11 +495,19 @@ impl From<ConfigError> for AppError {
     }
 }
 
+impl From<chat::ChatError> for AppError {
+    fn from(error: chat::ChatError) -> Self {
+        Self::Chat(error)
+    }
+}
+
 fn user_facing_error(error: &AppError) -> String {
     match error {
         AppError::Plan(PlanError::EmptyPrompt) => {
             "A non-empty prompt is required. Usage: spectacular plan <prompt>".to_owned()
         }
+        AppError::Chat(chat::ChatError::Exit) => String::new(),
+        AppError::Chat(error) => error.to_string(),
         AppError::Plan(PlanError::Config(config_error)) | AppError::Config(config_error) => {
             format_config_error(config_error)
         }
@@ -591,13 +612,14 @@ mod tests {
     use std::collections::BTreeMap;
 
     #[test]
-    fn top_level_help_lists_config_and_plan() {
+    fn top_level_help_lists_chat_config_and_plan() {
         let mut command = Cli::command();
         let mut buffer = Vec::new();
 
         command.write_long_help(&mut buffer).unwrap();
         let help = String::from_utf8(buffer).unwrap();
 
+        assert!(help.contains("chat"));
         assert!(help.contains("config"));
         assert!(help.contains("plan"));
     }

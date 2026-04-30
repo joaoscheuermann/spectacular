@@ -6,6 +6,10 @@ pub struct Store {
 }
 
 impl Store {
+    pub fn from_events(events: Vec<AgentEvent>) -> Self {
+        Self { events }
+    }
+
     pub fn append(&mut self, event: AgentEvent) {
         self.events.push(event);
     }
@@ -20,6 +24,12 @@ impl Store {
 
     pub fn rollback(&mut self, checkpoint: usize) {
         self.events.truncate(checkpoint);
+    }
+}
+
+impl From<Vec<AgentEvent>> for Store {
+    fn from(events: Vec<AgentEvent>) -> Self {
+        Self::from_events(events)
     }
 }
 

@@ -118,6 +118,10 @@ impl RunQueue {
     }
 
     pub async fn cancel_pending(&self) {
+        self.cancel_pending_now();
+    }
+
+    pub fn cancel_pending_now(&self) {
         let mut state = self.state.lock().unwrap();
         state.rejecting = true;
         cancel_waiting(&mut state);

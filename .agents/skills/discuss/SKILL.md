@@ -8,3 +8,7 @@ Interview me relentlessly about every aspect of this plan until we reach a share
 Ask the questions one at a time.
 
 If a question can be answered by exploring the codebase, explore the codebase instead.
+
+Do not write any code, this is purrely a conversation!
+
+At the end of the conversation, output your understanding of the conclusion of the conversation.

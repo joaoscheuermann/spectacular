@@ -41,24 +41,21 @@ impl LlmProvider for FakeProvider {
         _cancellation: Cancellation,
     ) -> ProviderCall<'a> {
         Box::pin(async {
-            let stream: ProviderStream = Box::new(
-                vec![
-                    Ok(ProviderStreamEvent::MessageDelta(MessageDelta::assistant(
-                        "fake assistant response",
-                    ))),
-                    Ok(ProviderStreamEvent::Finished(ProviderFinished {
-                        finish_reason: FinishReason::Stop,
-                        tool_calls: Vec::new(),
-                        usage: Some(UsageMetadata {
-                            input_tokens: Some(1),
-                            output_tokens: Some(1),
-                            total_tokens: Some(2),
-                        }),
-                        reasoning: None,
-                    })),
-                ]
-                .into_iter(),
-            );
+            let stream = ProviderStream::from_events(vec![
+                Ok(ProviderStreamEvent::MessageDelta(MessageDelta::assistant(
+                    "fake assistant response",
+                ))),
+                Ok(ProviderStreamEvent::Finished(ProviderFinished {
+                    finish_reason: FinishReason::Stop,
+                    tool_calls: Vec::new(),
+                    usage: Some(UsageMetadata {
+                        input_tokens: Some(1),
+                        output_tokens: Some(1),
+                        total_tokens: Some(2),
+                    }),
+                    reasoning: None,
+                })),
+            ]);
             Ok(stream)
         })
     }
