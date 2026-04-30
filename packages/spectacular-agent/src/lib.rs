@@ -7,7 +7,7 @@ pub mod schema;
 pub mod store;
 pub mod tool;
 
-pub use agent::{Agent, AgentConfig};
+pub use agent::{Agent, AgentConfig, AgentRunStream};
 pub use context::{provider_messages_from_store, validate_context_limits, ContextLimitFailure};
 pub use error::AgentError;
 pub use event::AgentEvent;

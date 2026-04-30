@@ -1,13 +1,13 @@
 ---
 name: project-index
-description: Spectacular repository map and file index. Use when Codex needs quick context about this repo, its Nx/Cargo workspace layout, local agent skills, Rust crates, GPUI app structure, config/theme files, or source-controlled files before planning, coding, reviewing, or debugging.
+description: Spectacular repository map and file index. Use when Codex needs quick context about this repo, its Nx/Cargo workspace layout, local agent skills, Rust CLI crates, source-controlled files, planning, coding, reviewing, or debugging.
 ---
 
 # Project Index
 
-Last updated: 2026-04-28
+Last updated: 2026-04-29
 
-This skill gives agents a compact map of the current Spectacular repository. It indexes source-controlled and unignored project files, with generated/dependency folders omitted so startup context stays useful.
+This skill gives agents a compact, source-of-truth map of the current Spectacular repository. It indexes files returned by `git ls-files --cached --others --exclude-standard` and keeps generated, dependency, and local-only paths out of startup context.
 
 Omitted intentionally:
 
@@ -18,7 +18,7 @@ Omitted intentionally:
 
 ## Repository Summary
 
-Spectacular is an Nx workspace backed by a Rust Cargo workspace. It currently contains a GPUI desktop application (`spectacular`) plus supporting Rust crates for agent orchestration, provider abstractions, config persistence, and a placeholder planning route. The repo also contains `.agents/skills` playbooks that steer coding, Nx, debugging, CI, and journal workflows.
+Spectacular is an Nx workspace backed by a Rust Cargo workspace. The current indexed source contains a Rust CLI application crate (`spectacular`) plus supporting crates for agent orchestration, LLM provider abstractions, configuration persistence, and placeholder planning behavior. The repo also includes local `.agents/skills` playbooks for Nx operations, coding conventions, debugging, CI monitoring, journaling, and repository indexing.
 
 ## Tree
 
@@ -29,13 +29,13 @@ Spectacular is an Nx workspace backed by a Rust Cargo workspace. It currently co
 |       |-- architect/
 |       |   `-- SKILL.md - Planning-only architecture workflow for Nx monorepo changes.
 |       |-- coding-conventions/
-|       |   |-- SKILL.md - Shared implementation conventions and references.
+|       |   |-- SKILL.md - Shared design principles and implementation conventions.
 |       |   `-- references/
 |       |       |-- dependency-injection.md - Dependency injection guidance and examples.
 |       |       |-- dip.md - Dependency Inversion Principle guidance.
 |       |       |-- dry.md - DRY principle guidance.
 |       |       |-- early-returns.md - Early return and control-flow style guidance.
-|       |       |-- functional-programming.md - Functional style guidance for implementation work.
+|       |       |-- functional-programming.md - Functional programming guidance for implementation work.
 |       |       |-- isp.md - Interface Segregation Principle guidance.
 |       |       |-- kiss.md - KISS principle guidance.
 |       |       |-- monodon-rust.md - Rust project guidance for `@monodon/rust` in Nx.
@@ -50,8 +50,10 @@ Spectacular is an Nx workspace backed by a Rust Cargo workspace. It currently co
 |       |   `-- SKILL.md - Breaks approved architecture into ordered effort files.
 |       |-- developer/
 |       |   `-- SKILL.md - Implements approved efforts while following repo conventions.
+|       |-- discuss/
+|       |   `-- SKILL.md - One-question-at-a-time plan interrogation and decision clarification.
 |       |-- effort-executor/
-|       |   `-- SKILL.md - Orchestrates effort execution and status lifecycle.
+|       |   `-- SKILL.md - Orchestrates effort execution and journal status lifecycle.
 |       |-- generate-project-index/
 |       |   |-- SKILL.md - Workflow and reusable prompt for regenerating this repository index skill.
 |       |   `-- agents/
@@ -91,47 +93,26 @@ Spectacular is an Nx workspace backed by a Rust Cargo workspace. It currently co
 |       |   `-- agents/
 |       |       `-- openai.yaml - UI metadata for this project-index skill.
 |       |-- spec/
-|       |   `-- SKILL.md - Requirements elicitation, stories, acceptance criteria, and edge cases.
+|       |   `-- SKILL.md - Requirements elicitation, user stories, acceptance criteria, and edge cases.
 |       `-- tester/
 |           `-- SKILL.md - Verification workflow for efforts and bug fixes.
 |-- .cargo/
-|   `-- config.toml - Cargo configuration for the workspace.
+|   `-- config.toml - Cargo configuration that places build outputs under `dist/target`.
 |-- .github/
 |   `-- workflows/
-|       `-- ci.yml - GitHub Actions workflow for Nx CI, install, format, lint, test, build, and fix-ci.
+|       `-- ci.yml - GitHub Actions workflow for Nx CI, install, format, run-many, and fix-ci.
 |-- .vscode/
 |   `-- extensions.json - Recommended VS Code extensions for the workspace.
 |-- packages/
-|   |-- .gitkeep - Keeps the packages directory present when empty.
-|   |-- spectacular/ - GPUI desktop application crate.
-|   |   |-- Cargo.toml - Application crate manifest with GPUI, config, agent, and LLM dependencies.
-|   |   |-- project.json - Nx project definition for build, test, lint, and run targets.
-|   |   |-- assets/
-|   |   |   |-- fonts/
-|   |   |   |   `-- UbuntoSansMono/
-|   |   |   |       |-- UbuntuSansMono-Italic-VariableFont_wght.ttf - Bundled italic monospace font asset.
-|   |   |   |       `-- UbuntuSansMono-VariableFont_wght.ttf - Bundled regular monospace font asset.
-|   |   |   |-- footer/
-|   |   |   |   |-- branch.svg - Footer branch-status icon.
-|   |   |   |   `-- config.svg - Footer configuration icon.
-|   |   |   `-- window-controls/
-|   |   |       |-- close.svg - Close window control icon.
-|   |   |       |-- maximize.svg - Maximize window control icon.
-|   |   |       |-- minimize.svg - Minimize window control icon.
-|   |   |       `-- restore.svg - Restore window control icon.
+|   |-- .gitkeep - Keeps the packages directory present when no packages are generated.
+|   |-- spectacular/ - Rust CLI application crate.
+|   |   |-- Cargo.toml - Application manifest with CLI styling and local crate dependencies.
+|   |   |-- project.json - Nx targets for Rust build, test, lint, and run.
 |   |   `-- src/
-|   |       |-- main.rs - Application entry point; resolves project directory args and launches the GUI.
-|   |       `-- gui/
-|   |           |-- fake_agent.rs - Produces fake agent events for the current shell prototype.
-|   |           |-- mod.rs - GUI module root; binds actions, loads assets/fonts, configures the GPUI window.
-|   |           |-- prompt_input.rs - Custom multiline prompt input with selection, cursor, clipboard, and scrolling behavior.
-|   |           |-- shell.rs - Main Spectacular shell UI: header, transcript, sticky prompt, footer, timer, branch status, and fake work loop.
-|   |           |-- theme.rs - Theme token structs and loading/fallback logic for JSON themes.
-|   |           |-- transcript.rs - Converts agent events into user and assistant transcript groups.
-|   |           `-- window_controls.rs - Cross-platform custom close/minimize/maximize controls and window-drag helpers.
+|   |       `-- main.rs - CLI entry point for `config` and `plan` commands, user-facing errors, and tests.
 |   |-- spectacular-agent/ - Agent orchestration library crate.
-|   |   |-- Cargo.toml - Agent crate manifest with JSON schema, Tokio, and LLM crate dependencies.
-|   |   |-- project.json - Nx project definition for Rust check, test, and lint targets.
+|   |   |-- Cargo.toml - Agent manifest with JSON schema, Tokio, and LLM crate dependencies.
+|   |   |-- project.json - Nx targets for Rust check, test, and lint.
 |   |   |-- examples/
 |   |   |   |-- cancellation.rs - Example for cancelling an active agent run.
 |   |   |   |-- context_filtering.rs - Example for converting stored events into provider context.
@@ -141,34 +122,32 @@ Spectacular is an Nx workspace backed by a Rust Cargo workspace. It currently co
 |   |   |   |-- structured_output.rs - Example for JSON-schema-backed response validation.
 |   |   |   `-- tool_loop.rs - Example for provider-requested tool execution loops.
 |   |   `-- src/
-|   |       |-- agent.rs - Core Agent implementation: run queue integration, provider streaming, tool loops, validation, cancellation, and tests.
-|   |       |-- context.rs - Builds provider messages from stored events and validates provider context limits.
-|   |       |-- error.rs - Agent error enum and mapping from provider errors.
-|   |       |-- event.rs - Agent event model for prompts, deltas, metadata, tools, validation, errors, cancellation, and finish reasons.
+|   |       |-- agent.rs - Core agent runtime, queue integration, provider streaming, tools, validation, cancellation, and tests.
+|   |       |-- context.rs - Provider context construction and context-limit validation.
+|   |       |-- error.rs - Agent error enum and provider error mapping.
+|   |       |-- event.rs - Agent event model for prompts, deltas, tools, validation, cancellation, and finishes.
 |   |       |-- lib.rs - Public module declarations and re-exports for the agent crate.
-|   |       |-- queue.rs - FIFO run queue with manual queueing, concurrent waiters, and cancellation handling.
-|   |       |-- schema.rs - JSON schema wrapper for validating structured assistant responses.
+|   |       |-- queue.rs - FIFO run queue with manual queueing, waiters, and cancellation behavior.
+|   |       |-- schema.rs - JSON schema wrapper for structured assistant response validation.
 |   |       |-- store.rs - Append-only event store with checkpoints and rollback.
-|   |       `-- tool.rs - Tool trait, registry, execution, error formatting, and provider-visible tool call formatting.
+|   |       `-- tool.rs - Tool trait, registry, execution, error formatting, and provider-visible tool calls.
 |   |-- spectacular-config/ - Configuration persistence crate.
 |   |   |-- Cargo.toml - Config crate manifest with Serde dependencies.
-|   |   |-- project.json - Nx project definition for Rust check, test, and lint targets.
+|   |   |-- project.json - Nx targets for Rust check, test, and lint.
 |   |   `-- src/
-|   |       `-- lib.rs - Config path resolution, read/write/repair logic, provider API key storage, task model validation, and tests.
+|   |       `-- lib.rs - Config path resolution, read/write/migration logic, provider API keys, task models, validation, and tests.
 |   |-- spectacular-llms/ - LLM provider abstraction crate.
-|   |   |-- Cargo.toml - LLM crate manifest with reqwest, Serde, and JSON dependencies.
-|   |   |-- project.json - Nx project definition for Rust check, test, and lint targets.
+|   |   |-- Cargo.toml - LLM crate manifest with reqwest, Serde, JSON, and test dependencies.
+|   |   |-- project.json - Nx targets for Rust check, test, and lint.
 |   |   |-- examples/
 |   |   |   `-- provider_capabilities.rs - Example for inspecting enabled provider capabilities.
 |   |   `-- src/
-|   |       `-- lib.rs - Provider registry, model metadata, chat/message types, capabilities, cancellation, OpenRouter validation/model fetching, and provider errors.
-|   |-- spectacular-plan/ - Placeholder planning route crate.
-|   |   |-- Cargo.toml - Plan crate manifest depending on `spectacular-config`.
-|   |   |-- project.json - Nx project definition for Rust check, test, and lint targets.
-|   |   `-- src/
-|   |       `-- lib.rs - Validates non-empty plan prompts and complete config before returning placeholder output.
-|-- themes/
-|   `-- default.json - Default GUI theme token file.
+|   |       `-- lib.rs - Provider registry, OpenRouter metadata and validation, model fetching, capability reports, request/stream types, and errors.
+|   `-- spectacular-plan/ - Placeholder planning route crate.
+|       |-- Cargo.toml - Plan crate manifest depending on `spectacular-config`.
+|       |-- project.json - Nx targets for Rust check, test, and lint.
+|       `-- src/
+|           `-- lib.rs - Validates non-empty plan prompts and complete config before returning placeholder output.
 |-- .gitignore - Ignore rules for generated outputs, dependency directories, editor files, Nx cache, and local journals.
 |-- .prettierignore - Files excluded from Prettier formatting.
 |-- .prettierrc - Prettier configuration.
@@ -185,8 +164,10 @@ Spectacular is an Nx workspace backed by a Rust Cargo workspace. It currently co
 
 ## Working Notes For Agents
 
+- Use `git ls-files --cached --others --exclude-standard` as the file inventory source when refreshing this index.
 - Prefer Nx targets when available: `npx nx <target> <project>`, for example `npx nx test spectacular-agent`.
 - Rust crates are members of the root Cargo workspace, so `cargo test -p <crate>` is also a useful direct verification path.
-- The current GUI shell uses fake agent events; real agent-provider integration lives in `spectacular-agent` and `spectacular-llms`.
+- The current indexed application surface is a Rust CLI; do not assume GUI, theme, or asset files exist unless they appear in the file inventory.
+- Real agent-provider integration is split across `spectacular-agent` and `spectacular-llms`; `spectacular-plan` currently returns placeholder planning output after validation.
 - The repo has local agent skills under `.agents/skills`; load the relevant skill before following a specialized workflow.
 - Do not treat ignored `.journal` files as normal source unless the task explicitly asks for journal planning or effort execution.

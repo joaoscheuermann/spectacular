@@ -9,17 +9,20 @@ use spectacular_llms::{
     Cancellation, FinishReason, LlmProvider, ProviderCapabilities, ProviderError, ProviderFinished,
     ProviderMessageRole, ProviderRequest, ProviderStreamEvent, ProviderToolCall,
 };
-use std::sync::Mutex;
-use tokio::sync::RwLock;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
+use tokio::sync::{mpsc, RwLock};
 
 const DEFAULT_SYSTEM_PROMPT: &str = "You are Spectacular, a focused coding assistant.";
 
 #[derive(Debug)]
 pub struct Agent<P> {
     provider: P,
-    queue: RunQueue,
+    queue: Arc<RunQueue>,
     store: Mutex<Store>,
-    active_cancellation: Mutex<Option<Cancellation>>,
+    active_cancellation: Arc<Mutex<Option<Cancellation>>>,
     tools: RwLock<ToolStorage>,
     config: AgentConfig,
 }
@@ -27,16 +30,78 @@ pub struct Agent<P> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct AgentConfig {
     pub system_prompt: String,
+    pub model: Option<String>,
     pub require_usage_metadata: bool,
     pub require_reasoning_metadata: bool,
     pub include_reasoning: bool,
     pub output_schema: Option<OutputSchema>,
 }
 
+pub struct AgentRunStream {
+    receiver: mpsc::Receiver<AgentEvent>,
+    cancellation: Cancellation,
+    queue: Arc<RunQueue>,
+    completed: Arc<AtomicBool>,
+    active_cancellation: Arc<Mutex<Option<Cancellation>>>,
+}
+
+impl AgentRunStream {
+    fn new(
+        receiver: mpsc::Receiver<AgentEvent>,
+        cancellation: Cancellation,
+        queue: Arc<RunQueue>,
+        completed: Arc<AtomicBool>,
+        active_cancellation: Arc<Mutex<Option<Cancellation>>>,
+    ) -> Self {
+        Self {
+            receiver,
+            cancellation,
+            queue,
+            completed,
+            active_cancellation,
+        }
+    }
+
+    pub async fn next(&mut self) -> Option<AgentEvent> {
+        let event = self.receiver.recv().await;
+        if matches!(
+            event,
+            Some(
+                AgentEvent::Finished { .. }
+                    | AgentEvent::Error { .. }
+                    | AgentEvent::Cancelled { .. }
+            )
+        ) {
+            self.completed.store(true, Ordering::SeqCst);
+        }
+
+        event
+    }
+
+    pub fn cancel(&self) {
+        if self.completed.load(Ordering::SeqCst) {
+            return;
+        }
+
+        self.cancellation.cancel();
+        if let Some(active_cancellation) = self.active_cancellation.lock().unwrap().as_ref() {
+            active_cancellation.cancel();
+        }
+        self.queue.cancel_pending_now();
+    }
+}
+
+impl Drop for AgentRunStream {
+    fn drop(&mut self) {
+        self.cancel();
+    }
+}
+
 impl Default for AgentConfig {
     fn default() -> Self {
         Self {
             system_prompt: DEFAULT_SYSTEM_PROMPT.to_owned(),
+            model: None,
             require_usage_metadata: true,
             require_reasoning_metadata: false,
             include_reasoning: false,
@@ -54,11 +119,15 @@ where
     }
 
     pub fn with_config(provider: P, config: AgentConfig) -> Self {
+        Self::with_config_and_store(provider, config, Store::default())
+    }
+
+    pub fn with_config_and_store(provider: P, config: AgentConfig, store: Store) -> Self {
         Self {
             provider,
-            queue: RunQueue::default(),
-            store: Mutex::new(Store::default()),
-            active_cancellation: Mutex::new(None),
+            queue: Arc::new(RunQueue::default()),
+            store: Mutex::new(store),
+            active_cancellation: Arc::new(Mutex::new(None)),
             tools: RwLock::new(ToolStorage::default()),
             config,
         }
@@ -82,7 +151,7 @@ where
             .await
             .map_err(|_| AgentError::CancellationError)?;
         let cancellation = self.start_cancellation();
-        let result = self.run_request(run, cancellation).await;
+        let result = self.run_request(run, cancellation, None).await;
         self.finish_run(&result).await;
         result
     }
@@ -94,7 +163,7 @@ where
             .await
             .ok_or(AgentError::EmptyRunQueue)?;
         let cancellation = self.start_cancellation();
-        let result = self.run_request(run, cancellation).await;
+        let result = self.run_request(run, cancellation, None).await;
         self.finish_run(&result).await;
         result
     }
@@ -120,29 +189,65 @@ where
     pub fn store(&self) -> Store {
         self.store.lock().unwrap().clone()
     }
+}
 
+impl<P> Agent<P>
+where
+    P: LlmProvider + 'static,
+{
+    pub fn run_stream(self: Arc<Self>, prompt: impl Into<String>) -> AgentRunStream {
+        let cancellation = Cancellation::default();
+        let (sender, receiver) = mpsc::channel(128);
+        let completed = Arc::new(AtomicBool::new(false));
+        let stream = AgentRunStream::new(
+            receiver,
+            cancellation.clone(),
+            Arc::clone(&self.queue),
+            Arc::clone(&completed),
+            Arc::clone(&self.active_cancellation),
+        );
+        let prompt = prompt.into();
+        let agent = Arc::clone(&self);
+
+        tokio::spawn(async move {
+            let result = match agent.queue.enqueue_and_wait(prompt).await {
+                Ok(run) => {
+                    agent.activate_cancellation(cancellation.clone());
+                    agent.run_request(run, cancellation, Some(sender)).await
+                }
+                Err(_) => Err(AgentError::CancellationError),
+            };
+            agent.finish_run(&result).await;
+            completed.store(true, Ordering::SeqCst);
+        });
+
+        stream
+    }
+}
+
+impl<P> Agent<P>
+where
+    P: LlmProvider,
+{
     async fn run_request(
         &self,
         run: RunRequest,
         cancellation: Cancellation,
+        sender: Option<mpsc::Sender<AgentEvent>>,
     ) -> Result<RunId, AgentError> {
+        let mut recorder = RunRecorder::new(self, cancellation, sender);
         let prompt = run.prompt().to_owned();
-        let run_event_checkpoint = {
-            let mut store = self.store.lock().unwrap();
-            let checkpoint = store.checkpoint();
-            store.append(AgentEvent::user_prompt(prompt));
-            checkpoint
-        };
-        let run_event_start = run_event_checkpoint + 1;
+        let run_event_start = self.store.lock().unwrap().checkpoint() + 1;
+        recorder.record(AgentEvent::user_prompt(prompt)).await?;
 
         let capabilities = self.provider.capabilities();
         let has_tools = !self.tools.read().await.is_empty();
         if let Err(error) = validate_provider_capabilities(capabilities, &self.config, has_tools) {
-            return Err(self.store_error(error));
+            return recorder.record_error(error).await;
         }
 
         loop {
-            self.return_if_cancelled(&cancellation, run_event_checkpoint)?;
+            recorder.return_if_cancelled().await?;
             let messages = {
                 let store = self.store.lock().unwrap();
                 provider_messages_from_store(self.config.system_prompt.clone(), &store)
@@ -151,43 +256,48 @@ where
                 let agent_error = AgentError::ContextLimitError {
                     reason: error.to_string(),
                 };
-                return Err(self.store_error(agent_error));
+                return recorder.record_error(agent_error).await;
             }
 
             let mut request = ProviderRequest::new(messages);
+            if let Some(model) = self.config.model.clone() {
+                request = request.with_model(model);
+            }
             request.capabilities = capabilities;
             request.flags.allow_tools = has_tools;
             request.flags.include_reasoning = self.config.include_reasoning;
 
-            let stream = match self
+            let mut stream = match self
                 .provider
-                .stream_completion(request, cancellation.clone())
+                .stream_completion(request, recorder.cancellation())
                 .await
             {
                 Ok(stream) => stream,
                 Err(ProviderError::CancellationError) => {
-                    cancellation.cancel();
-                    self.return_if_cancelled(&cancellation, run_event_checkpoint)?;
+                    recorder.cancel();
+                    recorder.return_if_cancelled().await?;
                     return Err(AgentError::CancellationError);
                 }
-                Err(error) => return Err(self.store_error(error.into())),
+                Err(error) => return recorder.record_error(error.into()).await,
             };
-            self.return_if_cancelled(&cancellation, run_event_checkpoint)?;
+            recorder.return_if_cancelled().await?;
 
             let mut requested_tools = Vec::new();
-            for provider_event in stream {
-                self.return_if_cancelled(&cancellation, run_event_checkpoint)?;
+            while let Some(provider_event) = stream.next().await {
+                recorder.return_if_cancelled().await?;
                 let provider_event = match provider_event {
                     Ok(provider_event) => provider_event,
                     Err(ProviderError::CancellationError) => {
-                        self.return_if_cancelled(&Cancellation::cancelled(), run_event_checkpoint)?;
+                        recorder.cancel();
+                        recorder.return_if_cancelled().await?;
                         return Err(AgentError::CancellationError);
                     }
-                    Err(error) => return Err(self.store_error(error.into())),
+                    Err(error) => return recorder.record_error(error.into()).await,
                 };
 
-                if let Some(tool_calls) =
-                    self.record_provider_event(provider_event, run_event_start)?
+                if let Some(tool_calls) = self
+                    .record_provider_event(&mut recorder, provider_event, run_event_start)
+                    .await?
                 {
                     requested_tools = tool_calls;
                 }
@@ -197,127 +307,128 @@ where
                 break;
             }
 
-            self.execute_tool_calls(&requested_tools, cancellation.clone(), run_event_checkpoint)
+            self.execute_tool_calls(&mut recorder, &requested_tools)
                 .await?;
         }
 
         Ok(run.id())
     }
 
-    fn store_error(&self, error: AgentError) -> AgentError {
-        self.store
-            .lock()
-            .unwrap()
-            .append(AgentEvent::error(error.to_string()));
-        error
-    }
-
-    fn record_provider_event(
+    async fn record_provider_event(
         &self,
+        recorder: &mut RunRecorder<'_, P>,
         provider_event: ProviderStreamEvent,
         run_event_start: usize,
     ) -> Result<Option<Vec<ProviderToolCall>>, AgentError> {
-        let mut store = self.store.lock().unwrap();
         match provider_event {
             ProviderStreamEvent::MessageDelta(delta) => {
-                store.append(AgentEvent::MessageDelta(delta));
+                recorder.record(AgentEvent::MessageDelta(delta)).await?;
             }
             ProviderStreamEvent::ReasoningDelta(delta) => {
-                store.append(AgentEvent::ReasoningDelta(delta));
+                recorder.record(AgentEvent::ReasoningDelta(delta)).await?;
             }
             ProviderStreamEvent::Finished(finished) => {
-                return Self::record_finished_event(
-                    &mut store,
-                    finished,
-                    run_event_start,
-                    self.config.require_usage_metadata,
-                    self.config.output_schema.as_ref(),
-                );
+                return self
+                    .record_finished_event(
+                        recorder,
+                        finished,
+                        run_event_start,
+                        self.config.require_usage_metadata,
+                        self.config.output_schema.as_ref(),
+                    )
+                    .await;
             }
         }
 
         Ok(None)
     }
 
-    fn record_finished_event(
-        store: &mut Store,
+    async fn record_finished_event(
+        &self,
+        recorder: &mut RunRecorder<'_, P>,
         finished: ProviderFinished,
         run_event_start: usize,
         require_usage_metadata: bool,
         output_schema: Option<&OutputSchema>,
     ) -> Result<Option<Vec<ProviderToolCall>>, AgentError> {
         if let Some(usage) = finished.usage {
-            store.append(AgentEvent::UsageMetadata(usage));
+            recorder.record(AgentEvent::UsageMetadata(usage)).await?;
         }
         if let Some(reasoning) = finished.reasoning.clone() {
-            store.append(AgentEvent::ReasoningMetadata(reasoning));
+            recorder
+                .record(AgentEvent::ReasoningMetadata(reasoning))
+                .await?;
         }
 
         if finished.finish_reason == FinishReason::ToolCalls {
             if finished.tool_calls.is_empty() {
-                return Err(store_finished_error(
-                    store,
-                    AgentError::MalformedProviderResponse {
+                return recorder
+                    .record_error(AgentError::MalformedProviderResponse {
                         reason: "tool-call finish did not include tool calls".to_owned(),
-                    },
-                ));
+                    })
+                    .await;
             }
 
             if let Some(tool_call) = finished.tool_calls.iter().find(|tool_call| {
                 tool_call.id.trim().is_empty() || tool_call.name.trim().is_empty()
             }) {
-                return Err(store_finished_error(
-                    store,
-                    AgentError::MalformedProviderResponse {
+                return recorder
+                    .record_error(AgentError::MalformedProviderResponse {
                         reason: format!(
                             "tool call has empty id or name: id={:?}, name={:?}",
                             tool_call.id, tool_call.name
                         ),
-                    },
-                ));
+                    })
+                    .await;
             }
 
             return Ok(Some(finished.tool_calls));
         }
 
         if !finished.tool_calls.is_empty() {
-            return Err(store_finished_error(
-                store,
-                AgentError::MalformedProviderResponse {
+            return recorder
+                .record_error(AgentError::MalformedProviderResponse {
                     reason: "non-tool finish included tool calls".to_owned(),
-                },
-            ));
+                })
+                .await;
         }
 
         if require_usage_metadata && finished.usage.is_none() {
-            return Err(store_finished_error(
-                store,
-                AgentError::MalformedProviderResponse {
+            return recorder
+                .record_error(AgentError::MalformedProviderResponse {
                     reason: "provider omitted required usage metadata".to_owned(),
-                },
-            ));
+                })
+                .await;
         }
 
         if let Some(output_schema) = output_schema {
-            let final_response = final_assistant_response(&store.events()[run_event_start..]);
+            let final_response = {
+                let store = self.store.lock().unwrap();
+                final_assistant_response(&store.events()[run_event_start..])
+            };
             if let Err(error) = output_schema.validate_response(&final_response) {
                 let message = error.to_string();
-                store.append(AgentEvent::validation_error(message.clone()));
-                return Err(store_finished_error(
-                    store,
-                    AgentError::ValidationError { message },
-                ));
+                recorder
+                    .record(AgentEvent::validation_error(message.clone()))
+                    .await?;
+                return recorder
+                    .record_error(AgentError::ValidationError { message })
+                    .await;
             }
         }
 
-        store.append(AgentEvent::finished(finished));
+        recorder.record(AgentEvent::finished(finished)).await?;
         Ok(None)
     }
 
     fn start_cancellation(&self) -> Cancellation {
         let cancellation = Cancellation::default();
-        *self.active_cancellation.lock().unwrap() = Some(cancellation.clone());
+        self.activate_cancellation(cancellation.clone());
         cancellation
+    }
+
+    fn activate_cancellation(&self, cancellation: Cancellation) {
+        *self.active_cancellation.lock().unwrap() = Some(cancellation);
     }
 
     async fn finish_run(&self, result: &Result<RunId, AgentError>) {
@@ -330,51 +441,117 @@ where
         self.queue.finish_active().await;
     }
 
-    fn return_if_cancelled(
-        &self,
-        cancellation: &Cancellation,
-        checkpoint: usize,
-    ) -> Result<(), AgentError> {
-        if !cancellation.is_cancelled() {
-            return Ok(());
-        }
-
-        let mut store = self.store.lock().unwrap();
-        store.rollback(checkpoint);
-        store.append(AgentEvent::cancelled("active run cancelled"));
-        Err(AgentError::CancellationError)
-    }
-
     async fn execute_tool_calls(
         &self,
+        recorder: &mut RunRecorder<'_, P>,
         tool_calls: &[ProviderToolCall],
-        cancellation: Cancellation,
-        checkpoint: usize,
     ) -> Result<(), AgentError> {
         let tools = self.tools.read().await.clone();
         for tool_call in tool_calls {
-            if cancellation.is_cancelled() {
-                return self.return_if_cancelled(&cancellation, checkpoint);
-            }
+            recorder.return_if_cancelled().await?;
 
-            self.store
-                .lock()
-                .unwrap()
-                .append(AgentEvent::assistant_tool_call_request(
+            recorder
+                .record(AgentEvent::assistant_tool_call_request(
                     format_tool_call_request(tool_call),
-                ));
-            let result = tools.execute(tool_call, cancellation.clone()).await;
-            if cancellation.is_cancelled() {
-                return self.return_if_cancelled(&cancellation, checkpoint);
-            }
+                ))
+                .await?;
+            let result = tools.execute(tool_call, recorder.cancellation()).await;
+            recorder.return_if_cancelled().await?;
 
-            self.store
-                .lock()
-                .unwrap()
-                .append(AgentEvent::tool_result(result));
+            recorder.record(AgentEvent::tool_result(result)).await?;
         }
 
         Ok(())
+    }
+}
+
+struct RunRecorder<'a, P>
+where
+    P: LlmProvider,
+{
+    agent: &'a Agent<P>,
+    cancellation: Cancellation,
+    sender: Option<mpsc::Sender<AgentEvent>>,
+    cancelled_recorded: bool,
+}
+
+impl<'a, P> RunRecorder<'a, P>
+where
+    P: LlmProvider,
+{
+    fn new(
+        agent: &'a Agent<P>,
+        cancellation: Cancellation,
+        sender: Option<mpsc::Sender<AgentEvent>>,
+    ) -> Self {
+        Self {
+            agent,
+            cancellation,
+            sender,
+            cancelled_recorded: false,
+        }
+    }
+
+    fn cancellation(&self) -> Cancellation {
+        self.cancellation.clone()
+    }
+
+    fn cancel(&self) {
+        self.cancellation.cancel();
+    }
+
+    async fn record(&mut self, event: AgentEvent) -> Result<(), AgentError> {
+        {
+            self.agent.store.lock().unwrap().append(event.clone());
+        }
+
+        let Some(sender) = self.sender.as_ref() else {
+            return Ok(());
+        };
+
+        if sender.send(event).await.is_ok() {
+            return Ok(());
+        }
+
+        self.cancellation.cancel();
+        self.record_cancelled().await;
+        Err(AgentError::CancellationError)
+    }
+
+    async fn record_error<T>(&mut self, error: AgentError) -> Result<T, AgentError> {
+        if self.cancellation.is_cancelled() {
+            self.record_cancelled().await;
+            return Err(AgentError::CancellationError);
+        }
+
+        self.record(AgentEvent::error(error.to_string())).await?;
+        Err(error)
+    }
+
+    async fn return_if_cancelled(&mut self) -> Result<(), AgentError> {
+        if !self.cancellation.is_cancelled() {
+            return Ok(());
+        }
+
+        self.record_cancelled().await;
+        Err(AgentError::CancellationError)
+    }
+
+    async fn record_cancelled(&mut self) {
+        self.agent.queue.cancel_pending().await;
+        if self.cancelled_recorded {
+            return;
+        }
+        self.cancelled_recorded = true;
+
+        let event = AgentEvent::cancelled("active run cancelled");
+        {
+            self.agent.store.lock().unwrap().append(event.clone());
+        }
+
+        if let Some(sender) = self.sender.as_ref() {
+            let _ = sender.send(event).await;
+        }
     }
 }
 
@@ -388,11 +565,6 @@ fn final_assistant_response(events: &[AgentEvent]) -> String {
             _ => None,
         })
         .collect::<String>()
-}
-
-fn store_finished_error(store: &mut Store, error: AgentError) -> AgentError {
-    store.append(AgentEvent::error(error.to_string()));
-    error
 }
 
 fn validate_provider_capabilities(
@@ -538,7 +710,7 @@ mod tests {
                 } else {
                     events
                 };
-                let stream: ProviderStream = Box::new(events.into_iter().map(Ok));
+                let stream = ProviderStream::from_events(events.into_iter().map(Ok));
                 Ok(stream)
             })
         }
@@ -876,7 +1048,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn cancelling_active_run_rolls_back_events_and_drops_waiters() {
+    async fn cancelling_active_run_keeps_partial_events_and_drops_waiters() {
         let provider = SlowProvider {
             started: Arc::new(tokio::sync::Notify::new()),
         };
@@ -904,8 +1076,124 @@ mod tests {
         ));
         assert_eq!(
             agent.events(),
-            vec![AgentEvent::cancelled("active run cancelled")]
+            vec![
+                AgentEvent::user_prompt("active"),
+                AgentEvent::cancelled("active run cancelled")
+            ]
         );
+    }
+
+    #[tokio::test]
+    async fn streaming_run_emits_events_in_store_order() {
+        let agent = Arc::new(Agent::new(FakeProvider::text("hello")));
+        let mut stream = Arc::clone(&agent).run_stream("prompt");
+        let mut events = Vec::new();
+
+        while let Some(event) = stream.next().await {
+            let terminal = matches!(
+                event,
+                AgentEvent::Finished { .. }
+                    | AgentEvent::Error { .. }
+                    | AgentEvent::Cancelled { .. }
+            );
+            events.push(event);
+            if terminal {
+                break;
+            }
+        }
+
+        assert_eq!(events, agent.events());
+    }
+
+    #[tokio::test]
+    async fn dropping_stream_cancels_active_run_and_pending_queue() {
+        let provider = SlowProvider {
+            started: Arc::new(tokio::sync::Notify::new()),
+        };
+        let agent = Arc::new(Agent::new(provider));
+        let stream = Arc::clone(&agent).run_stream("active");
+        agent.provider.started.notified().await;
+
+        let queued = tokio::spawn({
+            let agent = Arc::clone(&agent);
+            async move { agent.run("queued").await }
+        });
+        tokio::task::yield_now().await;
+
+        drop(stream);
+
+        for _ in 0..20 {
+            if matches!(agent.events().last(), Some(AgentEvent::Cancelled { .. })) {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+
+        assert!(matches!(
+            queued.await.unwrap(),
+            Err(AgentError::CancellationError)
+        ));
+        assert_eq!(
+            agent.events(),
+            vec![
+                AgentEvent::user_prompt("active"),
+                AgentEvent::cancelled("active run cancelled")
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn dropping_queued_stream_cancels_current_active_run() {
+        let provider = SlowProvider {
+            started: Arc::new(tokio::sync::Notify::new()),
+        };
+        let agent = Arc::new(Agent::new(provider));
+        let active = tokio::spawn({
+            let agent = Arc::clone(&agent);
+            async move { agent.run("active").await }
+        });
+        agent.provider.started.notified().await;
+
+        let queued_stream = Arc::clone(&agent).run_stream("queued");
+        tokio::task::yield_now().await;
+
+        drop(queued_stream);
+
+        assert!(matches!(
+            active.await.unwrap(),
+            Err(AgentError::CancellationError)
+        ));
+        assert_eq!(
+            agent.events(),
+            vec![
+                AgentEvent::user_prompt("active"),
+                AgentEvent::cancelled("active run cancelled")
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn dropping_completed_stream_does_not_reject_next_run() {
+        let agent = Arc::new(Agent::new(FakeProvider::text("hello")));
+        let mut stream = Arc::clone(&agent).run_stream("first");
+
+        while let Some(event) = stream.next().await {
+            if matches!(
+                event,
+                AgentEvent::Finished { .. }
+                    | AgentEvent::Error { .. }
+                    | AgentEvent::Cancelled { .. }
+            ) {
+                break;
+            }
+        }
+
+        drop(stream);
+
+        agent.run("second").await.unwrap();
+        assert!(agent.events().iter().any(|event| {
+            matches!(event, AgentEvent::UserPrompt { content } if content == "second")
+        }));
     }
 
     #[derive(Clone, Debug)]
@@ -972,18 +1260,15 @@ mod tests {
             _cancellation: Cancellation,
         ) -> ProviderCall<'a> {
             Box::pin(async {
-                let stream: ProviderStream = Box::new(
-                    vec![
-                        Ok(ProviderStreamEvent::MessageDelta(MessageDelta::assistant(
-                            "partial",
-                        ))),
-                        Err(ProviderError::ResponseParsingFailed {
-                            provider_name: "Fake".to_owned(),
-                            reason: "bad chunk".to_owned(),
-                        }),
-                    ]
-                    .into_iter(),
-                );
+                let stream = ProviderStream::from_events(vec![
+                    Ok(ProviderStreamEvent::MessageDelta(MessageDelta::assistant(
+                        "partial",
+                    ))),
+                    Err(ProviderError::ResponseParsingFailed {
+                        provider_name: "Fake".to_owned(),
+                        reason: "bad chunk".to_owned(),
+                    }),
+                ]);
                 Ok(stream)
             })
         }

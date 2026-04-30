@@ -1,10 +1,12 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::future::Future;
+use std::io::{BufRead, BufReader};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use tokio::sync::mpsc;
 
 pub const OPENROUTER_PROVIDER_ID: &str = "openrouter";
 pub const OPENAI_PROVIDER_ID: &str = "openai";
@@ -12,6 +14,7 @@ pub const GOOGLE_GEMINI_PROVIDER_ID: &str = "google-gemini";
 
 const OPENROUTER_API_KEY_URL: &str = "https://openrouter.ai/api/v1/key";
 const OPENROUTER_MODELS_URL: &str = "https://openrouter.ai/api/v1/models";
+const OPENROUTER_CHAT_COMPLETIONS_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
 
 static PROVIDERS: &[ProviderMetadata] = &[
     ProviderMetadata::enabled(OPENROUTER_PROVIDER_ID, "OpenRouter"),
@@ -300,7 +303,7 @@ pub enum FinishReason {
 }
 
 /// Token usage metadata returned when a provider exposes it.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
 pub struct UsageMetadata {
     pub input_tokens: Option<u64>,
     pub output_tokens: Option<u64>,
@@ -373,8 +376,33 @@ pub enum ProviderStreamEvent {
     Finished(ProviderFinished),
 }
 
-pub type ProviderStream =
-    Box<dyn Iterator<Item = Result<ProviderStreamEvent, ProviderError>> + Send>;
+pub struct ProviderStream {
+    receiver: mpsc::Receiver<Result<ProviderStreamEvent, ProviderError>>,
+}
+
+impl ProviderStream {
+    pub fn new(receiver: mpsc::Receiver<Result<ProviderStreamEvent, ProviderError>>) -> Self {
+        Self { receiver }
+    }
+
+    pub fn from_events(
+        events: impl IntoIterator<Item = Result<ProviderStreamEvent, ProviderError>>,
+    ) -> Self {
+        let (sender, receiver) = mpsc::channel(128);
+        for event in events {
+            if sender.try_send(event).is_err() {
+                break;
+            }
+        }
+        drop(sender);
+        Self { receiver }
+    }
+
+    pub async fn next(&mut self) -> Option<Result<ProviderStreamEvent, ProviderError>> {
+        self.receiver.recv().await
+    }
+}
+
 pub type ProviderCall<'a> =
     Pin<Box<dyn Future<Output = Result<ProviderStream, ProviderError>> + Send + 'a>>;
 
@@ -558,6 +586,16 @@ pub fn enabled_provider_capability_report() -> Result<ProviderCapabilityReport, 
 #[derive(Default)]
 pub struct OpenRouterProvider {
     client: OpenRouterHttpClient,
+    api_key: Option<String>,
+}
+
+impl OpenRouterProvider {
+    pub fn with_api_key(api_key: impl Into<String>) -> Self {
+        Self {
+            client: OpenRouterHttpClient,
+            api_key: Some(api_key.into()),
+        }
+    }
 }
 
 impl LlmProvider for OpenRouterProvider {
@@ -579,7 +617,7 @@ impl LlmProvider for OpenRouterProvider {
 
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
-            streaming: false,
+            streaming: true,
             tool_calls: false,
             structured_output: false,
             reasoning: false,
@@ -592,13 +630,16 @@ impl LlmProvider for OpenRouterProvider {
 
     fn stream_completion<'a>(
         &'a self,
-        _request: ProviderRequest,
-        _cancellation: Cancellation,
+        request: ProviderRequest,
+        cancellation: Cancellation,
     ) -> ProviderCall<'a> {
+        let api_key = self.api_key.clone();
         Box::pin(async {
-            Err(ProviderError::StreamUnavailable {
-                provider_name: "OpenRouter".to_owned(),
-            })
+            let Some(api_key) = api_key else {
+                return Err(ProviderError::InvalidApiKey);
+            };
+
+            openrouter_stream_completion(api_key, request, cancellation)
         })
     }
 }
@@ -639,6 +680,210 @@ impl OpenRouterHttpClient {
 
         Ok((status, body))
     }
+}
+
+fn openrouter_stream_completion(
+    api_key: String,
+    request: ProviderRequest,
+    cancellation: Cancellation,
+) -> Result<ProviderStream, ProviderError> {
+    if cancellation.is_cancelled() {
+        return Err(ProviderError::CancellationError);
+    }
+
+    let (sender, receiver) = mpsc::channel(128);
+    std::thread::spawn(move || {
+        let result = stream_openrouter_response(&api_key, request, cancellation, sender.clone());
+        if let Err(error) = result {
+            let _ = sender.blocking_send(Err(error));
+        }
+    });
+
+    Ok(ProviderStream::new(receiver))
+}
+
+fn stream_openrouter_response(
+    api_key: &str,
+    request: ProviderRequest,
+    cancellation: Cancellation,
+    sender: mpsc::Sender<Result<ProviderStreamEvent, ProviderError>>,
+) -> Result<(), ProviderError> {
+    let body = OpenRouterChatRequest::from_provider_request(request)?;
+    let response = reqwest::blocking::Client::new()
+        .post(OPENROUTER_CHAT_COMPLETIONS_URL)
+        .bearer_auth(api_key)
+        .json(&body)
+        .send()
+        .map_err(|error| ProviderError::NetworkError {
+            provider_name: "OpenRouter".to_owned(),
+            reason: error.to_string(),
+        })?;
+
+    let status = response.status().as_u16();
+    if status == 401 || status == 403 {
+        return Err(ProviderError::InvalidApiKey);
+    }
+    if !(200..300).contains(&status) {
+        return Err(ProviderError::ProviderUnavailable {
+            provider_name: "OpenRouter".to_owned(),
+        });
+    }
+
+    let reader = BufReader::new(response);
+    let mut saw_finished = false;
+    for line in reader.lines() {
+        if cancellation.is_cancelled() {
+            return Err(ProviderError::CancellationError);
+        }
+
+        let line = line.map_err(|error| ProviderError::NetworkError {
+            provider_name: "OpenRouter".to_owned(),
+            reason: error.to_string(),
+        })?;
+        let Some(payload) = line.strip_prefix("data: ") else {
+            continue;
+        };
+        if payload.trim() == "[DONE]" {
+            if !saw_finished
+                && sender
+                    .blocking_send(Ok(ProviderStreamEvent::Finished(
+                        ProviderFinished::stopped(),
+                    )))
+                    .is_err()
+            {
+                return Err(ProviderError::CancellationError);
+            }
+            saw_finished = true;
+            break;
+        }
+
+        for event in parse_openrouter_chat_chunk(payload)? {
+            saw_finished |= matches!(event, ProviderStreamEvent::Finished(_));
+            if sender.blocking_send(Ok(event)).is_err() {
+                return Err(ProviderError::CancellationError);
+            }
+        }
+    }
+
+    if !saw_finished
+        && sender
+            .blocking_send(Ok(ProviderStreamEvent::Finished(
+                ProviderFinished::stopped(),
+            )))
+            .is_err()
+    {
+        return Err(ProviderError::CancellationError);
+    }
+
+    Ok(())
+}
+
+#[derive(Serialize)]
+struct OpenRouterChatRequest {
+    model: String,
+    messages: Vec<OpenRouterChatMessage>,
+    stream: bool,
+}
+
+impl OpenRouterChatRequest {
+    fn from_provider_request(request: ProviderRequest) -> Result<Self, ProviderError> {
+        let model = request
+            .model
+            .filter(|model| !model.trim().is_empty())
+            .ok_or_else(|| ProviderError::MalformedResponse {
+                provider_name: "OpenRouter".to_owned(),
+                reason: "missing model for chat completion".to_owned(),
+            })?;
+
+        Ok(Self {
+            model,
+            messages: request
+                .messages
+                .into_iter()
+                .map(OpenRouterChatMessage::from_provider_message)
+                .collect(),
+            stream: true,
+        })
+    }
+}
+
+#[derive(Serialize)]
+struct OpenRouterChatMessage {
+    role: &'static str,
+    content: String,
+}
+
+impl OpenRouterChatMessage {
+    fn from_provider_message(message: ProviderMessage) -> Self {
+        let role = match message.role {
+            ProviderMessageRole::System => "system",
+            ProviderMessageRole::User => "user",
+            ProviderMessageRole::Assistant => "assistant",
+            ProviderMessageRole::Tool => "tool",
+        };
+
+        Self {
+            role,
+            content: message.content,
+        }
+    }
+}
+
+fn parse_openrouter_chat_chunk(payload: &str) -> Result<Vec<ProviderStreamEvent>, ProviderError> {
+    let chunk: OpenRouterChatChunk =
+        serde_json::from_str(payload).map_err(|error| ProviderError::ResponseParsingFailed {
+            provider_name: "OpenRouter".to_owned(),
+            reason: error.to_string(),
+        })?;
+    let mut events = Vec::new();
+
+    for choice in chunk.choices {
+        if let Some(content) = choice.delta.and_then(|delta| delta.content) {
+            if !content.is_empty() {
+                events.push(ProviderStreamEvent::MessageDelta(MessageDelta::assistant(
+                    content,
+                )));
+            }
+        }
+
+        if let Some(finish_reason) = choice.finish_reason {
+            events.push(ProviderStreamEvent::Finished(ProviderFinished {
+                finish_reason: parse_openrouter_finish_reason(&finish_reason),
+                tool_calls: Vec::new(),
+                usage: chunk.usage,
+                reasoning: None,
+            }));
+        }
+    }
+
+    Ok(events)
+}
+
+fn parse_openrouter_finish_reason(reason: &str) -> FinishReason {
+    match reason {
+        "length" => FinishReason::Length,
+        "tool_calls" => FinishReason::ToolCalls,
+        "cancelled" => FinishReason::Cancelled,
+        "error" => FinishReason::Error,
+        _ => FinishReason::Stop,
+    }
+}
+
+#[derive(Deserialize)]
+struct OpenRouterChatChunk {
+    choices: Vec<OpenRouterChatChoice>,
+    usage: Option<UsageMetadata>,
+}
+
+#[derive(Deserialize)]
+struct OpenRouterChatChoice {
+    delta: Option<OpenRouterChatDelta>,
+    finish_reason: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct OpenRouterChatDelta {
+    content: Option<String>,
 }
 
 fn validate_openrouter_api_key(
@@ -870,15 +1115,64 @@ mod tests {
     #[test]
     fn openrouter_exposes_async_stream_seam() {
         let provider = OpenRouterProvider::default();
-        let request = ProviderRequest::new(vec![ProviderMessage::user("hello")]);
+        let request =
+            ProviderRequest::new(vec![ProviderMessage::user("hello")]).with_model("test/model");
         let error = match futures::executor::block_on(
             provider.stream_completion(request, Cancellation::default()),
         ) {
-            Ok(_) => panic!("stream should not be implemented yet"),
+            Ok(_) => panic!("stream should require an API key"),
             Err(error) => error,
         };
 
-        assert!(matches!(error, ProviderError::StreamUnavailable { .. }));
+        assert!(matches!(error, ProviderError::InvalidApiKey));
+    }
+
+    #[test]
+    fn openrouter_chat_chunk_parses_content_and_finish() {
+        let events = parse_openrouter_chat_chunk(
+            r#"{"choices":[{"delta":{"content":"hello"},"finish_reason":null},{"delta":{},"finish_reason":"stop"}]}"#,
+        )
+        .unwrap();
+
+        assert!(matches!(
+            &events[0],
+            ProviderStreamEvent::MessageDelta(MessageDelta { content, .. }) if content == "hello"
+        ));
+        assert!(matches!(
+            events[1],
+            ProviderStreamEvent::Finished(ProviderFinished {
+                finish_reason: FinishReason::Stop,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn openrouter_chat_request_maps_model_and_messages() {
+        let request = OpenRouterChatRequest::from_provider_request(
+            ProviderRequest::new(vec![
+                ProviderMessage::system("system"),
+                ProviderMessage::user("hello"),
+                ProviderMessage::assistant("hi"),
+                ProviderMessage::tool("tool output"),
+            ])
+            .with_model("openrouter/model"),
+        )
+        .unwrap();
+
+        assert_eq!(request.model, "openrouter/model");
+        assert!(request.stream);
+        assert_eq!(request.messages[0].role, "system");
+        assert_eq!(request.messages[1].role, "user");
+        assert_eq!(request.messages[2].role, "assistant");
+        assert_eq!(request.messages[3].role, "tool");
+    }
+
+    #[test]
+    fn malformed_openrouter_chat_chunk_returns_provider_error() {
+        let error = parse_openrouter_chat_chunk("{not json").unwrap_err();
+
+        assert!(matches!(error, ProviderError::ResponseParsingFailed { .. }));
     }
 
     #[test]

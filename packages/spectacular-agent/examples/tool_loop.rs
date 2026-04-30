@@ -103,7 +103,7 @@ impl LlmProvider for FakeToolLoopProvider {
                 ]
             };
 
-            let stream: ProviderStream = Box::new(events.into_iter().map(Ok));
+            let stream = ProviderStream::from_events(events.into_iter().map(Ok));
             Ok(stream)
         })
     }
