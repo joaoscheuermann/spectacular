@@ -100,7 +100,7 @@ impl Renderer {
     }
 
     pub fn render_tool_call(&self, view: &ToolCallView) {
-        println!("{} <- {}", paint(tool_style(), &view.name), view.input);
+        println!("{} {}", paint(tool_style(), &view.name), view.input);
     }
 
     pub fn tool_result(&self, name: &str, content: &str, tools: &ToolStorage) {
