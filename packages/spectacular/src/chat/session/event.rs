@@ -1,3 +1,10 @@
+//! Chat session JSONL event schema.
+//!
+//! New sessions use schema version 2 so tool calls and tool results are stored
+//! as structured records: `tool_call_id`, `name`, `arguments`, and provider
+//! visible `content`. Older `tool_call.content` records are normalized on read
+//! so old JSONL sessions can still replay into structured agent events.
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -53,9 +60,24 @@ pub enum ChatEvent {
     #[serde(rename = "reasoning_delta")]
     ReasoningDelta { content: String, created_at: String },
     #[serde(rename = "tool_call")]
-    ToolCall { content: String, created_at: String },
+    ToolCall {
+        #[serde(default)]
+        tool_call_id: String,
+        #[serde(default)]
+        name: String,
+        #[serde(default)]
+        arguments: String,
+        created_at: String,
+    },
     #[serde(rename = "tool_result")]
-    ToolResult { content: String, created_at: String },
+    ToolResult {
+        #[serde(default)]
+        tool_call_id: String,
+        #[serde(default)]
+        name: String,
+        content: String,
+        created_at: String,
+    },
     #[serde(rename = "usage_metadata")]
     UsageMetadata {
         input_tokens: Option<u64>,
@@ -75,7 +97,9 @@ pub enum ChatEvent {
 
 impl ChatEvent {
     pub fn from_value(value: Value) -> Result<Self, Value> {
-        serde_json::from_value(value.clone()).map_err(|_| value)
+        let original = value.clone();
+        let value = normalize_legacy_tool_call(value);
+        serde_json::from_value(value).map_err(|_| original)
     }
 
     pub fn from_agent_event(event: &AgentEvent, created_at: String) -> Option<Self> {
@@ -93,11 +117,23 @@ impl ChatEvent {
                 content: delta.content.clone(),
                 created_at,
             }),
-            AgentEvent::AssistantToolCallRequest { content } => Some(Self::ToolCall {
-                content: content.clone(),
+            AgentEvent::AssistantToolCallRequest {
+                tool_call_id,
+                name,
+                arguments,
+            } => Some(Self::ToolCall {
+                tool_call_id: tool_call_id.clone(),
+                name: name.clone(),
+                arguments: arguments.clone(),
                 created_at,
             }),
-            AgentEvent::ToolResult { content } => Some(Self::ToolResult {
+            AgentEvent::ToolResult {
+                tool_call_id,
+                name,
+                content,
+            } => Some(Self::ToolResult {
+                tool_call_id: tool_call_id.clone(),
+                name: name.clone(),
                 content: content.clone(),
                 created_at,
             }),
@@ -142,10 +178,26 @@ impl ChatEvent {
                     metadata: None,
                 }))
             }
-            Self::ToolCall { content, .. } => {
-                Some(AgentEvent::assistant_tool_call_request(content))
-            }
-            Self::ToolResult { content, .. } => Some(AgentEvent::tool_result(content)),
+            Self::ToolCall {
+                tool_call_id,
+                name,
+                arguments,
+                ..
+            } => Some(AgentEvent::assistant_tool_call_request(
+                tool_call_id.clone(),
+                name.clone(),
+                arguments.clone(),
+            )),
+            Self::ToolResult {
+                tool_call_id,
+                name,
+                content,
+                ..
+            } => Some(AgentEvent::tool_result(
+                tool_call_id.clone(),
+                name.clone(),
+                content.clone(),
+            )),
             Self::ValidationError { message, .. } => Some(AgentEvent::validation_error(message)),
             Self::Error { message, .. } => Some(AgentEvent::error(message)),
             Self::Cancelled { reason, .. } => Some(AgentEvent::cancelled(reason)),
@@ -243,10 +295,50 @@ fn assistant_role() -> String {
     "assistant".to_owned()
 }
 
+fn normalize_legacy_tool_call(mut value: Value) -> Value {
+    let Some(object) = value.as_object_mut() else {
+        return value;
+    };
+    if object.get("type").and_then(Value::as_str) != Some("tool_call") {
+        return value;
+    }
+    if object
+        .get("tool_call_id")
+        .or_else(|| object.get("name"))
+        .or_else(|| object.get("arguments"))
+        .is_some()
+    {
+        return value;
+    }
+
+    let Some(content) = object.get("content").and_then(Value::as_str) else {
+        return value;
+    };
+    let Ok(content) = serde_json::from_str::<Value>(content) else {
+        return value;
+    };
+
+    if let Some(tool_call_id) = content.get("id").and_then(Value::as_str) {
+        object.insert(
+            "tool_call_id".to_owned(),
+            Value::String(tool_call_id.to_owned()),
+        );
+    }
+    if let Some(name) = content.get("name").and_then(Value::as_str) {
+        object.insert("name".to_owned(), Value::String(name.to_owned()));
+    }
+    if let Some(arguments) = content.get("arguments").and_then(Value::as_str) {
+        object.insert("arguments".to_owned(), Value::String(arguments.to_owned()));
+    }
+
+    value
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+    use spectacular_agent::{provider_messages_from_store, Store};
 
     #[test]
     fn recognized_jsonl_event_deserializes() {
@@ -313,5 +405,104 @@ mod tests {
                 "created_at": "2026-04-29T14:01:00Z"
             })
         );
+    }
+
+    #[test]
+    fn structured_tool_events_round_trip_through_jsonl_to_agent_events() {
+        let events = vec![
+            AgentEvent::assistant_tool_call_request("call-1", "write", r#"{"path":"foo.txt"}"#),
+            AgentEvent::tool_result("call-1", "write", r#"{"success":true}"#),
+        ];
+        let lines = events
+            .iter()
+            .map(|event| {
+                serde_json::to_string(
+                    &ChatEvent::from_agent_event(event, "2026-04-29T14:01:00Z".to_owned()).unwrap(),
+                )
+                .unwrap()
+            })
+            .collect::<Vec<_>>();
+
+        let first_line: Value = serde_json::from_str(&lines[0]).unwrap();
+        assert_eq!(
+            first_line,
+            json!({
+                "type": "tool_call",
+                "tool_call_id": "call-1",
+                "name": "write",
+                "arguments": r#"{"path":"foo.txt"}"#,
+                "created_at": "2026-04-29T14:01:00Z"
+            })
+        );
+
+        let round_trip = lines
+            .iter()
+            .map(|line| {
+                let value = serde_json::from_str::<Value>(line).unwrap();
+                ChatEvent::from_value(value)
+                    .unwrap()
+                    .to_agent_event()
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(round_trip, events);
+    }
+
+    #[test]
+    fn legacy_tool_call_content_replays_as_structured_agent_event() {
+        let event = ChatEvent::from_value(json!({
+            "type": "tool_call",
+            "content": r#"{"id":"call-1","name":"write","arguments":"{\"path\":\"foo.txt\"}"}"#,
+            "created_at": "2026-04-29T14:01:00Z"
+        }))
+        .unwrap();
+
+        assert_eq!(
+            event.to_agent_event(),
+            Some(AgentEvent::assistant_tool_call_request(
+                "call-1",
+                "write",
+                r#"{"path":"foo.txt"}"#
+            ))
+        );
+    }
+
+    #[test]
+    fn structured_tool_events_replay_into_provider_messages() {
+        let records = [
+            json!({
+                "type": "tool_call",
+                "tool_call_id": "call-1",
+                "name": "write",
+                "arguments": r#"{"path":"foo.txt"}"#,
+                "created_at": "2026-04-29T14:01:00Z"
+            }),
+            json!({
+                "type": "tool_result",
+                "tool_call_id": "call-1",
+                "name": "write",
+                "content": r#"{"success":true}"#,
+                "created_at": "2026-04-29T14:01:01Z"
+            }),
+        ];
+        let events = records
+            .into_iter()
+            .map(|value| {
+                ChatEvent::from_value(value)
+                    .unwrap()
+                    .to_agent_event()
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+        let store = Store::from(events);
+
+        let messages = provider_messages_from_store("system", &store);
+
+        assert_eq!(messages[1].tool_calls[0].id, "call-1");
+        assert_eq!(messages[1].tool_calls[0].name, "write");
+        assert_eq!(messages[1].tool_calls[0].arguments, r#"{"path":"foo.txt"}"#);
+        assert_eq!(messages[2].tool_call_id.as_deref(), Some("call-1"));
+        assert_eq!(messages[2].content, r#"{"success":true}"#);
     }
 }

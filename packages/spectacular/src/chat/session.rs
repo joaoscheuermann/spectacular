@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use store::{session_started, SessionStore};
 
-const SCHEMA_VERSION: u64 = 1;
+const SCHEMA_VERSION: u64 = 2;
 pub(super) const UNTITLED: &str = "Untitled session";
 
 #[derive(Clone)]
@@ -273,4 +273,22 @@ fn generate_id() -> String {
     nanos.hash(&mut hasher);
     std::process::id().hash(&mut hasher);
     format!("{:08x}", hasher.finish() as u32)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_session_schema_version_is_v2() {
+        let event = store::session_started("a83f19c2", SCHEMA_VERSION, UNTITLED);
+
+        assert!(matches!(
+            event,
+            ChatEvent::SessionStarted {
+                schema_version: 2,
+                ..
+            }
+        ));
+    }
 }

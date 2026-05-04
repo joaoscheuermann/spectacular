@@ -73,7 +73,7 @@ async fn render_replay_event(
     context: &mut ChatContext,
     event: &AgentEvent,
 ) -> Result<(), CommandError> {
-    render_agent_event(&context.renderer, event)
+    render_agent_event(&context.renderer, &context.tools, event)
         .await
         .map_err(|error| CommandError::message(error.to_string()))
 }

@@ -26,9 +26,9 @@ fn main() {
         finish_reason: FinishReason::Stop,
     });
     store.append(AgentEvent::assistant_tool_call_request(
-        r#"{"id":"call-1","name":"read","arguments":"{}"}"#,
+        "call-1", "read", "{}",
     ));
-    store.append(AgentEvent::tool_result(r#"{"ok":true}"#));
+    store.append(AgentEvent::tool_result("call-1", "read", r#"{"ok":true}"#));
     store.append(AgentEvent::cancelled("stale queued run"));
     store.append(AgentEvent::error("provider timeout stored for diagnostics"));
     store.append(AgentEvent::internal("queue bookkeeping"));
