@@ -4,9 +4,12 @@ use crate::chat::session::{
     agent_events_from_records, records_before_latest_user_prompt, SessionManager,
 };
 use crate::chat::{ChatError, RuntimeSelection};
-use spectacular_agent::{Agent, AgentConfig, AgentEvent, Store};
+use spectacular_agent::{
+    Agent, AgentConfig, AgentEvent, Store, ToolRegistrationError, ToolStorage,
+};
 use spectacular_config::{ConfigError, TaskModelConfig, TaskModelSlot};
-use spectacular_llms::ProviderMessageRole;
+use spectacular_llms::{LlmProvider, ProviderMessageRole};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::MissedTickBehavior;
@@ -21,11 +24,16 @@ pub struct ChatRunRequest {
 pub struct ChatRunner<'a> {
     session: &'a SessionManager,
     renderer: &'a Renderer,
+    tools: ToolStorage,
 }
 
 impl<'a> ChatRunner<'a> {
-    pub fn new(session: &'a SessionManager, renderer: &'a Renderer) -> Self {
-        Self { session, renderer }
+    pub fn new(session: &'a SessionManager, renderer: &'a Renderer, tools: ToolStorage) -> Self {
+        Self {
+            session,
+            renderer,
+            tools,
+        }
     }
 
     pub async fn run(&self, request: ChatRunRequest) -> Result<(), ChatError> {
@@ -40,14 +48,11 @@ impl<'a> ChatRunner<'a> {
             records.as_slice()
         };
         let store = Store::from(agent_events_from_records(context_records));
-        let agent = Arc::new(Agent::with_config_and_store(
+        let agent = Arc::new(main_chat_agent(
             provider_for_runtime(&request.runtime)?,
-            AgentConfig {
-                model: Some(request.runtime.model.clone()),
-                require_usage_metadata: false,
-                ..AgentConfig::default()
-            },
+            &request.runtime,
             store,
+            self.tools.clone(),
         ));
         let mut stream = agent.run_stream(request.prompt.clone());
         let mut title_text = String::new();
@@ -94,7 +99,7 @@ impl<'a> ChatRunner<'a> {
                         println!("\n");
                         response_open = false;
                     }
-                    render_agent_event(self.renderer, &event).await?;
+                    render_agent_event(self.renderer, &self.tools, &event).await?;
                     self.session.append_agent_event(&event)?;
                     if let AgentEvent::MessageDelta(delta) = &event {
                         if delta.role == ProviderMessageRole::Assistant {
@@ -134,15 +139,50 @@ impl<'a> ChatRunner<'a> {
     }
 }
 
-pub async fn render_agent_event(renderer: &Renderer, event: &AgentEvent) -> Result<(), ChatError> {
+pub fn main_chat_tool_storage(
+    workspace_root: impl Into<PathBuf>,
+) -> Result<ToolStorage, ToolRegistrationError> {
+    spectacular_tools::built_in_tools(workspace_root)
+}
+
+fn main_chat_agent<P>(
+    provider: P,
+    runtime: &RuntimeSelection,
+    store: Store,
+    tools: ToolStorage,
+) -> Agent<P>
+where
+    P: LlmProvider,
+{
+    Agent::with_config_and_store(
+        provider,
+        AgentConfig {
+            model: Some(runtime.model.clone()),
+            require_usage_metadata: false,
+            ..AgentConfig::default()
+        },
+        store,
+    )
+    .with_tools(tools)
+}
+
+pub async fn render_agent_event(
+    renderer: &Renderer,
+    tools: &ToolStorage,
+    event: &AgentEvent,
+) -> Result<(), ChatError> {
     match event {
         AgentEvent::UserPrompt { content } => renderer.user_prompt(content),
         AgentEvent::MessageDelta(delta) if delta.role == ProviderMessageRole::Assistant => {
             renderer.assistant_delta(&delta.content).await?;
         }
         AgentEvent::ReasoningDelta(_) => {}
-        AgentEvent::AssistantToolCallRequest { content } => renderer.tool_call(content),
-        AgentEvent::ToolResult { content } => renderer.tool_result(content),
+        AgentEvent::AssistantToolCallRequest {
+            tool_call_id,
+            name,
+            arguments,
+        } => renderer.tool_call(tool_call_id, name, arguments, tools),
+        AgentEvent::ToolResult { name, content, .. } => renderer.tool_result(name, content, tools),
         AgentEvent::ValidationError { message } | AgentEvent::Error { message } => {
             renderer.error(message)
         }
@@ -172,20 +212,19 @@ fn spawn_title_task(
     }
 
     tokio::spawn(async move {
-        let title_prompt = format!(
-            "Create a concise title for this chat session. Return only the title. Max 6 words.\n\nUser: {prompt}\nAssistant: {response}"
-        );
+        let system_prompt = "Generate a chat title with maximum of 6 words. You will get a User prompt and an Assistant response, use both to generate a title. Only return the title, no other data or text".to_owned();
+
+        let title_prompt =
+            format!("Return only the title. \n\nUser: {prompt}\nAssistant: {response}");
+
         let Ok(provider) = provider_for_parts(&provider, api_key) else {
             return;
         };
         let store = Store::default();
-        let agent = Arc::new(Agent::with_config_and_store(
+        let agent = Arc::new(title_generation_agent(
             provider,
-            AgentConfig {
-                model: Some(model.model.clone()),
-                require_usage_metadata: false,
-                ..AgentConfig::default()
-            },
+            model.model.clone(),
+            system_prompt,
             store,
         ));
         let mut stream = agent.run_stream(title_prompt);
@@ -208,6 +247,27 @@ fn spawn_title_task(
     });
 
     Ok(())
+}
+
+fn title_generation_agent<P>(
+    provider: P,
+    model: String,
+    system_prompt: String,
+    store: Store,
+) -> Agent<P>
+where
+    P: LlmProvider,
+{
+    Agent::with_config_and_store(
+        provider,
+        AgentConfig {
+            system_prompt,
+            model: Some(model),
+            require_usage_metadata: false,
+            ..AgentConfig::default()
+        },
+        store,
+    )
 }
 
 fn title_model(
@@ -263,4 +323,56 @@ fn sanitize_title(title: &str) -> String {
         .take(6)
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use spectacular_config::ReasoningLevel;
+    use spectacular_llms::{OpenRouterProvider, OPENROUTER_PROVIDER_ID};
+    use spectacular_tools::{
+        EDIT_TOOL_NAME, FIND_TOOL_NAME, GREP_TOOL_NAME, TERMINAL_TOOL_NAME, TREE_TOOL_NAME,
+        WRITE_TOOL_NAME,
+    };
+
+    #[test]
+    fn main_chat_agent_gets_built_in_tools_and_title_agent_stays_text_only() {
+        let tools = main_chat_tool_storage(PathBuf::from("workspace")).unwrap();
+        let runtime = RuntimeSelection {
+            provider: OPENROUTER_PROVIDER_ID.to_owned(),
+            api_key: "sk-or-v1-test".to_owned(),
+            model: "test/model".to_owned(),
+            reasoning: ReasoningLevel::Medium,
+        };
+
+        let main_agent = main_chat_agent(
+            OpenRouterProvider::with_api_key(runtime.api_key.clone()),
+            &runtime,
+            Store::default(),
+            tools,
+        );
+        let title_agent = title_generation_agent(
+            OpenRouterProvider::with_api_key(runtime.api_key),
+            "title/model".to_owned(),
+            "Generate a title.".to_owned(),
+            Store::default(),
+        );
+
+        assert_eq!(
+            main_agent
+                .tool_manifests()
+                .into_iter()
+                .map(|manifest| manifest.name)
+                .collect::<Vec<_>>(),
+            vec![
+                EDIT_TOOL_NAME,
+                FIND_TOOL_NAME,
+                GREP_TOOL_NAME,
+                TERMINAL_TOOL_NAME,
+                TREE_TOOL_NAME,
+                WRITE_TOOL_NAME
+            ]
+        );
+        assert!(title_agent.tool_manifests().is_empty());
+    }
 }

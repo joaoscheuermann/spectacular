@@ -4,18 +4,18 @@ use crate::event::AgentEvent;
 use crate::queue::{RunId, RunQueue, RunRequest};
 use crate::schema::OutputSchema;
 use crate::store::Store;
-use crate::tool::{format_tool_call_request, Tool, ToolStorage};
+use crate::tool::{Tool, ToolRegistrationError, ToolStorage};
 use spectacular_llms::{
     Cancellation, FinishReason, LlmProvider, ProviderCapabilities, ProviderError, ProviderFinished,
-    ProviderMessageRole, ProviderRequest, ProviderStreamEvent, ProviderToolCall,
+    ProviderMessageRole, ProviderRequest, ProviderStreamEvent, ProviderToolCall, ToolManifest,
 };
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Arc, Mutex,
+    Arc, Mutex, RwLock,
 };
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 
-const DEFAULT_SYSTEM_PROMPT: &str = "You are Spectacular, a focused coding assistant.";
+const DEFAULT_SYSTEM_PROMPT: &str = "";
 
 #[derive(Debug)]
 pub struct Agent<P> {
@@ -133,15 +133,22 @@ where
         }
     }
 
+    pub fn with_tools(self, tools: ToolStorage) -> Self {
+        Self {
+            tools: RwLock::new(tools),
+            ..self
+        }
+    }
+
     pub fn enqueue_prompt(&mut self, prompt: impl Into<String>) -> RunId {
         self.queue.enqueue_prompt(prompt)
     }
 
-    pub async fn register_tool<T>(&self, tool: T)
+    pub fn register_tool<T>(&self, tool: T) -> Result<(), ToolRegistrationError>
     where
         T: Tool + 'static,
     {
-        self.tools.write().await.register(tool).await;
+        self.tools.write().unwrap().register(tool)
     }
 
     pub async fn run(&self, prompt: impl Into<String>) -> Result<RunId, AgentError> {
@@ -188,6 +195,10 @@ where
 
     pub fn store(&self) -> Store {
         self.store.lock().unwrap().clone()
+    }
+
+    pub fn tool_manifests(&self) -> Vec<ToolManifest> {
+        self.tools.read().unwrap().manifests()
     }
 }
 
@@ -241,7 +252,8 @@ where
         recorder.record(AgentEvent::user_prompt(prompt)).await?;
 
         let capabilities = self.provider.capabilities();
-        let has_tools = !self.tools.read().await.is_empty();
+        let tool_manifests = self.tools.read().unwrap().manifests();
+        let has_tools = !tool_manifests.is_empty();
         if let Err(error) = validate_provider_capabilities(capabilities, &self.config, has_tools) {
             return recorder.record_error(error).await;
         }
@@ -250,7 +262,10 @@ where
             recorder.return_if_cancelled().await?;
             let messages = {
                 let store = self.store.lock().unwrap();
-                provider_messages_from_store(self.config.system_prompt.clone(), &store)
+                provider_messages_from_store(
+                    effective_system_prompt(&self.config.system_prompt, &tool_manifests),
+                    &store,
+                )
             };
             if let Err(error) = validate_context_limits(&messages, capabilities.context_limits) {
                 let agent_error = AgentError::ContextLimitError {
@@ -266,6 +281,7 @@ where
             request.capabilities = capabilities;
             request.flags.allow_tools = has_tools;
             request.flags.include_reasoning = self.config.include_reasoning;
+            request.tools = tool_manifests.clone();
 
             let mut stream = match self
                 .provider
@@ -280,11 +296,13 @@ where
                 }
                 Err(error) => return recorder.record_error(error.into()).await,
             };
+
             recorder.return_if_cancelled().await?;
 
             let mut requested_tools = Vec::new();
             while let Some(provider_event) = stream.next().await {
                 recorder.return_if_cancelled().await?;
+
                 let provider_event = match provider_event {
                     Ok(provider_event) => provider_event,
                     Err(ProviderError::CancellationError) => {
@@ -446,19 +464,27 @@ where
         recorder: &mut RunRecorder<'_, P>,
         tool_calls: &[ProviderToolCall],
     ) -> Result<(), AgentError> {
-        let tools = self.tools.read().await.clone();
+        let tools = self.tools.read().unwrap().clone();
         for tool_call in tool_calls {
             recorder.return_if_cancelled().await?;
 
             recorder
                 .record(AgentEvent::assistant_tool_call_request(
-                    format_tool_call_request(tool_call),
+                    tool_call.id.clone(),
+                    tool_call.name.clone(),
+                    tool_call.arguments.clone(),
                 ))
                 .await?;
             let result = tools.execute(tool_call, recorder.cancellation()).await;
             recorder.return_if_cancelled().await?;
 
-            recorder.record(AgentEvent::tool_result(result)).await?;
+            recorder
+                .record(AgentEvent::tool_result(
+                    tool_call.id.clone(),
+                    tool_call.name.clone(),
+                    result,
+                ))
+                .await?;
         }
 
         Ok(())
@@ -567,6 +593,29 @@ fn final_assistant_response(events: &[AgentEvent]) -> String {
         .collect::<String>()
 }
 
+fn effective_system_prompt(base_prompt: &str, tool_manifests: &[ToolManifest]) -> String {
+    if tool_manifests.is_empty() {
+        return base_prompt.to_owned();
+    }
+
+    let tool_summary = format_tool_summary(tool_manifests);
+    if base_prompt.trim().is_empty() {
+        return tool_summary;
+    }
+
+    format!("{base_prompt}\n\n{tool_summary}")
+}
+
+fn format_tool_summary(tool_manifests: &[ToolManifest]) -> String {
+    let tools = tool_manifests
+        .iter()
+        .map(|manifest| format!("* {} - {}", manifest.name, manifest.description))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!("You have access to the following tools:\n{tools}")
+}
+
 fn validate_provider_capabilities(
     capabilities: ProviderCapabilities,
     config: &AgentConfig,
@@ -614,7 +663,7 @@ fn validate_provider_capabilities(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{OutputSchema, Tool, ToolExecution};
+    use crate::{OutputSchema, Tool, ToolExecution, ToolManifest};
     use serde_json::{json, Value};
     use spectacular_llms::{
         provider_by_id, MessageDelta, Model, ProviderCall, ProviderContextLimits, ProviderMessage,
@@ -622,7 +671,7 @@ mod tests {
     };
     use std::sync::{
         atomic::{AtomicUsize, Ordering},
-        Arc,
+        Arc, Mutex,
     };
 
     fn capabilities() -> ProviderCapabilities {
@@ -712,6 +761,63 @@ mod tests {
                 };
                 let stream = ProviderStream::from_events(events.into_iter().map(Ok));
                 Ok(stream)
+            })
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct RecordingProvider {
+        calls: Arc<AtomicUsize>,
+        requests: Arc<Mutex<Vec<ProviderRequest>>>,
+        call_events: Vec<Vec<ProviderStreamEvent>>,
+    }
+
+    impl RecordingProvider {
+        fn new(call_events: Vec<Vec<ProviderStreamEvent>>) -> Self {
+            Self {
+                calls: Arc::new(AtomicUsize::new(0)),
+                requests: Arc::new(Mutex::new(Vec::new())),
+                call_events,
+            }
+        }
+    }
+
+    impl LlmProvider for RecordingProvider {
+        fn metadata(&self) -> ProviderMetadata {
+            provider_by_id(OPENROUTER_PROVIDER_ID).unwrap()
+        }
+
+        fn validate(&self, _mode: ValidationMode, _value: &str) -> Result<(), ProviderError> {
+            Ok(())
+        }
+
+        fn models(&self, _api_key: &str) -> Result<Vec<Model>, ProviderError> {
+            Ok(Vec::new())
+        }
+
+        fn capabilities(&self) -> ProviderCapabilities {
+            capabilities()
+        }
+
+        fn stream_completion<'a>(
+            &'a self,
+            request: ProviderRequest,
+            _cancellation: Cancellation,
+        ) -> ProviderCall<'a> {
+            Box::pin(async move {
+                let call_index = self.calls.fetch_add(1, Ordering::SeqCst);
+                self.requests.lock().unwrap().push(request);
+                let events = self
+                    .call_events
+                    .get(call_index)
+                    .cloned()
+                    .unwrap_or_else(|| {
+                        vec![
+                            ProviderStreamEvent::MessageDelta(MessageDelta::assistant("done")),
+                            ProviderStreamEvent::Finished(finished_stop_with_usage()),
+                        ]
+                    });
+                Ok(ProviderStream::from_events(events.into_iter().map(Ok)))
             })
         }
     }
@@ -837,7 +943,7 @@ mod tests {
         provider.capabilities.tool_calls = false;
         let calls = Arc::clone(&provider.calls);
         let mut agent = Agent::new(provider);
-        futures::executor::block_on(agent.register_tool(EchoTool));
+        agent.register_tool(EchoTool).unwrap();
         agent.enqueue_prompt("prompt");
 
         let error = futures::executor::block_on(agent.run_next()).unwrap_err();
@@ -914,12 +1020,59 @@ mod tests {
             "echo"
         }
 
+        fn manifest(&self) -> ToolManifest {
+            ToolManifest::new(
+                self.name(),
+                "Echo parsed arguments as provider-visible JSON.",
+                json!({"type": "object", "additionalProperties": true}),
+            )
+        }
+
         fn execute<'a>(
             &'a self,
             arguments: Value,
             _cancellation: Cancellation,
         ) -> ToolExecution<'a> {
-            Box::pin(async move { Ok(arguments) })
+            Box::pin(async move { Ok(arguments.to_string()) })
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct BuiltInStyleWriteTool;
+
+    impl Tool for BuiltInStyleWriteTool {
+        fn name(&self) -> &str {
+            "write"
+        }
+
+        fn manifest(&self) -> ToolManifest {
+            ToolManifest::new(
+                self.name(),
+                "Writes UTF-8 text to a file in the workspace.",
+                json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "content": {"type": "string"}
+                    },
+                    "required": ["path", "content"],
+                    "additionalProperties": false
+                }),
+            )
+        }
+
+        fn execute<'a>(
+            &'a self,
+            arguments: Value,
+            _cancellation: Cancellation,
+        ) -> ToolExecution<'a> {
+            Box::pin(async move {
+                Ok(json!({
+                    "success": true,
+                    "path": arguments.get("path").and_then(Value::as_str).unwrap_or_default()
+                })
+                .to_string())
+            })
         }
     }
 
@@ -937,7 +1090,7 @@ mod tests {
             ],
         };
         let mut agent = Agent::new(provider);
-        futures::executor::block_on(agent.register_tool(EchoTool));
+        agent.register_tool(EchoTool).unwrap();
         agent.enqueue_prompt("prompt");
 
         futures::executor::block_on(agent.run_next()).unwrap();
@@ -946,6 +1099,191 @@ mod tests {
             .events()
             .iter()
             .any(|event| matches!(event, AgentEvent::ToolResult { .. })));
+    }
+
+    #[test]
+    fn provider_request_includes_tool_manifest_and_tool_summary_system_prompt() {
+        let provider = RecordingProvider::new(vec![vec![
+            ProviderStreamEvent::MessageDelta(MessageDelta::assistant("done")),
+            ProviderStreamEvent::Finished(finished_stop_with_usage()),
+        ]]);
+        let requests = Arc::clone(&provider.requests);
+        let mut agent = Agent::new(provider);
+        agent.register_tool(EchoTool).unwrap();
+        agent.enqueue_prompt("prompt");
+
+        futures::executor::block_on(agent.run_next()).unwrap();
+
+        let requests = requests.lock().unwrap();
+        let request = requests.first().unwrap();
+        assert_eq!(request.tools.len(), 1);
+        assert_eq!(request.tools[0].name, "echo");
+        assert_eq!(
+            request.tools[0].description,
+            "Echo parsed arguments as provider-visible JSON."
+        );
+        assert_eq!(
+            request.messages[0].content,
+            "You have access to the following tools:\n* echo - Echo parsed arguments as provider-visible JSON."
+        );
+        assert!(!request.messages[0].content.contains("Parameters:"));
+        assert!(!request.messages[0].content.contains("additionalProperties"));
+        assert_eq!(agent.config.system_prompt, DEFAULT_SYSTEM_PROMPT);
+    }
+
+    #[test]
+    fn tool_call_loop_emits_structured_tool_events_with_matching_id() {
+        let provider = RecordingProvider::new(vec![
+            vec![ProviderStreamEvent::Finished(ProviderFinished::tool_calls(
+                vec![ProviderToolCall::new("call-1", "echo", r#"{"ok":true}"#)],
+            ))],
+            vec![
+                ProviderStreamEvent::MessageDelta(MessageDelta::assistant("done")),
+                ProviderStreamEvent::Finished(finished_stop_with_usage()),
+            ],
+        ]);
+        let mut agent = Agent::new(provider);
+        agent.register_tool(EchoTool).unwrap();
+        agent.enqueue_prompt("prompt");
+
+        futures::executor::block_on(agent.run_next()).unwrap();
+
+        let tool_call = agent.events().into_iter().find_map(|event| match event {
+            AgentEvent::AssistantToolCallRequest {
+                tool_call_id,
+                name,
+                arguments,
+            } => Some((tool_call_id, name, arguments)),
+            _ => None,
+        });
+        let tool_result = agent.events().into_iter().find_map(|event| match event {
+            AgentEvent::ToolResult {
+                tool_call_id,
+                name,
+                content,
+            } => Some((tool_call_id, name, content)),
+            _ => None,
+        });
+
+        assert_eq!(
+            tool_call,
+            Some((
+                "call-1".to_owned(),
+                "echo".to_owned(),
+                r#"{"ok":true}"#.to_owned()
+            ))
+        );
+        assert_eq!(
+            tool_result,
+            Some((
+                "call-1".to_owned(),
+                "echo".to_owned(),
+                r#"{"ok":true}"#.to_owned()
+            ))
+        );
+    }
+
+    #[test]
+    fn follow_up_provider_request_replays_assistant_tool_call_and_tool_result() {
+        let provider = RecordingProvider::new(vec![
+            vec![ProviderStreamEvent::Finished(ProviderFinished::tool_calls(
+                vec![ProviderToolCall::new("call-1", "echo", r#"{"ok":true}"#)],
+            ))],
+            vec![
+                ProviderStreamEvent::MessageDelta(MessageDelta::assistant("done")),
+                ProviderStreamEvent::Finished(finished_stop_with_usage()),
+            ],
+        ]);
+        let requests = Arc::clone(&provider.requests);
+        let mut agent = Agent::new(provider);
+        agent.register_tool(EchoTool).unwrap();
+        agent.enqueue_prompt("prompt");
+
+        futures::executor::block_on(agent.run_next()).unwrap();
+
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 2);
+        let initial = &requests[0];
+        assert_eq!(initial.tools.len(), 1);
+        assert_eq!(initial.tools[0].name, "echo");
+        let follow_up = &requests[1];
+        assert_eq!(follow_up.tools.len(), 1);
+        assert_eq!(follow_up.tools[0].name, "echo");
+
+        let assistant_tool_call = follow_up
+            .messages
+            .iter()
+            .find(|message| !message.tool_calls.is_empty())
+            .unwrap();
+        let tool_result = follow_up
+            .messages
+            .iter()
+            .find(|message| message.tool_call_id.as_deref() == Some("call-1"))
+            .unwrap();
+
+        assert_eq!(assistant_tool_call.tool_calls[0].id, "call-1");
+        assert_eq!(assistant_tool_call.tool_calls[0].name, "echo");
+        assert_eq!(
+            assistant_tool_call.tool_calls[0].arguments,
+            r#"{"ok":true}"#
+        );
+        assert_eq!(tool_result.content, r#"{"ok":true}"#);
+        assert_eq!(tool_result.tool_call_id.as_deref(), Some("call-1"));
+    }
+
+    #[test]
+    fn fake_provider_receives_built_in_style_tool_result_with_matching_id() {
+        let provider = RecordingProvider::new(vec![
+            vec![ProviderStreamEvent::Finished(ProviderFinished::tool_calls(
+                vec![ProviderToolCall::new(
+                    "call-write-1",
+                    "write",
+                    r#"{"path":"foo.txt","content":"hello"}"#,
+                )],
+            ))],
+            vec![
+                ProviderStreamEvent::MessageDelta(MessageDelta::assistant("done")),
+                ProviderStreamEvent::Finished(finished_stop_with_usage()),
+            ],
+        ]);
+        let requests = Arc::clone(&provider.requests);
+        let mut agent = Agent::new(provider);
+        agent.register_tool(BuiltInStyleWriteTool).unwrap();
+        agent.enqueue_prompt("prompt");
+
+        futures::executor::block_on(agent.run_next()).unwrap();
+
+        let tool_result_event = agent.events().into_iter().find_map(|event| match event {
+            AgentEvent::ToolResult {
+                tool_call_id,
+                name,
+                content,
+            } => Some((tool_call_id, name, content)),
+            _ => None,
+        });
+        let requests = requests.lock().unwrap();
+        let follow_up_tool_result = requests[1]
+            .messages
+            .iter()
+            .find(|message| message.tool_call_id.as_deref() == Some("call-write-1"))
+            .unwrap();
+
+        assert_eq!(
+            tool_result_event,
+            Some((
+                "call-write-1".to_owned(),
+                "write".to_owned(),
+                r#"{"path":"foo.txt","success":true}"#.to_owned()
+            ))
+        );
+        assert_eq!(
+            follow_up_tool_result.tool_call_id.as_deref(),
+            Some("call-write-1")
+        );
+        assert_eq!(
+            follow_up_tool_result.content,
+            r#"{"path":"foo.txt","success":true}"#
+        );
     }
 
     #[test]
@@ -958,7 +1296,7 @@ mod tests {
             ))],
         };
         let mut agent = Agent::new(provider);
-        futures::executor::block_on(agent.register_tool(EchoTool));
+        agent.register_tool(EchoTool).unwrap();
         agent.enqueue_prompt("prompt");
 
         let error = futures::executor::block_on(agent.run_next()).unwrap_err();

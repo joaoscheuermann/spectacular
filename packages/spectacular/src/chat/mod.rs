@@ -7,14 +7,13 @@ mod session;
 
 use crate::chat::prompt::PromptEditor;
 use crate::chat::renderer::Renderer;
-use crate::chat::runner::{ChatRunRequest, ChatRunner};
+use crate::chat::runner::{main_chat_tool_storage, ChatRunRequest, ChatRunner};
 use crate::chat::session::{ChatEvent, SessionManager};
+use spectacular_agent::ToolStorage;
 use spectacular_commands::{
     parse_line, CommandControl, CommandError, CommandRegistry, ParseOutcome,
 };
-use spectacular_config::{
-    ConfigError, ReasoningLevel, SpectacularConfig, TaskModelConfig, TaskModelSlot,
-};
+use spectacular_config::{ConfigError, ReasoningLevel, SpectacularConfig, TaskModelSlot};
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::io::{self, IsTerminal, Write};
@@ -36,17 +35,22 @@ pub struct ChatContext {
     renderer: Renderer,
     registry: Arc<CommandRegistry<ChatContext>>,
     runtime: RuntimeSelection,
+    tools: ToolStorage,
 }
 
 impl ChatContext {
     fn new() -> Result<Self, ChatError> {
         let config = spectacular_config::read_config_or_default()?;
         let runtime = RuntimeSelection::from_config(&config)?;
+        let workspace_root = std::env::current_dir().map_err(ChatError::Io)?;
+        let tools = main_chat_tool_storage(workspace_root)
+            .map_err(|error| ChatError::Session(error.to_string()))?;
         Ok(Self {
             session: SessionManager::new()?,
-            renderer: Renderer::default(),
+            renderer: Renderer,
             registry: Arc::new(commands::registry()?),
             runtime,
+            tools,
         })
     }
 
@@ -100,7 +104,7 @@ impl ChatContext {
         render_user_prompt: bool,
         retry_existing_prompt: bool,
     ) -> Result<(), ChatError> {
-        ChatRunner::new(&self.session, &self.renderer)
+        ChatRunner::new(&self.session, &self.renderer, self.tools.clone())
             .run(ChatRunRequest {
                 prompt,
                 render_user_prompt,
@@ -338,7 +342,7 @@ impl Error for ChatError {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use spectacular_config::{ProviderConfig, ProvidersConfig, TaskModels};
+    use spectacular_config::{ProviderConfig, ProvidersConfig, TaskModelConfig, TaskModels};
     use std::collections::BTreeMap;
 
     #[test]

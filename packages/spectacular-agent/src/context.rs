@@ -1,6 +1,6 @@
 use crate::event::AgentEvent;
 use crate::store::Store;
-use spectacular_llms::{ProviderContextLimits, ProviderMessage};
+use spectacular_llms::{ProviderContextLimits, ProviderMessage, ProviderToolCall};
 use std::error::Error;
 use std::fmt::{self, Display};
 
@@ -62,10 +62,23 @@ fn provider_message_from_event(event: &AgentEvent) -> Option<ProviderMessage> {
     match event {
         AgentEvent::UserPrompt { content } => Some(ProviderMessage::user(content.clone())),
         AgentEvent::MessageDelta(delta) => Some(ProviderMessage::assistant(delta.content.clone())),
-        AgentEvent::AssistantToolCallRequest { content } => {
-            Some(ProviderMessage::assistant(content.clone()))
-        }
-        AgentEvent::ToolResult { content } => Some(ProviderMessage::tool(content.clone())),
+        AgentEvent::AssistantToolCallRequest {
+            tool_call_id,
+            name,
+            arguments,
+        } => Some(ProviderMessage::assistant_tool_call(ProviderToolCall::new(
+            tool_call_id.clone(),
+            name.clone(),
+            arguments.clone(),
+        ))),
+        AgentEvent::ToolResult {
+            tool_call_id,
+            content,
+            ..
+        } => Some(ProviderMessage::tool_result(
+            tool_call_id.clone(),
+            content.clone(),
+        )),
         AgentEvent::ReasoningDelta(_)
         | AgentEvent::UsageMetadata(_)
         | AgentEvent::ReasoningMetadata(_)
@@ -93,9 +106,9 @@ mod tests {
             "assistant response",
         )));
         store.append(AgentEvent::assistant_tool_call_request(
-            r#"{"id":"call-1","name":"read","arguments":"{}"}"#,
+            "call-1", "read", "{}",
         ));
-        store.append(AgentEvent::tool_result(r#"{"ok":true}"#));
+        store.append(AgentEvent::tool_result("call-1", "read", r#"{"ok":true}"#));
         store.append(AgentEvent::ReasoningDelta(ReasoningDelta {
             content: "private thought".to_owned(),
             metadata: Some(ReasoningMetadata::default()),
@@ -128,13 +141,14 @@ mod tests {
                 (ProviderMessageRole::System, "system prompt"),
                 (ProviderMessageRole::User, "user prompt"),
                 (ProviderMessageRole::Assistant, "assistant response"),
-                (
-                    ProviderMessageRole::Assistant,
-                    r#"{"id":"call-1","name":"read","arguments":"{}"}"#
-                ),
+                (ProviderMessageRole::Assistant, ""),
                 (ProviderMessageRole::Tool, r#"{"ok":true}"#),
             ]
         );
+        assert_eq!(messages[3].tool_calls[0].id, "call-1");
+        assert_eq!(messages[3].tool_calls[0].name, "read");
+        assert_eq!(messages[3].tool_calls[0].arguments, "{}");
+        assert_eq!(messages[4].tool_call_id.as_deref(), Some("call-1"));
     }
 
     #[test]

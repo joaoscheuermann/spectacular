@@ -5,18 +5,38 @@ use std::fmt::{self, Display};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AgentEvent {
-    UserPrompt { content: String },
+    UserPrompt {
+        content: String,
+    },
     MessageDelta(MessageDelta),
     ReasoningDelta(ReasoningDelta),
     UsageMetadata(UsageMetadata),
     ReasoningMetadata(ReasoningMetadata),
-    AssistantToolCallRequest { content: String },
-    ToolResult { content: String },
-    ValidationError { message: String },
-    Error { message: String },
-    Cancelled { reason: String },
-    Finished { finish_reason: FinishReason },
-    Internal { message: String },
+    AssistantToolCallRequest {
+        tool_call_id: String,
+        name: String,
+        arguments: String,
+    },
+    ToolResult {
+        tool_call_id: String,
+        name: String,
+        content: String,
+    },
+    ValidationError {
+        message: String,
+    },
+    Error {
+        message: String,
+    },
+    Cancelled {
+        reason: String,
+    },
+    Finished {
+        finish_reason: FinishReason,
+    },
+    Internal {
+        message: String,
+    },
 }
 
 impl AgentEvent {
@@ -26,14 +46,26 @@ impl AgentEvent {
         }
     }
 
-    pub fn assistant_tool_call_request(content: impl Into<String>) -> Self {
+    pub fn assistant_tool_call_request(
+        tool_call_id: impl Into<String>,
+        name: impl Into<String>,
+        arguments: impl Into<String>,
+    ) -> Self {
         Self::AssistantToolCallRequest {
-            content: content.into(),
+            tool_call_id: tool_call_id.into(),
+            name: name.into(),
+            arguments: arguments.into(),
         }
     }
 
-    pub fn tool_result(content: impl Into<String>) -> Self {
+    pub fn tool_result(
+        tool_call_id: impl Into<String>,
+        name: impl Into<String>,
+        content: impl Into<String>,
+    ) -> Self {
         Self::ToolResult {
+            tool_call_id: tool_call_id.into(),
+            name: name.into(),
             content: content.into(),
         }
     }
@@ -93,10 +125,24 @@ impl Display for AgentEvent {
                 "ReasoningMetadata(effort={:?}, summary={:?})",
                 metadata.effort, metadata.summary
             ),
-            AgentEvent::AssistantToolCallRequest { content } => {
-                write!(formatter, "AssistantToolCallRequest({content})")
+            AgentEvent::AssistantToolCallRequest {
+                tool_call_id,
+                name,
+                arguments,
+            } => {
+                write!(
+                    formatter,
+                    "AssistantToolCallRequest(id={tool_call_id}, name={name}, arguments={arguments})"
+                )
             }
-            AgentEvent::ToolResult { content } => write!(formatter, "ToolResult({content})"),
+            AgentEvent::ToolResult {
+                tool_call_id,
+                name,
+                content,
+            } => write!(
+                formatter,
+                "ToolResult(id={tool_call_id}, name={name}, content={content})"
+            ),
             AgentEvent::ValidationError { message } => {
                 write!(formatter, "ValidationError({message})")
             }

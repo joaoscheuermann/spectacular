@@ -13,5 +13,6 @@ pub use error::AgentError;
 pub use event::AgentEvent;
 pub use queue::{RunId, RunQueue, RunRequest};
 pub use schema::{OutputSchema, SchemaError};
+pub use spectacular_llms::{Cancellation, ToolManifest};
 pub use store::Store;
-pub use tool::{Tool, ToolError, ToolExecution, ToolStorage};
+pub use tool::{Tool, ToolDisplay, ToolError, ToolExecution, ToolRegistrationError, ToolStorage};

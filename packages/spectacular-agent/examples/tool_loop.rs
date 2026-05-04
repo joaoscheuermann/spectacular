@@ -1,5 +1,5 @@
 use serde_json::{json, Value};
-use spectacular_agent::{Agent, AgentEvent, Tool, ToolExecution};
+use spectacular_agent::{Agent, AgentEvent, Tool, ToolExecution, ToolManifest};
 use spectacular_llms::{
     provider_by_id, Cancellation, FinishReason, LlmProvider, MessageDelta, Model, ProviderCall,
     ProviderCapabilities, ProviderContextLimits, ProviderError, ProviderFinished, ProviderMetadata,
@@ -21,13 +21,22 @@ impl Tool for FakeTool {
         self.name
     }
 
+    fn manifest(&self) -> ToolManifest {
+        ToolManifest::new(
+            self.name(),
+            format!("Fake {} tool used by the tool-loop example.", self.name()),
+            json!({"type": "object", "additionalProperties": true}),
+        )
+    }
+
     fn execute<'a>(&'a self, arguments: Value, _cancellation: Cancellation) -> ToolExecution<'a> {
         Box::pin(async move {
             Ok(json!({
                 "tool": self.name,
                 "arguments": arguments,
                 "output": format!("{} result", self.name),
-            }))
+            })
+            .to_string())
         })
     }
 }
@@ -113,12 +122,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut agent = Agent::new(FakeToolLoopProvider {
         calls: Arc::new(AtomicUsize::new(0)),
     });
-    futures::executor::block_on(agent.register_tool(FakeTool {
+    agent.register_tool(FakeTool {
         name: "read_release",
-    }));
-    futures::executor::block_on(agent.register_tool(FakeTool {
+    })?;
+    agent.register_tool(FakeTool {
         name: "summarize_diff",
-    }));
+    })?;
 
     agent.enqueue_prompt("Use tools before answering");
     futures::executor::block_on(agent.run_next())?;

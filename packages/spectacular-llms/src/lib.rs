@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::future::Future;
@@ -133,6 +134,8 @@ impl Model {
 pub struct ProviderMessage {
     pub role: ProviderMessageRole,
     pub content: String,
+    pub tool_calls: Vec<ProviderToolCall>,
+    pub tool_call_id: Option<String>,
 }
 
 impl ProviderMessage {
@@ -140,6 +143,8 @@ impl ProviderMessage {
         Self {
             role: ProviderMessageRole::System,
             content: content.into(),
+            tool_calls: Vec::new(),
+            tool_call_id: None,
         }
     }
 
@@ -147,6 +152,8 @@ impl ProviderMessage {
         Self {
             role: ProviderMessageRole::User,
             content: content.into(),
+            tool_calls: Vec::new(),
+            tool_call_id: None,
         }
     }
 
@@ -154,6 +161,21 @@ impl ProviderMessage {
         Self {
             role: ProviderMessageRole::Assistant,
             content: content.into(),
+            tool_calls: Vec::new(),
+            tool_call_id: None,
+        }
+    }
+
+    pub fn assistant_tool_call(tool_call: ProviderToolCall) -> Self {
+        Self::assistant_tool_calls(vec![tool_call])
+    }
+
+    pub fn assistant_tool_calls(tool_calls: Vec<ProviderToolCall>) -> Self {
+        Self {
+            role: ProviderMessageRole::Assistant,
+            content: String::new(),
+            tool_calls,
+            tool_call_id: None,
         }
     }
 
@@ -161,6 +183,17 @@ impl ProviderMessage {
         Self {
             role: ProviderMessageRole::Tool,
             content: content.into(),
+            tool_calls: Vec::new(),
+            tool_call_id: None,
+        }
+    }
+
+    pub fn tool_result(tool_call_id: impl Into<String>, content: impl Into<String>) -> Self {
+        Self {
+            role: ProviderMessageRole::Tool,
+            content: content.into(),
+            tool_calls: Vec::new(),
+            tool_call_id: Some(tool_call_id.into()),
         }
     }
 }
@@ -237,11 +270,34 @@ impl Default for ProviderCallFlags {
     }
 }
 
+/// Provider-visible function tool schema.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ToolManifest {
+    pub name: String,
+    pub description: String,
+    pub parameters: serde_json::Value,
+}
+
+impl ToolManifest {
+    pub fn new(
+        name: impl Into<String>,
+        description: impl Into<String>,
+        parameters: serde_json::Value,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            description: description.into(),
+            parameters,
+        }
+    }
+}
+
 /// Provider completion request consumed by async provider implementations.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProviderRequest {
     pub model: Option<String>,
     pub messages: Vec<ProviderMessage>,
+    pub tools: Vec<ToolManifest>,
     pub capabilities: ProviderCapabilities,
     pub flags: ProviderCallFlags,
 }
@@ -251,6 +307,7 @@ impl ProviderRequest {
         Self {
             model: None,
             messages,
+            tools: Vec::new(),
             capabilities: ProviderCapabilities::default(),
             flags: ProviderCallFlags::default(),
         }
@@ -258,6 +315,11 @@ impl ProviderRequest {
 
     pub fn with_model(mut self, model: impl Into<String>) -> Self {
         self.model = Some(model.into());
+        self
+    }
+
+    pub fn with_tools(mut self, tools: Vec<ToolManifest>) -> Self {
+        self.tools = tools;
         self
     }
 }
@@ -305,7 +367,9 @@ pub enum FinishReason {
 /// Token usage metadata returned when a provider exposes it.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
 pub struct UsageMetadata {
+    #[serde(alias = "prompt_tokens")]
     pub input_tokens: Option<u64>,
+    #[serde(alias = "completion_tokens")]
     pub output_tokens: Option<u64>,
     pub total_tokens: Option<u64>,
 }
@@ -618,7 +682,7 @@ impl LlmProvider for OpenRouterProvider {
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
             streaming: true,
-            tool_calls: false,
+            tool_calls: true,
             structured_output: false,
             reasoning: false,
             cancellation: false,
@@ -731,6 +795,7 @@ fn stream_openrouter_response(
 
     let reader = BufReader::new(response);
     let mut saw_finished = false;
+    let mut tool_call_accumulator = OpenRouterToolCallAccumulator::default();
     for line in reader.lines() {
         if cancellation.is_cancelled() {
             return Err(ProviderError::CancellationError);
@@ -744,6 +809,12 @@ fn stream_openrouter_response(
             continue;
         };
         if payload.trim() == "[DONE]" {
+            if tool_call_accumulator.has_pending() {
+                return Err(ProviderError::MalformedResponse {
+                    provider_name: "OpenRouter".to_owned(),
+                    reason: "stream ended before tool-call finish".to_owned(),
+                });
+            }
             if !saw_finished
                 && sender
                     .blocking_send(Ok(ProviderStreamEvent::Finished(
@@ -757,12 +828,19 @@ fn stream_openrouter_response(
             break;
         }
 
-        for event in parse_openrouter_chat_chunk(payload)? {
-            saw_finished |= matches!(event, ProviderStreamEvent::Finished(_));
-            if sender.blocking_send(Ok(event)).is_err() {
-                return Err(ProviderError::CancellationError);
-            }
+        let finished_in_payload =
+            send_openrouter_payload_events(payload, &mut tool_call_accumulator, &sender)?;
+        saw_finished |= finished_in_payload;
+        if finished_in_payload {
+            break;
         }
+    }
+
+    if !saw_finished && tool_call_accumulator.has_pending() {
+        return Err(ProviderError::MalformedResponse {
+            provider_name: "OpenRouter".to_owned(),
+            reason: "stream ended before tool-call finish".to_owned(),
+        });
     }
 
     if !saw_finished
@@ -778,31 +856,63 @@ fn stream_openrouter_response(
     Ok(())
 }
 
+fn send_openrouter_payload_events(
+    payload: &str,
+    accumulator: &mut OpenRouterToolCallAccumulator,
+    sender: &mpsc::Sender<Result<ProviderStreamEvent, ProviderError>>,
+) -> Result<bool, ProviderError> {
+    let mut finished_in_payload = false;
+    for event in parse_openrouter_chat_chunk_with_accumulator(payload, accumulator)? {
+        finished_in_payload |= matches!(event, ProviderStreamEvent::Finished(_));
+        if sender.blocking_send(Ok(event)).is_err() {
+            return Err(ProviderError::CancellationError);
+        }
+    }
+
+    Ok(finished_in_payload)
+}
+
 #[derive(Serialize)]
 struct OpenRouterChatRequest {
     model: String,
     messages: Vec<OpenRouterChatMessage>,
     stream: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    tools: Vec<OpenRouterToolManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parallel_tool_calls: Option<bool>,
 }
 
 impl OpenRouterChatRequest {
     fn from_provider_request(request: ProviderRequest) -> Result<Self, ProviderError> {
-        let model = request
-            .model
+        let ProviderRequest {
+            model,
+            messages,
+            tools,
+            flags,
+            ..
+        } = request;
+        let model = model
             .filter(|model| !model.trim().is_empty())
             .ok_or_else(|| ProviderError::MalformedResponse {
                 provider_name: "OpenRouter".to_owned(),
                 reason: "missing model for chat completion".to_owned(),
             })?;
+        let tools = tools
+            .into_iter()
+            .map(OpenRouterToolManifest::from_tool_manifest)
+            .collect::<Vec<_>>();
+        let parallel_tool_calls = if tools.is_empty() { None } else { Some(false) };
 
         Ok(Self {
             model,
-            messages: request
-                .messages
+            messages: messages
                 .into_iter()
                 .map(OpenRouterChatMessage::from_provider_message)
                 .collect(),
-            stream: true,
+            stream: flags.stream,
+            tools,
+            parallel_tool_calls,
         })
     }
 }
@@ -810,7 +920,12 @@ impl OpenRouterChatRequest {
 #[derive(Serialize)]
 struct OpenRouterChatMessage {
     role: &'static str,
-    content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    tool_calls: Vec<OpenRouterAssistantToolCall>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_call_id: Option<String>,
 }
 
 impl OpenRouterChatMessage {
@@ -821,15 +936,93 @@ impl OpenRouterChatMessage {
             ProviderMessageRole::Assistant => "assistant",
             ProviderMessageRole::Tool => "tool",
         };
+        let tool_calls = message
+            .tool_calls
+            .into_iter()
+            .map(OpenRouterAssistantToolCall::from_provider_tool_call)
+            .collect::<Vec<_>>();
+        let content = if role == "assistant" && !tool_calls.is_empty() && message.content.is_empty()
+        {
+            None
+        } else {
+            Some(message.content)
+        };
 
         Self {
             role,
-            content: message.content,
+            content,
+            tool_calls,
+            tool_call_id: message.tool_call_id,
         }
     }
 }
 
+#[derive(Serialize)]
+struct OpenRouterToolManifest {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    function: OpenRouterFunctionManifest,
+}
+
+impl OpenRouterToolManifest {
+    fn from_tool_manifest(manifest: ToolManifest) -> Self {
+        Self {
+            kind: "function",
+            function: OpenRouterFunctionManifest {
+                name: manifest.name,
+                description: manifest.description,
+                parameters: manifest.parameters,
+                strict: true,
+            },
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct OpenRouterFunctionManifest {
+    name: String,
+    description: String,
+    parameters: serde_json::Value,
+    strict: bool,
+}
+
+#[derive(Serialize)]
+struct OpenRouterAssistantToolCall {
+    id: String,
+    #[serde(rename = "type")]
+    kind: &'static str,
+    function: OpenRouterAssistantToolCallFunction,
+}
+
+impl OpenRouterAssistantToolCall {
+    fn from_provider_tool_call(tool_call: ProviderToolCall) -> Self {
+        Self {
+            id: tool_call.id,
+            kind: "function",
+            function: OpenRouterAssistantToolCallFunction {
+                name: tool_call.name,
+                arguments: tool_call.arguments,
+            },
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct OpenRouterAssistantToolCallFunction {
+    name: String,
+    arguments: String,
+}
+
+#[cfg(test)]
 fn parse_openrouter_chat_chunk(payload: &str) -> Result<Vec<ProviderStreamEvent>, ProviderError> {
+    let mut accumulator = OpenRouterToolCallAccumulator::default();
+    parse_openrouter_chat_chunk_with_accumulator(payload, &mut accumulator)
+}
+
+fn parse_openrouter_chat_chunk_with_accumulator(
+    payload: &str,
+    accumulator: &mut OpenRouterToolCallAccumulator,
+) -> Result<Vec<ProviderStreamEvent>, ProviderError> {
     let chunk: OpenRouterChatChunk =
         serde_json::from_str(payload).map_err(|error| ProviderError::ResponseParsingFailed {
             provider_name: "OpenRouter".to_owned(),
@@ -838,18 +1031,76 @@ fn parse_openrouter_chat_chunk(payload: &str) -> Result<Vec<ProviderStreamEvent>
     let mut events = Vec::new();
 
     for choice in chunk.choices {
-        if let Some(content) = choice.delta.and_then(|delta| delta.content) {
-            if !content.is_empty() {
-                events.push(ProviderStreamEvent::MessageDelta(MessageDelta::assistant(
-                    content,
-                )));
+        let mut finish_reason = choice.finish_reason;
+        let native_finish_reason = choice.native_finish_reason;
+        let mut complete_tool_calls = Vec::new();
+        if let Some(delta) = choice.delta {
+            if let Some(tool_calls) = delta.tool_calls {
+                accumulator.add_chunks(tool_calls)?;
+            }
+            if let Some(content) = delta.content {
+                if !content.is_empty() {
+                    events.push(ProviderStreamEvent::MessageDelta(MessageDelta::assistant(
+                        content,
+                    )));
+                }
+            }
+            if finish_reason.is_none() {
+                finish_reason = delta.finish_reason;
             }
         }
 
-        if let Some(finish_reason) = choice.finish_reason {
+        if let Some(message) = choice.message {
+            if let Some(content) = message.content {
+                if !content.is_empty() {
+                    events.push(ProviderStreamEvent::MessageDelta(MessageDelta::assistant(
+                        content,
+                    )));
+                }
+            }
+            if let Some(tool_calls) = message.tool_calls {
+                complete_tool_calls = tool_calls
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, tool_call)| tool_call.into_provider_tool_call(index))
+                    .collect::<Result<Vec<_>, _>>()?;
+            }
+        }
+
+        if let Some(finish_reason) = finish_reason {
+            let finish_reason = parse_openrouter_finish_reason(&finish_reason);
+            let tool_calls = if finish_reason == FinishReason::ToolCalls {
+                let mut accumulated = if accumulator.has_pending() {
+                    accumulator.finish_tool_calls()?
+                } else {
+                    Vec::new()
+                };
+                accumulated.extend(complete_tool_calls);
+                if accumulated.is_empty() {
+                    return Err(ProviderError::MalformedResponse {
+                        provider_name: "OpenRouter".to_owned(),
+                        reason: openrouter_empty_tool_call_finish_reason(
+                            native_finish_reason.as_deref(),
+                            payload,
+                        ),
+                    });
+                }
+                accumulated
+            } else {
+                if accumulator.has_pending() || !complete_tool_calls.is_empty() {
+                    return Err(ProviderError::MalformedResponse {
+                        provider_name: "OpenRouter".to_owned(),
+                        reason: format!(
+                            "tool-call chunks ended without tool-call finish; OpenRouter response chunk JSON: {payload}"
+                        ),
+                    });
+                }
+                Vec::new()
+            };
+
             events.push(ProviderStreamEvent::Finished(ProviderFinished {
-                finish_reason: parse_openrouter_finish_reason(&finish_reason),
-                tool_calls: Vec::new(),
+                finish_reason,
+                tool_calls,
                 usage: chunk.usage,
                 reasoning: None,
             }));
@@ -869,6 +1120,24 @@ fn parse_openrouter_finish_reason(reason: &str) -> FinishReason {
     }
 }
 
+fn openrouter_empty_tool_call_finish_reason(
+    native_finish_reason: Option<&str>,
+    payload: &str,
+) -> String {
+    let native_finish_reason = native_finish_reason
+        .filter(|reason| !reason.trim().is_empty())
+        .unwrap_or("unknown");
+
+    format!(
+        "OpenRouter reported finish_reason=tool_calls without any tool call data \
+         (no delta.tool_calls and no message.tool_calls). \
+         native_finish_reason={native_finish_reason}. \
+         This usually means the selected model/provider route stopped without emitting a native function call, \
+         even though tools were present. Try a different tool-capable model/provider route or disable tools for this model. \
+         OpenRouter response chunk JSON: {payload}"
+    )
+}
+
 #[derive(Deserialize)]
 struct OpenRouterChatChunk {
     choices: Vec<OpenRouterChatChoice>,
@@ -878,12 +1147,188 @@ struct OpenRouterChatChunk {
 #[derive(Deserialize)]
 struct OpenRouterChatChoice {
     delta: Option<OpenRouterChatDelta>,
+    message: Option<OpenRouterChatChoiceMessage>,
     finish_reason: Option<String>,
+    native_finish_reason: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct OpenRouterChatDelta {
     content: Option<String>,
+    tool_calls: Option<Vec<OpenRouterChatDeltaToolCall>>,
+    finish_reason: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct OpenRouterChatChoiceMessage {
+    content: Option<String>,
+    tool_calls: Option<Vec<OpenRouterChatMessageToolCall>>,
+}
+
+#[derive(Deserialize)]
+struct OpenRouterChatMessageToolCall {
+    id: String,
+    #[serde(rename = "type")]
+    kind: String,
+    function: OpenRouterChatMessageToolCallFunction,
+}
+
+impl OpenRouterChatMessageToolCall {
+    fn into_provider_tool_call(self, index: usize) -> Result<ProviderToolCall, ProviderError> {
+        if self.kind != "function" {
+            return Err(ProviderError::MalformedResponse {
+                provider_name: "OpenRouter".to_owned(),
+                reason: format!("unsupported tool-call type `{}`", self.kind),
+            });
+        }
+
+        if self.id.trim().is_empty() {
+            return Err(ProviderError::MalformedResponse {
+                provider_name: "OpenRouter".to_owned(),
+                reason: format!("tool-call index {index} omitted id"),
+            });
+        }
+
+        if self.function.name.trim().is_empty() {
+            return Err(ProviderError::MalformedResponse {
+                provider_name: "OpenRouter".to_owned(),
+                reason: format!("tool-call index {index} omitted function name"),
+            });
+        }
+
+        Ok(ProviderToolCall::new(
+            self.id,
+            self.function.name,
+            self.function.arguments,
+        ))
+    }
+}
+
+#[derive(Deserialize)]
+struct OpenRouterChatMessageToolCallFunction {
+    name: String,
+    arguments: String,
+}
+
+#[derive(Deserialize)]
+struct OpenRouterChatDeltaToolCall {
+    index: usize,
+    id: Option<String>,
+    #[serde(rename = "type")]
+    kind: Option<String>,
+    function: Option<OpenRouterChatDeltaToolCallFunction>,
+}
+
+#[derive(Deserialize)]
+struct OpenRouterChatDeltaToolCallFunction {
+    name: Option<String>,
+    arguments: Option<String>,
+}
+
+#[derive(Default)]
+struct OpenRouterToolCallAccumulator {
+    tool_calls: BTreeMap<usize, OpenRouterAccumulatedToolCall>,
+}
+
+impl OpenRouterToolCallAccumulator {
+    fn add_chunks(
+        &mut self,
+        tool_calls: Vec<OpenRouterChatDeltaToolCall>,
+    ) -> Result<(), ProviderError> {
+        for tool_call in tool_calls {
+            if let Some(kind) = tool_call.kind.as_deref() {
+                if kind != "function" {
+                    return Err(ProviderError::MalformedResponse {
+                        provider_name: "OpenRouter".to_owned(),
+                        reason: format!("unsupported tool-call type `{kind}`"),
+                    });
+                }
+            }
+
+            let accumulated = self.tool_calls.entry(tool_call.index).or_default();
+            if let Some(id) = tool_call.id {
+                if let Some(existing_id) = accumulated.id.as_deref() {
+                    if existing_id != id {
+                        return Err(ProviderError::MalformedResponse {
+                            provider_name: "OpenRouter".to_owned(),
+                            reason: format!(
+                                "tool-call index {} changed id from `{existing_id}` to `{id}`",
+                                tool_call.index
+                            ),
+                        });
+                    }
+                } else {
+                    accumulated.id = Some(id);
+                }
+            }
+
+            if let Some(function) = tool_call.function {
+                if let Some(name) = function.name {
+                    accumulated.name.push_str(&name);
+                }
+                if let Some(arguments) = function.arguments {
+                    accumulated.arguments.push_str(&arguments);
+                    accumulated.saw_arguments = true;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn has_pending(&self) -> bool {
+        !self.tool_calls.is_empty()
+    }
+
+    fn finish_tool_calls(&mut self) -> Result<Vec<ProviderToolCall>, ProviderError> {
+        if self.tool_calls.is_empty() {
+            return Err(ProviderError::MalformedResponse {
+                provider_name: "OpenRouter".to_owned(),
+                reason: "tool-call finish did not include tool-call chunks".to_owned(),
+            });
+        }
+
+        let tool_calls = std::mem::take(&mut self.tool_calls);
+        tool_calls
+            .into_iter()
+            .map(|(index, accumulated)| accumulated.into_provider_tool_call(index))
+            .collect()
+    }
+}
+
+#[derive(Default)]
+struct OpenRouterAccumulatedToolCall {
+    id: Option<String>,
+    name: String,
+    arguments: String,
+    saw_arguments: bool,
+}
+
+impl OpenRouterAccumulatedToolCall {
+    fn into_provider_tool_call(self, index: usize) -> Result<ProviderToolCall, ProviderError> {
+        let Some(id) = self.id.filter(|id| !id.trim().is_empty()) else {
+            return Err(ProviderError::MalformedResponse {
+                provider_name: "OpenRouter".to_owned(),
+                reason: format!("tool-call index {index} omitted id"),
+            });
+        };
+
+        if self.name.trim().is_empty() {
+            return Err(ProviderError::MalformedResponse {
+                provider_name: "OpenRouter".to_owned(),
+                reason: format!("tool-call index {index} omitted function name"),
+            });
+        }
+
+        if !self.saw_arguments {
+            return Err(ProviderError::MalformedResponse {
+                provider_name: "OpenRouter".to_owned(),
+                reason: format!("tool-call index {index} omitted function arguments"),
+            });
+        }
+
+        Ok(ProviderToolCall::new(id, self.name, self.arguments))
+    }
 }
 
 fn validate_openrouter_api_key(
@@ -977,6 +1422,7 @@ struct OpenRouterModelResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn enabled_provider_is_openrouter() {
@@ -1169,6 +1615,223 @@ mod tests {
     }
 
     #[test]
+    fn openrouter_chat_request_serializes_strict_tool_manifest() {
+        let request = OpenRouterChatRequest::from_provider_request(
+            ProviderRequest::new(vec![ProviderMessage::user("hello")])
+                .with_model("openrouter/model")
+                .with_tools(vec![ToolManifest::new(
+                    "read_release",
+                    "Read a release artifact.",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "path": {"type": "string"}
+                        },
+                        "required": ["path"]
+                    }),
+                )]),
+        )
+        .unwrap();
+        let value = serde_json::to_value(request).unwrap();
+
+        assert_eq!(value["tools"][0]["type"], "function");
+        assert_eq!(value["tools"][0]["function"]["name"], "read_release");
+        assert_eq!(value["tools"][0]["function"]["strict"], true);
+        assert_eq!(value["parallel_tool_calls"], false);
+    }
+
+    #[test]
+    fn openrouter_chat_request_serializes_tool_call_and_tool_result_replay() {
+        let request = OpenRouterChatRequest::from_provider_request(
+            ProviderRequest::new(vec![
+                ProviderMessage::assistant_tool_call(ProviderToolCall::new(
+                    "call-1",
+                    "read_release",
+                    r#"{"path":"release/resume.yaml"}"#,
+                )),
+                ProviderMessage::tool_result("call-1", r#"{"ok":true}"#),
+            ])
+            .with_model("openrouter/model"),
+        )
+        .unwrap();
+        let value = serde_json::to_value(request).unwrap();
+
+        assert_eq!(value["messages"][0]["role"], "assistant");
+        assert!(value["messages"][0].get("content").is_none());
+        assert_eq!(value["messages"][0]["tool_calls"][0]["id"], "call-1");
+        assert_eq!(value["messages"][0]["tool_calls"][0]["type"], "function");
+        assert_eq!(
+            value["messages"][0]["tool_calls"][0]["function"]["name"],
+            "read_release"
+        );
+        assert_eq!(
+            value["messages"][0]["tool_calls"][0]["function"]["arguments"],
+            r#"{"path":"release/resume.yaml"}"#
+        );
+        assert_eq!(value["messages"][1]["role"], "tool");
+        assert_eq!(value["messages"][1]["tool_call_id"], "call-1");
+        assert_eq!(value["messages"][1]["content"], r#"{"ok":true}"#);
+    }
+
+    #[test]
+    fn openrouter_chat_chunks_emit_tool_calls_only_on_tool_call_finish() {
+        let mut accumulator = OpenRouterToolCallAccumulator::default();
+
+        let events = parse_openrouter_chat_chunk_with_accumulator(
+            r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-1","type":"function","function":{"name":"read_release","arguments":"{\"path\""}}]},"finish_reason":null}]}"#,
+            &mut accumulator,
+        )
+        .unwrap();
+        assert!(events.is_empty());
+
+        let events = parse_openrouter_chat_chunk_with_accumulator(
+            r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":":\"release/resume.yaml\"}"}}]},"finish_reason":null}]}"#,
+            &mut accumulator,
+        )
+        .unwrap();
+        assert!(events.is_empty());
+
+        let events = parse_openrouter_chat_chunk_with_accumulator(
+            r#"{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}"#,
+            &mut accumulator,
+        )
+        .unwrap();
+
+        assert_eq!(
+            events,
+            vec![ProviderStreamEvent::Finished(ProviderFinished {
+                finish_reason: FinishReason::ToolCalls,
+                tool_calls: vec![ProviderToolCall::new(
+                    "call-1",
+                    "read_release",
+                    r#"{"path":"release/resume.yaml"}"#
+                )],
+                usage: None,
+                reasoning: None,
+            })]
+        );
+    }
+
+    #[test]
+    fn openrouter_stream_stops_after_valid_tool_call_finish_before_duplicate_empty_finish() {
+        let mut accumulator = OpenRouterToolCallAccumulator::default();
+        let (sender, mut receiver) = mpsc::channel(8);
+
+        let should_stop = send_openrouter_payload_events(
+            r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"tool_terminal_TXIsWhOkok7u4ZqvpAeG","type":"function","function":{"name":"terminal","arguments":"{\"command\":\"pwd\"}"}}]},"finish_reason":"tool_calls"}]}"#,
+            &mut accumulator,
+            &sender,
+        )
+        .unwrap();
+
+        assert!(should_stop);
+        let event = receiver.try_recv().unwrap().unwrap();
+        assert_eq!(
+            event,
+            ProviderStreamEvent::Finished(ProviderFinished {
+                finish_reason: FinishReason::ToolCalls,
+                tool_calls: vec![ProviderToolCall::new(
+                    "tool_terminal_TXIsWhOkok7u4ZqvpAeG",
+                    "terminal",
+                    r#"{"command":"pwd"}"#
+                )],
+                usage: None,
+                reasoning: None,
+            })
+        );
+        assert!(receiver.try_recv().is_err());
+
+        let duplicate_empty_finish = r#"{"choices":[{"delta":{"content":"","role":"assistant"},"finish_reason":"tool_calls","native_finish_reason":"STOP"}],"usage":{"prompt_tokens":814,"completion_tokens":130,"total_tokens":944}}"#;
+        if !should_stop {
+            send_openrouter_payload_events(duplicate_empty_finish, &mut accumulator, &sender)
+                .unwrap();
+        }
+        assert!(receiver.try_recv().is_err());
+    }
+
+    #[test]
+    fn openrouter_chat_chunk_accepts_complete_message_tool_calls_on_tool_call_finish() {
+        let events = parse_openrouter_chat_chunk(
+            r#"{"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call-1","type":"function","function":{"name":"read_release","arguments":"{\"path\":\"release/resume.yaml\"}"}}]},"finish_reason":"tool_calls"}]}"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            events,
+            vec![ProviderStreamEvent::Finished(ProviderFinished {
+                finish_reason: FinishReason::ToolCalls,
+                tool_calls: vec![ProviderToolCall::new(
+                    "call-1",
+                    "read_release",
+                    r#"{"path":"release/resume.yaml"}"#
+                )],
+                usage: None,
+                reasoning: None,
+            })]
+        );
+    }
+
+    #[test]
+    fn openrouter_chat_chunk_accepts_delta_finish_reason_from_tool_call_guide_shape() {
+        let events = parse_openrouter_chat_chunk(
+            r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-1","type":"function","function":{"name":"read_release","arguments":"{\"path\":\"release/resume.yaml\"}"}}],"finish_reason":"tool_calls"}}]}"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            events,
+            vec![ProviderStreamEvent::Finished(ProviderFinished {
+                finish_reason: FinishReason::ToolCalls,
+                tool_calls: vec![ProviderToolCall::new(
+                    "call-1",
+                    "read_release",
+                    r#"{"path":"release/resume.yaml"}"#
+                )],
+                usage: None,
+                reasoning: None,
+            })]
+        );
+    }
+
+    #[test]
+    fn openrouter_tool_call_finish_without_tool_data_reports_raw_response_chunk() {
+        let payload = r#"{"id":"gen-1777903368-VISjaqh4vj28SScWcgcH","object":"chat.completion.chunk","created":1777903368,"model":"google/gemini-3.1-pro-preview-20260219","provider":"Google","choices":[{"index":0,"delta":{"content":"","role":"assistant"},"finish_reason":"tool_calls","native_finish_reason":"STOP"}],"usage":{"prompt_tokens":818,"completion_tokens":260,"total_tokens":1078,"cost":0.004756,"is_byok":false,"prompt_tokens_details":{"cached_tokens":0,"cache_write_tokens":0,"audio_tokens":0,"video_tokens":0},"cost_details":{"upstream_inference_cost":0.004756,"upstream_inference_prompt_cost":0.001636,"upstream_inference_completions_cost":0.00312},"completion_tokens_details":{"reasoning_tokens":228,"image_tokens":0,"audio_tokens":0}}}"#;
+
+        let error = parse_openrouter_chat_chunk(payload).unwrap_err();
+
+        assert!(matches!(error, ProviderError::MalformedResponse { .. }));
+        let message = error.to_string();
+        assert!(message.contains("finish_reason=tool_calls without any tool call data"));
+        assert!(message.contains("native_finish_reason=STOP"));
+        assert!(message.contains(
+            "selected model/provider route stopped without emitting a native function call"
+        ));
+        assert!(message.contains(payload));
+    }
+
+    #[test]
+    fn openrouter_chat_chunk_parses_openrouter_usage_token_names() {
+        let events = parse_openrouter_chat_chunk(
+            r#"{"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":818,"completion_tokens":260,"total_tokens":1078}}"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            events,
+            vec![ProviderStreamEvent::Finished(ProviderFinished {
+                finish_reason: FinishReason::Stop,
+                tool_calls: Vec::new(),
+                usage: Some(UsageMetadata {
+                    input_tokens: Some(818),
+                    output_tokens: Some(260),
+                    total_tokens: Some(1078),
+                }),
+                reasoning: None,
+            })]
+        );
+    }
+
+    #[test]
     fn malformed_openrouter_chat_chunk_returns_provider_error() {
         let error = parse_openrouter_chat_chunk("{not json").unwrap_err();
 
@@ -1180,6 +1843,7 @@ mod tests {
         let request = ProviderRequest::new(vec![ProviderMessage::user("hello")]);
 
         assert_eq!(request.messages[0].role, ProviderMessageRole::User);
+        assert!(request.tools.is_empty());
         assert!(request.flags.stream);
         assert!(!request.flags.allow_tools);
         assert!(!request.flags.include_reasoning);
@@ -1191,6 +1855,8 @@ mod tests {
 
         assert_eq!(message.role, ProviderMessageRole::Tool);
         assert_eq!(message.content, "tool output");
+        assert!(message.tool_calls.is_empty());
+        assert_eq!(message.tool_call_id, None);
     }
 
     #[test]
