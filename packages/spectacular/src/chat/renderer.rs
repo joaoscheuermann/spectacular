@@ -108,12 +108,7 @@ impl Renderer {
     }
 
     pub fn render_tool_result(&self, view: &ToolResultView) {
-        println!("{}", view.output);
-        let status = match view.status {
-            ToolStatus::Done => paint(success_style(), "done"),
-            ToolStatus::Failed => paint(error_style(), "failed"),
-        };
-        println!("{} {}", status, paint(dim_style(), "- ran"));
+        println!("└ {}", view.output);
         println!();
     }
 
