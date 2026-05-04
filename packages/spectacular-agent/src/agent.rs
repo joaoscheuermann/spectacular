@@ -13,9 +13,11 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex, RwLock,
 };
+use std::time::Duration;
 use tokio::sync::mpsc;
 
 const DEFAULT_SYSTEM_PROMPT: &str = "";
+const DEFAULT_MAX_PROVIDER_RETRIES: usize = 2;
 
 #[derive(Debug)]
 pub struct Agent<P> {
@@ -35,6 +37,10 @@ pub struct AgentConfig {
     pub require_reasoning_metadata: bool,
     pub include_reasoning: bool,
     pub output_schema: Option<OutputSchema>,
+    /// Retries after the first provider attempt for transient provider/network failures.
+    pub max_provider_retries: usize,
+    /// Optional pause between transient provider retries.
+    pub provider_retry_delay: Duration,
 }
 
 pub struct AgentRunStream {
@@ -106,6 +112,8 @@ impl Default for AgentConfig {
             require_reasoning_metadata: false,
             include_reasoning: false,
             output_schema: None,
+            max_provider_retries: DEFAULT_MAX_PROVIDER_RETRIES,
+            provider_retry_delay: Duration::ZERO,
         }
     }
 }
@@ -283,43 +291,81 @@ where
             request.flags.include_reasoning = self.config.include_reasoning;
             request.tools = tool_manifests.clone();
 
-            let mut stream = match self
-                .provider
-                .stream_completion(request, recorder.cancellation())
-                .await
-            {
-                Ok(stream) => stream,
-                Err(ProviderError::CancellationError) => {
-                    recorder.cancel();
-                    recorder.return_if_cancelled().await?;
-                    return Err(AgentError::CancellationError);
-                }
-                Err(error) => return recorder.record_error(error.into()).await,
-            };
-
-            recorder.return_if_cancelled().await?;
-
-            let mut requested_tools = Vec::new();
-            while let Some(provider_event) = stream.next().await {
+            let mut provider_retries = 0;
+            let requested_tools = 'provider_attempt: loop {
                 recorder.return_if_cancelled().await?;
 
-                let provider_event = match provider_event {
-                    Ok(provider_event) => provider_event,
+                let mut stream = match self
+                    .provider
+                    .stream_completion(request.clone(), recorder.cancellation())
+                    .await
+                {
+                    Ok(stream) => stream,
                     Err(ProviderError::CancellationError) => {
                         recorder.cancel();
                         recorder.return_if_cancelled().await?;
                         return Err(AgentError::CancellationError);
                     }
+                    Err(error)
+                        if should_retry_provider_error(
+                            &error,
+                            provider_retries,
+                            false,
+                            &self.config,
+                        ) =>
+                    {
+                        provider_retries += 1;
+                        wait_before_provider_retry(&mut recorder, self.config.provider_retry_delay)
+                            .await?;
+                        continue;
+                    }
                     Err(error) => return recorder.record_error(error.into()).await,
                 };
 
-                if let Some(tool_calls) = self
-                    .record_provider_event(&mut recorder, provider_event, run_event_start)
-                    .await?
-                {
-                    requested_tools = tool_calls;
+                recorder.return_if_cancelled().await?;
+
+                let mut requested_tools = Vec::new();
+                let mut saw_provider_event = false;
+                while let Some(provider_event) = stream.next().await {
+                    recorder.return_if_cancelled().await?;
+
+                    let provider_event = match provider_event {
+                        Ok(provider_event) => provider_event,
+                        Err(ProviderError::CancellationError) => {
+                            recorder.cancel();
+                            recorder.return_if_cancelled().await?;
+                            return Err(AgentError::CancellationError);
+                        }
+                        Err(error)
+                            if should_retry_provider_error(
+                                &error,
+                                provider_retries,
+                                saw_provider_event,
+                                &self.config,
+                            ) =>
+                        {
+                            provider_retries += 1;
+                            wait_before_provider_retry(
+                                &mut recorder,
+                                self.config.provider_retry_delay,
+                            )
+                            .await?;
+                            continue 'provider_attempt;
+                        }
+                        Err(error) => return recorder.record_error(error.into()).await,
+                    };
+
+                    saw_provider_event = true;
+                    if let Some(tool_calls) = self
+                        .record_provider_event(&mut recorder, provider_event, run_event_start)
+                        .await?
+                    {
+                        requested_tools = tool_calls;
+                    }
                 }
-            }
+
+                break requested_tools;
+            };
 
             if requested_tools.is_empty() {
                 break;
@@ -660,6 +706,36 @@ fn validate_provider_capabilities(
     Ok(())
 }
 
+async fn wait_before_provider_retry<P>(
+    recorder: &mut RunRecorder<'_, P>,
+    delay: Duration,
+) -> Result<(), AgentError>
+where
+    P: LlmProvider,
+{
+    recorder.return_if_cancelled().await?;
+    if !delay.is_zero() {
+        tokio::time::sleep(delay).await;
+    }
+    recorder.return_if_cancelled().await
+}
+
+fn should_retry_provider_error(
+    error: &ProviderError,
+    retries_used: usize,
+    saw_provider_event: bool,
+    config: &AgentConfig,
+) -> bool {
+    if saw_provider_event || retries_used >= config.max_provider_retries {
+        return false;
+    }
+
+    matches!(
+        error,
+        ProviderError::NetworkError { .. } | ProviderError::ProviderUnavailable { .. }
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -769,7 +845,13 @@ mod tests {
     struct RecordingProvider {
         calls: Arc<AtomicUsize>,
         requests: Arc<Mutex<Vec<ProviderRequest>>>,
-        call_events: Vec<Vec<ProviderStreamEvent>>,
+        call_attempts: Vec<ProviderAttempt>,
+    }
+
+    #[derive(Clone, Debug)]
+    enum ProviderAttempt {
+        Error(ProviderError),
+        Events(Vec<Result<ProviderStreamEvent, ProviderError>>),
     }
 
     impl RecordingProvider {
@@ -777,7 +859,18 @@ mod tests {
             Self {
                 calls: Arc::new(AtomicUsize::new(0)),
                 requests: Arc::new(Mutex::new(Vec::new())),
-                call_events,
+                call_attempts: call_events
+                    .into_iter()
+                    .map(|events| ProviderAttempt::Events(events.into_iter().map(Ok).collect()))
+                    .collect(),
+            }
+        }
+
+        fn with_attempts(call_attempts: Vec<ProviderAttempt>) -> Self {
+            Self {
+                calls: Arc::new(AtomicUsize::new(0)),
+                requests: Arc::new(Mutex::new(Vec::new())),
+                call_attempts,
             }
         }
     }
@@ -807,17 +900,22 @@ mod tests {
             Box::pin(async move {
                 let call_index = self.calls.fetch_add(1, Ordering::SeqCst);
                 self.requests.lock().unwrap().push(request);
-                let events = self
-                    .call_events
+                let attempt = self
+                    .call_attempts
                     .get(call_index)
                     .cloned()
                     .unwrap_or_else(|| {
-                        vec![
-                            ProviderStreamEvent::MessageDelta(MessageDelta::assistant("done")),
-                            ProviderStreamEvent::Finished(finished_stop_with_usage()),
-                        ]
+                        ProviderAttempt::Events(vec![
+                            Ok(ProviderStreamEvent::MessageDelta(MessageDelta::assistant(
+                                "done",
+                            ))),
+                            Ok(ProviderStreamEvent::Finished(finished_stop_with_usage())),
+                        ])
                     });
-                Ok(ProviderStream::from_events(events.into_iter().map(Ok)))
+                match attempt {
+                    ProviderAttempt::Error(error) => Err(error),
+                    ProviderAttempt::Events(events) => Ok(ProviderStream::from_events(events)),
+                }
             })
         }
     }
@@ -1352,19 +1450,107 @@ mod tests {
 
     #[test]
     fn provider_errors_are_stored() {
+        let calls = Arc::new(AtomicUsize::new(0));
         let provider = FailingProvider {
-            calls: Arc::new(AtomicUsize::new(0)),
+            calls: Arc::clone(&calls),
         };
         let mut agent = Agent::new(provider);
         agent.enqueue_prompt("prompt");
 
         let error = futures::executor::block_on(agent.run_next()).unwrap_err();
 
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            DEFAULT_MAX_PROVIDER_RETRIES + 1
+        );
         assert!(matches!(error, AgentError::ProviderNetworkError { .. }));
         assert!(matches!(
             agent.events().last(),
             Some(AgentEvent::Error { .. })
         ));
+    }
+
+    #[test]
+    fn retryable_provider_error_before_stream_is_retried() {
+        let provider = RecordingProvider::with_attempts(vec![
+            ProviderAttempt::Error(provider_unavailable()),
+            ProviderAttempt::Error(provider_unavailable()),
+            ProviderAttempt::Events(recovered_events()),
+        ]);
+        let calls = Arc::clone(&provider.calls);
+        let mut agent = Agent::with_config(
+            provider,
+            AgentConfig {
+                max_provider_retries: 2,
+                ..AgentConfig::default()
+            },
+        );
+        agent.enqueue_prompt("prompt");
+
+        futures::executor::block_on(agent.run_next()).unwrap();
+
+        assert_eq!(calls.load(Ordering::SeqCst), 3);
+        assert!(agent.events().iter().any(|event| matches!(
+            event,
+            AgentEvent::MessageDelta(MessageDelta { content, .. }) if content == "recovered"
+        )));
+        assert!(!agent
+            .events()
+            .iter()
+            .any(|event| matches!(event, AgentEvent::Error { .. })));
+    }
+
+    #[test]
+    fn retryable_stream_error_before_events_is_retried() {
+        let provider = RecordingProvider::with_attempts(vec![
+            ProviderAttempt::Events(vec![Err(provider_unavailable())]),
+            ProviderAttempt::Events(vec![Err(provider_unavailable())]),
+            ProviderAttempt::Events(recovered_events()),
+        ]);
+        let calls = Arc::clone(&provider.calls);
+        let mut agent = Agent::with_config(
+            provider,
+            AgentConfig {
+                max_provider_retries: 2,
+                ..AgentConfig::default()
+            },
+        );
+        agent.enqueue_prompt("prompt");
+
+        futures::executor::block_on(agent.run_next()).unwrap();
+
+        assert_eq!(calls.load(Ordering::SeqCst), 3);
+        assert!(matches!(
+            agent.events().last(),
+            Some(AgentEvent::Finished {
+                finish_reason: FinishReason::Stop
+            })
+        ));
+    }
+
+    #[test]
+    fn retryable_stream_error_after_events_is_not_retried() {
+        let provider = RecordingProvider::with_attempts(vec![ProviderAttempt::Events(vec![
+            Ok(ProviderStreamEvent::MessageDelta(MessageDelta::assistant(
+                "partial",
+            ))),
+            Err(provider_unavailable()),
+        ])]);
+        let calls = Arc::clone(&provider.calls);
+        let mut agent = Agent::new(provider);
+        agent.enqueue_prompt("prompt");
+
+        let error = futures::executor::block_on(agent.run_next()).unwrap_err();
+
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert!(matches!(
+            error,
+            AgentError::Provider(ProviderError::ProviderUnavailable { .. })
+        ));
+        assert!(agent.events().iter().any(|event| matches!(
+            event,
+            AgentEvent::MessageDelta(MessageDelta { content, .. }) if content == "partial"
+        )));
     }
 
     #[test]
@@ -1537,6 +1723,21 @@ mod tests {
     #[derive(Clone, Debug)]
     struct FailingProvider {
         calls: Arc<AtomicUsize>,
+    }
+
+    fn provider_unavailable() -> ProviderError {
+        ProviderError::ProviderUnavailable {
+            provider_name: "Fake".to_owned(),
+        }
+    }
+
+    fn recovered_events() -> Vec<Result<ProviderStreamEvent, ProviderError>> {
+        vec![
+            Ok(ProviderStreamEvent::MessageDelta(MessageDelta::assistant(
+                "recovered",
+            ))),
+            Ok(ProviderStreamEvent::Finished(finished_stop_with_usage())),
+        ]
     }
 
     impl LlmProvider for FailingProvider {
