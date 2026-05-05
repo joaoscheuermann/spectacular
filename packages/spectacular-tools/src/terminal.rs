@@ -346,22 +346,30 @@ fn configure_process_group(_command: &mut Command) {}
 
 #[derive(Clone, Debug)]
 enum ShellSpec {
+    #[cfg(windows)]
     PowerShell { program: String },
+    #[cfg(windows)]
     Cmd { program: String },
+    #[cfg(not(windows))]
     Bash,
 }
 
 impl ShellSpec {
     fn detect() -> Self {
-        if cfg!(windows) {
-            return windows_shell_spec();
+        #[cfg(windows)]
+        {
+            windows_shell_spec()
         }
 
-        Self::Bash
+        #[cfg(not(windows))]
+        {
+            Self::Bash
+        }
     }
 
     fn command(&self, command_text: &str) -> Command {
         match self {
+            #[cfg(windows)]
             Self::PowerShell { program } => {
                 let mut command = Command::new(program);
                 command.args([
@@ -373,11 +381,13 @@ impl ShellSpec {
                 ]);
                 command
             }
+            #[cfg(windows)]
             Self::Cmd { program } => {
                 let mut command = Command::new(program);
                 command.args(["/C", command_text]);
                 command
             }
+            #[cfg(not(windows))]
             Self::Bash => {
                 let mut command = Command::new("bash");
                 command.args(["-lc", command_text]);
@@ -419,11 +429,6 @@ fn windows_shell_spec() -> ShellSpec {
     ShellSpec::Cmd {
         program: std::env::var("ComSpec").unwrap_or_else(|_| "cmd.exe".to_owned()),
     }
-}
-
-#[cfg(not(windows))]
-fn windows_shell_spec() -> ShellSpec {
-    ShellSpec::Bash
 }
 
 #[cfg(windows)]
