@@ -3,7 +3,7 @@ use spectacular_llms::{OpenRouterProvider, OPENROUTER_PROVIDER_ID};
 
 pub fn provider_for_runtime(runtime: &RuntimeSelection) -> Result<OpenRouterProvider, ChatError> {
     if runtime.provider == OPENROUTER_PROVIDER_ID {
-        return Ok(OpenRouterProvider::with_api_key(runtime.api_key.clone()));
+        return Ok(OpenRouterProvider::new(runtime.api_key.clone()));
     }
 
     Err(ChatError::Session(format!(
@@ -17,7 +17,7 @@ pub fn provider_for_parts(
     api_key: String,
 ) -> Result<OpenRouterProvider, ChatError> {
     if provider == OPENROUTER_PROVIDER_ID {
-        return Ok(OpenRouterProvider::with_api_key(api_key));
+        return Ok(OpenRouterProvider::new(api_key));
     }
 
     Err(ChatError::Session(format!(

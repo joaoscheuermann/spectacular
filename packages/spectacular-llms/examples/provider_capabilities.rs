@@ -1,9 +1,9 @@
-use spectacular_llms::enabled_provider_capability_report;
+use spectacular_llms::{LlmProvider, OpenRouterProvider};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let report = enabled_provider_capability_report()?;
-    let metadata = report.metadata;
-    let capabilities = report.capabilities;
+    let provider = OpenRouterProvider::new(String::new());
+    let metadata = provider.metadata();
+    let capabilities = provider.capabilities();
 
     println!("Provider: {} ({})", metadata.display_name(), metadata.id());
     println!("Enabled: {}", metadata.is_enabled());

@@ -36,6 +36,7 @@ pub struct AgentConfig {
     pub require_usage_metadata: bool,
     pub require_reasoning_metadata: bool,
     pub include_reasoning: bool,
+    pub reasoning_effort: Option<String>,
     pub output_schema: Option<OutputSchema>,
     /// Retries after the first provider attempt for transient provider/network failures.
     pub max_provider_retries: usize,
@@ -111,6 +112,7 @@ impl Default for AgentConfig {
             require_usage_metadata: true,
             require_reasoning_metadata: false,
             include_reasoning: false,
+            reasoning_effort: None,
             output_schema: None,
             max_provider_retries: DEFAULT_MAX_PROVIDER_RETRIES,
             provider_retry_delay: Duration::ZERO,
@@ -288,7 +290,9 @@ where
             }
             request.capabilities = capabilities;
             request.flags.allow_tools = has_tools;
-            request.flags.include_reasoning = self.config.include_reasoning;
+            request.flags.include_reasoning =
+                self.config.include_reasoning || self.config.reasoning_effort.is_some();
+            request.flags.reasoning_effort = self.config.reasoning_effort.clone();
             request.tools = tool_manifests.clone();
 
             let mut provider_retries = 0;
@@ -679,7 +683,7 @@ fn validate_provider_capabilities(
         });
     }
 
-    if config.include_reasoning && !capabilities.reasoning {
+    if (config.include_reasoning || config.reasoning_effort.is_some()) && !capabilities.reasoning {
         return Err(AgentError::CapabilityMismatch {
             capability: "reasoning",
         });
@@ -1861,5 +1865,6 @@ mod tests {
         assert!(request.flags.stream);
         assert!(!request.flags.allow_tools);
         assert!(!request.flags.include_reasoning);
+        assert_eq!(request.flags.reasoning_effort, None);
     }
 }
