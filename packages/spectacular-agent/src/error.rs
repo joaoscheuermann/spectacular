@@ -7,9 +7,11 @@ pub enum AgentError {
     EmptyRunQueue,
     CancellationError,
     CapabilityMismatch { capability: &'static str },
+    ContentFiltered,
     ContextLimitError { reason: String },
     MalformedProviderResponse { reason: String },
     ProviderCapabilityError { reason: String },
+    ProviderFinishError { reason: String },
     ProviderNetworkError { reason: String },
     ProviderParsingError { reason: String },
     ValidationError { message: String },
@@ -27,6 +29,9 @@ impl Display for AgentError {
                     "provider does not support required capability `{capability}`"
                 )
             }
+            AgentError::ContentFiltered => {
+                formatter.write_str("request was blocked by the model's safety guardrails")
+            }
             AgentError::ContextLimitError { reason } => {
                 write!(formatter, "provider context limit exceeded: {reason}")
             }
@@ -38,6 +43,9 @@ impl Display for AgentError {
             }
             AgentError::ProviderCapabilityError { reason } => {
                 write!(formatter, "provider capability error: {reason}")
+            }
+            AgentError::ProviderFinishError { reason } => {
+                write!(formatter, "provider finished with an error: {reason}")
             }
             AgentError::ProviderNetworkError { reason } => {
                 write!(formatter, "provider network error: {reason}")
@@ -60,9 +68,11 @@ impl Error for AgentError {
             AgentError::EmptyRunQueue
             | AgentError::CancellationError
             | AgentError::CapabilityMismatch { .. }
+            | AgentError::ContentFiltered
             | AgentError::ContextLimitError { .. }
             | AgentError::MalformedProviderResponse { .. }
             | AgentError::ProviderCapabilityError { .. }
+            | AgentError::ProviderFinishError { .. }
             | AgentError::ProviderNetworkError { .. }
             | AgentError::ProviderParsingError { .. }
             | AgentError::ValidationError { .. } => None,
