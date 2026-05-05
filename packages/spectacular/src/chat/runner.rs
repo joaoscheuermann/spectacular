@@ -60,6 +60,7 @@ impl<'a> ChatRunner<'a> {
         let mut title_spawned = self.session.has_title()?;
         let mut spinner_visible = true;
         let mut spinner_frame = 0usize;
+        let mut is_streaming = false;
         let mut spinner = tokio::time::interval(Duration::from_millis(90));
         let mut skip_retry_user = request.retry_existing_prompt;
         spinner.set_missed_tick_behavior(MissedTickBehavior::Delay);
@@ -67,7 +68,7 @@ impl<'a> ChatRunner<'a> {
 
         loop {
             tokio::select! {
-                _ = spinner.tick(), if spinner_visible => {
+                _ = spinner.tick(), if spinner_visible && !is_streaming => {
                     spinner_frame = spinner_frame.wrapping_add(1);
                     self.renderer.working_frame(spinner_frame);
                 }
@@ -87,14 +88,19 @@ impl<'a> ChatRunner<'a> {
                         continue;
                     }
 
-                    if spinner_visible {
-                        self.renderer.clear_working();
-                        spinner_visible = false;
-                    }
                     let is_assistant_delta = matches!(
                         &event,
                         AgentEvent::MessageDelta(delta) if delta.role == ProviderMessageRole::Assistant
                     );
+                    if is_assistant_delta && !is_streaming {
+                        self.renderer.clear_working();
+                        is_streaming = true;
+                    } else if is_assistant_delta {
+                        // still streaming, spinner stays hidden
+                    } else if is_streaming {
+                        // transition away from streaming
+                        is_streaming = false;
+                    }
                     if response_open && !is_assistant_delta {
                         println!("\n");
                         response_open = false;
@@ -122,6 +128,10 @@ impl<'a> ChatRunner<'a> {
                         event,
                         AgentEvent::Finished { .. } | AgentEvent::Error { .. } | AgentEvent::Cancelled { .. }
                     ) {
+                        if spinner_visible {
+                            self.renderer.clear_working();
+                            spinner_visible = false;
+                        }
                         break;
                     }
                 }
@@ -181,10 +191,20 @@ pub async fn render_agent_event(
             tool_call_id,
             name,
             arguments,
-        } => renderer.tool_call(tool_call_id, name, arguments, tools),
-        AgentEvent::ToolResult { name, content, .. } => renderer.tool_result(name, content, tools),
+        } => {
+            renderer.clear_working();
+            renderer.tool_call(tool_call_id, name, arguments, tools);
+            renderer.working();
+        }
+        AgentEvent::ToolResult { name, content, .. } => {
+            renderer.clear_working();
+            renderer.tool_result(name, content, tools);
+            renderer.working();
+        }
         AgentEvent::ValidationError { message } | AgentEvent::Error { message } => {
-            renderer.error(message)
+            renderer.clear_working();
+            renderer.error(message);
+            renderer.working();
         }
         AgentEvent::Cancelled { reason } => renderer.cancelled(reason),
         AgentEvent::Finished { .. }
