@@ -1649,6 +1649,7 @@ dependencies = [
  "spectacular-plan",
  "spectacular-tools",
  "tokio",
+ "unicode-width",
 ]
 
 [[package]]
