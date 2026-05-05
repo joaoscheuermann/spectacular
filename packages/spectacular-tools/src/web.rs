@@ -10,7 +10,7 @@ pub const WEB_SEARCH_TOOL_NAME: &str = "web";
 
 const WEB_SEARCH_TOOL_DESCRIPTION: &str =
     "Searches the web, opens a page, or finds text within a page. Actions mirror Codex web navigation: search, open_page, and find_in_page.";
-const USER_AGENT: &str = "Spectacular/0.1 web";
+const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const DEFAULT_SEARCH_LIMIT: usize = 5;
 const MAX_SEARCH_LIMIT: usize = 10;
 const DEFAULT_FIND_LIMIT: usize = 20;
