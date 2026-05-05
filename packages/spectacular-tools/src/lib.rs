@@ -10,6 +10,7 @@ pub mod terminal;
 #[cfg(test)]
 mod test_support;
 pub mod tree;
+pub mod web;
 pub mod write;
 
 pub use edit::{EditTool, EDIT_TOOL_NAME};
@@ -17,6 +18,7 @@ pub use find::{FindTool, FIND_TOOL_NAME};
 pub use grep::{GrepTool, GREP_TOOL_NAME};
 pub use terminal::{TerminalTool, TERMINAL_TOOL_NAME};
 pub use tree::{TreeTool, TREE_TOOL_NAME};
+pub use web::{WebSearchTool, WEB_SEARCH_TOOL_NAME};
 pub use write::{WriteTool, WRITE_TOOL_NAME};
 
 pub fn built_in_tools(
@@ -29,6 +31,7 @@ pub fn built_in_tools(
     storage.register(GrepTool::new(workspace_root.clone()))?;
     storage.register(TerminalTool::new(workspace_root.clone()))?;
     storage.register(TreeTool::new(workspace_root.clone()))?;
+    storage.register(WebSearchTool)?;
     storage.register(WriteTool::new(workspace_root))?;
     Ok(storage)
 }
@@ -56,6 +59,7 @@ mod tests {
                 GREP_TOOL_NAME,
                 TERMINAL_TOOL_NAME,
                 TREE_TOOL_NAME,
+                WEB_SEARCH_TOOL_NAME,
                 WRITE_TOOL_NAME
             ]
         );
@@ -94,6 +98,18 @@ mod tests {
                 json!({"stdout": "", "stderr": "", "exit_code": 0}),
             ),
             (TREE_TOOL_NAME, json!({"path": "."}), Value::Null),
+            (
+                WEB_SEARCH_TOOL_NAME,
+                json!({"action": "search", "query": "rust"}),
+                json!({
+                    "action": "search",
+                    "detail": "rust",
+                    "results": [],
+                    "matches": [],
+                    "total": 0,
+                    "truncated": false
+                }),
+            ),
             (
                 WRITE_TOOL_NAME,
                 json!({"path": "notes.txt", "content": "hello"}),
