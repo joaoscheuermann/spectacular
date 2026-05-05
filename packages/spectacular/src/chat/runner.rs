@@ -222,6 +222,7 @@ pub async fn render_agent_event(
         | AgentEvent::ReasoningMetadata(_)
         | AgentEvent::Internal { .. } => {}
         AgentEvent::MessageDelta(_) => {}
+        _ => {}
     }
 
     Ok(())
