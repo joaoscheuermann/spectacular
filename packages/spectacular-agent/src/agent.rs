@@ -7,7 +7,8 @@ use crate::store::Store;
 use crate::tool::{Tool, ToolRegistrationError, ToolStorage};
 use spectacular_llms::{
     Cancellation, FinishReason, LlmProvider, ProviderCapabilities, ProviderError, ProviderFinished,
-    ProviderMessageRole, ProviderRequest, ProviderStreamEvent, ProviderToolCall, ToolManifest,
+    ProviderMessage, ProviderMessageRole, ProviderRequest, ProviderStreamEvent, ProviderToolCall,
+    ToolManifest,
 };
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -18,6 +19,8 @@ use tokio::sync::mpsc;
 
 const DEFAULT_SYSTEM_PROMPT: &str = "";
 const DEFAULT_MAX_PROVIDER_RETRIES: usize = 2;
+const LENGTH_CONTINUATION_PROMPT: &str = "Continue from exactly where the previous assistant response stopped. Do not repeat any earlier text, and do not explain that you are continuing.";
+const PROVIDER_CANCELLED_MESSAGE: &str = "provider cancelled the response";
 
 #[derive(Debug)]
 pub struct Agent<P> {
@@ -50,6 +53,13 @@ pub struct AgentRunStream {
     queue: Arc<RunQueue>,
     completed: Arc<AtomicBool>,
     active_cancellation: Arc<Mutex<Option<Cancellation>>>,
+}
+
+enum ProviderEventOutcome {
+    ContinueStream,
+    CompleteRun,
+    ContinueCompletion,
+    ExecuteTools(Vec<ProviderToolCall>),
 }
 
 impl AgentRunStream {
@@ -268,15 +278,19 @@ where
             return recorder.record_error(error).await;
         }
 
+        let mut continuing_after_length = false;
         loop {
             recorder.return_if_cancelled().await?;
-            let messages = {
+            let mut messages = {
                 let store = self.store.lock().unwrap();
                 provider_messages_from_store(
                     effective_system_prompt(&self.config.system_prompt, &tool_manifests),
                     &store,
                 )
             };
+            if continuing_after_length {
+                messages.push(ProviderMessage::user(LENGTH_CONTINUATION_PROMPT));
+            }
             if let Err(error) = validate_context_limits(&messages, capabilities.context_limits) {
                 let agent_error = AgentError::ContextLimitError {
                     reason: error.to_string(),
@@ -296,7 +310,7 @@ where
             request.tools = tool_manifests.clone();
 
             let mut provider_retries = 0;
-            let requested_tools = 'provider_attempt: loop {
+            let provider_outcome = 'provider_attempt: loop {
                 recorder.return_if_cancelled().await?;
 
                 let mut stream = match self
@@ -328,7 +342,6 @@ where
 
                 recorder.return_if_cancelled().await?;
 
-                let mut requested_tools = Vec::new();
                 let mut saw_provider_event = false;
                 while let Some(provider_event) = stream.next().await {
                     recorder.return_if_cancelled().await?;
@@ -360,23 +373,40 @@ where
                     };
 
                     saw_provider_event = true;
-                    if let Some(tool_calls) = self
+                    match self
                         .record_provider_event(&mut recorder, provider_event, run_event_start)
                         .await?
                     {
-                        requested_tools = tool_calls;
+                        ProviderEventOutcome::ContinueStream => {}
+                        ProviderEventOutcome::CompleteRun => {
+                            break 'provider_attempt ProviderEventOutcome::CompleteRun;
+                        }
+                        ProviderEventOutcome::ContinueCompletion => {
+                            break 'provider_attempt ProviderEventOutcome::ContinueCompletion;
+                        }
+                        ProviderEventOutcome::ExecuteTools(tool_calls) => {
+                            break 'provider_attempt ProviderEventOutcome::ExecuteTools(tool_calls);
+                        }
                     }
                 }
 
-                break requested_tools;
+                break ProviderEventOutcome::CompleteRun;
             };
 
-            if requested_tools.is_empty() {
-                break;
+            match provider_outcome {
+                ProviderEventOutcome::ContinueStream => {
+                    unreachable!("provider attempts only break on terminal outcomes")
+                }
+                ProviderEventOutcome::CompleteRun => break,
+                ProviderEventOutcome::ContinueCompletion => {
+                    continuing_after_length = true;
+                    continue;
+                }
+                ProviderEventOutcome::ExecuteTools(tool_calls) => {
+                    continuing_after_length = false;
+                    self.execute_tool_calls(&mut recorder, &tool_calls).await?;
+                }
             }
-
-            self.execute_tool_calls(&mut recorder, &requested_tools)
-                .await?;
         }
 
         Ok(run.id())
@@ -387,7 +417,7 @@ where
         recorder: &mut RunRecorder<'_, P>,
         provider_event: ProviderStreamEvent,
         run_event_start: usize,
-    ) -> Result<Option<Vec<ProviderToolCall>>, AgentError> {
+    ) -> Result<ProviderEventOutcome, AgentError> {
         match provider_event {
             ProviderStreamEvent::MessageDelta(delta) => {
                 recorder.record(AgentEvent::MessageDelta(delta)).await?;
@@ -408,7 +438,7 @@ where
             }
         }
 
-        Ok(None)
+        Ok(ProviderEventOutcome::ContinueStream)
     }
 
     async fn record_finished_event(
@@ -418,7 +448,7 @@ where
         run_event_start: usize,
         require_usage_metadata: bool,
         output_schema: Option<&OutputSchema>,
-    ) -> Result<Option<Vec<ProviderToolCall>>, AgentError> {
+    ) -> Result<ProviderEventOutcome, AgentError> {
         if let Some(usage) = finished.usage {
             recorder.record(AgentEvent::UsageMetadata(usage)).await?;
         }
@@ -428,65 +458,93 @@ where
                 .await?;
         }
 
-        if finished.finish_reason == FinishReason::ToolCalls {
-            if finished.tool_calls.is_empty() {
-                return recorder
-                    .record_error(AgentError::MalformedProviderResponse {
-                        reason: "tool-call finish did not include tool calls".to_owned(),
-                    })
-                    .await;
+        match finished.finish_reason {
+            FinishReason::ToolCalls => {
+                if finished.tool_calls.is_empty() {
+                    return recorder
+                        .record_error(AgentError::MalformedProviderResponse {
+                            reason: "tool-call finish did not include tool calls".to_owned(),
+                        })
+                        .await;
+                }
+
+                if let Some(tool_call) = finished.tool_calls.iter().find(|tool_call| {
+                    tool_call.id.trim().is_empty() || tool_call.name.trim().is_empty()
+                }) {
+                    return recorder
+                        .record_error(AgentError::MalformedProviderResponse {
+                            reason: format!(
+                                "tool call has empty id or name: id={:?}, name={:?}",
+                                tool_call.id, tool_call.name
+                            ),
+                        })
+                        .await;
+                }
+
+                Ok(ProviderEventOutcome::ExecuteTools(finished.tool_calls))
             }
+            FinishReason::Length => {
+                if !finished.tool_calls.is_empty() {
+                    return recorder
+                        .record_error(AgentError::MalformedProviderResponse {
+                            reason: "non-tool finish included tool calls".to_owned(),
+                        })
+                        .await;
+                }
 
-            if let Some(tool_call) = finished.tool_calls.iter().find(|tool_call| {
-                tool_call.id.trim().is_empty() || tool_call.name.trim().is_empty()
-            }) {
-                return recorder
-                    .record_error(AgentError::MalformedProviderResponse {
-                        reason: format!(
-                            "tool call has empty id or name: id={:?}, name={:?}",
-                            tool_call.id, tool_call.name
-                        ),
-                    })
-                    .await;
+                Ok(ProviderEventOutcome::ContinueCompletion)
             }
-
-            return Ok(Some(finished.tool_calls));
-        }
-
-        if !finished.tool_calls.is_empty() {
-            return recorder
-                .record_error(AgentError::MalformedProviderResponse {
-                    reason: "non-tool finish included tool calls".to_owned(),
-                })
-                .await;
-        }
-
-        if require_usage_metadata && finished.usage.is_none() {
-            return recorder
-                .record_error(AgentError::MalformedProviderResponse {
-                    reason: "provider omitted required usage metadata".to_owned(),
-                })
-                .await;
-        }
-
-        if let Some(output_schema) = output_schema {
-            let final_response = {
-                let store = self.store.lock().unwrap();
-                final_assistant_response(&store.events()[run_event_start..])
-            };
-            if let Err(error) = output_schema.validate_response(&final_response) {
-                let message = error.to_string();
+            FinishReason::ContentFilter => recorder.record_error(AgentError::ContentFiltered).await,
+            FinishReason::Cancelled => {
                 recorder
-                    .record(AgentEvent::validation_error(message.clone()))
-                    .await?;
-                return recorder
-                    .record_error(AgentError::ValidationError { message })
+                    .record_cancelled_with_reason(PROVIDER_CANCELLED_MESSAGE)
                     .await;
+                Err(AgentError::CancellationError)
+            }
+            FinishReason::Error => {
+                recorder
+                    .record_error(AgentError::ProviderFinishError {
+                        reason: "provider reported finish_reason=error".to_owned(),
+                    })
+                    .await
+            }
+            FinishReason::Stop => {
+                if !finished.tool_calls.is_empty() {
+                    return recorder
+                        .record_error(AgentError::MalformedProviderResponse {
+                            reason: "non-tool finish included tool calls".to_owned(),
+                        })
+                        .await;
+                }
+
+                if require_usage_metadata && finished.usage.is_none() {
+                    return recorder
+                        .record_error(AgentError::MalformedProviderResponse {
+                            reason: "provider omitted required usage metadata".to_owned(),
+                        })
+                        .await;
+                }
+
+                if let Some(output_schema) = output_schema {
+                    let final_response = {
+                        let store = self.store.lock().unwrap();
+                        final_assistant_response(&store.events()[run_event_start..])
+                    };
+                    if let Err(error) = output_schema.validate_response(&final_response) {
+                        let message = error.to_string();
+                        recorder
+                            .record(AgentEvent::validation_error(message.clone()))
+                            .await?;
+                        return recorder
+                            .record_error(AgentError::ValidationError { message })
+                            .await;
+                    }
+                }
+
+                recorder.record(AgentEvent::finished(finished)).await?;
+                Ok(ProviderEventOutcome::CompleteRun)
             }
         }
-
-        recorder.record(AgentEvent::finished(finished)).await?;
-        Ok(None)
     }
 
     fn start_cancellation(&self) -> Cancellation {
@@ -614,13 +672,18 @@ where
     }
 
     async fn record_cancelled(&mut self) {
+        self.record_cancelled_with_reason("active run cancelled")
+            .await;
+    }
+
+    async fn record_cancelled_with_reason(&mut self, reason: impl Into<String>) {
         self.agent.queue.cancel_pending().await;
         if self.cancelled_recorded {
             return;
         }
         self.cancelled_recorded = true;
 
-        let event = AgentEvent::cancelled("active run cancelled");
+        let event = AgentEvent::cancelled(reason);
         {
             self.agent.store.lock().unwrap().append(event.clone());
         }
@@ -767,15 +830,28 @@ mod tests {
         }
     }
 
-    fn finished_stop_with_usage() -> ProviderFinished {
+    fn finished_with_reason(finish_reason: FinishReason) -> ProviderFinished {
         ProviderFinished {
-            finish_reason: FinishReason::Stop,
+            finish_reason,
             tool_calls: Vec::new(),
             usage: Some(UsageMetadata {
                 input_tokens: Some(1),
                 output_tokens: Some(1),
                 total_tokens: Some(2),
             }),
+            reasoning: None,
+        }
+    }
+
+    fn finished_stop_with_usage() -> ProviderFinished {
+        finished_with_reason(FinishReason::Stop)
+    }
+
+    fn finished_length_without_usage() -> ProviderFinished {
+        ProviderFinished {
+            finish_reason: FinishReason::Length,
+            tool_calls: Vec::new(),
+            usage: None,
             reasoning: None,
         }
     }
@@ -935,6 +1011,119 @@ mod tests {
         assert!(matches!(agent.events()[1], AgentEvent::MessageDelta(_)));
         assert!(matches!(agent.events()[2], AgentEvent::UsageMetadata(_)));
         assert!(matches!(agent.events()[3], AgentEvent::Finished { .. }));
+    }
+
+    #[test]
+    fn length_finish_silently_continues_until_stop() {
+        let provider = RecordingProvider::new(vec![
+            vec![
+                ProviderStreamEvent::MessageDelta(MessageDelta::assistant("first ")),
+                ProviderStreamEvent::Finished(finished_length_without_usage()),
+            ],
+            vec![
+                ProviderStreamEvent::MessageDelta(MessageDelta::assistant("second")),
+                ProviderStreamEvent::Finished(finished_stop_with_usage()),
+            ],
+        ]);
+        let calls = Arc::clone(&provider.calls);
+        let requests = Arc::clone(&provider.requests);
+        let mut agent = Agent::new(provider);
+        agent.enqueue_prompt("prompt");
+
+        futures::executor::block_on(agent.run_next()).unwrap();
+
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        assert_eq!(final_assistant_response(&agent.events()), "first second");
+        assert!(!agent.events().iter().any(|event| matches!(
+            event,
+            AgentEvent::Finished {
+                finish_reason: FinishReason::Length
+            }
+        )));
+        assert!(matches!(
+            agent.events().last(),
+            Some(AgentEvent::Finished {
+                finish_reason: FinishReason::Stop
+            })
+        ));
+
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 2);
+        let continuation = requests[1].messages.last().unwrap();
+        assert_eq!(continuation.role, ProviderMessageRole::User);
+        assert_eq!(continuation.content, LENGTH_CONTINUATION_PROMPT);
+        assert!(requests[1].messages.iter().any(|message| {
+            message.role == ProviderMessageRole::Assistant && message.content == "first "
+        }));
+    }
+
+    #[test]
+    fn content_filter_finish_records_safety_guardrail_error() {
+        let provider = FakeProvider {
+            calls: Arc::new(AtomicUsize::new(0)),
+            capabilities: capabilities(),
+            events: vec![ProviderStreamEvent::Finished(finished_with_reason(
+                FinishReason::ContentFilter,
+            ))],
+        };
+        let mut agent = Agent::new(provider);
+        agent.enqueue_prompt("prompt");
+
+        let error = futures::executor::block_on(agent.run_next()).unwrap_err();
+
+        assert!(matches!(error, AgentError::ContentFiltered));
+        assert!(matches!(
+            agent.events().last(),
+            Some(AgentEvent::Error { message }) if message.contains("safety guardrails")
+        ));
+        assert!(!agent.events().iter().any(|event| matches!(
+            event,
+            AgentEvent::Finished {
+                finish_reason: FinishReason::ContentFilter
+            }
+        )));
+    }
+
+    #[test]
+    fn error_finish_records_provider_finish_error() {
+        let provider = FakeProvider {
+            calls: Arc::new(AtomicUsize::new(0)),
+            capabilities: capabilities(),
+            events: vec![ProviderStreamEvent::Finished(finished_with_reason(
+                FinishReason::Error,
+            ))],
+        };
+        let mut agent = Agent::new(provider);
+        agent.enqueue_prompt("prompt");
+
+        let error = futures::executor::block_on(agent.run_next()).unwrap_err();
+
+        assert!(matches!(error, AgentError::ProviderFinishError { .. }));
+        assert!(matches!(
+            agent.events().last(),
+            Some(AgentEvent::Error { message }) if message.contains("finish_reason=error")
+        ));
+    }
+
+    #[test]
+    fn cancelled_finish_records_provider_cancelled_event() {
+        let provider = FakeProvider {
+            calls: Arc::new(AtomicUsize::new(0)),
+            capabilities: capabilities(),
+            events: vec![ProviderStreamEvent::Finished(finished_with_reason(
+                FinishReason::Cancelled,
+            ))],
+        };
+        let mut agent = Agent::new(provider);
+        agent.enqueue_prompt("prompt");
+
+        let error = futures::executor::block_on(agent.run_next()).unwrap_err();
+
+        assert!(matches!(error, AgentError::CancellationError));
+        assert!(matches!(
+            agent.events().last(),
+            Some(AgentEvent::Cancelled { reason }) if reason == PROVIDER_CANCELLED_MESSAGE
+        ));
     }
 
     #[test]
