@@ -273,6 +273,7 @@ fn finish_reason_to_str(reason: FinishReason) -> &'static str {
         FinishReason::Length => "length",
         FinishReason::ToolCalls => "toolcalls",
         FinishReason::Cancelled => "cancelled",
+        FinishReason::ContentFilter => "content_filter",
         FinishReason::Error => "error",
     }
 }
@@ -282,6 +283,7 @@ fn finish_reason_from_str(reason: &str) -> FinishReason {
         "length" => FinishReason::Length,
         "toolcalls" | "tool_calls" => FinishReason::ToolCalls,
         "cancelled" => FinishReason::Cancelled,
+        "content_filter" => FinishReason::ContentFilter,
         "error" => FinishReason::Error,
         _ => FinishReason::Stop,
     }
@@ -405,6 +407,24 @@ mod tests {
                 "created_at": "2026-04-29T14:01:00Z"
             })
         );
+    }
+
+    #[test]
+    fn content_filter_finish_reason_round_trips() {
+        let event = ChatEvent::from_agent_event(
+            &AgentEvent::Finished {
+                finish_reason: FinishReason::ContentFilter,
+            },
+            "2026-04-29T14:01:00Z".to_owned(),
+        )
+        .unwrap();
+
+        assert!(matches!(
+            event.to_agent_event(),
+            Some(AgentEvent::Finished {
+                finish_reason: FinishReason::ContentFilter
+            })
+        ));
     }
 
     #[test]

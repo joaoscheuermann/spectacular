@@ -540,6 +540,16 @@ fn format_provider_error(error: &ProviderError) -> String {
             provider_name,
             reason,
         } => format!("Failed to parse {provider_name} response: {reason}."),
+        ProviderError::StreamError {
+            provider_name,
+            code,
+            message,
+        } => match code {
+            Some(code) => {
+                format!("{provider_name} stream returned error `{code}`: {message}.")
+            }
+            None => format!("{provider_name} stream returned error: {message}."),
+        },
         ProviderError::NetworkError {
             provider_name,
             reason,

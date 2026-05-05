@@ -7,7 +7,7 @@ use crate::chat::{ChatError, RuntimeSelection};
 use spectacular_agent::{
     Agent, AgentConfig, AgentEvent, Store, ToolRegistrationError, ToolStorage,
 };
-use spectacular_config::{ConfigError, TaskModelConfig, TaskModelSlot};
+use spectacular_config::{ConfigError, ReasoningLevel, TaskModelConfig, TaskModelSlot};
 use spectacular_llms::{LlmProvider, ProviderMessageRole};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -164,16 +164,26 @@ fn main_chat_agent<P>(
 where
     P: LlmProvider,
 {
+    let reasoning_effort = runtime_reasoning_effort(runtime.reasoning);
     Agent::with_config_and_store(
         provider,
         AgentConfig {
             model: Some(runtime.model.clone()),
             require_usage_metadata: false,
+            include_reasoning: reasoning_effort.is_some(),
+            reasoning_effort,
             ..AgentConfig::default()
         },
         store,
     )
     .with_tools(tools)
+}
+
+fn runtime_reasoning_effort(reasoning: ReasoningLevel) -> Option<String> {
+    match reasoning {
+        ReasoningLevel::None => None,
+        level => Some(level.as_str().to_owned()),
+    }
 }
 
 pub async fn render_agent_event(
@@ -366,13 +376,13 @@ mod tests {
         };
 
         let main_agent = main_chat_agent(
-            OpenRouterProvider::with_api_key(runtime.api_key.clone()),
+            OpenRouterProvider::new(runtime.api_key.clone()),
             &runtime,
             Store::default(),
             tools,
         );
         let title_agent = title_generation_agent(
-            OpenRouterProvider::with_api_key(runtime.api_key),
+            OpenRouterProvider::new(runtime.api_key),
             "title/model".to_owned(),
             "Generate a title.".to_owned(),
             Store::default(),
