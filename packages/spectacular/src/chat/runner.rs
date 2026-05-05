@@ -332,7 +332,7 @@ mod tests {
     use spectacular_llms::{OpenRouterProvider, OPENROUTER_PROVIDER_ID};
     use spectacular_tools::{
         EDIT_TOOL_NAME, FIND_TOOL_NAME, GREP_TOOL_NAME, TERMINAL_TOOL_NAME, TREE_TOOL_NAME,
-        WRITE_TOOL_NAME,
+        WEB_SEARCH_TOOL_NAME, WRITE_TOOL_NAME,
     };
 
     #[test]
@@ -370,6 +370,7 @@ mod tests {
                 GREP_TOOL_NAME,
                 TERMINAL_TOOL_NAME,
                 TREE_TOOL_NAME,
+                WEB_SEARCH_TOOL_NAME,
                 WRITE_TOOL_NAME
             ]
         );
