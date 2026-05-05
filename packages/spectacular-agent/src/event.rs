@@ -4,6 +4,7 @@ use spectacular_llms::{
 use std::fmt::{self, Display};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub enum AgentEvent {
     UserPrompt {
         content: String,

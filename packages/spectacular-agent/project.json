@@ -31,6 +31,14 @@
       "options": {
         "target-dir": "dist/target/spectacular-agent"
       }
+    },
+    "clean": {
+      "executor": "nx:run-commands",
+      "dependsOn": [],
+      "options": {
+        "command": "cargo clean",
+        "cwd": "{projectRoot}"
+      }
     }
   },
   "tags": []

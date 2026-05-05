@@ -160,6 +160,7 @@ impl ChatEvent {
                 created_at,
             }),
             AgentEvent::ReasoningMetadata(_) | AgentEvent::Internal { .. } => None,
+            _ => None,
         }
     }
 
