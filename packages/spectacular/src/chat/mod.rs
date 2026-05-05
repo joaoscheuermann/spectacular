@@ -1,4 +1,5 @@
 mod commands;
+mod paste_burst;
 mod prompt;
 mod provider;
 mod renderer;

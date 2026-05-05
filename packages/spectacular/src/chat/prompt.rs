@@ -1,3 +1,4 @@
+use crate::chat::paste_burst::{CharDecision, FlushResult, PasteBurst};
 use crate::chat::renderer::{dim_style, paint, user_style, Renderer};
 use crate::chat::ChatError;
 use crossterm::cursor::{MoveDown, MoveToColumn, MoveUp};
@@ -11,6 +12,7 @@ use spectacular_commands::{CommandRegistry, CommandSearchMatch};
 use std::io::{self, Write};
 use std::ops::Range;
 use std::sync::Arc;
+use std::time::Instant;
 use unicode_width::UnicodeWidthChar;
 
 const DEFAULT_TERMINAL_WIDTH: u16 = 80;
@@ -24,6 +26,7 @@ pub struct PromptEditor<'a, C> {
     terminal: PromptTerminal,
     rendered_lines: u16,
     rendered_cursor_row: u16,
+    paste_burst: PasteBurst,
 }
 
 #[derive(Default)]
@@ -57,6 +60,7 @@ impl<'a, C> PromptEditor<'a, C> {
             terminal: PromptTerminal,
             rendered_lines: 0,
             rendered_cursor_row: 0,
+            paste_burst: PasteBurst::default(),
         }
     }
 
@@ -65,125 +69,197 @@ impl<'a, C> PromptEditor<'a, C> {
         self.redraw()?;
 
         loop {
-            match event::read().map_err(ChatError::Io)? {
-                Event::Key(key) if is_key_edit_event(key) => match self.handle_key(key)? {
-                    PromptAction::Continue => self.redraw()?,
-                    PromptAction::Submit => {
-                        let line = self.state.buffer.clone();
-                        self.clear_rendered_block()?;
-                        return Ok(line);
-                    }
-                    PromptAction::Exit => {
-                        self.clear_rendered_block()?;
-                        return Err(ChatError::Exit);
-                    }
-                },
-                Event::Paste(text) => {
-                    self.state.insert_str(&normalize_paste(&text));
-                    self.redraw()?;
+            match self.read_next_action()? {
+                PromptAction::Noop => {}
+                PromptAction::Continue => self.redraw()?,
+                PromptAction::Submit => {
+                    let line = self.state.buffer.clone();
+                    self.clear_rendered_block()?;
+                    return Ok(line);
                 }
-                _ => {}
+                PromptAction::Exit => {
+                    self.clear_rendered_block()?;
+                    return Err(ChatError::Exit);
+                }
             }
         }
     }
 
-    fn handle_key(&mut self, key: KeyEvent) -> Result<PromptAction, ChatError> {
-        if is_ctrl_char(key, 'c') {
-            return Ok(PromptAction::Exit);
-        }
+    fn read_next_action(&mut self) -> Result<PromptAction, ChatError> {
+        loop {
+            if self.paste_burst.is_active() {
+                if event::poll(self.paste_burst.poll_delay()).map_err(ChatError::Io)? {
+                    let event = event::read().map_err(ChatError::Io)?;
+                    return self.handle_event_with_time(event, Instant::now());
+                }
 
-        if is_newline_key(key) {
-            self.state.insert_str("\n");
+                if self.flush_paste_burst_if_due(Instant::now()) {
+                    return Ok(PromptAction::Continue);
+                }
+
+                continue;
+            }
+
+            let event = event::read().map_err(ChatError::Io)?;
+            return self.handle_event_with_time(event, Instant::now());
+        }
+    }
+
+    #[cfg(test)]
+    fn handle_event(&mut self, event: Event) -> Result<PromptAction, ChatError> {
+        self.handle_event_with_time(event, Instant::now())
+    }
+
+    fn handle_event_with_time(
+        &mut self,
+        event: Event,
+        now: Instant,
+    ) -> Result<PromptAction, ChatError> {
+        match event {
+            Event::Key(key) if is_key_edit_event(key) => self.handle_key_with_time(key, now),
+            Event::Paste(text) => {
+                self.flush_paste_burst_before_modified_input();
+                self.handle_paste(&text);
+                Ok(PromptAction::Continue)
+            }
+            _ => Ok(PromptAction::Noop),
+        }
+    }
+
+    fn handle_key_with_time(
+        &mut self,
+        key: KeyEvent,
+        now: Instant,
+    ) -> Result<PromptAction, ChatError> {
+        if is_ctrl_char(key, 'c') {
+            if self.state.buffer.is_empty() {
+                return Ok(PromptAction::Exit);
+            }
+            self.state.buffer.clear();
+            self.state.cursor = 0;
+            self.state.after_edit();
+            self.paste_burst.clear_window_after_non_char();
             return Ok(PromptAction::Continue);
         }
 
-        if is_submit_key(key) {
-            return Ok(PromptAction::Submit);
+        if is_newline_key(key) {
+            return Ok(self.handle_newline_with_time(now));
         }
 
+        if is_submit_key(key) || is_unmodified_line_break_char(key) {
+            return Ok(self.handle_submit_with_time(now));
+        }
+
+        let prompt_changed = self.flush_paste_burst_if_due(now);
+
         if is_ctrl_char(key, 'a') {
+            self.flush_paste_burst_before_modified_input();
             self.state.select_all();
+            self.paste_burst.clear_window_after_non_char();
             return Ok(PromptAction::Continue);
         }
 
         if is_ctrl_char(key, 'u') {
+            self.flush_paste_burst_before_modified_input();
             self.state.kill_to_line_start();
+            self.paste_burst.clear_window_after_non_char();
             return Ok(PromptAction::Continue);
         }
 
         if is_ctrl_char(key, 'k') {
+            self.flush_paste_burst_before_modified_input();
             self.state.kill_to_line_end();
+            self.paste_burst.clear_window_after_non_char();
             return Ok(PromptAction::Continue);
         }
 
         if is_ctrl_char(key, 'y') {
+            self.flush_paste_burst_before_modified_input();
             self.state.yank();
+            self.paste_burst.clear_window_after_non_char();
             return Ok(PromptAction::Continue);
         }
 
         match key.code {
             KeyCode::Esc => {
+                self.flush_paste_burst_before_modified_input();
                 self.state.escape();
+                self.paste_burst.clear_window_after_non_char();
                 Ok(PromptAction::Continue)
             }
             KeyCode::Left => {
+                self.flush_paste_burst_before_modified_input();
                 if moves_by_word(key) {
                     self.state.move_word_left(selects_text(key));
                 } else {
                     self.state.move_left(selects_text(key));
                 }
+                self.paste_burst.clear_window_after_non_char();
                 Ok(PromptAction::Continue)
             }
             KeyCode::Right => {
+                self.flush_paste_burst_before_modified_input();
                 if moves_by_word(key) {
                     self.state.move_word_right(selects_text(key));
                 } else {
                     self.state.move_right(selects_text(key));
                 }
+                self.paste_burst.clear_window_after_non_char();
                 Ok(PromptAction::Continue)
             }
             KeyCode::Home => {
+                self.flush_paste_burst_before_modified_input();
                 if key.modifiers.contains(KeyModifiers::CONTROL) {
                     self.state.move_start(selects_text(key));
                 } else {
                     self.state.move_line_start(selects_text(key));
                 }
+                self.paste_burst.clear_window_after_non_char();
                 Ok(PromptAction::Continue)
             }
             KeyCode::End => {
+                self.flush_paste_burst_before_modified_input();
                 if key.modifiers.contains(KeyModifiers::CONTROL) {
                     self.state.move_end(selects_text(key));
                 } else {
                     self.state.move_line_end(selects_text(key));
                 }
+                self.paste_burst.clear_window_after_non_char();
                 Ok(PromptAction::Continue)
             }
             KeyCode::Backspace => {
+                self.flush_paste_burst_before_modified_input();
                 if moves_by_word(key) {
                     self.state.delete_previous_word();
                 } else {
                     self.state.backspace();
                 }
+                self.paste_burst.clear_window_after_non_char();
                 Ok(PromptAction::Continue)
             }
             KeyCode::Delete => {
+                self.flush_paste_burst_before_modified_input();
                 if moves_by_word(key) {
                     self.state.delete_next_word();
                 } else {
                     self.state.delete();
                 }
+                self.paste_burst.clear_window_after_non_char();
                 Ok(PromptAction::Continue)
             }
             KeyCode::Up => {
+                self.flush_paste_burst_before_modified_input();
                 if self.should_move_suggestion(key) {
                     self.state.select_previous();
                 } else {
                     self.state
                         .move_visual_up(selects_text(key), self.content_width());
                 }
+                self.paste_burst.clear_window_after_non_char();
                 Ok(PromptAction::Continue)
             }
             KeyCode::Down => {
+                self.flush_paste_burst_before_modified_input();
                 let suggestions = self.suggestions();
                 if self.should_move_suggestion(key) {
                     self.state.select_next(suggestions.len());
@@ -191,22 +267,125 @@ impl<'a, C> PromptEditor<'a, C> {
                     self.state
                         .move_visual_down(selects_text(key), self.content_width());
                 }
+                self.paste_burst.clear_window_after_non_char();
                 Ok(PromptAction::Continue)
             }
             KeyCode::Tab => {
+                self.flush_paste_burst_before_modified_input();
                 if let Some(command) = self.suggestions().get(self.state.selected).copied() {
                     self.state.complete_command(command.metadata.name);
                 } else {
                     self.state.insert_char('\t');
                 }
+                self.paste_burst.clear_window_after_non_char();
                 Ok(PromptAction::Continue)
             }
             KeyCode::Char(character) if should_insert_char(key) => {
+                if is_plain_paste_candidate_key(key) {
+                    return Ok(self.handle_plain_char_with_time(character, now, prompt_changed));
+                }
+
+                self.flush_paste_burst_before_modified_input();
                 self.state.insert_char(character);
+                self.paste_burst.clear_window_after_non_char();
                 Ok(PromptAction::Continue)
             }
-            _ => Ok(PromptAction::Continue),
+            _ => {
+                self.flush_paste_burst_before_modified_input();
+                self.paste_burst.clear_window_after_non_char();
+                Ok(PromptAction::Continue)
+            }
         }
+    }
+
+    fn handle_newline_with_time(&mut self, now: Instant) -> PromptAction {
+        if self.paste_burst.append_newline_if_active(now) {
+            return PromptAction::Noop;
+        }
+
+        self.flush_paste_burst_before_modified_input();
+        self.state.insert_str("\n");
+        self.paste_burst.clear_window_after_non_char();
+        PromptAction::Continue
+    }
+
+    fn handle_submit_with_time(&mut self, now: Instant) -> PromptAction {
+        if self.is_slash_context() {
+            self.flush_paste_burst_before_modified_input();
+            return PromptAction::Submit;
+        }
+
+        if self.paste_burst.append_newline_if_active(now) {
+            return PromptAction::Noop;
+        }
+
+        if self
+            .paste_burst
+            .newline_should_insert_instead_of_submit(now)
+        {
+            self.state.insert_str("\n");
+            self.paste_burst.extend_window(now);
+            return PromptAction::Continue;
+        }
+
+        PromptAction::Submit
+    }
+
+    fn handle_plain_char_with_time(
+        &mut self,
+        character: char,
+        now: Instant,
+        prompt_changed: bool,
+    ) -> PromptAction {
+        match self.paste_burst.on_plain_char(character, now) {
+            CharDecision::Buffered | CharDecision::Held => {}
+        }
+
+        if prompt_changed {
+            return PromptAction::Continue;
+        }
+
+        PromptAction::Noop
+    }
+
+    fn flush_paste_burst_if_due(&mut self, now: Instant) -> bool {
+        match self.paste_burst.flush_if_due(now) {
+            FlushResult::Paste(pasted) => {
+                self.state.insert_str(&pasted);
+                true
+            }
+            FlushResult::Typed(character) => {
+                self.state.insert_char(character);
+                true
+            }
+            FlushResult::None => false,
+        }
+    }
+
+    fn flush_paste_burst_before_modified_input(&mut self) {
+        if let Some(pasted) = self.paste_burst.flush_before_modified_input() {
+            self.state.insert_str(&pasted);
+        }
+    }
+
+    fn handle_paste(&mut self, pasted: &str) {
+        self.state.insert_str(&normalize_paste(pasted));
+        self.paste_burst.clear_after_explicit_paste();
+    }
+
+    fn is_slash_context(&self) -> bool {
+        if self
+            .state
+            .buffer
+            .lines()
+            .next()
+            .unwrap_or_default()
+            .starts_with('/')
+        {
+            return true;
+        }
+
+        self.state.buffer.is_empty() && self.paste_burst.starts_with('/')
     }
 
     fn redraw(&mut self) -> Result<(), ChatError> {
@@ -639,6 +818,7 @@ impl PromptState {
 }
 
 enum PromptAction {
+    Noop,
     Continue,
     Submit,
     Exit,
@@ -997,6 +1177,10 @@ fn is_submit_key(key: KeyEvent) -> bool {
     key.code == KeyCode::Enter && key.modifiers == KeyModifiers::NONE
 }
 
+fn is_unmodified_line_break_char(key: KeyEvent) -> bool {
+    matches!(key.code, KeyCode::Char('\n' | '\r')) && key.modifiers == KeyModifiers::NONE
+}
+
 fn is_newline_key(key: KeyEvent) -> bool {
     key.code == KeyCode::Enter
         && (key.modifiers.contains(KeyModifiers::ALT)
@@ -1031,6 +1215,10 @@ fn should_insert_char(key: KeyEvent) -> bool {
     }
 
     matches!(key.code, KeyCode::Char(character) if !character.is_control())
+}
+
+fn is_plain_paste_candidate_key(key: KeyEvent) -> bool {
+    key.modifiers == KeyModifiers::NONE
 }
 
 fn saturating_u16(value: usize) -> u16 {
@@ -1284,6 +1472,107 @@ mod tests {
         assert_eq!(normalize_paste("a\r\nb\rc"), "a\nb\nc");
     }
 
+    #[test]
+    fn bracketed_paste_normalizes_crlf_without_submitting() {
+        let renderer = Renderer::default();
+        let registry = Arc::new(test_registry());
+        let mut editor = PromptEditor::new(&renderer, &registry);
+
+        let action = editor
+            .handle_event(Event::Paste("a\r\nb".to_owned()))
+            .unwrap();
+
+        assert!(matches!(action, PromptAction::Continue));
+        assert_eq!(editor.state.buffer, "a\nb");
+    }
+
+    #[test]
+    fn unbracketed_crlf_paste_keeps_line_breaks_without_submit() {
+        let renderer = Renderer::default();
+        let registry = Arc::new(test_registry());
+        let mut editor = PromptEditor::new(&renderer, &registry);
+        let pasted =
+            "error: variants `PowerShell` and `Cmd` are never constructed\r\n\r\nError: build failed";
+        let mut now = Instant::now();
+
+        for key in unbracketed_paste_keys(pasted) {
+            let action = editor.handle_key_with_time(key, now).unwrap();
+            assert!(matches!(
+                action,
+                PromptAction::Noop | PromptAction::Continue
+            ));
+            now += std::time::Duration::from_millis(1);
+        }
+
+        let flush_at = now
+            + PasteBurst::recommended_active_flush_delay()
+            + std::time::Duration::from_millis(1);
+        assert!(editor.flush_paste_burst_if_due(flush_at));
+        assert_eq!(editor.state.buffer, normalize_paste(pasted));
+    }
+
+    #[test]
+    fn plain_enter_submits_after_pending_character_flushes() {
+        let renderer = Renderer::default();
+        let registry = Arc::new(test_registry());
+        let mut editor = PromptEditor::new(&renderer, &registry);
+        let now = Instant::now();
+
+        let action = editor
+            .handle_key_with_time(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE), now)
+            .unwrap();
+        assert!(matches!(action, PromptAction::Noop));
+        assert_eq!(editor.state.buffer, "");
+
+        let flush_at = now + PasteBurst::recommended_flush_delay();
+        assert!(editor.flush_paste_burst_if_due(flush_at));
+        assert_eq!(editor.state.buffer, "h");
+
+        let action = editor
+            .handle_key_with_time(
+                KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+                flush_at + std::time::Duration::from_millis(1),
+            )
+            .unwrap();
+        assert!(matches!(action, PromptAction::Submit));
+    }
+
+    #[test]
+    fn unbracketed_paste_does_not_redraw_until_flush() {
+        let renderer = Renderer::default();
+        let registry = Arc::new(test_registry());
+        let mut editor = PromptEditor::new(&renderer, &registry);
+        let now = Instant::now();
+
+        let first = editor
+            .handle_key_with_time(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE), now)
+            .unwrap();
+        let second = editor
+            .handle_key_with_time(
+                KeyEvent::new(KeyCode::Char('b'), KeyModifiers::NONE),
+                now + std::time::Duration::from_millis(1),
+            )
+            .unwrap();
+        let newline = editor
+            .handle_key_with_time(
+                KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+                now + std::time::Duration::from_millis(2),
+            )
+            .unwrap();
+
+        assert!(matches!(first, PromptAction::Noop));
+        assert!(matches!(second, PromptAction::Noop));
+        assert!(matches!(newline, PromptAction::Noop));
+        assert_eq!(editor.state.buffer, "");
+
+        let flush_at = now
+            + std::time::Duration::from_millis(2)
+            + PasteBurst::recommended_active_flush_delay()
+            + std::time::Duration::from_millis(1);
+        assert!(editor.flush_paste_burst_if_due(flush_at));
+        assert_eq!(editor.state.buffer, "ab\n");
+    }
+
     fn state_with(value: &str) -> PromptState {
         PromptState {
             buffer: value.to_owned(),
@@ -1312,5 +1601,23 @@ mod tests {
                 .unwrap();
         }
         registry
+    }
+
+    fn unbracketed_paste_keys(value: &str) -> Vec<KeyEvent> {
+        let mut keys = Vec::new();
+        let mut chars = value.chars().peekable();
+        while let Some(character) = chars.next() {
+            match character {
+                '\r' => {
+                    if chars.peek() == Some(&'\n') {
+                        chars.next();
+                    }
+                    keys.push(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+                }
+                '\n' => keys.push(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+                character => keys.push(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE)),
+            }
+        }
+        keys
     }
 }
