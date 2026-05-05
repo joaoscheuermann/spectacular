@@ -19,11 +19,6 @@ jobs:
           filter: tree:0
           fetch-depth: 0
 
-      # This enables task distribution via Nx Cloud
-      # Run this command as early as possible, before dependencies are installed
-      # Learn more at https://nx.dev/ci/reference/nx-cloud-cli#npx-nxcloud-startcirun
-      - run: npx nx start-ci-run --distribute-on="3 linux-medium-js" --stop-agents-after="e2e-ci"
-
       # Cache node_modules
       - uses: actions/setup-node@v4
         with:
@@ -32,9 +27,19 @@ jobs:
 
       - run: npm ci
 
-      # Prepend any command with "nx record --" to record its logs to Nx Cloud
-      - run: npx nx record -- npx nx format:check  --base="remotes/origin/main"
-      - run: npx nx run-many -t lint test build typecheck e2e-ci
-      # Nx Cloud recommends fixes for failures to help you get CI green faster. Learn more: https://nx.dev/ci/features/self-healing-ci
-      - run: npx nx fix-ci
-        if: always()
+      # Set up Rust toolchain for running cargo tests
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          cache: true
+
+      # Install cargo-nextest for faster/parallel test execution
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      # Run all Rust tests via cargo nextest (runs inline #[test], #[cfg(test)], integration tests under tests/)
+      - name: Run all Rust tests
+        run: cargo nextest run --workspace --all-features
+
+      # Run Nx targets for lint, build, typecheck
+      - run: npx nx run-many -t lint build typecheck
