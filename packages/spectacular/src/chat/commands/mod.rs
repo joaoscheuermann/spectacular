@@ -1,4 +1,5 @@
 pub mod config;
+pub mod git;
 pub mod runtime;
 pub mod session;
 
@@ -201,6 +202,8 @@ pub fn registry() -> Result<ChatCommandAdapter, CommandError> {
         config::model::command(),
         config::reasoning::command(),
         runtime::retry::command(),
+        git::status::command(),
+        git::commit::command(),
     ])
 }
 
