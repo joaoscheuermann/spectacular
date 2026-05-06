@@ -7,6 +7,7 @@ use serde_json::Value;
 use spectacular_agent::AgentEvent;
 use spectacular_agent::ToolStorage;
 use std::io::{self, Write};
+use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
 
 /// Number of visible characters the terminal typewriter writes per tick while
@@ -18,7 +19,16 @@ pub(crate) const TYPEWRITER_CHARS_PER_TICK: usize = 30;
 const TYPEWRITER_TICK_INTERVAL: Duration = Duration::from_millis(50);
 
 #[derive(Default)]
-pub struct Renderer;
+pub struct Renderer {
+    working: Mutex<WorkingLineState>,
+}
+
+#[derive(Default)]
+struct WorkingLineState {
+    active: bool,
+    frame: usize,
+    pause_depth: usize,
+}
 
 pub struct ToolCallView {
     pub name: String,
@@ -46,16 +56,20 @@ impl Renderer {
     }
 
     pub fn clear_screen(&self) {
+        self.reset_working();
         print!("\x1b[2J\x1b[3J\x1b[H");
         let _ = io::stdout().flush();
     }
 
     pub fn user_prompt(&self, prompt: &str) {
-        println!("{}", paint(user_style(), prompt));
-        println!();
+        self.with_interrupted_working_line(|| {
+            println!("{}", paint(user_style(), prompt));
+            println!();
+        });
     }
 
     pub fn prompt(&self) {
+        self.interrupt_working_line();
         print!("{}", paint(user_style(), "> "));
     }
 
@@ -64,39 +78,54 @@ impl Renderer {
     }
 
     pub fn working_frame(&self, frame: usize) {
-        const FRAMES: &[&str] = &["⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-        let frame = FRAMES[frame % FRAMES.len()];
-        print!(
-            "\r{}",
-            paint(dim_style(), format!("working {frame} (Ctrl+C to stop)"))
-        );
-        let _ = io::stdout().flush();
+        let should_render = {
+            let mut state = self.working_state();
+            state.active = true;
+            state.frame = frame;
+            state.pause_depth == 0
+        };
+
+        if should_render {
+            Self::write_working_frame(frame);
+        }
     }
 
     pub fn clear_working(&self) {
-        print!("\r\x1b[2K");
-        let _ = io::stdout().flush();
+        self.reset_working();
+        Self::clear_working_line();
     }
 
     pub async fn assistant_delta(&self, content: &str) -> Result<(), ChatError> {
-        let mut characters = content.chars().peekable();
-        while characters.peek().is_some() {
-            let chunk = characters
-                .by_ref()
-                .take(TYPEWRITER_CHARS_PER_TICK)
-                .collect::<String>();
-            print!("{}", paint(assistant_style(), chunk));
-            io::stdout().flush().map_err(ChatError::Io)?;
-            if characters.peek().is_some() {
-                tokio::time::sleep(TYPEWRITER_TICK_INTERVAL).await;
+        let paused = self.pause_working();
+        let result = async {
+            let mut characters = content.chars().peekable();
+            while characters.peek().is_some() {
+                let chunk = characters
+                    .by_ref()
+                    .take(TYPEWRITER_CHARS_PER_TICK)
+                    .collect::<String>();
+                print!("{}", paint(assistant_style(), chunk));
+                io::stdout().flush().map_err(ChatError::Io)?;
+                if characters.peek().is_some() {
+                    tokio::time::sleep(TYPEWRITER_TICK_INTERVAL).await;
+                }
             }
+
+            Ok(())
         }
-        Ok(())
+        .await;
+        if paused {
+            self.resume_working();
+        }
+
+        result
     }
 
     pub fn assistant_text(&self, content: &str) {
-        println!("{}", paint(assistant_style(), content));
-        println!();
+        self.with_interrupted_working_line(|| {
+            println!("{}", paint(assistant_style(), content));
+            println!();
+        });
     }
 
     pub fn tool_call(&self, _tool_call_id: &str, name: &str, arguments: &str, tools: &ToolStorage) {
@@ -104,7 +133,9 @@ impl Renderer {
     }
 
     pub fn render_tool_call(&self, view: &ToolCallView) {
-        println!("{} {}", paint(tool_style(), &view.name), view.input);
+        self.with_interrupted_working_line(|| {
+            println!("{} {}", paint(tool_style(), &view.name), view.input);
+        });
     }
 
     pub fn tool_result(&self, name: &str, content: &str, tools: &ToolStorage) {
@@ -113,13 +144,17 @@ impl Renderer {
 
     pub fn render_tool_result(&self, view: &ToolResultView) {
         let _ = &view.status;
-        println!("└ {}", view.output);
-        println!();
+        self.with_interrupted_working_line(|| {
+            println!("└ {}", view.output);
+            println!();
+        });
     }
 
     pub fn error(&self, message: &str) {
-        println!("{}", paint(error_style(), format!("error: {message}")));
-        println!();
+        self.with_interrupted_working_line(|| {
+            println!("{}", paint(error_style(), format!("error: {message}")));
+            println!();
+        });
     }
 
     pub fn command_error(&self, error: &impl std::fmt::Display) {
@@ -127,20 +162,28 @@ impl Renderer {
     }
 
     pub fn warning(&self, message: &str) {
-        println!("{}", paint(warning_style(), format!("warning: {message}")));
+        self.with_interrupted_working_line(|| {
+            println!("{}", paint(warning_style(), format!("warning: {message}")));
+        });
     }
 
     pub fn cancelled(&self, reason: &str) {
-        println!("{}", paint(warning_style(), reason));
-        println!();
+        self.with_interrupted_working_line(|| {
+            println!("{}", paint(warning_style(), reason));
+            println!();
+        });
     }
 
     pub fn dim(&self, message: &str) {
-        println!("{}", paint(dim_style(), message));
+        self.with_interrupted_working_line(|| {
+            println!("{}", paint(dim_style(), message));
+        });
     }
 
     pub fn success(&self, message: &str) {
-        println!("{}", paint(success_style(), message));
+        self.with_interrupted_working_line(|| {
+            println!("{}", paint(success_style(), message));
+        });
     }
 
     pub async fn render_records(
@@ -193,17 +236,21 @@ impl Renderer {
     }
 
     pub fn history_table(&self, table: &HistoryTableModel) {
-        println!("sessions");
-        println!("hash      updated           title                  messages");
-        for session in &table.rows {
-            let marker = if session.corrupt { "*" } else { " " };
-            println!(
-                "{:<8}  {:<16}  {:<22}  {}{}",
-                session.id, session.updated, session.title, session.messages, marker
-            );
-        }
+        self.with_interrupted_working_line(|| {
+            println!("sessions");
+            println!("hash      updated           title                  messages");
+            for session in &table.rows {
+                let marker = if session.corrupt { "*" } else { " " };
+                println!(
+                    "{:<8}  {:<16}  {:<22}  {}{}",
+                    session.id, session.updated, session.title, session.messages, marker
+                );
+            }
+        });
         if table.remaining > 0 {
-            println!();
+            self.with_interrupted_working_line(|| {
+                println!();
+            });
             self.dim(&format!("{} more sessions", table.remaining));
         }
     }
@@ -221,11 +268,95 @@ impl Renderer {
         use iocraft::prelude::*;
 
         let content = message.into();
-        element! {
-            Text(color: Color::DarkGrey, content: content)
+        self.with_interrupted_working_line(|| {
+            element! {
+                Text(color: Color::DarkGrey, content: content)
+            }
+            .print();
+            println!();
+        });
+    }
+
+    fn working_state(&self) -> MutexGuard<'_, WorkingLineState> {
+        self.working
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn reset_working(&self) {
+        let mut state = self.working_state();
+        state.active = false;
+        state.pause_depth = 0;
+    }
+
+    fn renderable_working_frame(&self) -> Option<usize> {
+        let state = self.working_state();
+        if state.active && state.pause_depth == 0 {
+            return Some(state.frame);
         }
-        .print();
-        println!();
+
+        None
+    }
+
+    fn with_interrupted_working_line(&self, write: impl FnOnce()) {
+        let frame = self.renderable_working_frame();
+        if frame.is_some() {
+            Self::clear_working_line();
+        }
+
+        write();
+
+        if let Some(frame) = frame {
+            if self.renderable_working_frame().is_some() {
+                Self::write_working_frame(frame);
+            }
+        }
+    }
+
+    fn interrupt_working_line(&self) {
+        if self.renderable_working_frame().is_some() {
+            Self::clear_working_line();
+        }
+    }
+
+    fn pause_working(&self) -> bool {
+        let (did_pause, should_clear) = {
+            let mut state = self.working_state();
+            let should_clear = state.active && state.pause_depth == 0;
+            let did_pause = state.active;
+            if state.active {
+                state.pause_depth += 1;
+            }
+            (did_pause, should_clear)
+        };
+
+        if should_clear {
+            Self::clear_working_line();
+        }
+
+        did_pause
+    }
+
+    fn resume_working(&self) {
+        let mut state = self.working_state();
+        if state.pause_depth > 0 {
+            state.pause_depth -= 1;
+        }
+    }
+
+    fn write_working_frame(frame: usize) {
+        const FRAMES: &[&str] = &["⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+        let frame = FRAMES[frame % FRAMES.len()];
+        print!(
+            "\r\x1b[2K{}",
+            paint(dim_style(), format!("working {frame} (Ctrl+C to stop)"))
+        );
+        let _ = io::stdout().flush();
+    }
+
+    fn clear_working_line() {
+        print!("\r\x1b[2K");
+        let _ = io::stdout().flush();
     }
 }
 
@@ -385,6 +516,35 @@ mod tests {
         ) -> ToolExecution<'a> {
             Box::pin(async { Ok(r#"{"success":true}"#.to_owned()) })
         }
+    }
+
+    #[test]
+    fn line_output_keeps_working_indicator_active() {
+        let renderer = Renderer::default();
+
+        renderer.working_frame(1);
+        renderer.dim("status update");
+
+        assert_eq!(renderer.renderable_working_frame(), Some(1));
+    }
+
+    #[test]
+    fn stream_output_pauses_working_indicator() {
+        let renderer = Renderer::default();
+
+        renderer.working_frame(2);
+        assert!(renderer.pause_working());
+
+        assert_eq!(renderer.renderable_working_frame(), None);
+
+        renderer.working_frame(3);
+        assert_eq!(renderer.renderable_working_frame(), None);
+
+        renderer.resume_working();
+        assert_eq!(renderer.renderable_working_frame(), Some(3));
+
+        renderer.clear_working();
+        assert_eq!(renderer.renderable_working_frame(), None);
     }
 
     #[test]

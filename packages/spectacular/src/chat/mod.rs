@@ -52,7 +52,7 @@ impl ChatBootstrap {
             .map_err(|error| ChatError::Session(error.to_string()))?;
         Ok(Self {
             session: SessionManager::new()?,
-            renderer: Renderer,
+            renderer: Renderer::default(),
             runtime,
             tools,
         })

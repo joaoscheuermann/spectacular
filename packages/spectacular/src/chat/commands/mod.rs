@@ -16,6 +16,7 @@ use std::collections::BTreeMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Duration;
 
 pub type ChatCommandFuture<'a> = Pin<Box<dyn Future<Output = ChatCommandResult> + 'a>>;
 
@@ -127,6 +128,37 @@ impl<'a> ChatCommandContext<'a> {
 
     pub fn success(&self, message: &str) {
         self.renderer.success(message);
+    }
+
+    /// Runs async command work with a transient "working" indicator until the
+    /// operation completes.
+    pub async fn work<F, T>(&self, f: F) -> T
+    where
+        F: Future<Output = T>,
+    {
+        use std::pin::pin;
+
+        let mut future = pin!(f);
+        let mut frame = 0usize;
+        let mut interval = tokio::time::interval(Duration::from_millis(90));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+
+        self.renderer.working();
+
+        let result = loop {
+            tokio::select! {
+                _ = interval.tick() => {
+                    self.renderer.working_frame(frame);
+                    frame = frame.wrapping_add(1);
+                }
+                result = &mut future => {
+                    break result;
+                }
+            }
+        };
+
+        self.renderer.clear_working();
+        result
     }
 
     pub fn request_exit(&mut self) {

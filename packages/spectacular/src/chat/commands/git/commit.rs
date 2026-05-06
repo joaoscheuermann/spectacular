@@ -20,7 +20,7 @@ const MAX_DIFF_CHARS: usize = 15_000;
 pub fn command() -> ChatCommand {
     ChatCommand {
         name: "git-commit",
-        usage: "/commit",
+        usage: "/git-commit",
         summary: "Generate a conventional commit message and commit staged changes",
         execute,
     }
@@ -33,8 +33,10 @@ fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatComman
         }
 
         // 1. Check for staged changes
-        context.notice("checking for staged changes...");
-        let has_staged = match helpers::has_staged_changes().await {
+        let has_staged = match context
+            .work(async { helpers::has_staged_changes().await })
+            .await
+        {
             Ok(v) => v,
             Err(e) => return ChatCommandResult::error(e.to_string()),
         };
@@ -45,8 +47,10 @@ fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatComman
         }
 
         // 2. Get the staged diff
-        context.notice("reading staged changes...");
-        let diff = match helpers::get_staged_diff().await {
+        let diff = match context
+            .work(async { helpers::get_staged_diff().await })
+            .await
+        {
             Ok(v) => v,
             Err(e) => return ChatCommandResult::error(e.to_string()),
         };
@@ -61,8 +65,7 @@ fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatComman
         let prompt = build_commit_prompt(&diff_for_prompt);
 
         // 5. Generate commit message using standalone agent
-        context.notice("generating commit message...");
-        let commit_message = match generate_commit_message(&context, prompt).await {
+        let commit_message = match generate_commit_message_with_work(&context, prompt).await {
             Ok(msg) => msg,
             Err(e) => {
                 return ChatCommandResult::error(format!(
@@ -91,8 +94,10 @@ fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatComman
         }
 
         // 7. Commit
-        context.notice("committing changes...");
-        match helpers::commit_with_message(&commit_message).await {
+        match context
+            .work(async { helpers::commit_with_message(&commit_message).await })
+            .await
+        {
             Ok(output) => {
                 context.success("changes committed successfully!");
                 if !output.trim().is_empty() {
@@ -105,9 +110,14 @@ fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatComman
     })
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Commit message generation
-// ─────────────────────────────────────────────────────────────────────────────
+async fn generate_commit_message_with_work(
+    context: &ChatCommandContext<'_>,
+    prompt: String,
+) -> Result<String, String> {
+    context
+        .work(async { generate_commit_message(context, prompt).await })
+        .await
+}
 
 async fn generate_commit_message(
     context: &ChatCommandContext<'_>,
@@ -163,10 +173,6 @@ Rules:
     Ok(sanitize_commit_message(&message))
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Prompt building
-// ─────────────────────────────────────────────────────────────────────────────
-
 fn build_commit_prompt(diff: &str) -> String {
     format!(
         r#"Analyze the following staged git diff and generate a conventional commit message:
@@ -186,10 +192,6 @@ Return only the commit message."#,
     )
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Diff truncation
-// ─────────────────────────────────────────────────────────────────────────────
-
 fn truncate_diff_if_needed(diff: &str) -> (String, bool) {
     if diff.len() <= MAX_DIFF_CHARS {
         return (diff.to_owned(), false);
@@ -206,10 +208,6 @@ fn truncate_diff_if_needed(diff: &str) -> (String, bool) {
         true,
     )
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Message sanitization
-// ─────────────────────────────────────────────────────────────────────────────
 
 fn sanitize_commit_message(message: &str) -> String {
     let mut sanitized = message.to_owned();
@@ -251,10 +249,6 @@ fn sanitize_commit_message(message: &str) -> String {
         .trim_end_matches('"')
         .to_owned()
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Tests
-// ─────────────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
