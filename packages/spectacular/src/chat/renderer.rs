@@ -1,6 +1,10 @@
+use crate::chat::model::HistoryTableModel;
+use crate::chat::runner::render_agent_event;
+use crate::chat::session::ChatRecord;
 use crate::chat::ChatError;
 use anstyle::{AnsiColor, Style};
 use serde_json::Value;
+use spectacular_agent::AgentEvent;
 use spectacular_agent::ToolStorage;
 use std::io::{self, Write};
 use std::time::Duration;
@@ -108,6 +112,7 @@ impl Renderer {
     }
 
     pub fn render_tool_result(&self, view: &ToolResultView) {
+        let _ = &view.status;
         println!("└ {}", view.output);
         println!();
     }
@@ -136,6 +141,80 @@ impl Renderer {
 
     pub fn success(&self, message: &str) {
         println!("{}", paint(success_style(), message));
+    }
+
+    pub async fn render_records(
+        &self,
+        records: &[ChatRecord],
+        tools: &ToolStorage,
+    ) -> Result<(), ChatError> {
+        let mut assistant_buffer = String::new();
+        for record in records {
+            if matches!(record, ChatRecord::Corrupt { .. }) {
+                self.flush_assistant(&mut assistant_buffer);
+                self.warning(&format!(
+                    "unreadable session event at line {}",
+                    record.line()
+                ));
+                continue;
+            }
+
+            let Some(event) = record.event() else {
+                self.flush_assistant(&mut assistant_buffer);
+                let event_type = match record {
+                    ChatRecord::Unknown { value, .. } => value
+                        .get("type")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or("unknown"),
+                    ChatRecord::Corrupt { .. } | ChatRecord::Known { .. } => "unknown",
+                };
+                self.warning(&format!(
+                    "unknown session event `{event_type}` at line {}",
+                    record.line()
+                ));
+                continue;
+            };
+
+            let Some(event) = event.to_agent_event() else {
+                continue;
+            };
+
+            if let AgentEvent::MessageDelta(delta) = &event {
+                assistant_buffer.push_str(&delta.content);
+                continue;
+            }
+
+            self.flush_assistant(&mut assistant_buffer);
+            render_agent_event(self, tools, &event).await?;
+        }
+
+        self.flush_assistant(&mut assistant_buffer);
+        Ok(())
+    }
+
+    pub fn history_table(&self, table: &HistoryTableModel) {
+        println!("sessions");
+        println!("hash      updated           title                  messages");
+        for session in &table.rows {
+            let marker = if session.corrupt { "*" } else { " " };
+            println!(
+                "{:<8}  {:<16}  {:<22}  {}{}",
+                session.id, session.updated, session.title, session.messages, marker
+            );
+        }
+        if table.remaining > 0 {
+            println!();
+            self.dim(&format!("{} more sessions", table.remaining));
+        }
+    }
+
+    fn flush_assistant(&self, buffer: &mut String) {
+        if buffer.is_empty() {
+            return;
+        }
+
+        self.assistant_text(buffer);
+        buffer.clear();
     }
 
     fn notice(&self, message: impl Into<String>) {

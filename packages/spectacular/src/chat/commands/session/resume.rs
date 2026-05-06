@@ -1,11 +1,10 @@
-use crate::chat::runner::render_agent_event;
-use crate::chat::session::ChatRecord;
-use crate::chat::ChatContext;
-use spectacular_agent::AgentEvent;
-use spectacular_commands::{Command, CommandControl, CommandError, CommandFuture};
+use crate::chat::commands::{
+    ChatCommand, ChatCommandContext, ChatCommandFuture, ChatCommandResult,
+};
+use spectacular_commands::CommandError;
 
-pub fn command() -> Command<ChatContext> {
-    Command {
+pub fn command() -> ChatCommand {
+    ChatCommand {
         name: "resume",
         usage: "/resume <session-id>",
         summary: "Resume a saved session",
@@ -13,76 +12,78 @@ pub fn command() -> Command<ChatContext> {
     }
 }
 
-fn execute<'a>(context: &'a mut ChatContext, args: Vec<String>) -> CommandFuture<'a> {
+fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatCommandFuture<'a> {
     Box::pin(async move {
         let [prefix] = args.as_slice() else {
-            return Err(CommandError::usage("/resume <session-id>"));
+            return ChatCommandResult::error(
+                CommandError::usage("/resume <session-id>").to_string(),
+            );
         };
-        let records = context
-            .session
-            .resume(prefix)
-            .map_err(|error| CommandError::message(error.to_string()))?;
-        context
-            .restore_runtime_from_records(&records)
-            .map_err(|error| CommandError::message(error.to_string()))?;
-        context.renderer.clear_screen();
-        context.renderer.resumed(context.session.current_id());
-        let mut assistant_buffer = String::new();
-        for record in &records {
-            if matches!(record, ChatRecord::Corrupt { .. }) {
-                flush_assistant(context, &mut assistant_buffer);
-                context.renderer.warning(&format!(
-                    "unreadable session event at line {}",
-                    record.line()
-                ));
-                continue;
-            }
-            let Some(event) = record.event() else {
-                flush_assistant(context, &mut assistant_buffer);
-                let event_type = match record {
-                    ChatRecord::Unknown { value, .. } => value
-                        .get("type")
-                        .and_then(|value| value.as_str())
-                        .unwrap_or("unknown"),
-                    ChatRecord::Corrupt { .. } | ChatRecord::Known { .. } => "unknown",
-                };
-                context.renderer.warning(&format!(
-                    "unknown session event `{event_type}` at line {}",
-                    record.line()
-                ));
-                continue;
-            };
-            let Some(event) = event.to_agent_event() else {
-                continue;
-            };
 
-            if let AgentEvent::MessageDelta(delta) = &event {
-                assistant_buffer.push_str(&delta.content);
-                continue;
-            }
+        let resumed = match context.model.resume_session(prefix) {
+            Ok(resumed) => resumed,
+            Err(error) => return ChatCommandResult::error(error.to_string()),
+        };
 
-            flush_assistant(context, &mut assistant_buffer);
-            render_replay_event(context, &event).await?;
+        context.clear_screen();
+        context.session_resumed(&resumed.id);
+        if let Err(error) = context.render_records(&resumed.records).await {
+            return ChatCommandResult::error(error.to_string());
         }
-        flush_assistant(context, &mut assistant_buffer);
-        Ok(CommandControl::Continue)
+
+        ChatCommandResult::success()
     })
 }
 
-async fn render_replay_event(
-    context: &mut ChatContext,
-    event: &AgentEvent,
-) -> Result<(), CommandError> {
-    render_agent_event(&context.renderer, &context.tools, event)
-        .await
-        .map_err(|error| CommandError::message(error.to_string()))
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::chat::commands::{
+        test_support::NoopRunner, ChatCommandContext, ChatCommandControl, ChatCommandResult,
+    };
+    use crate::chat::model::ChatModel;
+    use crate::chat::renderer::Renderer;
+    use crate::chat::session::SessionManager;
+    use crate::chat::RuntimeSelection;
+    use spectacular_agent::ToolStorage;
+    use spectacular_config::ReasoningLevel;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
-fn flush_assistant(context: &ChatContext, buffer: &mut String) {
-    if buffer.is_empty() {
-        return;
+    #[tokio::test]
+    async fn resume_returns_success_after_replaying_records() {
+        let mut model = test_model();
+        let started = model.start_new_session().unwrap();
+        model.start_new_session().unwrap();
+        let renderer = Renderer::default();
+        let tools = ToolStorage::default();
+        let runner = NoopRunner;
+        let mut control = ChatCommandControl::default();
+        let context = ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
+
+        let result = execute(context, vec![started.id]).await;
+
+        assert_eq!(result, ChatCommandResult::Success);
     }
 
-    context.renderer.assistant_text(buffer);
-    buffer.clear();
+    fn test_model() -> ChatModel {
+        ChatModel::new(
+            SessionManager::new_in(temp_session_dir("resume-command")).unwrap(),
+            RuntimeSelection {
+                provider: "openrouter".to_owned(),
+                api_key: "sk-or-v1-test".to_owned(),
+                model: "test/model".to_owned(),
+                reasoning: ReasoningLevel::Medium,
+            },
+        )
+    }
+
+    fn temp_session_dir(name: &str) -> PathBuf {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+
+        std::env::temp_dir().join(format!("spectacular-resume-command-{name}-{suffix}"))
+    }
 }

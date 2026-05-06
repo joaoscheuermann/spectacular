@@ -1,3 +1,4 @@
+use crate::chat::model::{ChatModel, ChatRunRequestModel};
 use crate::chat::provider::{provider_for_parts, provider_for_runtime};
 use crate::chat::renderer::Renderer;
 use crate::chat::session::{
@@ -9,10 +10,24 @@ use spectacular_agent::{
 };
 use spectacular_config::{ConfigError, ReasoningLevel, TaskModelConfig, TaskModelSlot};
 use spectacular_llms::{LlmProvider, ProviderMessageRole};
+use std::future::Future;
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::MissedTickBehavior;
+
+pub type ChatTurnFuture<'a> = Pin<Box<dyn Future<Output = Result<(), ChatError>> + Send + 'a>>;
+
+pub trait ChatTurnRunner {
+    fn run<'a>(
+        &'a self,
+        model: &'a mut ChatModel,
+        renderer: &'a Renderer,
+        tools: &'a ToolStorage,
+        request: ChatRunRequestModel,
+    ) -> ChatTurnFuture<'a>;
+}
 
 pub struct ChatRunRequest {
     pub prompt: String,
@@ -22,15 +37,49 @@ pub struct ChatRunRequest {
 }
 
 pub struct ChatRunner<'a> {
-    session: &'a SessionManager,
+    model: &'a ChatModel,
     renderer: &'a Renderer,
     tools: ToolStorage,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ChatRunnerService;
+
+impl ChatTurnRunner for ChatRunnerService {
+    fn run<'a>(
+        &'a self,
+        model: &'a mut ChatModel,
+        renderer: &'a Renderer,
+        tools: &'a ToolStorage,
+        request: ChatRunRequestModel,
+    ) -> ChatTurnFuture<'a> {
+        Box::pin(async move { ChatRunnerService::run(self, model, renderer, tools, request).await })
+    }
+}
+
+impl ChatRunnerService {
+    pub async fn run(
+        &self,
+        model: &mut ChatModel,
+        renderer: &Renderer,
+        tools: &ToolStorage,
+        request: ChatRunRequestModel,
+    ) -> Result<(), ChatError> {
+        ChatRunner::new(model, renderer, tools.clone())
+            .run(ChatRunRequest {
+                prompt: request.prompt,
+                render_user_prompt: request.render_user_prompt,
+                retry_existing_prompt: request.retry_existing_prompt,
+                runtime: request.runtime,
+            })
+            .await
+    }
+}
+
 impl<'a> ChatRunner<'a> {
-    pub fn new(session: &'a SessionManager, renderer: &'a Renderer, tools: ToolStorage) -> Self {
+    pub fn new(model: &'a ChatModel, renderer: &'a Renderer, tools: ToolStorage) -> Self {
         Self {
-            session,
+            model,
             renderer,
             tools,
         }
@@ -41,7 +90,7 @@ impl<'a> ChatRunner<'a> {
             self.renderer.user_prompt(&request.prompt);
         }
 
-        let records = self.session.records()?;
+        let records = self.model.records()?;
         let context_records = if request.retry_existing_prompt {
             records_before_latest_user_prompt(&records)
         } else {
@@ -57,7 +106,7 @@ impl<'a> ChatRunner<'a> {
         let mut stream = agent.run_stream(request.prompt.clone());
         let mut title_text = String::new();
         let mut response_open = false;
-        let mut title_spawned = self.session.has_title()?;
+        let mut title_spawned = self.model.session_manager().has_title()?;
         let mut spinner_visible = true;
         let mut spinner_frame = 0usize;
         let mut is_streaming = false;
@@ -79,12 +128,11 @@ impl<'a> ChatRunner<'a> {
                     let Some(event) = event else {
                         break;
                     };
-                    if skip_retry_user && matches!(event, AgentEvent::UserPrompt { .. }) {
-                        skip_retry_user = false;
+                    if should_skip_retry_user_prompt(&mut skip_retry_user, &event) {
                         continue;
                     }
-                    if matches!(event, AgentEvent::UserPrompt { .. }) {
-                        self.session.append_agent_event(&event)?;
+                    if should_append_without_render(&event) {
+                        self.model.append_agent_event(&event)?;
                         continue;
                     }
 
@@ -106,14 +154,14 @@ impl<'a> ChatRunner<'a> {
                         response_open = false;
                     }
                     render_agent_event(self.renderer, &self.tools, &event).await?;
-                    self.session.append_agent_event(&event)?;
+                    self.model.append_agent_event(&event)?;
                     if let AgentEvent::MessageDelta(delta) = &event {
                         if delta.role == ProviderMessageRole::Assistant {
                             response_open = true;
                             title_text.push_str(&delta.content);
-                            if !title_spawned && !title_text.trim().is_empty() {
+                            if should_spawn_title_task(title_spawned, &title_text) {
                                 spawn_title_task(
-                                    self.session.clone(),
+                                    self.model.session_manager().clone(),
                                     request.prompt.clone(),
                                     title_text.clone(),
                                     &request.runtime,
@@ -124,10 +172,7 @@ impl<'a> ChatRunner<'a> {
                         }
                     }
 
-                    if matches!(
-                        event,
-                        AgentEvent::Finished { .. } | AgentEvent::Error { .. } | AgentEvent::Cancelled { .. }
-                    ) {
+                    if is_terminal_agent_event(&event) {
                         if spinner_visible {
                             self.renderer.clear_working();
                             spinner_visible = false;
@@ -226,6 +271,30 @@ pub async fn render_agent_event(
     }
 
     Ok(())
+}
+
+fn should_skip_retry_user_prompt(skip_retry_user: &mut bool, event: &AgentEvent) -> bool {
+    if *skip_retry_user && matches!(event, AgentEvent::UserPrompt { .. }) {
+        *skip_retry_user = false;
+        return true;
+    }
+
+    false
+}
+
+fn should_append_without_render(event: &AgentEvent) -> bool {
+    matches!(event, AgentEvent::UserPrompt { .. })
+}
+
+fn should_spawn_title_task(title_spawned: bool, title_text: &str) -> bool {
+    !title_spawned && !title_text.trim().is_empty()
+}
+
+fn is_terminal_agent_event(event: &AgentEvent) -> bool {
+    matches!(
+        event,
+        AgentEvent::Finished { .. } | AgentEvent::Error { .. } | AgentEvent::Cancelled { .. }
+    )
 }
 
 fn spawn_title_task(
@@ -360,7 +429,7 @@ fn sanitize_title(title: &str) -> String {
 mod tests {
     use super::*;
     use spectacular_config::ReasoningLevel;
-    use spectacular_llms::{OpenRouterProvider, OPENROUTER_PROVIDER_ID};
+    use spectacular_llms::{MessageDelta, OpenRouterProvider, OPENROUTER_PROVIDER_ID};
     use spectacular_tools::{
         EDIT_TOOL_NAME, FIND_TOOL_NAME, GREP_TOOL_NAME, TERMINAL_TOOL_NAME, TREE_TOOL_NAME,
         WEB_SEARCH_TOOL_NAME, WRITE_TOOL_NAME,
@@ -406,5 +475,32 @@ mod tests {
             ]
         );
         assert!(title_agent.tool_manifests().is_empty());
+    }
+
+    #[test]
+    fn retry_user_prompt_gate_skips_first_user_prompt() {
+        let mut skip_retry_user = true;
+
+        let skipped =
+            should_skip_retry_user_prompt(&mut skip_retry_user, &AgentEvent::user_prompt("again"));
+
+        assert_eq!((skipped, skip_retry_user), (true, false));
+    }
+
+    #[test]
+    fn title_task_triggers_after_nonblank_assistant_text() {
+        assert!(should_spawn_title_task(false, "answer"));
+    }
+
+    #[test]
+    fn cancelled_agent_event_is_terminal() {
+        assert!(is_terminal_agent_event(&AgentEvent::cancelled("stopped")));
+    }
+
+    #[test]
+    fn assistant_events_render_before_append() {
+        let event = AgentEvent::MessageDelta(MessageDelta::assistant("hello"));
+
+        assert!(!should_append_without_render(&event));
     }
 }

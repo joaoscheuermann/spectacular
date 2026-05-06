@@ -1,10 +1,11 @@
-use crate::chat::renderer::{dim_style, paint};
-use crate::chat::session::{format_local_time, HistoryQuery};
-use crate::chat::ChatContext;
-use spectacular_commands::{Command, CommandControl, CommandError, CommandFuture};
+use crate::chat::commands::{
+    ChatCommand, ChatCommandContext, ChatCommandFuture, ChatCommandResult,
+};
+use crate::chat::session::HistoryQuery;
+use spectacular_commands::CommandError;
 
-pub fn command() -> Command<ChatContext> {
-    Command {
+pub fn command() -> ChatCommand {
+    ChatCommand {
         name: "history",
         usage: "/history [page|start-end]",
         summary: "List saved sessions",
@@ -12,34 +13,20 @@ pub fn command() -> Command<ChatContext> {
     }
 }
 
-fn execute<'a>(context: &'a mut ChatContext, args: Vec<String>) -> CommandFuture<'a> {
+fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatCommandFuture<'a> {
     Box::pin(async move {
-        let query = parse_query(&args)?;
-        let page = context
-            .session
-            .history(query)
-            .map_err(|error| CommandError::message(error.to_string()))?;
-        println!("sessions");
-        println!("hash      updated           title                  messages");
-        for session in page.sessions {
-            let marker = if session.corrupt { "*" } else { " " };
-            println!(
-                "{:<8}  {:<16}  {:<22}  {}{}",
-                session.id,
-                format_local_time(session.updated),
-                truncate(&session.title, 22),
-                session.messages,
-                marker
-            );
-        }
-        if page.remaining > 0 {
-            println!();
-            println!(
-                "{}",
-                paint(dim_style(), format!("{} more sessions", page.remaining))
-            );
-        }
-        Ok(CommandControl::Continue)
+        let query = match parse_query(&args) {
+            Ok(query) => query,
+            Err(error) => return ChatCommandResult::error(error.to_string()),
+        };
+        let table = match context.model.history(query) {
+            Ok(table) => table,
+            Err(error) => return ChatCommandResult::error(error.to_string()),
+        };
+
+        context.render_history(&table);
+
+        ChatCommandResult::success()
     })
 }
 
@@ -63,14 +50,56 @@ fn parse_usize(value: &str) -> Result<usize, CommandError> {
         .map_err(|_| CommandError::usage("/history [page|start-end]"))
 }
 
-fn truncate(value: &str, limit: usize) -> String {
-    if value.chars().count() <= limit {
-        return value.to_owned();
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::chat::commands::{
+        test_support::NoopRunner, ChatCommandContext, ChatCommandControl, ChatCommandResult,
+    };
+    use crate::chat::model::ChatModel;
+    use crate::chat::renderer::Renderer;
+    use crate::chat::session::SessionManager;
+    use crate::chat::RuntimeSelection;
+    use spectacular_agent::ToolStorage;
+    use spectacular_config::ReasoningLevel;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[tokio::test]
+    async fn history_returns_success_after_rendering_history() {
+        let mut model = test_model();
+        let renderer = Renderer::default();
+        let tools = ToolStorage::default();
+        let runner = NoopRunner;
+        let mut control = ChatCommandControl::default();
+        let context = ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
+
+        let result = execute(context, Vec::new()).await;
+
+        assert_eq!(result, ChatCommandResult::Success);
     }
 
-    value
-        .chars()
-        .take(limit.saturating_sub(3))
-        .collect::<String>()
-        + "..."
+    fn test_model() -> ChatModel {
+        let session = SessionManager::new_in(temp_session_dir("history")).unwrap();
+        let mut model = ChatModel::new(
+            session,
+            RuntimeSelection {
+                provider: "openrouter".to_owned(),
+                api_key: "sk-or-v1-test".to_owned(),
+                model: "test/model".to_owned(),
+                reasoning: ReasoningLevel::Medium,
+            },
+        );
+        model.start_new_session().unwrap();
+        model
+    }
+
+    fn temp_session_dir(name: &str) -> PathBuf {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+
+        std::env::temp_dir().join(format!("spectacular-history-command-{name}-{suffix}"))
+    }
 }

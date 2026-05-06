@@ -1,4 +1,6 @@
 mod commands;
+mod controller;
+mod model;
 mod paste_burst;
 mod prompt;
 mod provider;
@@ -6,40 +8,42 @@ mod renderer;
 mod runner;
 mod session;
 
-use crate::chat::prompt::PromptEditor;
 use crate::chat::renderer::Renderer;
-use crate::chat::runner::{main_chat_tool_storage, ChatRunRequest, ChatRunner};
+use crate::chat::runner::main_chat_tool_storage;
 use crate::chat::session::{ChatEvent, SessionManager};
+use controller::ChatController;
+use model::ChatModel;
 use spectacular_agent::ToolStorage;
-use spectacular_commands::{
-    parse_line, CommandControl, CommandError, CommandRegistry, ParseOutcome,
-};
+use spectacular_commands::CommandError;
 use spectacular_config::{ConfigError, ReasoningLevel, SpectacularConfig, TaskModelSlot};
 use std::error::Error;
 use std::fmt::{self, Display};
-use std::io::{self, IsTerminal, Write};
+use std::io;
 use std::str::FromStr;
-use std::sync::Arc;
 
 pub async fn run() -> Result<(), ChatError> {
-    let mut context = ChatContext::new()?;
-    context.start_new_session()?;
-    context.renderer.clear_screen();
-    context
-        .renderer
-        .session_created(context.session.current_id());
-    context.run_loop().await
+    let bootstrap = ChatBootstrap::new()?;
+    let mut model = ChatModel::new(bootstrap.session, bootstrap.runtime);
+    let started = model.start_new_session()?;
+    bootstrap.renderer.clear_screen();
+    bootstrap.renderer.session_created(&started.id);
+    let mut controller = ChatController::new(
+        model,
+        commands::registry()?,
+        bootstrap.renderer,
+        bootstrap.tools,
+    );
+    controller.run_loop().await
 }
 
-pub struct ChatContext {
+struct ChatBootstrap {
     session: SessionManager,
     renderer: Renderer,
-    registry: Arc<CommandRegistry<ChatContext>>,
     runtime: RuntimeSelection,
     tools: ToolStorage,
 }
 
-impl ChatContext {
+impl ChatBootstrap {
     fn new() -> Result<Self, ChatError> {
         let config = spectacular_config::read_config_or_default()?;
         let runtime = RuntimeSelection::from_config(&config)?;
@@ -49,165 +53,13 @@ impl ChatContext {
         Ok(Self {
             session: SessionManager::new()?,
             renderer: Renderer,
-            registry: Arc::new(commands::registry()?),
             runtime,
             tools,
         })
     }
-
-    async fn run_loop(&mut self) -> Result<(), ChatError> {
-        loop {
-            let line = self.read_prompt_line()?;
-            let line = line.trim_end_matches(['\r', '\n']).to_owned();
-            if line.trim().is_empty() {
-                continue;
-            }
-
-            match parse_line(&line) {
-                Ok(ParseOutcome::NotCommand) => self.run_user_prompt(line, true, false).await?,
-                Ok(ParseOutcome::Command(invocation)) => {
-                    let registry = Arc::clone(&self.registry);
-                    match registry.execute(self, invocation).await {
-                        Ok(CommandControl::Continue) => {}
-                        Ok(CommandControl::Exit) => return Ok(()),
-                        Err(error) => self.renderer.command_error(&error),
-                    }
-                }
-                Err(error) => self.renderer.command_error(&error),
-            }
-        }
-    }
-
-    fn read_prompt_line(&self) -> Result<String, ChatError> {
-        if io::stdin().is_terminal() && io::stdout().is_terminal() {
-            return PromptEditor::new(&self.renderer, &self.registry).read_line();
-        }
-
-        self.renderer.prompt();
-        io::stdout().flush().map_err(ChatError::Io)?;
-        let mut line = String::new();
-        let read = io::stdin().read_line(&mut line).map_err(ChatError::Io)?;
-        if read == 0 {
-            return Err(ChatError::Exit);
-        }
-
-        Ok(line)
-    }
-
-    pub(super) fn start_new_session(&mut self) -> Result<(), ChatError> {
-        self.session.create(self.runtime.clone())?;
-        Ok(())
-    }
-
-    pub(super) async fn run_user_prompt(
-        &mut self,
-        prompt: String,
-        render_user_prompt: bool,
-        retry_existing_prompt: bool,
-    ) -> Result<(), ChatError> {
-        ChatRunner::new(&self.session, &self.renderer, self.tools.clone())
-            .run(ChatRunRequest {
-                prompt,
-                render_user_prompt,
-                retry_existing_prompt,
-                runtime: self.runtime.clone(),
-            })
-            .await
-    }
-
-    pub(super) fn restore_runtime_from_records(
-        &mut self,
-        records: &[session::ChatRecord],
-    ) -> Result<(), ChatError> {
-        let config = spectacular_config::read_config_or_default()?;
-        if let Some(runtime) = RuntimeSelection::from_session_records(&config, records)? {
-            self.runtime = runtime;
-            return Ok(());
-        }
-
-        self.runtime = RuntimeSelection::from_config(&config)?;
-        self.session
-            .append_runtime_defaults(&self.runtime, "resume_fallback")
-    }
-
-    pub(super) fn show_provider(&self) -> Result<(), ChatError> {
-        let config = spectacular_config::read_config_or_default()?;
-        println!(
-            "active provider: {}",
-            config.providers.selected.as_deref().unwrap_or("none")
-        );
-        println!("configured providers");
-        for provider in config.providers.available.keys() {
-            println!("- {provider}");
-        }
-        Ok(())
-    }
-
-    pub(super) fn switch_provider(&mut self, provider: &str) -> Result<(), ChatError> {
-        let mut config = spectacular_config::read_config_or_default()?;
-        config.select_provider(provider)?;
-        let runtime = RuntimeSelection::from_config(&config)?;
-        spectacular_config::write_config(&config)?;
-        self.runtime = runtime;
-        self.session
-            .append_runtime_defaults(&self.runtime, "command")?;
-        self.renderer
-            .success(&format!("active provider updated: {provider}"));
-        Ok(())
-    }
-
-    pub(super) fn show_coding_model(&self) {
-        println!("coding model");
-        println!("provider: {}", self.runtime.provider);
-        println!("model: {}", self.runtime.model);
-        println!("reasoning: {}", self.runtime.reasoning);
-    }
-
-    pub(super) fn update_coding_model(
-        &mut self,
-        model: &str,
-        reasoning: ReasoningLevel,
-    ) -> Result<(), ChatError> {
-        let mut config = spectacular_config::read_config_or_default()?;
-        let provider = config
-            .providers
-            .selected
-            .clone()
-            .ok_or_else(|| ChatError::Session("no provider is selected".to_owned()))?;
-        config.set_provider_task_model(&provider, TaskModelSlot::Coding, model, reasoning);
-        self.save_runtime_config(config)?;
-        self.renderer.success("coding model updated");
-        Ok(())
-    }
-
-    pub(super) fn show_reasoning(&self) {
-        println!("coding reasoning: {}", self.runtime.reasoning);
-    }
-
-    pub(super) fn update_reasoning(&mut self, reasoning: ReasoningLevel) -> Result<(), ChatError> {
-        let model = self.runtime.model.clone();
-        let mut config = spectacular_config::read_config_or_default()?;
-        let provider = config
-            .providers
-            .selected
-            .clone()
-            .ok_or_else(|| ChatError::Session("no provider is selected".to_owned()))?;
-        config.set_provider_task_model(&provider, TaskModelSlot::Coding, model, reasoning);
-        self.save_runtime_config(config)?;
-        self.renderer.success("coding reasoning updated");
-        Ok(())
-    }
-
-    fn save_runtime_config(&mut self, config: SpectacularConfig) -> Result<(), ChatError> {
-        let runtime = RuntimeSelection::from_config(&config)?;
-        spectacular_config::write_config(&config)?;
-        self.runtime = runtime;
-        self.session
-            .append_runtime_defaults(&self.runtime, "command")
-    }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RuntimeSelection {
     pub(crate) provider: String,
     pub(crate) api_key: String,
@@ -343,6 +195,7 @@ impl Error for ChatError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use spectacular_commands::CommandControl;
     use spectacular_config::{ProviderConfig, ProvidersConfig, TaskModelConfig, TaskModels};
     use std::collections::BTreeMap;
 
@@ -405,6 +258,38 @@ mod tests {
         assert!(runtime.is_none());
     }
 
+    #[tokio::test]
+    async fn chat_controller_dispatches_exit_command() {
+        let session = session::SessionManager::new_in(temp_session_dir("controller-exit"))
+            .expect("session manager should be created");
+        let mut model = super::model::ChatModel::new(
+            session,
+            RuntimeSelection {
+                provider: "openrouter".to_owned(),
+                api_key: "sk-or-v1-test".to_owned(),
+                model: "test/model".to_owned(),
+                reasoning: ReasoningLevel::Medium,
+            },
+        );
+        model.start_new_session().unwrap();
+        let mut controller = super::controller::ChatController::new(
+            model,
+            commands::registry().unwrap(),
+            Renderer::default(),
+            ToolStorage::default(),
+        );
+
+        let control = controller
+            .dispatch_command(spectacular_commands::CommandInvocation {
+                name: "exit".to_owned(),
+                args: Vec::new(),
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(control, CommandControl::Exit);
+    }
+
     fn complete_config() -> SpectacularConfig {
         let mut available = BTreeMap::new();
         available.insert(
@@ -432,5 +317,14 @@ mod tests {
 
     fn chat_record(event: ChatEvent) -> session::ChatRecord {
         session::ChatRecord::Known { line: 1, event }
+    }
+
+    fn temp_session_dir(name: &str) -> std::path::PathBuf {
+        let suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+
+        std::env::temp_dir().join(format!("spectacular-chat-{name}-{suffix}"))
     }
 }
