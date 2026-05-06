@@ -1,119 +1,229 @@
-# Monorepo template (Nx)
+# Spectacular
 
-<a alt="Nx logo" href="https://nx.dev" target="_blank" rel="noreferrer"><img src="https://raw.githubusercontent.com/nrwl/nx/master/images/nx-logo.png" width="45"></a>
+Spectacular is a terminal AI assistant for working inside a local codebase.
+It runs as a native chat loop, streams model output, keeps session history, and
+lets the model use built-in tools to inspect, edit, search, and run commands in
+the current workspace.
 
-This repository is an **Nx workspace template**: a starting point you can **copy, fork, or use as the basis for new monorepos**. It is not a single product—treat it as boilerplate with opinionated plugin wiring so your team can add apps and libraries quickly across **TypeScript/JavaScript**, **Rust**, and **Python**.
+The main product surface today is `spectacular chat`. The longer-term direction
+is spec-driven development, but the current working functionality is centered on
+chat, tool use, sessions, provider configuration, and repository workflows.
 
-## What this template already includes
+## Functionality
 
-| Area | Package / plugin | Role |
-|------|------------------|------|
-| **JavaScript & TS** | [`@nx/js`](https://nx.dev/nx-api/js) | Core JS/TS support, generators, and task patterns for Nx. |
-| **TypeScript** | [`@nx/js/typescript`](https://nx.dev/nx-api/js/documents/typescript-plugin) | Inferred TypeScript builds, typecheck, and `tsconfig` wiring (registered in `nx.json`). |
-| **Rust** | [`@monodon/rust`](https://github.com/cammisuli/monodon) | Rust crates in the workspace with Nx-aware targets (registered in `nx.json`). |
-| **Python** | [`@nxlv/python`](https://www.npmjs.com/package/@nxlv/python) | Python projects (e.g. uv-based layout), generators, and executors—dependency is **installed** so you can scaffold and run Python targets without adding the plugin yourself. |
+### Terminal Chat
 
-TypeScript [project references](https://www.typescriptlang.org/docs/handbook/project-references.html) stay aligned with the Nx graph when you run builds or typecheck; you can also run `npx nx sync` (or `npx nx sync:check` in CI).
-
-## Agent skills (`.agents/skills`)
-
-The template ships **personal agent skills**: Markdown playbooks under [`.agents/skills`](.agents/skills) that tools like Cursor can load to steer AI assistants toward consistent Nx workflows, monorepo hygiene, and a structured journal-based dev process. Each skill lives in its own folder with a `SKILL.md` (name and description in the file frontmatter). Below is what each one is for.
-
-### Nx workspace and monorepo operations
-
-| Skill | What it does |
-|-------|----------------|
-| **`nx-workspace`** | Read-only exploration of the Nx workspace: list projects, inspect configuration and targets, understand dependencies, and debug failed `nx` commands before running tasks. |
-| **`nx-generate`** | Run Nx **generators** the right way (discover plugins, prefer `--no-interactive`, read generator behavior, match repo patterns, verify with lint/test/build). Use when scaffolding apps, libraries, or migrations. |
-| **`nx-run-tasks`** | How to **execute** Nx tasks: single-project runs, `run-many`, `affected`, inferred targets, and checking available targets (e.g. via `nx show project`). |
-| **`nx-plugins`** | **Discover and install** Nx plugins (`nx list`, `nx add <plugin>`) when you need new framework or stack support. |
-| **`nx-import`** | Bring **external repos** into the workspace with `nx import` while preserving history—strategies, directory layout, and version quirks (e.g. non-interactive flags). |
-| **`link-workspace-packages`** | Wire **workspace dependencies** across packages using the repo’s package manager (npm, pnpm, yarn, bun)—fix `@org/*` resolution and “cannot find module” without fake `tsconfig` path hacks. |
-| **`monitor-ci`** | **Watch Nx Cloud CI** pipelines, interpret runs, and coordinate self-healing / fix loops when you care about branch status and automated remediation (not a replacement for raw `gh`/`glab` for generic Git ops). |
-
-### Design, coding standards, and implementation
-
-| Skill | What it does |
-|-------|----------------|
-| **`architect`** | **Planning only**: architecture and refactor design for an Nx monorepo with journaling, explicit human gates, trade-offs, and effort decomposition—does not implement product code. |
-| **`coding-conventions`** | Shared **principles and rules** (SRP, OCP, DIP, ISP, KISS, DRY, early returns, functional style, DI) plus references for **@nxlv/python** and **@monodon/rust** scaffolding—load with architect or developer. |
-| **`developer`** | **Implements** work from a journal Effort (or an approved bug-fix plan): explore the repo, write code and tests, follow `coding-conventions`, and hand off verification—does not mutate Effort status or journal metadata itself. |
-| **`tester`** | **Verifies** changes against Effort or bug criteria using Nx targets, builds, tests, and evidence-backed pass/fail reporting; does not own arbitrary product edits (delegates fixes back to developer when needed). |
-
-### Journal workflow (optional structured delivery)
-
-These skills assume file-backed journals under `.journal/` (paths, slugs, efforts, bugs, decisions). They chain together for slice-by-slice delivery after architecture is approved.
-
-| Skill | What it does |
-|-------|----------------|
-| **`journal-manager`** | **CRUD for journal files**: create/update entries, efforts, bug reports, decision logs; resolve `<entry_dir>` from a slug; the low-level file protocol other skills build on. |
-| **`decomposer`** | Splits an approved **`## Architecture`** section in `ticket.md` into **ordered Effort** files—vertical slices with runnable outcomes; does not implement code. |
-| **`effort-executor`** | Runs efforts **in sequence**: status lifecycle, delegates each effort to **developer**, captures change summaries and decision logs; does not write application code itself. |
-
-### Debugging workflow
-
-| Skill | What it does |
-|-------|----------------|
-| **`debug-coordinator`** | **Orchestrates** bug workflows: journal/bug setup, triage, loops with **debugger** → human-approved **developer** fixes → **tester** verification and documentation; does not patch product code directly. |
-| **`debugger`** | **Hypothesis-driven investigation**: context, exploration, falsifiable hypotheses, diagnostics, structured findings—returns outcomes like root cause vs. needs-more-info; does not fix code or talk to the user without a coordinator. |
-
----
-
-If you copy this template, keep or trim `.agents/skills` to match how your team uses AI assistants; the skills are documentation and process, not runtime dependencies.
-
-## Using this template for a new project
-
-1. **Copy the repo** (fork, duplicate, or `git clone` into a new directory) and rename it to match your product or organization.
-2. Update **root metadata**: `package.json` name (e.g. `@your-org/source`), license, and workspace paths if you change `packages/*`.
-3. **Install dependencies**: `npm install` (this workspace uses npm workspaces under `packages/*`).
-4. **Replace placeholders** in any generated examples (import paths like `@my-org/...`, project names).
-5. **Add projects** with Nx generators, e.g. `@nx/js:library`, `@monodon/rust` generators, `@nxlv/python` generators—see each plugin’s docs for exact commands.
-
-Explore the workspace graph anytime:
+Start a fresh terminal chat session:
 
 ```sh
-npx nx graph
+npx nx run spectacular:run --args='chat'
 ```
 
-## Everyday commands
+The chat experience is transcript-first: no fullscreen TUI, no fixed panels,
+and normal terminal scrollback. User prompts and assistant responses stay in the
+terminal output, while the prompt editor handles interactive input.
 
-Run a target for a project:
+The prompt supports:
+
+- Multiline input.
+- Bracketed paste and fallback paste-burst handling.
+- Slash-command suggestions.
+- Tab completion for command names.
+- Quoted command arguments.
+- `Enter` to submit.
+- `Shift+Enter`, `Alt+Enter`, `Ctrl+Enter`, or `Ctrl+J` to insert a newline.
+- `Ctrl+C` to clear the current prompt, or exit when the prompt is empty.
+
+### Slash Commands
+
+Slash commands are strict. Empty commands, uppercase command names, unknown
+commands, and unterminated quotes are errors.
+
+| Command | What it does |
+| ------- | ------------ |
+| `/new` | Starts a new chat session. |
+| `/history [page|start-end]` | Lists saved sessions. |
+| `/resume <session-id>` | Resumes a saved session by id or unique prefix. |
+| `/clear` | Clears the visible terminal output. |
+| `/exit` | Exits chat. |
+| `/provider [configured-provider-id]` | Shows or switches the active provider. |
+| `/model [model-id none|low|medium|high]` | Shows or updates the coding model and reasoning level. |
+| `/reasoning [none|low|medium|high]` | Shows or updates coding reasoning. |
+| `/retry` | Replays the latest prompt after truncating the previous response. |
+| `/git-status` | Shows working tree status and staged diff stats. |
+| `/git-commit` | Generates a conventional commit message for staged changes and commits them. |
+
+### Built-In Tools
+
+The main chat agent exposes these tools to the model:
+
+| Tool | What it does |
+| ---- | ------------ |
+| `find` | Finds files by glob, respecting `.gitignore`. |
+| `grep` | Searches file contents with regex or literal matching. |
+| `tree` | Prints a gitignore-aware ASCII directory tree. |
+| `terminal` | Runs shell commands and returns stdout, stderr, and exit code. |
+| `edit` | Applies exact text replacements to existing files. |
+| `write` | Creates or overwrites files, including parent directories. |
+| `web` | Searches the web, opens pages, and finds text in pages. |
+
+Tool calls are model-facing and currently run without an approval prompt. Use
+Spectacular in workspaces where file writes and command execution are intended.
+
+### Sessions
+
+Chat sessions are persisted as structured JSONL records. A session can include:
+
+- The session id and title.
+- Provider and model changes.
+- User prompts and assistant deltas.
+- Reasoning deltas.
+- Tool calls and tool results.
+- Usage metadata.
+- Errors, cancellations, and finish reasons.
+
+Useful session behavior:
+
+- `spectacular chat` starts a fresh session by default.
+- `/history` lists recent saved sessions.
+- `/resume <session-id>` restores a previous session.
+- `/retry` truncates after the latest user prompt and reruns it.
+- Titles are generated in the background after the first assistant response.
+
+### Provider And Model Configuration
+
+OpenRouter is the enabled provider implementation in this checkout.
+
+Spectacular stores provider settings locally and supports three model slots:
+
+- `coding`: used by `spectacular chat`.
+- `labeling`: used for background session titles when configured.
+- `planning`: reserved for the planning route.
+
+Reasoning levels:
+
+- `none`
+- `low`
+- `medium`
+- `high`
+
+Show current configuration:
 
 ```sh
-npx nx <target> <project-name>
+npx nx run spectacular:run --args='config'
 ```
 
-Example for a publishable JS/TS library (adjust names to your org):
+Configure OpenRouter:
 
 ```sh
-npx nx g @nx/js:lib packages/pkg1 --publishable --importPath=@your-org/pkg1
-npx nx build pkg1
+npx nx run spectacular:run --args='config --provider openrouter --key sk-or-v1-your-key'
+npx nx run spectacular:run --args='config --use openrouter'
+npx nx run spectacular:run --args='config --provider openrouter --task coding --model openrouter/your-model --reasoning medium'
 ```
 
-Keep TS references in sync manually if needed:
+Optional title model:
 
 ```sh
-npx nx sync
+npx nx run spectacular:run --args='config --provider openrouter --task labeling --model openrouter/title-model --reasoning none'
 ```
 
-Version and release (when configured):
+### Planning Command
+
+`spectacular plan <prompt>` exists, but it is not a real planning workflow yet.
+It validates a non-empty prompt and complete config, then returns:
+
+```text
+Hello World
+```
+
+## Quick Start
+
+Prerequisites:
+
+- Node.js 20+
+- npm
+- Rust stable
+- OpenRouter API key
+
+Install dependencies:
 
 ```sh
-npx nx release
+npm ci
 ```
 
-Use `--dry-run` with `nx release` to preview.
+Build:
 
-## Tooling & CI
+```sh
+cargo build -p spectacular
+```
 
-- **Nx Console** — [Editor integration](https://nx.dev/getting-started/editor-setup) for tasks and generators in VS Code and IntelliJ.
-- **CI** — Generate a workflow for non–GitHub Actions providers: `npx nx g ci-workflow`. For GitHub Actions, follow [Nx CI docs](https://nx.dev/ci/intro/ci-with-nx).
+Configure the chat model:
 
-This template sets `neverConnectToCloud` in `nx.json`; enable [Nx Cloud](https://nx.dev/ci/intro/why-nx-cloud) in your fork if you want remote caching and distributed CI.
+```sh
+npx nx run spectacular:run --args='config --provider openrouter --key sk-or-v1-your-key'
+npx nx run spectacular:run --args='config --use openrouter'
+npx nx run spectacular:run --args='config --provider openrouter --task coding --model openrouter/your-model --reasoning medium'
+```
 
-## Learn more
+Start chat:
 
-- [Nx docs](https://nx.dev)
-- [Nx plugins](https://nx.dev/concepts/nx-plugins)
-- [Managing releases](https://nx.dev/features/manage-releases)
-- [Community](https://go.nx.dev/community)
+```sh
+npx nx run spectacular:run --args='chat'
+```
+
+## Local Data
+
+Configuration and sessions are stored outside the repo.
+
+Windows:
+
+```text
+%APPDATA%\spectacular\config.json
+%APPDATA%\spectacular\sessions\*.jsonl
+```
+
+macOS:
+
+```text
+~/Library/Application Support/spectacular/config.json
+~/Library/Application Support/spectacular/sessions/*.jsonl
+```
+
+Linux:
+
+```text
+$XDG_CONFIG_HOME/spectacular/config.json
+$XDG_CONFIG_HOME/spectacular/sessions/*.jsonl
+```
+
+If `XDG_CONFIG_HOME` is not set, Linux uses `~/.config/spectacular`.
+
+API keys are stored as plain text in `config.json`.
+
+## Development
+
+Spectacular is an Nx workspace backed by a Rust Cargo workspace.
+
+| Package | Purpose |
+| ------- | ------- |
+| `spectacular` | CLI, chat loop, prompt editor, renderer, sessions, and chat commands. |
+| `spectacular-agent` | Agent runtime, streaming, retries, continuation, tool loop, and store. |
+| `spectacular-llms` | Provider traits, provider types, registry, and OpenRouter. |
+| `spectacular-tools` | Built-in file, terminal, web, search, edit, and write tools. |
+| `spectacular-commands` | Slash-command parsing, metadata, fuzzy search, and errors. |
+| `spectacular-config` | Config schema, persistence, validation, and migration. |
+| `spectacular-plan` | Placeholder planning command. |
+
+Common commands:
+
+```sh
+npx nx show projects
+npx nx test spectacular
+npx nx run-many -t lint build test
+cargo test --workspace
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+```
+
+CI runs `cargo nextest run --workspace --all-features` and Nx `lint`, `build`,
+and `typecheck`.
