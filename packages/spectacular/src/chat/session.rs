@@ -34,6 +34,10 @@ impl SessionManager {
         let dir = spectacular_config::config_dir()
             .map_err(ChatError::Config)?
             .join("sessions");
+        Self::new_in(dir)
+    }
+
+    pub(super) fn new_in(dir: PathBuf) -> Result<Self, ChatError> {
         Ok(Self {
             store: SessionStore::new(dir)?,
             active: None,
@@ -165,7 +169,7 @@ impl SessionManager {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ChatRecord {
     Known { line: usize, event: ChatEvent },
     Unknown { line: usize, value: Value },
