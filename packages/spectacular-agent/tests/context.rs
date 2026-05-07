@@ -58,6 +58,43 @@ fn provider_context_includes_only_model_relevant_roles() {
 }
 
 #[test]
+fn provider_context_coalesces_streamed_assistant_deltas() {
+    let mut store = Store::default();
+    store.append(AgentEvent::user_prompt("first prompt"));
+    store.append(AgentEvent::MessageDelta(MessageDelta::assistant("first")));
+    store.append(AgentEvent::ReasoningDelta(ReasoningDelta {
+        content: "hidden reasoning".to_owned(),
+        metadata: None,
+    }));
+    store.append(AgentEvent::MessageDelta(MessageDelta::assistant(
+        " response",
+    )));
+    store.append(AgentEvent::Finished {
+        finish_reason: FinishReason::Stop,
+    });
+    store.append(AgentEvent::user_prompt("second prompt"));
+    store.append(AgentEvent::MessageDelta(MessageDelta::assistant(
+        "second response",
+    )));
+
+    let messages = provider_messages_from_store("system prompt", &store);
+
+    assert_eq!(
+        messages
+            .iter()
+            .map(|message| (message.role, message.content.as_str()))
+            .collect::<Vec<_>>(),
+        vec![
+            (ProviderMessageRole::System, "system prompt"),
+            (ProviderMessageRole::User, "first prompt"),
+            (ProviderMessageRole::Assistant, "first response"),
+            (ProviderMessageRole::User, "second prompt"),
+            (ProviderMessageRole::Assistant, "second response"),
+        ]
+    );
+}
+
+#[test]
 fn context_limits_allow_messages_within_bounds() {
     let messages = vec![
         ProviderMessage::system("system"),
