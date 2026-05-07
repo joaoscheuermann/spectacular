@@ -123,8 +123,11 @@ async fn generate_commit_message(
     context: &ChatCommandContext<'_>,
     prompt: String,
 ) -> Result<String, String> {
-    let provider = provider_for_runtime(context.model.runtime())
-        .map_err(|e| format!("provider error: {}", e))?;
+    let provider = provider_for_runtime(
+        context.model.runtime(),
+        context.model.debug_logger().clone(),
+    )
+    .map_err(|e| format!("provider error: {}", e))?;
 
     let model_name = context.model.runtime().model.clone();
     let system_prompt = r#"You are a git commit message generator that follows the Conventional Commits specification.

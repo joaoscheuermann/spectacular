@@ -7,6 +7,7 @@ mod provider;
 mod renderer;
 mod runner;
 mod session;
+mod title;
 
 use crate::chat::renderer::Renderer;
 use crate::chat::runner::main_chat_tool_storage;
@@ -16,21 +17,23 @@ use model::ChatModel;
 use spectacular_agent::ToolStorage;
 use spectacular_commands::CommandError;
 use spectacular_config::{ConfigError, ReasoningLevel, SpectacularConfig, TaskModelSlot};
+use spectacular_llms::LlmDebugLogger;
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::io;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-pub async fn run() -> Result<(), ChatError> {
+pub async fn run(debug_logger: LlmDebugLogger) -> Result<(), ChatError> {
     let ChatBootstrap {
         session,
         renderer,
         runtime,
         tools,
         workspace_root,
-    } = ChatBootstrap::new()?;
-    let mut model = ChatModel::new(session, runtime);
+        debug_logger,
+    } = ChatBootstrap::new(debug_logger)?;
+    let mut model = ChatModel::new_with_debug_logger(session, runtime, debug_logger);
     let started = model.start_new_session()?;
     renderer.clear_screen();
     renderer.session_created(&started.id, model.runtime(), &workspace_root);
@@ -44,10 +47,11 @@ struct ChatBootstrap {
     runtime: RuntimeSelection,
     tools: ToolStorage,
     workspace_root: PathBuf,
+    debug_logger: LlmDebugLogger,
 }
 
 impl ChatBootstrap {
-    fn new() -> Result<Self, ChatError> {
+    fn new(debug_logger: LlmDebugLogger) -> Result<Self, ChatError> {
         let config = spectacular_config::read_config_or_default()?;
         let runtime = RuntimeSelection::from_config(&config)?;
         let workspace_root = std::env::current_dir().map_err(ChatError::Io)?;
@@ -59,6 +63,7 @@ impl ChatBootstrap {
             runtime,
             tools,
             workspace_root,
+            debug_logger,
         })
     }
 }
