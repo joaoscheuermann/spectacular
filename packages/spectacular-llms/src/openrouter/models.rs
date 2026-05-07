@@ -65,7 +65,11 @@ fn parse_openrouter_models(body: &str) -> Result<Vec<Model>, ProviderError> {
                 .filter(|name| !name.is_empty())
                 .unwrap_or(id);
 
-            Some(Model::new(id, display_name))
+            Some(Model::with_supported_parameters(
+                id,
+                display_name,
+                model.supported_parameters,
+            ))
         })
         .collect::<Vec<_>>();
 

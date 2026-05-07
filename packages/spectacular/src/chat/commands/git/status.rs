@@ -10,6 +10,7 @@ pub fn command() -> ChatCommand {
         name: "git-status",
         usage: "/git-status",
         summary: "Show current git status and staged changes",
+        completion: &[],
         execute,
     }
 }
@@ -86,66 +87,8 @@ fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatComman
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::chat::commands::{test_support::NoopRunner, ChatCommandControl};
-    use crate::chat::model::ChatModel;
-    use crate::chat::renderer::Renderer;
-    use crate::chat::session::SessionManager;
-    use crate::chat::RuntimeSelection;
-    use spectacular_agent::ToolStorage;
-    use spectacular_config::ReasoningLevel;
-    use std::path::PathBuf;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    #[tokio::test]
-    async fn git_status_returns_success() {
-        let mut model = test_model();
-        let renderer = Renderer::default();
-        let tools = ToolStorage::default();
-        let runner = NoopRunner;
-        let mut control = ChatCommandControl::default();
-        let context = ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
-
-        let result = execute(context, Vec::new()).await;
-
-        assert_eq!(result, ChatCommandResult::Success);
-    }
-
-    #[tokio::test]
-    async fn git_status_rejects_args() {
-        let mut model = test_model();
-        let renderer = Renderer::default();
-        let tools = ToolStorage::default();
-        let runner = NoopRunner;
-        let mut control = ChatCommandControl::default();
-        let context = ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
-
-        let result = execute(context, vec!["extra".to_owned()]).await;
-
-        assert!(matches!(result, ChatCommandResult::Error(_)));
-    }
-
-    fn test_model() -> ChatModel {
-        let session = SessionManager::new_in(temp_session_dir("git-status")).unwrap();
-        let mut model = ChatModel::new(
-            session,
-            RuntimeSelection {
-                provider: "openrouter".to_owned(),
-                api_key: "sk-or-v1-test".to_owned(),
-                model: "test/model".to_owned(),
-                reasoning: ReasoningLevel::Medium,
-            },
-        );
-        model.start_new_session().unwrap();
-        model
-    }
-
-    fn temp_session_dir(name: &str) -> PathBuf {
-        let suffix = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-
-        std::env::temp_dir().join(format!("spectacular-git-status-command-{name}-{suffix}"))
-    }
+    include!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/unit/chat/commands/git/status.rs"
+    ));
 }

@@ -17,6 +17,7 @@ pub struct Command<C> {
 }
 
 impl<C> Clone for Command<C> {
+    /// Provides the clone behavior for slash-command parsing and completion.
     fn clone(&self) -> Self {
         *self
     }
@@ -32,6 +33,7 @@ pub struct CommandMetadata {
 }
 
 impl<C> Command<C> {
+    /// Provides the metadata behavior for slash-command parsing and completion.
     pub fn metadata(self) -> CommandMetadata {
         CommandMetadata {
             name: self.name,
@@ -44,6 +46,94 @@ impl<C> Command<C> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CommandSearchMatch {
     pub metadata: CommandMetadata,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CompletionCommandSpec {
+    pub name: &'static str,
+    pub subcommands: &'static [CompletionSubcommandSpec],
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CompletionSubcommandSpec {
+    pub name: &'static str,
+    pub summary: &'static str,
+    pub fields: &'static [CompletionFieldSpec],
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CompletionFieldSpec {
+    pub name: &'static str,
+    pub summary: &'static str,
+    pub required: bool,
+    pub value_source: CompletionValueSource,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CompletionValueSource {
+    Static(&'static [&'static str]),
+    Dynamic(&'static str),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NamedArgs {
+    values: BTreeMap<String, String>,
+}
+
+impl NamedArgs {
+    /// Provides the parse behavior for slash-command parsing and completion.
+    pub fn parse(tokens: &[String]) -> Result<Self, CommandError> {
+        let mut values = BTreeMap::new();
+        for token in tokens {
+            let Some((field, value)) = token.split_once(':') else {
+                return Err(CommandError::InvalidNamedArgument {
+                    argument: token.clone(),
+                });
+            };
+            if field.trim().is_empty() {
+                return Err(CommandError::InvalidNamedArgument {
+                    argument: token.clone(),
+                });
+            }
+            if values.insert(field.to_owned(), value.to_owned()).is_some() {
+                return Err(CommandError::DuplicateNamedArgument {
+                    name: field.to_owned(),
+                });
+            }
+        }
+
+        Ok(Self { values })
+    }
+
+    /// Provides the require behavior for slash-command parsing and completion.
+    pub fn require(&self, name: &'static str) -> Result<&str, CommandError> {
+        self.get(name)
+            .filter(|value| !value.trim().is_empty())
+            .ok_or(CommandError::MissingNamedArgument { name })
+    }
+
+    /// Provides the optional behavior for slash-command parsing and completion.
+    pub fn optional(&self, name: &str) -> Option<&str> {
+        self.get(name).filter(|value| !value.trim().is_empty())
+    }
+
+    /// Provides the get behavior for slash-command parsing and completion.
+    pub fn get(&self, name: &str) -> Option<&str> {
+        self.values.get(name).map(String::as_str)
+    }
+
+    /// Provides the reject unknown behavior for slash-command parsing and completion.
+    pub fn reject_unknown(&self, allowed: &[&str]) -> Result<(), CommandError> {
+        let Some(name) = self
+            .values
+            .keys()
+            .find(|name| !allowed.contains(&name.as_str()))
+        else {
+            return Ok(());
+        };
+
+        Err(CommandError::UnknownNamedArgument { name: name.clone() })
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -70,12 +160,14 @@ pub struct CommandRegistry<C> {
 }
 
 impl<C> CommandRegistry<C> {
+    /// Provides the new behavior for slash-command parsing and completion.
     pub fn new() -> Self {
         Self {
             commands: BTreeMap::new(),
         }
     }
 
+    /// Provides the register behavior for slash-command parsing and completion.
     pub fn register(&mut self, command: Command<C>) -> Result<(), CommandError> {
         if command.name.trim().is_empty() {
             return Err(CommandError::InvalidRegistration {
@@ -101,6 +193,7 @@ impl<C> CommandRegistry<C> {
         Ok(())
     }
 
+    /// Provides the with behavior for slash-command parsing and completion.
     pub fn with(mut self, command: Command<C>) -> Result<Self, CommandError> {
         self.register(command)?;
         Ok(self)
@@ -120,14 +213,17 @@ impl<C> CommandRegistry<C> {
         (command.execute)(context, invocation.args).await
     }
 
+    /// Provides the commands behavior for slash-command parsing and completion.
     pub fn commands(&self) -> impl Iterator<Item = &Command<C>> {
         self.commands.values()
     }
 
+    /// Provides the command metadata behavior for slash-command parsing and completion.
     pub fn command_metadata(&self) -> impl Iterator<Item = CommandMetadata> + '_ {
         self.commands.values().map(|command| command.metadata())
     }
 
+    /// Provides the search behavior for slash-command parsing and completion.
     pub fn search(&self, query: &str, limit: usize) -> Vec<CommandSearchMatch> {
         let mut matches = self
             .commands
@@ -152,6 +248,7 @@ impl<C> CommandRegistry<C> {
     }
 }
 
+/// Provides the parse line behavior for slash-command parsing and completion.
 pub fn parse_line(line: &str) -> Result<ParseOutcome, CommandError> {
     if !line.starts_with('/') {
         return Ok(ParseOutcome::NotCommand);
@@ -177,6 +274,7 @@ pub fn parse_line(line: &str) -> Result<ParseOutcome, CommandError> {
     }))
 }
 
+/// Provides the shell words behavior for slash-command parsing and completion.
 fn shell_words(input: &str) -> Result<Vec<String>, CommandError> {
     let mut tokens = Vec::new();
     let mut current = String::new();
@@ -222,9 +320,14 @@ fn shell_words(input: &str) -> Result<Vec<String>, CommandError> {
     Ok(tokens)
 }
 
-fn fuzzy_rank(name: &str, query: &str) -> Option<(u8, usize)> {
+/// Provides the fuzzy rank behavior for slash-command parsing and completion.
+pub fn fuzzy_rank(name: &str, query: &str) -> Option<(u8, usize)> {
     if query.is_empty() {
         return Some((3, 0));
+    }
+
+    if query.chars().any(char::is_uppercase) {
+        return None;
     }
 
     if name == query {
@@ -235,28 +338,61 @@ fn fuzzy_rank(name: &str, query: &str) -> Option<(u8, usize)> {
         return Some((1, name.len().saturating_sub(query.len())));
     }
 
-    subsequence_gap_score(name, query).map(|score| (2, score))
+    let distance = levenshtein(name, query);
+    (distance <= 2).then_some((2, distance))
 }
 
-fn subsequence_gap_score(name: &str, query: &str) -> Option<usize> {
-    let mut score = 0usize;
-    let mut last_match = None;
-    let mut name_indices = name.char_indices();
+/// Provides the fuzzy filter behavior for slash-command parsing and completion.
+pub fn fuzzy_filter<'a>(
+    candidates: impl IntoIterator<Item = &'a str>,
+    query: &str,
+    limit: usize,
+) -> Vec<&'a str> {
+    let mut matches = candidates
+        .into_iter()
+        .filter_map(|candidate| fuzzy_rank(candidate, query).map(|rank| (rank, candidate)))
+        .collect::<Vec<_>>();
 
-    for query_char in query.chars() {
-        let Some((index, _)) = name_indices.find(|(_, name_char)| *name_char == query_char) else {
-            return None;
-        };
+    matches.sort_by(|(left_rank, left), (right_rank, right)| {
+        left_rank.cmp(right_rank).then_with(|| left.cmp(right))
+    });
 
-        if let Some(last_match) = last_match {
-            score += index.saturating_sub(last_match + 1);
-        } else {
-            score += index;
-        }
-        last_match = Some(index);
+    matches
+        .into_iter()
+        .take(limit)
+        .map(|(_, candidate)| candidate)
+        .collect()
+}
+
+/// Provides the levenshtein behavior for slash-command parsing and completion.
+fn levenshtein(left: &str, right: &str) -> usize {
+    if left == right {
+        return 0;
     }
 
-    Some(score + name.len().saturating_sub(query.len()))
+    if left.is_empty() {
+        return right.chars().count();
+    }
+    if right.is_empty() {
+        return left.chars().count();
+    }
+
+    let right_chars = right.chars().collect::<Vec<_>>();
+    let mut previous = (0..=right_chars.len()).collect::<Vec<_>>();
+    let mut current = vec![0; right_chars.len() + 1];
+
+    for (left_index, left_char) in left.chars().enumerate() {
+        current[0] = left_index + 1;
+        for (right_index, right_char) in right_chars.iter().enumerate() {
+            let substitution = previous[right_index] + usize::from(left_char != *right_char);
+            let insertion = current[right_index] + 1;
+            let deletion = previous[right_index + 1] + 1;
+            current[right_index + 1] = substitution.min(insertion).min(deletion);
+        }
+        std::mem::swap(&mut previous, &mut current);
+    }
+
+    previous[right_chars.len()]
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -266,23 +402,30 @@ pub enum CommandError {
     UnterminatedQuote,
     DuplicateCommand { name: String },
     InvalidRegistration { message: String },
+    InvalidNamedArgument { argument: String },
+    DuplicateNamedArgument { name: String },
+    MissingNamedArgument { name: &'static str },
+    UnknownNamedArgument { name: String },
     Usage { usage: String },
     Message(String),
 }
 
 impl CommandError {
+    /// Provides the usage behavior for slash-command parsing and completion.
     pub fn usage(usage: impl Into<String>) -> Self {
         Self::Usage {
             usage: usage.into(),
         }
     }
 
+    /// Provides the message behavior for slash-command parsing and completion.
     pub fn message(message: impl Into<String>) -> Self {
         Self::Message(message.into())
     }
 }
 
 impl Display for CommandError {
+    /// Provides the fmt behavior for slash-command parsing and completion.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CommandError::EmptyCommand => formatter.write_str("empty command"),
@@ -292,6 +435,19 @@ impl Display for CommandError {
                 write!(formatter, "duplicate command `{name}`")
             }
             CommandError::InvalidRegistration { message } => formatter.write_str(message),
+            CommandError::InvalidNamedArgument { argument } => write!(
+                formatter,
+                "invalid argument `{argument}`; expected name:<value>"
+            ),
+            CommandError::DuplicateNamedArgument { name } => {
+                write!(formatter, "duplicate argument `{name}`")
+            }
+            CommandError::MissingNamedArgument { name } => {
+                write!(formatter, "missing required argument `{name}:<value>`")
+            }
+            CommandError::UnknownNamedArgument { name } => {
+                write!(formatter, "unknown argument `{name}`")
+            }
             CommandError::Usage { usage } => write!(formatter, "usage: {usage}"),
             CommandError::Message(message) => formatter.write_str(message),
         }
@@ -302,159 +458,8 @@ impl Error for CommandError {}
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    #[test]
-    fn normal_text_is_not_command() {
-        assert_eq!(parse_line("hello").unwrap(), ParseOutcome::NotCommand);
-    }
-
-    #[test]
-    fn empty_slash_is_rejected() {
-        assert!(matches!(parse_line("/"), Err(CommandError::EmptyCommand)));
-        assert!(matches!(
-            parse_line("/   "),
-            Err(CommandError::EmptyCommand)
-        ));
-    }
-
-    #[test]
-    fn command_with_quoted_args_parses() {
-        let parsed = parse_line(r#"/model "openai/gpt 4" medium"#).unwrap();
-
-        assert_eq!(
-            parsed,
-            ParseOutcome::Command(CommandInvocation {
-                name: "model".to_owned(),
-                args: vec!["openai/gpt 4".to_owned(), "medium".to_owned()]
-            })
-        );
-    }
-
-    #[test]
-    fn escaped_quotes_parse_inside_quotes() {
-        let parsed = parse_line(r#"/echo "say \"hello\"""#).unwrap();
-
-        assert_eq!(
-            parsed,
-            ParseOutcome::Command(CommandInvocation {
-                name: "echo".to_owned(),
-                args: vec![r#"say "hello""#.to_owned()]
-            })
-        );
-    }
-
-    #[test]
-    fn unterminated_quote_is_rejected() {
-        assert!(matches!(
-            parse_line(r#"/model "openrouter/model"#),
-            Err(CommandError::UnterminatedQuote)
-        ));
-    }
-
-    #[test]
-    fn uppercase_command_is_unknown() {
-        assert!(matches!(
-            parse_line("/History"),
-            Err(CommandError::UnknownCommand { name }) if name == "History"
-        ));
-    }
-
-    #[test]
-    fn duplicate_registration_fails() {
-        #[derive(Default)]
-        struct Context;
-
-        fn execute<'a>(_context: &'a mut Context, _args: Vec<String>) -> CommandFuture<'a> {
-            Box::pin(async { Ok(CommandControl::Continue) })
-        }
-
-        let command = Command {
-            name: "test",
-            usage: "/test",
-            summary: "test",
-            execute,
-        };
-        let mut registry = CommandRegistry::<Context>::new();
-        registry.register(command).unwrap();
-
-        assert!(matches!(
-            registry.register(command),
-            Err(CommandError::DuplicateCommand { name }) if name == "test"
-        ));
-    }
-
-    #[test]
-    fn search_empty_query_returns_all_commands() {
-        let registry = test_registry();
-        let matches = registry.search("", 8);
-
-        assert_eq!(
-            matches
-                .iter()
-                .map(|entry| entry.metadata.name)
-                .collect::<Vec<_>>(),
-            vec!["clear", "history", "model", "resume"]
-        );
-    }
-
-    #[test]
-    fn search_ranks_prefix_before_subsequence() {
-        let registry = registry_with([("haiku", "Write haiku"), ("history", "List sessions")]);
-        let matches = registry.search("hi", 8);
-
-        assert_eq!(matches[0].metadata.name, "history");
-        assert!(matches.iter().any(|entry| entry.metadata.name == "haiku"));
-    }
-
-    #[test]
-    fn search_matches_fuzzy_subsequence() {
-        let registry = test_registry();
-        let matches = registry.search("hi", 8);
-
-        assert_eq!(
-            matches
-                .iter()
-                .map(|entry| entry.metadata.name)
-                .collect::<Vec<_>>(),
-            vec!["history"]
-        );
-    }
-
-    #[test]
-    fn search_is_case_sensitive() {
-        let registry = test_registry();
-
-        assert!(registry.search("History", 8).is_empty());
-    }
-
-    fn test_registry() -> CommandRegistry<()> {
-        registry_with([
-            ("clear", "Clear terminal"),
-            ("history", "List sessions"),
-            ("model", "Set model"),
-            ("resume", "Resume session"),
-        ])
-    }
-
-    fn registry_with<const N: usize>(
-        entries: [(&'static str, &'static str); N],
-    ) -> CommandRegistry<()> {
-        fn execute<'a>(_context: &'a mut (), _args: Vec<String>) -> CommandFuture<'a> {
-            Box::pin(async { Ok(CommandControl::Continue) })
-        }
-
-        let mut registry = CommandRegistry::new();
-        for (name, summary) in entries {
-            registry
-                .register(Command {
-                    name,
-                    usage: name,
-                    summary,
-                    execute,
-                })
-                .unwrap();
-        }
-        registry
-    }
+    include!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/unit/commands.rs"
+    ));
 }

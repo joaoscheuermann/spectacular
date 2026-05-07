@@ -281,18 +281,8 @@ fn generate_id() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    #[test]
-    fn new_session_schema_version_is_v2() {
-        let event = store::session_started("a83f19c2", SCHEMA_VERSION, UNTITLED);
-
-        assert!(matches!(
-            event,
-            ChatEvent::SessionStarted {
-                schema_version: 2,
-                ..
-            }
-        ));
-    }
+    include!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/unit/chat/session.rs"
+    ));
 }
