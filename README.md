@@ -50,8 +50,8 @@ commands, and unterminated quotes are errors.
 | `/model [model-id none|low|medium|high]` | Shows or updates the coding model and reasoning level. |
 | `/reasoning [none|low|medium|high]` | Shows or updates coding reasoning. |
 | `/retry` | Replays the latest prompt after truncating the previous response. |
-| `/git-status` | Shows working tree status and staged diff stats. |
-| `/git-commit` | Generates a conventional commit message for staged changes and commits them. |
+| `/git status` | Shows working tree status and staged diff stats. |
+| `/git commit` | Generates a conventional commit message for staged changes and commits them. |
 
 ### Built-In Tools
 

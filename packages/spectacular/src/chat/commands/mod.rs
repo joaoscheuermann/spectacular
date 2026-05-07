@@ -256,8 +256,7 @@ pub fn registry() -> Result<ChatCommandAdapter, CommandError> {
         config::model::command(),
         config::task::command(),
         runtime::retry::command(),
-        git::status::command(),
-        git::commit::command(),
+        git::command(),
     ])
 }
 

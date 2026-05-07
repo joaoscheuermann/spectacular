@@ -1,11 +1,12 @@
-//! `/git-commit` command implementation.
+//! `/git-commit` command implementation (legacy).
 //!
 //! Generates a conventional commit message using a standalone AI agent
 //! and commits the currently staged changes.
 
 use crate::chat::commands::{
-    ChatCommand, ChatCommandContext, ChatCommandFuture, ChatCommandResult,
+    ChatCommandContext, ChatCommandFuture, ChatCommandResult,
 };
+
 use crate::chat::provider::provider_for_runtime;
 use spectacular_agent::{Agent, AgentConfig, AgentEvent};
 use spectacular_commands::CommandError;
@@ -19,20 +20,11 @@ const MAX_DIFF_CHARS: usize = 15_000;
 const TRUNCATED_DIFF_NOTICE: &str =
     "warning: diff is large and has been truncated for the commit message agent";
 
-pub fn command() -> ChatCommand {
-    ChatCommand {
-        name: "git-commit",
-        usage: "/git-commit",
-        summary: "Generate a conventional commit message and commit staged changes",
-        completion: &[],
-        execute,
-    }
-}
-
-fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatCommandFuture<'a> {
+/// Internal execute function that can be called from the parent git command
+pub fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatCommandFuture<'a> {
     Box::pin(async move {
         if !args.is_empty() {
-            return ChatCommandResult::error(CommandError::usage("/commit").to_string());
+            return ChatCommandResult::error(CommandError::usage("/git commit").to_string());
         }
 
         // 1. Check for staged changes
