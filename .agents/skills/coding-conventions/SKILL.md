@@ -12,7 +12,7 @@ Use this skill as the **single source** for principles and coding rules referenc
 | Role | What to read |
 |------|----------------|
 | **Architect / planning** | Design principles ([references/srp.md](references/srp.md) through [references/kiss.md](references/kiss.md), [references/dry.md](references/dry.md)). Open [references/nxlv-python.md](references/nxlv-python.md) or [references/monodon-rust.md](references/monodon-rust.md) when scaffolding new packages or crates. |
-| **Developer / implementation** | Read [references/dry.md](references/dry.md) (includes reusability workflow), [references/early-returns.md](references/early-returns.md), [references/functional-programming.md](references/functional-programming.md), [references/dependency-injection.md](references/dependency-injection.md). Use Nx plugin refs when touching Python or Rust project layout. |
+| **Developer / implementation** | Read [references/dry.md](references/dry.md) (includes reusability workflow), [references/early-returns.md](references/early-returns.md), [references/functional-programming.md](references/functional-programming.md), [references/dependency-injection.md](references/dependency-injection.md), [references/file-size-limits.md](references/file-size-limits.md), [references/test-location.md](references/test-location.md). Use Nx plugin refs when touching Python or Rust project layout. |
 
 ## Reference index
 
@@ -35,6 +35,8 @@ Use this skill as the **single source** for principles and coding rules referenc
 - [Early returns & guard clauses](references/early-returns.md)
 - [Functional programming standard (TS/JS-oriented)](references/functional-programming.md)
 - [Dependency injection & explicit parameters](references/dependency-injection.md)
+- [File size limits (250–500 lines)](references/file-size-limits.md)
+- [Test file location (`tests/<name>.<ext>`)](references/test-location.md)
 
 ## Progressive disclosure
 
