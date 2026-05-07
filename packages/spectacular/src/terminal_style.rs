@@ -49,7 +49,7 @@ pub fn tool_style() -> Style {
 }
 
 pub fn title_style() -> Style {
-    CYAN.on_default().bold()
+    GREEN.on_default().bold()
 }
 
 pub fn provider_style() -> Style {

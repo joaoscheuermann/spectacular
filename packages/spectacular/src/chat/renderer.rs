@@ -402,21 +402,28 @@ fn format_opening_banner(view: &OpeningBannerView) -> String {
         .unwrap_or(0)
         .max(OPENING_BANNER_MIN_WIDTH);
     let horizontal = "─".repeat(content_width + 2);
-    let mut rendered = vec![format!("╭{horizontal}╮")];
+    let green = terminal_style::title_style();
+    let mut rendered = vec![paint(green, format!("╭{horizontal}╮"))];
     rendered.push(format!(
-        "│ {} │",
-        paint(
-            terminal_style::title_style(),
-            pad_banner_line(&title, content_width),
-        )
+        "{} {} {}",
+        paint(green, "│"),
+        paint(green, pad_banner_line(&title, content_width)),
+        paint(green, "│")
     ));
     rendered.extend(
         lines
             .iter()
             .skip(1)
-            .map(|line| format!("│ {} │", pad_banner_line(line, content_width))),
+            .map(|line| {
+                format!(
+                    "{} {} {}",
+                    paint(green, "│"),
+                    pad_banner_line(line, content_width),
+                    paint(green, "│")
+                )
+            }),
     );
-    rendered.push(format!("╰{horizontal}╯"));
+    rendered.push(paint(green, format!("╰{horizontal}╯")));
     rendered.join("\n")
 }
 
