@@ -1,6 +1,6 @@
 use crate::chat::model::{ChatModel, ChatRunRequestModel};
 use crate::chat::provider::provider_for_runtime;
-use crate::chat::renderer::Renderer;
+use crate::chat::renderer::{has_visible_assistant_text, Renderer};
 use crate::chat::session::{agent_events_from_records, records_before_latest_user_prompt};
 use crate::chat::title::spawn_title_task;
 use crate::chat::{ChatError, RuntimeSelection};
@@ -104,7 +104,7 @@ impl<'a> ChatRunner<'a> {
         ));
         let mut stream = agent.run_stream(request.prompt.clone());
         let mut title_text = String::new();
-        let mut response_open = false;
+        let mut assistant_output = AssistantResponseRenderState::default();
         let mut title_spawned = self.model.session_manager().has_title()?;
         let mut spinner_visible = true;
         let mut spinner_frame = 0usize;
@@ -135,28 +135,16 @@ impl<'a> ChatRunner<'a> {
                         continue;
                     }
 
-                    let is_assistant_delta = matches!(
-                        &event,
-                        AgentEvent::MessageDelta(delta) if delta.role == ProviderMessageRole::Assistant
-                    );
-                    if is_assistant_delta && !is_streaming {
-                        self.renderer.clear_working();
-                        is_streaming = true;
-                    } else if is_assistant_delta {
-                        // still streaming, spinner stays hidden
-                    } else if is_streaming {
-                        // transition away from streaming
-                        is_streaming = false;
-                    }
-                    if response_open && !is_assistant_delta {
-                        println!("\n");
-                        response_open = false;
-                    }
-                    render_agent_event(self.renderer, &self.tools, &event).await?;
-                    self.model.append_agent_event(&event)?;
                     if let AgentEvent::MessageDelta(delta) = &event {
                         if delta.role == ProviderMessageRole::Assistant {
-                            response_open = true;
+                            if let Some(render) = assistant_output.delta(&delta.content) {
+                                if render.started && !is_streaming {
+                                    self.renderer.clear_working();
+                                    is_streaming = true;
+                                }
+                                self.renderer.assistant_delta(&render.content).await?;
+                            }
+                            self.model.append_agent_event(&event)?;
                             title_text.push_str(&delta.content);
                             if should_spawn_title_task(title_spawned, &title_text) {
                                 spawn_title_task(
@@ -169,8 +157,18 @@ impl<'a> ChatRunner<'a> {
                                 )?;
                                 title_spawned = true;
                             }
+                            continue;
                         }
                     }
+
+                    if assistant_output.close_visible_response() {
+                        println!("\n");
+                    }
+                    if is_streaming {
+                        is_streaming = false;
+                    }
+                    render_agent_event(self.renderer, &self.tools, &event).await?;
+                    self.model.append_agent_event(&event)?;
 
                     if is_terminal_agent_event(&event) {
                         if spinner_visible {
@@ -186,7 +184,7 @@ impl<'a> ChatRunner<'a> {
         if spinner_visible {
             self.renderer.clear_working();
         }
-        if response_open {
+        if assistant_output.close_visible_response() {
             println!("\n");
         }
 
@@ -231,6 +229,49 @@ fn runtime_reasoning_effort(reasoning: ReasoningLevel) -> Option<String> {
     }
 }
 
+#[derive(Default)]
+struct AssistantResponseRenderState {
+    pending: String,
+    visible: bool,
+}
+
+struct AssistantDeltaRender {
+    content: String,
+    started: bool,
+}
+
+impl AssistantResponseRenderState {
+    fn delta(&mut self, content: &str) -> Option<AssistantDeltaRender> {
+        if self.visible {
+            return Some(AssistantDeltaRender {
+                content: content.to_owned(),
+                started: false,
+            });
+        }
+
+        self.pending.push_str(content);
+        if !has_visible_assistant_text(&self.pending) {
+            return None;
+        }
+
+        self.visible = true;
+        Some(AssistantDeltaRender {
+            content: std::mem::take(&mut self.pending),
+            started: true,
+        })
+    }
+
+    fn close_visible_response(&mut self) -> bool {
+        self.pending.clear();
+        if !self.visible {
+            return false;
+        }
+
+        self.visible = false;
+        true
+    }
+}
+
 pub async fn render_agent_event(
     renderer: &Renderer,
     tools: &ToolStorage,
@@ -239,6 +280,10 @@ pub async fn render_agent_event(
     match event {
         AgentEvent::UserPrompt { content } => renderer.user_prompt(content),
         AgentEvent::MessageDelta(delta) if delta.role == ProviderMessageRole::Assistant => {
+            if !has_visible_assistant_text(&delta.content) {
+                return Ok(());
+            }
+
             renderer.assistant_delta(&delta.content).await?;
         }
         AgentEvent::ReasoningDelta(_) => {}
@@ -363,6 +408,29 @@ mod tests {
     #[test]
     fn title_task_triggers_after_nonblank_assistant_text() {
         assert!(should_spawn_title_task(false, "answer"));
+    }
+
+    #[test]
+    fn assistant_response_render_state_hides_blank_response() {
+        let mut state = AssistantResponseRenderState::default();
+
+        assert!(state.delta("").is_none());
+        assert!(state.delta(" \n\t").is_none());
+        assert!(!state.close_visible_response());
+    }
+
+    #[test]
+    fn assistant_response_render_state_starts_when_aggregate_becomes_nonblank() {
+        let mut state = AssistantResponseRenderState::default();
+
+        assert!(state.delta("\n").is_none());
+        let render = state
+            .delta("answer")
+            .expect("nonblank aggregate should become visible");
+
+        assert!(render.started);
+        assert_eq!(render.content, "\nanswer");
+        assert!(state.close_visible_response());
     }
 
     #[test]
