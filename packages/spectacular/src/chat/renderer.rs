@@ -132,6 +132,10 @@ impl Renderer {
     }
 
     pub fn assistant_text(&self, content: &str) {
+        if !has_visible_assistant_text(content) {
+            return;
+        }
+
         self.with_interrupted_working_line(|| {
             println!("{}", paint(assistant_style(), content));
             println!();
@@ -266,7 +270,8 @@ impl Renderer {
     }
 
     fn flush_assistant(&self, buffer: &mut String) {
-        if buffer.is_empty() {
+        if !has_visible_assistant_text(buffer) {
+            buffer.clear();
             return;
         }
 
@@ -410,19 +415,14 @@ fn format_opening_banner(view: &OpeningBannerView) -> String {
         paint(green, pad_banner_line(&title, content_width)),
         paint(green, "│")
     ));
-    rendered.extend(
-        lines
-            .iter()
-            .skip(1)
-            .map(|line| {
-                format!(
-                    "{} {} {}",
-                    paint(green, "│"),
-                    pad_banner_line(line, content_width),
-                    paint(green, "│")
-                )
-            }),
-    );
+    rendered.extend(lines.iter().skip(1).map(|line| {
+        format!(
+            "{} {} {}",
+            paint(green, "│"),
+            pad_banner_line(line, content_width),
+            paint(green, "│")
+        )
+    }));
     rendered.push(paint(green, format!("╰{horizontal}╯")));
     rendered.join("\n")
 }
@@ -530,6 +530,10 @@ fn result_failed(content: &str, parsed: Option<&Value>) -> bool {
 
 pub fn paint(style: Style, value: impl AsRef<str>) -> String {
     terminal_style::paint(style, value)
+}
+
+pub(crate) fn has_visible_assistant_text(content: &str) -> bool {
+    !content.trim().is_empty()
 }
 
 fn format_json_preview(value: &str) -> String {
@@ -701,6 +705,13 @@ mod tests {
             "registered output: parsed=none; raw=not json"
         );
         assert_eq!(result.status, ToolStatus::Done);
+    }
+
+    #[test]
+    fn assistant_visibility_requires_nonblank_trimmed_text() {
+        assert!(!has_visible_assistant_text(""));
+        assert!(!has_visible_assistant_text(" \n\t"));
+        assert!(has_visible_assistant_text(" answer "));
     }
 
     #[test]
