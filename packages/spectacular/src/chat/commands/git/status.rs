@@ -1,24 +1,15 @@
 use crate::chat::commands::{
-    ChatCommand, ChatCommandContext, ChatCommandFuture, ChatCommandResult,
+    ChatCommandContext, ChatCommandFuture, ChatCommandResult,
 };
 use spectacular_commands::CommandError;
 
 use std::process::Command;
 
-pub fn command() -> ChatCommand {
-    ChatCommand {
-        name: "git-status",
-        usage: "/git-status",
-        summary: "Show current git status and staged changes",
-        completion: &[],
-        execute,
-    }
-}
-
-fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatCommandFuture<'a> {
+/// Internal execute function that can be called from the parent git command
+pub fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatCommandFuture<'a> {
     Box::pin(async move {
         if !args.is_empty() {
-            return ChatCommandResult::error(CommandError::usage("/git-status").to_string());
+            return ChatCommandResult::error(CommandError::usage("/git status").to_string());
         }
 
         // Get git status
