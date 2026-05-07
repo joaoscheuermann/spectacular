@@ -6,16 +6,31 @@ use spectacular_config::{
     ConfigError, ProviderConfig, ProvidersConfig, SpectacularConfig, TaskModelConfig,
     TaskModelSlot, TaskModels,
 };
+use spectacular_llms::LlmDebugLogger;
 use std::collections::BTreeMap;
 
 pub struct ChatModel {
     session: SessionManager,
     runtime: RuntimeSelection,
+    debug_logger: LlmDebugLogger,
 }
 
 impl ChatModel {
+    #[cfg(test)]
     pub fn new(session: SessionManager, runtime: RuntimeSelection) -> Self {
-        Self { session, runtime }
+        Self::new_with_debug_logger(session, runtime, LlmDebugLogger::disabled())
+    }
+
+    pub fn new_with_debug_logger(
+        session: SessionManager,
+        runtime: RuntimeSelection,
+        debug_logger: LlmDebugLogger,
+    ) -> Self {
+        Self {
+            session,
+            runtime,
+            debug_logger,
+        }
     }
 
     pub fn start_new_session(&mut self) -> Result<SessionStartedModel, ChatError> {
@@ -154,6 +169,10 @@ impl ChatModel {
 
     pub fn runtime(&self) -> &RuntimeSelection {
         &self.runtime
+    }
+
+    pub fn debug_logger(&self) -> &LlmDebugLogger {
+        &self.debug_logger
     }
 
     pub(super) fn session_manager(&self) -> &SessionManager {

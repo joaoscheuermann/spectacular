@@ -1,35 +1,52 @@
 use super::client::OpenRouterHttpClient;
-use super::dto::{
-    OpenRouterChatChunk, OpenRouterChatDeltaToolCall, OpenRouterChatRequest,
-    OpenRouterModelsResponse, OpenRouterStreamError,
-};
+use super::debug;
+use super::dto::OpenRouterChatRequest;
+#[cfg(test)]
+use super::models::{fetch_openrouter_models, validate_openrouter_api_key};
+#[cfg(test)]
+use super::parser::parse_openrouter_chat_chunk;
+use super::parser::{parse_openrouter_chat_chunk_with_accumulator, OpenRouterToolCallAccumulator};
 use super::sse::OpenRouterSseParser;
 use crate::{
-    Cancellation, FinishReason, MessageDelta, Model, ProviderError, ProviderFinished,
-    ProviderRequest, ProviderStream, ProviderStreamEvent, ProviderToolCall, ReasoningDelta,
+    Cancellation, FinishReason, LlmDebugLogger, ProviderError, ProviderFinished, ProviderRequest,
+    ProviderStream, ProviderStreamEvent,
 };
-use std::collections::BTreeMap;
+use serde_json::json;
 use tokio::sync::mpsc;
 
 pub(crate) async fn openrouter_stream_completion(
     api_key: String,
     client: OpenRouterHttpClient,
+    debug_logger: LlmDebugLogger,
     request: ProviderRequest,
     cancellation: Cancellation,
 ) -> Result<ProviderStream, ProviderError> {
     if cancellation.is_cancelled() {
+        debug::log_event(&debug_logger, "stream_cancelled_before_start", json!({}));
         return Err(ProviderError::CancellationError);
     }
     if api_key.trim().is_empty() {
+        debug::log_error(
+            &debug_logger,
+            "stream_invalid_api_key",
+            &ProviderError::InvalidApiKey,
+        );
         return Err(ProviderError::InvalidApiKey);
     }
 
     let (sender, receiver) = mpsc::channel(128);
     tokio::spawn(async move {
-        let result =
-            stream_openrouter_response(&client, &api_key, request, cancellation, sender.clone())
-                .await;
+        let result = stream_openrouter_response(
+            &client,
+            &api_key,
+            &debug_logger,
+            request,
+            cancellation,
+            sender.clone(),
+        )
+        .await;
         if let Err(error) = result {
+            debug::log_error(&debug_logger, "stream_error", &error);
             let _ = sender.send(Err(error)).await;
         }
     });
@@ -40,18 +57,43 @@ pub(crate) async fn openrouter_stream_completion(
 async fn stream_openrouter_response(
     client: &OpenRouterHttpClient,
     api_key: &str,
+    debug_logger: &LlmDebugLogger,
     request: ProviderRequest,
     cancellation: Cancellation,
     sender: mpsc::Sender<Result<ProviderStreamEvent, ProviderError>>,
 ) -> Result<(), ProviderError> {
-    let body = OpenRouterChatRequest::from_provider_request(request)?;
-    let mut response = client.stream_response(api_key, &body).await?;
+    let body = OpenRouterChatRequest::from_provider_request(request).map_err(|error| {
+        debug::log_error(debug_logger, "chat_request_build_error", &error);
+        error
+    })?;
+    if let Ok(raw_json) = serde_json::to_value(&body) {
+        debug::log_raw_json(debug_logger, "chat_request", raw_json);
+    }
+
+    let mut response = client
+        .stream_response(api_key, &body)
+        .await
+        .map_err(|error| {
+            debug::log_error(debug_logger, "chat_request_network_error", &error);
+            error
+        })?;
 
     let status = response.status().as_u16();
+    debug::log_event(
+        debug_logger,
+        "chat_response_status",
+        json!({ "status": status }),
+    );
     if status == 401 || status == 403 {
+        debug::log_error(
+            debug_logger,
+            "chat_response_invalid_api_key",
+            &ProviderError::InvalidApiKey,
+        );
         return Err(ProviderError::InvalidApiKey);
     }
     if !(200..300).contains(&status) {
+        log_non_success_response_body(debug_logger, response).await;
         return Err(ProviderError::ProviderUnavailable {
             provider_name: "OpenRouter".to_owned(),
         });
@@ -60,20 +102,16 @@ async fn stream_openrouter_response(
     let mut sse_parser = OpenRouterSseParser::default();
     let mut saw_finished = false;
     let mut stream_state = OpenRouterStreamState::default();
-    while let Some(chunk) = response
-        .chunk()
-        .await
-        .map_err(|error| ProviderError::NetworkError {
-            provider_name: "OpenRouter".to_owned(),
-            reason: error.to_string(),
-        })?
-    {
+    while let Some(chunk) = next_response_chunk(&mut response, debug_logger).await? {
         if cancellation.is_cancelled() {
+            debug::log_event(debug_logger, "stream_cancelled", json!({}));
             return Err(ProviderError::CancellationError);
         }
 
-        for payload in sse_parser.push(&chunk)? {
+        for payload in parse_sse_payloads(&mut sse_parser, &chunk, debug_logger)? {
+            debug::log_raw_text(debug_logger, "sse_payload", &payload);
             if payload.trim() == "[DONE]" {
+                debug::log_event(debug_logger, "sse_done", json!({}));
                 if stream_state.has_pending_tool_call() {
                     return Err(ProviderError::MalformedResponse {
                         provider_name: "OpenRouter".to_owned(),
@@ -84,13 +122,15 @@ async fn stream_openrouter_response(
                     let finished = stream_state
                         .take_pending_finish()
                         .unwrap_or_else(ProviderFinished::stopped);
+                    debug::log_finish(debug_logger, "stream_finished", &finished);
                     send_openrouter_event(ProviderStreamEvent::Finished(finished), &sender).await?;
                 }
                 return Ok(());
             }
 
             let finished_in_payload =
-                send_openrouter_payload_events(&payload, &mut stream_state, &sender).await?;
+                send_openrouter_payload_events(&payload, &mut stream_state, debug_logger, &sender)
+                    .await?;
             saw_finished |= finished_in_payload;
             if finished_in_payload {
                 return Ok(());
@@ -109,10 +149,51 @@ async fn stream_openrouter_response(
         let finished = stream_state
             .take_pending_finish()
             .unwrap_or_else(ProviderFinished::stopped);
+        debug::log_finish(debug_logger, "stream_finished", &finished);
         send_openrouter_event(ProviderStreamEvent::Finished(finished), &sender).await?;
     }
 
     Ok(())
+}
+
+async fn next_response_chunk(
+    response: &mut reqwest::Response,
+    debug_logger: &LlmDebugLogger,
+) -> Result<Option<Vec<u8>>, ProviderError> {
+    response
+        .chunk()
+        .await
+        .map_err(|error| {
+            let error = ProviderError::NetworkError {
+                provider_name: "OpenRouter".to_owned(),
+                reason: error.to_string(),
+            };
+            debug::log_error(debug_logger, "stream_chunk_network_error", &error);
+            error
+        })
+        .map(|chunk| chunk.map(|chunk| chunk.to_vec()))
+}
+
+fn parse_sse_payloads(
+    sse_parser: &mut OpenRouterSseParser,
+    chunk: &[u8],
+    debug_logger: &LlmDebugLogger,
+) -> Result<Vec<String>, ProviderError> {
+    sse_parser.push(chunk).map_err(|error| {
+        debug::log_error(debug_logger, "sse_parse_error", &error);
+        error
+    })
+}
+
+async fn log_non_success_response_body(debug_logger: &LlmDebugLogger, response: reqwest::Response) {
+    match response.text().await {
+        Ok(body) => debug::log_raw_text(debug_logger, "chat_response_error_body", &body),
+        Err(error) => debug::log_event(
+            debug_logger,
+            "chat_response_error_body_read_failed",
+            json!({ "message": error.to_string() }),
+        ),
+    }
 }
 
 #[derive(Default)]
@@ -134,11 +215,17 @@ impl OpenRouterStreamState {
 async fn send_openrouter_payload_events(
     payload: &str,
     state: &mut OpenRouterStreamState,
+    debug_logger: &LlmDebugLogger,
     sender: &mpsc::Sender<Result<ProviderStreamEvent, ProviderError>>,
 ) -> Result<bool, ProviderError> {
-    for event in
-        parse_openrouter_chat_chunk_with_accumulator(payload, &mut state.tool_call_accumulator)?
-    {
+    let events =
+        parse_openrouter_chat_chunk_with_accumulator(payload, &mut state.tool_call_accumulator)
+            .map_err(|error| {
+                debug::log_error(debug_logger, "payload_parse_error", &error);
+                error
+            })?;
+
+    for event in events {
         let ProviderStreamEvent::Finished(finished) = event else {
             if state.pending_finish.is_some() {
                 return Err(ProviderError::MalformedResponse {
@@ -153,6 +240,7 @@ async fn send_openrouter_payload_events(
         };
 
         if finished.finish_reason == FinishReason::ToolCalls {
+            debug::log_finish(debug_logger, "stream_finished", &finished);
             send_openrouter_event(ProviderStreamEvent::Finished(finished), sender).await?;
             return Ok(true);
         }
@@ -163,6 +251,7 @@ async fn send_openrouter_payload_events(
             } else {
                 finished
             };
+            debug::log_finish(debug_logger, "stream_finished", &finished);
             send_openrouter_event(ProviderStreamEvent::Finished(finished), sender).await?;
             return Ok(true);
         }
@@ -197,401 +286,15 @@ async fn send_openrouter_event(
 }
 
 #[cfg(test)]
-fn parse_openrouter_chat_chunk(payload: &str) -> Result<Vec<ProviderStreamEvent>, ProviderError> {
-    let mut accumulator = OpenRouterToolCallAccumulator::default();
-    parse_openrouter_chat_chunk_with_accumulator(payload, &mut accumulator)
-}
-
-fn parse_openrouter_chat_chunk_with_accumulator(
-    payload: &str,
-    accumulator: &mut OpenRouterToolCallAccumulator,
-) -> Result<Vec<ProviderStreamEvent>, ProviderError> {
-    let chunk: OpenRouterChatChunk =
-        serde_json::from_str(payload).map_err(|error| ProviderError::ResponseParsingFailed {
-            provider_name: "OpenRouter".to_owned(),
-            reason: error.to_string(),
-        })?;
-    let mut events = Vec::new();
-    let usage = chunk.usage;
-
-    if let Some(error) = chunk.error {
-        return Err(openrouter_stream_error(error, payload));
-    }
-
-    if chunk.choices.is_empty() {
-        let Some(usage) = usage else {
-            return Err(ProviderError::MalformedResponse {
-                provider_name: "OpenRouter".to_owned(),
-                reason: format!(
-                    "stream chunk omitted choices; OpenRouter response chunk JSON: {payload}"
-                ),
-            });
-        };
-
-        events.push(ProviderStreamEvent::Finished(ProviderFinished {
-            finish_reason: FinishReason::Stop,
-            tool_calls: Vec::new(),
-            usage: Some(usage),
-            reasoning: None,
-        }));
-        return Ok(events);
-    }
-
-    for choice in chunk.choices {
-        let mut finish_reason = choice.finish_reason;
-        let native_finish_reason = choice.native_finish_reason;
-        let mut complete_tool_calls = Vec::new();
-        if let Some(delta) = choice.delta {
-            if let Some(tool_calls) = delta.tool_calls {
-                accumulator.add_chunks(tool_calls)?;
-            }
-            if let Some(content) = delta.content {
-                if !content.is_empty() {
-                    events.push(ProviderStreamEvent::MessageDelta(MessageDelta::assistant(
-                        content,
-                    )));
-                }
-            }
-            if let Some(reasoning) = delta.reasoning {
-                if !reasoning.is_empty() {
-                    events.push(ProviderStreamEvent::ReasoningDelta(ReasoningDelta {
-                        content: reasoning,
-                        metadata: None,
-                    }));
-                }
-            }
-            if let Some(refusal) = delta.refusal {
-                if !refusal.is_empty() {
-                    events.push(ProviderStreamEvent::MessageDelta(MessageDelta::assistant(
-                        refusal,
-                    )));
-                }
-            }
-            if finish_reason.is_none() {
-                finish_reason = delta.finish_reason;
-            }
-        }
-
-        if let Some(message) = choice.message {
-            if let Some(content) = message.content {
-                if !content.is_empty() {
-                    events.push(ProviderStreamEvent::MessageDelta(MessageDelta::assistant(
-                        content,
-                    )));
-                }
-            }
-            if let Some(reasoning) = message.reasoning {
-                if !reasoning.is_empty() {
-                    events.push(ProviderStreamEvent::ReasoningDelta(ReasoningDelta {
-                        content: reasoning,
-                        metadata: None,
-                    }));
-                }
-            }
-            if let Some(refusal) = message.refusal {
-                if !refusal.is_empty() {
-                    events.push(ProviderStreamEvent::MessageDelta(MessageDelta::assistant(
-                        refusal,
-                    )));
-                }
-            }
-            if let Some(tool_calls) = message.tool_calls {
-                complete_tool_calls = tool_calls
-                    .into_iter()
-                    .enumerate()
-                    .map(|(index, tool_call)| tool_call.into_provider_tool_call(index))
-                    .collect::<Result<Vec<_>, _>>()?;
-            }
-        }
-
-        if let Some(finish_reason) = finish_reason {
-            let finish_reason = parse_openrouter_finish_reason(&finish_reason);
-            let tool_calls = if finish_reason == FinishReason::ToolCalls {
-                let mut accumulated = if accumulator.has_pending() {
-                    accumulator.finish_tool_calls()?
-                } else {
-                    Vec::new()
-                };
-                accumulated.extend(complete_tool_calls);
-                if accumulated.is_empty() {
-                    return Err(ProviderError::MalformedResponse {
-                        provider_name: "OpenRouter".to_owned(),
-                        reason: openrouter_empty_tool_call_finish_reason(
-                            native_finish_reason.as_deref(),
-                            payload,
-                        ),
-                    });
-                }
-                accumulated
-            } else {
-                if accumulator.has_pending() || !complete_tool_calls.is_empty() {
-                    return Err(ProviderError::MalformedResponse {
-                        provider_name: "OpenRouter".to_owned(),
-                        reason: format!(
-                            "tool-call chunks ended without tool-call finish; OpenRouter response chunk JSON: {payload}"
-                        ),
-                    });
-                }
-                Vec::new()
-            };
-
-            events.push(ProviderStreamEvent::Finished(ProviderFinished {
-                finish_reason,
-                tool_calls,
-                usage,
-                reasoning: None,
-            }));
-        }
-    }
-
-    Ok(events)
-}
-
-fn parse_openrouter_finish_reason(reason: &str) -> FinishReason {
-    match reason {
-        "length" => FinishReason::Length,
-        "tool_calls" => FinishReason::ToolCalls,
-        "cancelled" => FinishReason::Cancelled,
-        "content_filter" => FinishReason::ContentFilter,
-        "error" => FinishReason::Error,
-        _ => FinishReason::Stop,
-    }
-}
-
-fn openrouter_stream_error(error: OpenRouterStreamError, payload: &str) -> ProviderError {
-    ProviderError::StreamError {
-        provider_name: "OpenRouter".to_owned(),
-        code: error
-            .code
-            .as_ref()
-            .and_then(openrouter_error_code_to_string),
-        message: format!(
-            "{}; OpenRouter response chunk JSON: {payload}",
-            error.message
-        ),
-    }
-}
-
-fn openrouter_error_code_to_string(code: &serde_json::Value) -> Option<String> {
-    match code {
-        serde_json::Value::Null => None,
-        serde_json::Value::String(code) if code.trim().is_empty() => None,
-        serde_json::Value::String(code) => Some(code.clone()),
-        serde_json::Value::Number(code) => Some(code.to_string()),
-        _ => Some(code.to_string()),
-    }
-}
-
-fn openrouter_empty_tool_call_finish_reason(
-    native_finish_reason: Option<&str>,
-    payload: &str,
-) -> String {
-    let native_finish_reason = native_finish_reason
-        .filter(|reason| !reason.trim().is_empty())
-        .unwrap_or("unknown");
-
-    format!(
-        "OpenRouter reported finish_reason=tool_calls without any tool call data \
-         (no delta.tool_calls and no message.tool_calls). \
-         native_finish_reason={native_finish_reason}. \
-         This usually means the selected model/provider route stopped without emitting a native function call, \
-         even though tools were present. Try a different tool-capable model/provider route or disable tools for this model. \
-         OpenRouter response chunk JSON: {payload}"
-    )
-}
-
-#[derive(Default)]
-struct OpenRouterToolCallAccumulator {
-    tool_calls: BTreeMap<usize, OpenRouterAccumulatedToolCall>,
-}
-
-impl OpenRouterToolCallAccumulator {
-    fn add_chunks(
-        &mut self,
-        tool_calls: Vec<OpenRouterChatDeltaToolCall>,
-    ) -> Result<(), ProviderError> {
-        for tool_call in tool_calls {
-            if let Some(kind) = tool_call.kind.as_deref() {
-                if kind != "function" {
-                    return Err(ProviderError::MalformedResponse {
-                        provider_name: "OpenRouter".to_owned(),
-                        reason: format!("unsupported tool-call type `{kind}`"),
-                    });
-                }
-            }
-
-            let accumulated = self.tool_calls.entry(tool_call.index).or_default();
-            if let Some(id) = tool_call.id {
-                if let Some(existing_id) = accumulated.id.as_deref() {
-                    if existing_id != id {
-                        return Err(ProviderError::MalformedResponse {
-                            provider_name: "OpenRouter".to_owned(),
-                            reason: format!(
-                                "tool-call index {} changed id from `{existing_id}` to `{id}`",
-                                tool_call.index
-                            ),
-                        });
-                    }
-                } else {
-                    accumulated.id = Some(id);
-                }
-            }
-
-            if let Some(function) = tool_call.function {
-                if let Some(name) = function.name {
-                    accumulated.name.push_str(&name);
-                }
-                if let Some(arguments) = function.arguments {
-                    accumulated.arguments.push_str(&arguments);
-                    accumulated.saw_arguments = true;
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    fn has_pending(&self) -> bool {
-        !self.tool_calls.is_empty()
-    }
-
-    fn finish_tool_calls(&mut self) -> Result<Vec<ProviderToolCall>, ProviderError> {
-        if self.tool_calls.is_empty() {
-            return Err(ProviderError::MalformedResponse {
-                provider_name: "OpenRouter".to_owned(),
-                reason: "tool-call finish did not include tool-call chunks".to_owned(),
-            });
-        }
-
-        let tool_calls = std::mem::take(&mut self.tool_calls);
-        tool_calls
-            .into_iter()
-            .map(|(index, accumulated)| accumulated.into_provider_tool_call(index))
-            .collect()
-    }
-}
-
-#[derive(Default)]
-struct OpenRouterAccumulatedToolCall {
-    id: Option<String>,
-    name: String,
-    arguments: String,
-    saw_arguments: bool,
-}
-
-impl OpenRouterAccumulatedToolCall {
-    fn into_provider_tool_call(self, index: usize) -> Result<ProviderToolCall, ProviderError> {
-        let Some(id) = self.id.filter(|id| !id.trim().is_empty()) else {
-            return Err(ProviderError::MalformedResponse {
-                provider_name: "OpenRouter".to_owned(),
-                reason: format!("tool-call index {index} omitted id"),
-            });
-        };
-
-        if self.name.trim().is_empty() {
-            return Err(ProviderError::MalformedResponse {
-                provider_name: "OpenRouter".to_owned(),
-                reason: format!("tool-call index {index} omitted function name"),
-            });
-        }
-
-        if !self.saw_arguments {
-            return Err(ProviderError::MalformedResponse {
-                provider_name: "OpenRouter".to_owned(),
-                reason: format!("tool-call index {index} omitted function arguments"),
-            });
-        }
-
-        Ok(ProviderToolCall::new(id, self.name, self.arguments))
-    }
-}
-
-pub(crate) fn validate_openrouter_api_key(
-    api_key: &str,
-    request_current_key: impl FnOnce(&str) -> Result<u16, ProviderError>,
-) -> Result<(), ProviderError> {
-    let api_key = api_key.trim();
-    if api_key.is_empty() {
-        return Err(ProviderError::InvalidApiKey);
-    }
-
-    match request_current_key(api_key)? {
-        200 => Ok(()),
-        401 | 403 => Err(ProviderError::InvalidApiKey),
-        _ => Err(ProviderError::ProviderUnavailable {
-            provider_name: "OpenRouter".to_owned(),
-        }),
-    }
-}
-
-pub(crate) fn fetch_openrouter_models(
-    api_key: &str,
-    request_models: impl FnOnce(&str) -> Result<(u16, String), ProviderError>,
-) -> Result<Vec<Model>, ProviderError> {
-    let api_key = api_key.trim();
-    if api_key.is_empty() {
-        return Err(ProviderError::InvalidApiKey);
-    }
-
-    let (status, body) = request_models(api_key)?;
-    match status {
-        200 => parse_openrouter_models(&body),
-        401 | 403 => Err(ProviderError::InvalidApiKey),
-        _ => Err(ProviderError::ModelFetchFailed {
-            provider_name: "OpenRouter".to_owned(),
-        }),
-    }
-}
-
-fn parse_openrouter_models(body: &str) -> Result<Vec<Model>, ProviderError> {
-    let value: serde_json::Value =
-        serde_json::from_str(body).map_err(|error| ProviderError::ResponseParsingFailed {
-            provider_name: "OpenRouter".to_owned(),
-            reason: error.to_string(),
-        })?;
-    let response: OpenRouterModelsResponse =
-        serde_json::from_value(value).map_err(|error| ProviderError::MalformedResponse {
-            provider_name: "OpenRouter".to_owned(),
-            reason: error.to_string(),
-        })?;
-    let models = response
-        .data
-        .into_iter()
-        .filter_map(|model| {
-            let id = model.id.trim();
-            if id.is_empty() {
-                return None;
-            }
-
-            let display_name = model
-                .name
-                .as_deref()
-                .map(str::trim)
-                .filter(|name| !name.is_empty())
-                .unwrap_or(id);
-
-            Some(Model::new(id, display_name))
-        })
-        .collect::<Vec<_>>();
-
-    if models.is_empty() {
-        return Err(ProviderError::NoModelsReturned {
-            provider_name: "OpenRouter".to_owned(),
-        });
-    }
-
-    Ok(models)
-}
-
-#[cfg(test)]
 mod tests {
     use super::super::dto::OpenRouterChatRequest;
     use super::super::sse::OpenRouterSseParser;
     use super::super::OpenRouterProvider;
     use super::*;
     use crate::{
-        LlmProvider, ProviderCapabilities, ProviderContextLimits, ProviderMessage,
-        ProviderMessageRole, ToolManifest, UsageMetadata,
+        LlmDebugLogger, LlmProvider, MessageDelta, Model, ProviderCapabilities,
+        ProviderContextLimits, ProviderMessage, ProviderMessageRole, ProviderToolCall,
+        ReasoningDelta, ToolManifest, UsageMetadata,
     };
     use serde_json::json;
 
@@ -878,6 +581,7 @@ mod tests {
         let should_stop = futures::executor::block_on(send_openrouter_payload_events(
             r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"tool_terminal_TXIsWhOkok7u4ZqvpAeG","type":"function","function":{"name":"terminal","arguments":"{\"command\":\"pwd\"}"}}]},"finish_reason":"tool_calls"}]}"#,
             &mut state,
+            &LlmDebugLogger::disabled(),
             &sender,
         ))
         .unwrap();
@@ -904,6 +608,7 @@ mod tests {
             futures::executor::block_on(send_openrouter_payload_events(
                 duplicate_empty_finish,
                 &mut state,
+                &LlmDebugLogger::disabled(),
                 &sender,
             ))
             .unwrap();
@@ -919,6 +624,7 @@ mod tests {
         let should_stop = futures::executor::block_on(send_openrouter_payload_events(
             r#"{"choices":[{"delta":{},"finish_reason":"stop"}]}"#,
             &mut state,
+            &LlmDebugLogger::disabled(),
             &sender,
         ))
         .unwrap();
@@ -929,6 +635,7 @@ mod tests {
         let should_stop = futures::executor::block_on(send_openrouter_payload_events(
             r#"{"choices":[],"usage":{"prompt_tokens":12,"completion_tokens":34,"total_tokens":46}}"#,
             &mut state,
+            &LlmDebugLogger::disabled(),
             &sender,
         ))
         .unwrap();

@@ -6,7 +6,7 @@ use clap::{Args, Parser, Subcommand};
 use spectacular_config::{
     ConfigError, ProviderConfig, ReasoningLevel, SpectacularConfig, TaskModelConfig, TaskModelSlot,
 };
-use spectacular_llms::{ProviderError, ProviderMetadata};
+use spectacular_llms::{LlmDebugLogger, ProviderError, ProviderMetadata};
 use spectacular_plan::PlanError;
 use std::process::ExitCode;
 
@@ -74,7 +74,18 @@ enum ConfigOperation {
 #[tokio::main]
 async fn main() -> ExitCode {
     let cli = Cli::parse();
-    match handle(cli).await {
+    let debug_logger = match LlmDebugLogger::create_for_current_exe() {
+        Ok(logger) => logger,
+        Err(error) => {
+            eprintln!(
+                "{}",
+                user_facing_error(&AppError::DebugLog { source: error })
+            );
+            return ExitCode::FAILURE;
+        }
+    };
+
+    match handle(cli, debug_logger).await {
         Ok(Some(output)) => {
             if !output.is_empty() {
                 println!("{output}");
@@ -89,9 +100,9 @@ async fn main() -> ExitCode {
     }
 }
 
-async fn handle(cli: Cli) -> Result<Option<String>, AppError> {
+async fn handle(cli: Cli, debug_logger: LlmDebugLogger) -> Result<Option<String>, AppError> {
     match cli.command {
-        Command::Chat => match chat::run().await {
+        Command::Chat => match chat::run(debug_logger).await {
             Ok(()) | Err(chat::ChatError::Exit) => Ok(None),
             Err(error) => Err(error.into()),
         },
@@ -484,6 +495,7 @@ fn handle_plan_with_loader(
 enum AppError {
     Chat(chat::ChatError),
     Config(ConfigError),
+    DebugLog { source: std::io::Error },
     InvalidConfigCommand(String),
     Plan(PlanError),
     Provider { source: ProviderError },
@@ -510,6 +522,9 @@ fn user_facing_error(error: &AppError) -> String {
         AppError::Chat(error) => error.to_string(),
         AppError::Plan(PlanError::Config(config_error)) | AppError::Config(config_error) => {
             format_config_error(config_error)
+        }
+        AppError::DebugLog { source } => {
+            format!("Failed to create LLM debug log beside the executable: {source}.")
         }
         AppError::InvalidConfigCommand(message) => message.to_owned(),
         AppError::Provider { source } => format_provider_error(source),
