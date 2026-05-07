@@ -28,13 +28,23 @@ pub trait LlmProvider: Send + Sync {
 pub struct Model {
     id: String,
     display_name: String,
+    supported_parameters: Vec<String>,
 }
 
 impl Model {
     pub fn new(id: impl Into<String>, display_name: impl Into<String>) -> Self {
+        Self::with_supported_parameters(id, display_name, Vec::<String>::new())
+    }
+
+    pub fn with_supported_parameters(
+        id: impl Into<String>,
+        display_name: impl Into<String>,
+        supported_parameters: impl IntoIterator<Item = String>,
+    ) -> Self {
         Self {
             id: id.into(),
             display_name: display_name.into(),
+            supported_parameters: supported_parameters.into_iter().collect(),
         }
     }
 
@@ -44,6 +54,16 @@ impl Model {
 
     pub fn display_name(&self) -> &str {
         &self.display_name
+    }
+
+    pub fn supported_parameters(&self) -> &[String] {
+        &self.supported_parameters
+    }
+
+    pub fn supports_parameter(&self, parameter: &str) -> bool {
+        self.supported_parameters
+            .iter()
+            .any(|candidate| candidate == parameter)
     }
 }
 

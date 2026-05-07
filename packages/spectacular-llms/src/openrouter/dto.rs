@@ -268,4 +268,6 @@ pub(crate) struct OpenRouterModelsResponse {
 pub(crate) struct OpenRouterModelResponse {
     pub(crate) id: String,
     pub(crate) name: Option<String>,
+    #[serde(default)]
+    pub(crate) supported_parameters: Vec<String>,
 }

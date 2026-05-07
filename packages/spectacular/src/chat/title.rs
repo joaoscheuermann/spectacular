@@ -3,7 +3,7 @@ use crate::chat::renderer::Renderer;
 use crate::chat::session::SessionManager;
 use crate::chat::{ChatError, RuntimeSelection};
 use spectacular_agent::{Agent, AgentEvent, Store};
-use spectacular_config::{ConfigError, TaskModelConfig, TaskModelSlot};
+use spectacular_config::{ModelConfig, TaskModelSlot};
 use spectacular_llms::{LlmDebugLogger, LlmProvider};
 use std::sync::Arc;
 
@@ -16,7 +16,7 @@ pub(super) fn spawn_title_task(
     debug_logger: LlmDebugLogger,
 ) -> Result<(), ChatError> {
     let config = spectacular_config::read_config_or_default()?;
-    let (provider, slot, model, api_key) = title_model(&config, fallback_runtime)?;
+    let (provider_type, slot, model, api_key) = title_model(&config, fallback_runtime)?;
     let fallback = slot == TaskModelSlot::Coding;
     if fallback {
         renderer.warning("labeling model is not configured; using coding model for session title");
@@ -26,7 +26,7 @@ pub(super) fn spawn_title_task(
         let system_prompt = "Generate a chat title with maximum of 6 words. You will get a User prompt and an Assistant response, use both to generate a title. Only return the title, no other data or text".to_owned();
         let title_prompt =
             format!("Return only the title. \n\nUser: {prompt}\nAssistant: {response}");
-        let Ok(provider) = provider_for_parts(&provider, api_key, debug_logger) else {
+        let Ok(provider) = provider_for_parts(&provider_type, api_key, debug_logger) else {
             return;
         };
         let agent = Arc::new(title_generation_agent(
@@ -81,45 +81,28 @@ where
 fn title_model(
     config: &spectacular_config::SpectacularConfig,
     fallback: &RuntimeSelection,
-) -> Result<(String, TaskModelSlot, TaskModelConfig, String), ChatError> {
-    let provider = config
-        .providers
-        .selected
-        .as_deref()
-        .ok_or(ConfigError::NoSelectedProvider)?;
-    let provider_config = config.providers.available.get(provider).ok_or_else(|| {
-        ConfigError::ProviderNotConfigured {
-            provider: provider.to_owned(),
+) -> Result<(String, TaskModelSlot, ModelConfig, String), ChatError> {
+    if let Some(labeling_key) = config.tasks.get(TaskModelSlot::Labeling) {
+        if let Some(labeling) = config.models.get(labeling_key) {
+            let provider = config.provider_for_model(labeling_key)?;
+            return Ok((
+                provider.provider_type.clone(),
+                TaskModelSlot::Labeling,
+                labeling.clone(),
+                provider.apikey.clone(),
+            ));
         }
-    })?;
-    let api_key = provider_config
-        .key
-        .as_deref()
-        .filter(|key| !key.trim().is_empty())
-        .ok_or_else(|| ConfigError::MissingProviderApiKey {
-            provider: provider.to_owned(),
-        })?
-        .to_owned();
-
-    if let Some(labeling) = provider_config
-        .tasks
-        .labeling
-        .as_ref()
-        .filter(|task| !task.model.trim().is_empty())
-    {
-        return Ok((
-            provider.to_owned(),
-            TaskModelSlot::Labeling,
-            labeling.clone(),
-            api_key,
-        ));
     }
 
     Ok((
-        provider.to_owned(),
+        fallback.provider_type.clone(),
         TaskModelSlot::Coding,
-        TaskModelConfig::new(fallback.model.clone(), fallback.reasoning),
-        api_key,
+        ModelConfig::new(
+            fallback.provider.clone(),
+            fallback.model.clone(),
+            fallback.reasoning,
+        ),
+        fallback.api_key.clone(),
     ))
 }
 

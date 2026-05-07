@@ -11,6 +11,7 @@ use crate::chat::ChatError;
 use spectacular_agent::{AgentEvent, ToolStorage};
 use spectacular_commands::{
     Command, CommandControl, CommandError, CommandFuture, CommandInvocation, CommandRegistry,
+    CompletionCommandSpec, CompletionSubcommandSpec,
 };
 use std::collections::BTreeMap;
 use std::future::Future;
@@ -18,6 +19,11 @@ use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
+
+pub(crate) const SOURCE_PROVIDER_TYPES: &str = "provider-types";
+pub(crate) const SOURCE_PROVIDERS: &str = "providers";
+pub(crate) const SOURCE_MODELS: &str = "models";
+pub(crate) const SOURCE_MODEL_IDS: &str = "model-ids";
 
 pub type ChatCommandFuture<'a> = Pin<Box<dyn Future<Output = ChatCommandResult> + 'a>>;
 
@@ -59,6 +65,7 @@ pub struct ChatCommand {
     pub name: &'static str,
     pub usage: &'static str,
     pub summary: &'static str,
+    pub completion: &'static [CompletionSubcommandSpec],
     pub execute: ChatCommandHandler,
 }
 
@@ -177,12 +184,14 @@ impl<'a> ChatCommandContext<'a> {
 pub struct ChatCommandAdapter {
     commands: BTreeMap<&'static str, ChatCommand>,
     metadata: Arc<CommandRegistry<()>>,
+    completion_specs: Vec<CompletionCommandSpec>,
 }
 
 impl ChatCommandAdapter {
     pub fn new<const N: usize>(commands: [ChatCommand; N]) -> Result<Self, CommandError> {
         let mut handlers = BTreeMap::new();
         let mut metadata = CommandRegistry::new();
+        let mut completion_specs = Vec::new();
         for command in commands {
             metadata.register(Command {
                 name: command.name,
@@ -190,12 +199,19 @@ impl ChatCommandAdapter {
                 summary: command.summary,
                 execute: metadata_execute,
             })?;
+            if !command.completion.is_empty() {
+                completion_specs.push(CompletionCommandSpec {
+                    name: command.name,
+                    subcommands: command.completion,
+                });
+            }
             handlers.insert(command.name, command);
         }
 
         Ok(Self {
             commands: handlers,
             metadata: Arc::new(metadata),
+            completion_specs,
         })
     }
 
@@ -219,6 +235,10 @@ impl ChatCommandAdapter {
     pub fn metadata(&self) -> &Arc<CommandRegistry<()>> {
         &self.metadata
     }
+
+    pub fn completion_specs(&self) -> &[CompletionCommandSpec] {
+        &self.completion_specs
+    }
 }
 
 fn metadata_execute<'a>(_context: &'a mut (), _args: Vec<String>) -> CommandFuture<'a> {
@@ -234,7 +254,7 @@ pub fn registry() -> Result<ChatCommandAdapter, CommandError> {
         session::exit::command(),
         config::provider::command(),
         config::model::command(),
-        config::reasoning::command(),
+        config::task::command(),
         runtime::retry::command(),
         git::status::command(),
         git::commit::command(),
@@ -263,122 +283,8 @@ pub(crate) mod test_support {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::chat::commands::test_support::NoopRunner;
-    use crate::chat::RuntimeSelection;
-    use spectacular_agent::AgentEvent;
-    use spectacular_config::ReasoningLevel;
-    use std::path::PathBuf;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    #[tokio::test]
-    async fn adapter_executes_registered_command_success() {
-        let adapter = ChatCommandAdapter::new([session::clear::command()]).unwrap();
-        let mut model = test_model();
-        let renderer = Renderer::default();
-        let tools = ToolStorage::default();
-        let runner = NoopRunner;
-        let mut control = ChatCommandControl::default();
-        let context = ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
-
-        let result = adapter
-            .execute(
-                context,
-                CommandInvocation {
-                    name: "clear".to_owned(),
-                    args: Vec::new(),
-                },
-            )
-            .await;
-
-        assert_eq!(result, ChatCommandResult::Success);
-    }
-
-    #[test]
-    fn registry_exposes_command_metadata() {
-        let adapter = registry().unwrap();
-
-        assert!(adapter
-            .metadata()
-            .search("", 16)
-            .iter()
-            .any(|entry| entry.metadata.name == "retry"));
-    }
-
-    #[test]
-    fn context_append_agent_event_persists_chat_record() {
-        let mut model = test_model();
-        let renderer = Renderer::default();
-        let tools = ToolStorage::default();
-        let runner = NoopRunner;
-        let mut control = ChatCommandControl::default();
-        {
-            let context =
-                ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
-
-            context
-                .append_agent_event(&AgentEvent::UserPrompt {
-                    content: "persist me".to_owned(),
-                })
-                .unwrap();
-        }
-
-        assert!(model.records().unwrap().iter().any(|record| matches!(
-            record.event(),
-            Some(crate::chat::session::ChatEvent::UserPrompt { content, .. })
-                if content == "persist me"
-        )));
-    }
-
-    #[tokio::test]
-    async fn context_render_records_accepts_transient_records() {
-        let mut model = test_model();
-        let renderer = Renderer::default();
-        let tools = ToolStorage::default();
-        let runner = NoopRunner;
-        let mut control = ChatCommandControl::default();
-        let context = ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
-
-        context.render_records(&[]).await.unwrap();
-    }
-
-    #[test]
-    fn context_render_history_accepts_transient_history() {
-        let mut model = test_model();
-        let renderer = Renderer::default();
-        let tools = ToolStorage::default();
-        let table = model
-            .history(crate::chat::session::HistoryQuery::FirstPage)
-            .unwrap();
-        let runner = NoopRunner;
-        let mut control = ChatCommandControl::default();
-        let context = ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
-
-        context.render_history(&table);
-    }
-
-    fn test_model() -> ChatModel {
-        let session = crate::chat::session::SessionManager::new_in(temp_session_dir("adapter"))
-            .expect("session manager should be created");
-        let mut model = ChatModel::new(
-            session,
-            RuntimeSelection {
-                provider: "openrouter".to_owned(),
-                api_key: "sk-or-v1-test".to_owned(),
-                model: "test/model".to_owned(),
-                reasoning: ReasoningLevel::Medium,
-            },
-        );
-        model.start_new_session().unwrap();
-        model
-    }
-
-    fn temp_session_dir(name: &str) -> PathBuf {
-        let suffix = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-
-        std::env::temp_dir().join(format!("spectacular-command-adapter-{name}-{suffix}"))
-    }
+    include!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/unit/chat/commands/adapter.rs"
+    ));
 }
