@@ -1,6 +1,5 @@
-use crate::display::paint;
+use crate::display::{error_style, paint};
 use crate::path::resolve_workspace_path;
-use anstyle::AnsiColor;
 use glob::Pattern;
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use serde::Deserialize;
@@ -61,7 +60,7 @@ impl Tool for TreeTool {
 
     fn format_output(&self, raw_output: &str, _parsed_output: Option<&Value>) -> ToolDisplay {
         if raw_output.starts_with("Error:") {
-            let status = paint(AnsiColor::BrightRed.on_default().bold(), "failed");
+            let status = paint(error_style(), "failed");
             return format!("{status}: {raw_output}");
         }
 

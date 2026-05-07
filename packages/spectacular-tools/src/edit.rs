@@ -1,6 +1,5 @@
-use crate::display::paint;
+use crate::display::{error_style, paint, success_style};
 use crate::path::resolve_workspace_path;
-use anstyle::AnsiColor;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use similar::{ChangeTag, TextDiff};
@@ -99,7 +98,7 @@ impl Tool for EditTool {
         };
 
         if let Some(error) = output.get("error").and_then(Value::as_str) {
-            let status = paint(AnsiColor::BrightRed.on_default().bold(), "failed");
+            let status = paint(error_style(), "failed");
             return format!("{status}: {error}");
         }
 
@@ -108,7 +107,7 @@ impl Tool for EditTool {
             .and_then(Value::as_u64)
             .map(|line| format!(" at line {line}"))
             .unwrap_or_default();
-        let status = paint(AnsiColor::BrightGreen.on_default().bold(), "edited");
+        let status = paint(success_style(), "edited");
         format!("{status}{first_changed_line}")
     }
 

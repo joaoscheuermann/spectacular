@@ -14,6 +14,7 @@ use spectacular_commands::{
 };
 use std::collections::BTreeMap;
 use std::future::Future;
+use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
@@ -114,8 +115,9 @@ impl<'a> ChatCommandContext<'a> {
         self.renderer.clear_screen();
     }
 
-    pub fn session_created(&self, id: &str) {
-        self.renderer.session_created(id);
+    pub fn session_created(&self, id: &str, directory: &Path) {
+        self.renderer
+            .session_created(id, self.model.runtime(), directory);
     }
 
     pub fn session_resumed(&self, id: &str) {

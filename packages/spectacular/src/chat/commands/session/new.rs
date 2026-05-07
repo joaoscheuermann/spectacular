@@ -18,13 +18,17 @@ fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatComman
             return ChatCommandResult::error(CommandError::usage("/new").to_string());
         }
 
+        let directory = match std::env::current_dir() {
+            Ok(directory) => directory,
+            Err(error) => return ChatCommandResult::error(error.to_string()),
+        };
         let started = match context.model.start_new_session() {
             Ok(started) => started,
             Err(error) => return ChatCommandResult::error(error.to_string()),
         };
 
         context.clear_screen();
-        context.session_created(&started.id);
+        context.session_created(&started.id, &directory);
 
         ChatCommandResult::success()
     })

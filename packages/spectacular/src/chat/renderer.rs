@@ -2,13 +2,18 @@ use crate::chat::model::HistoryTableModel;
 use crate::chat::runner::render_agent_event;
 use crate::chat::session::ChatRecord;
 use crate::chat::ChatError;
-use anstyle::{AnsiColor, Style};
+use crate::terminal_style;
+use anstyle::Style;
 use serde_json::Value;
 use spectacular_agent::AgentEvent;
 use spectacular_agent::ToolStorage;
 use std::io::{self, Write};
+use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
+use unicode_width::UnicodeWidthStr;
+
+use super::RuntimeSelection;
 
 /// Number of visible characters the terminal typewriter writes per tick while
 /// an assistant delta is streaming. Combined with the 50 ms tick this paces
@@ -17,6 +22,7 @@ use std::time::Duration;
 /// finishes or fails.
 pub(crate) const TYPEWRITER_CHARS_PER_TICK: usize = 30;
 const TYPEWRITER_TICK_INTERVAL: Duration = Duration::from_millis(50);
+const OPENING_BANNER_MIN_WIDTH: usize = 52;
 
 #[derive(Default)]
 pub struct Renderer {
@@ -47,8 +53,12 @@ pub enum ToolStatus {
 }
 
 impl Renderer {
-    pub fn session_created(&self, id: &str) {
-        self.notice(format!("new session {id}"));
+    pub fn session_created(&self, id: &str, runtime: &RuntimeSelection, directory: &Path) {
+        let banner = OpeningBannerView::from_runtime(id, runtime, directory);
+        self.with_interrupted_working_line(|| {
+            println!("{}", format_opening_banner(&banner));
+            println!("");
+        });
     }
 
     pub fn resumed(&self, id: &str) {
@@ -265,15 +275,9 @@ impl Renderer {
     }
 
     fn notice(&self, message: impl Into<String>) {
-        use iocraft::prelude::*;
-
         let content = message.into();
         self.with_interrupted_working_line(|| {
-            element! {
-                Text(color: Color::DarkGrey, content: content)
-            }
-            .print();
-            println!();
+            println!("{}", paint(dim_style(), content));
         });
     }
 
@@ -360,6 +364,109 @@ impl Renderer {
     }
 }
 
+#[derive(Debug, Eq, PartialEq)]
+struct OpeningBannerView {
+    version: String,
+    model: String,
+    reasoning: String,
+    directory: String,
+    session_id: String,
+}
+
+impl OpeningBannerView {
+    fn from_runtime(id: &str, runtime: &RuntimeSelection, directory: &Path) -> Self {
+        Self {
+            version: env!("CARGO_PKG_VERSION").to_owned(),
+            model: runtime.model.clone(),
+            reasoning: runtime.reasoning.to_string(),
+            directory: format_directory(directory),
+            session_id: id.to_owned(),
+        }
+    }
+}
+
+fn format_opening_banner(view: &OpeningBannerView) -> String {
+    let title = format!("Spectacular (v{})", view.version);
+    let spacer = String::new();
+    let model = format!(
+        "model:     {} {}   /model to change",
+        view.model, view.reasoning
+    );
+    let directory = format!("directory: {}", view.directory);
+    let session = format!("session:   {}", view.session_id);
+    let lines = [&title, &spacer, &model, &directory, &session];
+    let content_width = lines
+        .iter()
+        .map(|line| UnicodeWidthStr::width(line.as_str()))
+        .max()
+        .unwrap_or(0)
+        .max(OPENING_BANNER_MIN_WIDTH);
+    let horizontal = "─".repeat(content_width + 2);
+    let mut rendered = vec![format!("╭{horizontal}╮")];
+    rendered.push(format!(
+        "│ {} │",
+        paint(
+            terminal_style::title_style(),
+            pad_banner_line(&title, content_width),
+        )
+    ));
+    rendered.extend(
+        lines
+            .iter()
+            .skip(1)
+            .map(|line| format!("│ {} │", pad_banner_line(line, content_width))),
+    );
+    rendered.push(format!("╰{horizontal}╯"));
+    rendered.join("\n")
+}
+
+fn pad_banner_line(line: &str, width: usize) -> String {
+    let padding = width.saturating_sub(UnicodeWidthStr::width(line));
+    format!("{line}{}", " ".repeat(padding))
+}
+
+fn format_directory(directory: &Path) -> String {
+    format_directory_with_home(directory, home_dir().as_deref())
+}
+
+fn format_directory_with_home(directory: &Path, home: Option<&Path>) -> String {
+    let Some(home) = home else {
+        return directory.display().to_string();
+    };
+
+    if directory == home {
+        return "~".to_owned();
+    }
+
+    let Ok(relative) = directory.strip_prefix(home) else {
+        return directory.display().to_string();
+    };
+
+    if relative.as_os_str().is_empty() {
+        return "~".to_owned();
+    }
+
+    format!("~{}{}", MAIN_SEPARATOR, relative.display())
+}
+
+fn home_dir() -> Option<PathBuf> {
+    std::env::var_os("USERPROFILE")
+        .map(PathBuf::from)
+        .filter(|path| !path.as_os_str().is_empty())
+        .or_else(|| {
+            let drive = std::env::var_os("HOMEDRIVE")?;
+            let path = std::env::var_os("HOMEPATH")?;
+            let mut home = drive;
+            home.push(path);
+            Some(PathBuf::from(home)).filter(|path| !path.as_os_str().is_empty())
+        })
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .filter(|path| !path.as_os_str().is_empty())
+        })
+}
+
 impl ToolCallView {
     pub fn from_parts(name: &str, arguments: &str, tools: &ToolStorage) -> Self {
         let name = if name.trim().is_empty() { "tool" } else { name };
@@ -415,8 +522,7 @@ fn result_failed(content: &str, parsed: Option<&Value>) -> bool {
 }
 
 pub fn paint(style: Style, value: impl AsRef<str>) -> String {
-    let value = value.as_ref();
-    format!("{style}{value}{style:#}")
+    terminal_style::paint(style, value)
 }
 
 fn format_json_preview(value: &str) -> String {
@@ -447,31 +553,35 @@ fn compact_value(value: &Value) -> String {
 }
 
 pub fn user_style() -> Style {
-    AnsiColor::BrightGreen.on_default()
+    terminal_style::user_style()
 }
 
 fn assistant_style() -> Style {
-    AnsiColor::BrightWhite.on_default()
+    terminal_style::assistant_style()
 }
 
 fn tool_style() -> Style {
-    AnsiColor::BrightMagenta.on_default().bold()
+    terminal_style::tool_style()
 }
 
 fn success_style() -> Style {
-    AnsiColor::BrightGreen.on_default().bold()
+    terminal_style::success_style()
 }
 
 fn warning_style() -> Style {
-    AnsiColor::BrightYellow.on_default().bold()
+    terminal_style::warning_style()
 }
 
 fn error_style() -> Style {
-    AnsiColor::BrightRed.on_default().bold()
+    terminal_style::error_style()
 }
 
 pub fn dim_style() -> Style {
-    AnsiColor::BrightBlack.on_default()
+    terminal_style::dim_style()
+}
+
+pub fn selection_style() -> Style {
+    terminal_style::selection_style()
 }
 
 #[cfg(test)]
@@ -479,6 +589,7 @@ mod tests {
     use super::*;
     use serde_json::{json, Value};
     use spectacular_agent::{Cancellation, Tool, ToolDisplay, ToolExecution, ToolManifest};
+    use spectacular_config::ReasoningLevel;
 
     #[derive(Clone, Debug)]
     struct DisplayTool;
@@ -618,5 +729,92 @@ mod tests {
         assert_eq!(call.input, "path: foo.txt");
         assert_eq!(result.output, "success: true");
         assert_eq!(result.status, ToolStatus::Done);
+    }
+
+    #[test]
+    fn opening_banner_renders_codex_style_session_summary() {
+        let view = OpeningBannerView {
+            version: "0.1.0".to_owned(),
+            model: "gpt-5.5".to_owned(),
+            reasoning: "high".to_owned(),
+            directory: format!(
+                "~{}Documents{}git{}Personal{}spectacular",
+                MAIN_SEPARATOR, MAIN_SEPARATOR, MAIN_SEPARATOR, MAIN_SEPARATOR
+            ),
+            session_id: "a83f19c2".to_owned(),
+        };
+
+        let banner = format_opening_banner(&view);
+
+        assert!(banner.contains("Spectacular (v0.1.0)"));
+        assert!(banner.contains(&format!(
+            "{}Spectacular (v0.1.0)",
+            terminal_style::title_style()
+        )));
+        assert!(banner.contains("model:     gpt-5.5 high   /model to change"));
+        assert!(banner.contains(&format!(
+            "directory: ~{}Documents{}git{}Personal{}spectacular",
+            MAIN_SEPARATOR, MAIN_SEPARATOR, MAIN_SEPARATOR, MAIN_SEPARATOR
+        )));
+        assert!(banner.contains("session:   a83f19c2"));
+
+        let widths = banner
+            .lines()
+            .map(|line| strip_ansi_codes(line))
+            .map(|line| UnicodeWidthStr::width(line.as_str()))
+            .collect::<Vec<_>>();
+        assert!(widths.windows(2).all(|pair| pair[0] == pair[1]));
+    }
+
+    fn strip_ansi_codes(value: &str) -> String {
+        let mut output = String::new();
+        let mut chars = value.chars().peekable();
+
+        while let Some(character) = chars.next() {
+            if character != '\u{1b}' {
+                output.push(character);
+                continue;
+            }
+
+            if chars.peek() == Some(&'[') {
+                chars.next();
+                for code_character in chars.by_ref() {
+                    if code_character.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            }
+        }
+
+        output
+    }
+
+    #[test]
+    fn opening_banner_view_uses_runtime_selection() {
+        let runtime = RuntimeSelection {
+            provider: "openrouter".to_owned(),
+            api_key: "sk-or-v1-test".to_owned(),
+            model: "openai/gpt-5.5".to_owned(),
+            reasoning: ReasoningLevel::High,
+        };
+
+        let view = OpeningBannerView::from_runtime("b7d4201f", &runtime, Path::new("workspace"));
+
+        assert_eq!(view.version, env!("CARGO_PKG_VERSION"));
+        assert_eq!(view.model, "openai/gpt-5.5");
+        assert_eq!(view.reasoning, "high");
+        assert_eq!(view.session_id, "b7d4201f");
+    }
+
+    #[test]
+    fn directory_label_uses_home_shorthand() {
+        let home = PathBuf::from("home");
+        let directory = home.join("repo").join("spectacular");
+
+        assert_eq!(
+            format_directory_with_home(&directory, Some(&home)),
+            format!("~{}repo{}spectacular", MAIN_SEPARATOR, MAIN_SEPARATOR)
+        );
+        assert_eq!(format_directory_with_home(&home, Some(&home)), "~");
     }
 }

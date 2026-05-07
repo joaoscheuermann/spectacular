@@ -1,6 +1,5 @@
-use crate::display::paint;
+use crate::display::{error_style, paint};
 use crate::path::resolve_workspace_path;
-use anstyle::AnsiColor;
 use glob::Pattern;
 use ignore::WalkBuilder;
 use regex::RegexBuilder;
@@ -93,7 +92,7 @@ impl Tool for GrepTool {
         };
 
         if let Some(error) = output.get("error").and_then(Value::as_str) {
-            let status = paint(AnsiColor::BrightRed.on_default().bold(), "failed");
+            let status = paint(error_style(), "failed");
             return format!("{status}: {error}");
         }
 

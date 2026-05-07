@@ -39,8 +39,7 @@ pub fn built_in_tools(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::display::paint;
-    use anstyle::AnsiColor;
+    use crate::display::{paint, tool_name_style};
     use serde_json::{json, Value};
 
     #[test]
@@ -119,10 +118,7 @@ mod tests {
 
         for (name, input, output) in cases {
             let tool = storage.get(name).unwrap();
-            let redundant_prefix = format!(
-                "{} ",
-                paint(AnsiColor::BrightCyan.on_default().bold(), name)
-            );
+            let redundant_prefix = format!("{} ", paint(tool_name_style(), name));
             let raw_output = match name {
                 TREE_TOOL_NAME => "workspace\n`-- file.txt\n".to_owned(),
                 _ => output.to_string(),
