@@ -19,20 +19,22 @@ use spectacular_config::{ConfigError, ReasoningLevel, SpectacularConfig, TaskMod
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::io;
+use std::path::PathBuf;
 use std::str::FromStr;
 
 pub async fn run() -> Result<(), ChatError> {
-    let bootstrap = ChatBootstrap::new()?;
-    let mut model = ChatModel::new(bootstrap.session, bootstrap.runtime);
+    let ChatBootstrap {
+        session,
+        renderer,
+        runtime,
+        tools,
+        workspace_root,
+    } = ChatBootstrap::new()?;
+    let mut model = ChatModel::new(session, runtime);
     let started = model.start_new_session()?;
-    bootstrap.renderer.clear_screen();
-    bootstrap.renderer.session_created(&started.id);
-    let mut controller = ChatController::new(
-        model,
-        commands::registry()?,
-        bootstrap.renderer,
-        bootstrap.tools,
-    );
+    renderer.clear_screen();
+    renderer.session_created(&started.id, model.runtime(), &workspace_root);
+    let mut controller = ChatController::new(model, commands::registry()?, renderer, tools);
     controller.run_loop().await
 }
 
@@ -41,6 +43,7 @@ struct ChatBootstrap {
     renderer: Renderer,
     runtime: RuntimeSelection,
     tools: ToolStorage,
+    workspace_root: PathBuf,
 }
 
 impl ChatBootstrap {
@@ -48,13 +51,14 @@ impl ChatBootstrap {
         let config = spectacular_config::read_config_or_default()?;
         let runtime = RuntimeSelection::from_config(&config)?;
         let workspace_root = std::env::current_dir().map_err(ChatError::Io)?;
-        let tools = main_chat_tool_storage(workspace_root)
+        let tools = main_chat_tool_storage(workspace_root.clone())
             .map_err(|error| ChatError::Session(error.to_string()))?;
         Ok(Self {
             session: SessionManager::new()?,
             renderer: Renderer::default(),
             runtime,
             tools,
+            workspace_root,
         })
     }
 }

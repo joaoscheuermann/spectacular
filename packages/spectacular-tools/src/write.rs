@@ -1,6 +1,5 @@
-use crate::display::paint;
+use crate::display::{error_style, paint, success_style};
 use crate::path::resolve_workspace_path;
-use anstyle::AnsiColor;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use spectacular_agent::{Cancellation, Tool, ToolDisplay, ToolExecution, ToolManifest};
@@ -73,7 +72,7 @@ impl Tool for WriteTool {
                 .get("bytes_written")
                 .and_then(Value::as_u64)
                 .unwrap_or_default();
-            let status = paint(AnsiColor::BrightGreen.on_default().bold(), "wrote");
+            let status = paint(success_style(), "wrote");
             return format!("{status} {bytes_written} bytes");
         }
 
@@ -81,7 +80,7 @@ impl Tool for WriteTool {
             .get("error")
             .and_then(Value::as_str)
             .unwrap_or("write failed");
-        let status = paint(AnsiColor::BrightRed.on_default().bold(), "failed");
+        let status = paint(error_style(), "failed");
         format!("{status}: {error}")
     }
 

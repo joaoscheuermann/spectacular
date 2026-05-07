@@ -1,5 +1,5 @@
 use crate::chat::paste_burst::{CharDecision, FlushResult, PasteBurst};
-use crate::chat::renderer::{dim_style, paint, user_style, Renderer};
+use crate::chat::renderer::{dim_style, paint, selection_style, user_style, Renderer};
 use crate::chat::ChatError;
 use crossterm::cursor::{MoveDown, MoveToColumn, MoveUp};
 use crossterm::event::{
@@ -864,7 +864,7 @@ fn render_buffer_range(buffer: &str, range: Range<usize>, selection: Option<Rang
         if selection
             .is_some_and(|selection| selection.start <= range.start && selection.end > range.start)
         {
-            print!("\x1b[7m \x1b[27m");
+            print!("{}", paint(selection_style(), " "));
         }
         return;
     }
@@ -883,8 +883,11 @@ fn render_buffer_range(buffer: &str, range: Range<usize>, selection: Option<Rang
 
     print!("{}", display_text(&buffer[range.start..selected_start]));
     print!(
-        "\x1b[7m{}\x1b[27m",
-        display_text(&buffer[selected_start..selected_end])
+        "{}",
+        paint(
+            selection_style(),
+            display_text(&buffer[selected_start..selected_end])
+        )
     );
     print!("{}", display_text(&buffer[selected_end..range.end]));
 }

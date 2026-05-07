@@ -13,9 +13,8 @@
 //! direct child is also killed as a fallback, but OS permissions and shell
 //! behavior can still leave grandchildren behind.
 
-use crate::display::paint;
+use crate::display::{error_style, paint, success_style};
 use crate::path::resolve_workspace_path;
-use anstyle::AnsiColor;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use spectacular_agent::{Cancellation, Tool, ToolDisplay, ToolExecution, ToolManifest};
@@ -101,9 +100,9 @@ impl Tool for TerminalTool {
             .and_then(Value::as_i64)
             .unwrap_or(-1);
         let status = if exit_code == 0 {
-            paint(AnsiColor::BrightGreen.on_default().bold(), "exited")
+            paint(success_style(), "exited")
         } else {
-            paint(AnsiColor::BrightRed.on_default().bold(), "failed")
+            paint(error_style(), "failed")
         };
         format!("{status} with code {exit_code}")
     }

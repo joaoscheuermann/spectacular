@@ -1,6 +1,7 @@
 mod chat;
+mod terminal_style;
 
-use anstyle::{AnsiColor, Style};
+use anstyle::Style;
 use clap::{Args, Parser, Subcommand};
 use spectacular_config::{
     ConfigError, ProviderConfig, ReasoningLevel, SpectacularConfig, TaskModelConfig, TaskModelSlot,
@@ -414,8 +415,7 @@ fn format_optional_value(value: &str) -> String {
 }
 
 fn paint(style: Style, value: impl AsRef<str>) -> String {
-    let value = value.as_ref();
-    format!("{style}{value}{style:#}")
+    terminal_style::paint(style, value)
 }
 
 fn paint_reasoning(reasoning: ReasoningLevel, suffix: &str) -> String {
@@ -423,47 +423,47 @@ fn paint_reasoning(reasoning: ReasoningLevel, suffix: &str) -> String {
 }
 
 fn title_style() -> Style {
-    AnsiColor::BrightCyan.on_default().bold()
+    terminal_style::title_style()
 }
 
 fn section_style() -> Style {
-    AnsiColor::BrightWhite.on_default().bold()
+    terminal_style::text_style().bold()
 }
 
 fn label_style() -> Style {
-    AnsiColor::BrightBlack.on_default()
+    terminal_style::dim_style()
 }
 
 fn success_style() -> Style {
-    AnsiColor::BrightGreen.on_default().bold()
+    terminal_style::success_style()
 }
 
 fn provider_style() -> Style {
-    AnsiColor::Cyan.on_default().bold()
+    terminal_style::provider_style()
 }
 
 fn task_style() -> Style {
-    AnsiColor::Magenta.on_default().bold()
+    terminal_style::task_style()
 }
 
 fn model_style() -> Style {
-    AnsiColor::BrightWhite.on_default()
+    terminal_style::model_style()
 }
 
 fn secret_style() -> Style {
-    AnsiColor::Yellow.on_default()
+    terminal_style::secret_style()
 }
 
 fn missing_style() -> Style {
-    AnsiColor::BrightYellow.on_default().bold()
+    terminal_style::warning_style()
 }
 
 fn reasoning_style(reasoning: ReasoningLevel) -> Style {
     match reasoning {
-        ReasoningLevel::None => AnsiColor::BrightBlack.on_default(),
-        ReasoningLevel::Low => AnsiColor::Blue.on_default(),
-        ReasoningLevel::Medium => AnsiColor::Yellow.on_default(),
-        ReasoningLevel::High => AnsiColor::BrightRed.on_default().bold(),
+        ReasoningLevel::None => terminal_style::dim_style(),
+        ReasoningLevel::Low => terminal_style::low_reasoning_style(),
+        ReasoningLevel::Medium => terminal_style::warning_style(),
+        ReasoningLevel::High => terminal_style::error_style(),
     }
 }
 

@@ -1,5 +1,4 @@
-use crate::display::paint;
-use anstyle::AnsiColor;
+use crate::display::{error_style, paint};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -81,7 +80,7 @@ impl Tool for WebSearchTool {
         };
 
         if let Some(error) = output.get("error").and_then(Value::as_str) {
-            let status = paint(AnsiColor::BrightRed.on_default().bold(), "failed");
+            let status = paint(error_style(), "failed");
             return format!("{status}: {error}");
         }
 
