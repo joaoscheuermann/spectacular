@@ -1,14 +1,31 @@
-use crate::chat::commands::config::completion_values::{
-    configured_provider_values, confirm_true_values, enabled_provider_type_values, no_values,
-    openai_provider_values,
-};
 use crate::chat::commands::{
-    ChatCommand, ChatCommandContext, ChatCommandFuture, ChatCommandResult, CompletionFieldSpec,
-    CompletionSubcommandSpec, CompletionValueValidation,
+    ChatCommand, ChatCommandContext, ChatCommandFuture, ChatCommandResult, ChatCompletionContext,
+    CompletionFieldSpec, CompletionSubcommandSpec, CompletionValueValidation,
 };
+use crate::chat::ChatError;
 use crate::config_fields::{named_args, provider_type_enabled};
 use spectacular_commands::CommandError;
-use spectacular_llms::{open_browser, start_openai_browser_auth};
+use spectacular_llms::{open_browser, start_openai_browser_auth, OPENAI_PROVIDER_ID};
+
+/// Returns enabled provider backend ids from the provider registry.
+fn enabled_provider_type_values(ctx: &ChatCompletionContext<'_>) -> Result<Vec<String>, ChatError> {
+    Ok(ctx.enabled_provider_type_ids())
+}
+
+/// Returns no suggestions for free-form or secret command fields.
+fn no_values(_: &ChatCompletionContext<'_>) -> Result<Vec<String>, ChatError> {
+    Ok(Vec::new())
+}
+
+/// Returns configured provider names from persisted chat configuration.
+fn configured_provider_values(ctx: &ChatCompletionContext<'_>) -> Result<Vec<String>, ChatError> {
+    ctx.configured_provider_names()
+}
+
+/// Returns the OpenAI provider id used by the provider browser-auth flow.
+fn available_provider_values(_: &ChatCompletionContext<'_>) -> Result<Vec<String>, ChatError> {
+    Ok(vec![OPENAI_PROVIDER_ID.to_owned()])
+}
 
 const PROVIDER_ADD_FIELDS: &[CompletionFieldSpec] = &[
     CompletionFieldSpec {
@@ -27,28 +44,19 @@ const PROVIDER_ADD_FIELDS: &[CompletionFieldSpec] = &[
     },
 ];
 
-const PROVIDER_REMOVE_FIELDS: &[CompletionFieldSpec] = &[
-    CompletionFieldSpec {
-        name: "name",
-        summary: "configured provider name",
-        required: true,
-        values: configured_provider_values,
-        validation: CompletionValueValidation::None,
-    },
-    CompletionFieldSpec {
-        name: "confirm",
-        summary: "explicit deletion confirmation",
-        required: false,
-        values: confirm_true_values,
-        validation: CompletionValueValidation::OneOfValues,
-    },
-];
+const PROVIDER_REMOVE_FIELDS: &[CompletionFieldSpec] = &[CompletionFieldSpec {
+    name: "name",
+    summary: "configured provider name",
+    required: true,
+    values: configured_provider_values,
+    validation: CompletionValueValidation::None,
+}];
 
 const PROVIDER_AUTH_FIELDS: &[CompletionFieldSpec] = &[CompletionFieldSpec {
     name: "provider",
-    summary: "OpenAI provider type",
+    summary: "available providers to perform auth",
     required: true,
-    values: openai_provider_values,
+    values: available_provider_values,
     validation: CompletionValueValidation::OneOfValues,
 }];
 
