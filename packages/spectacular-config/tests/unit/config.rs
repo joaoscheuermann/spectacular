@@ -29,11 +29,85 @@ fn config_round_trips_flat_schema() {
     assert!(content.contains("\"models\""));
     assert!(content.contains("\"tasks\""));
     assert!(content.contains("\"type\""));
+    assert!(content.contains("\"auth\": \"apikey\""));
     assert!(content.contains("\"apikey\""));
     assert!(!content.contains("\"selected\""));
     assert!(!content.contains("\"available\""));
 
     let _ = fs::remove_file(path);
+}
+
+#[test]
+fn config_round_trips_chatgpt_provider_auth() {
+    let path = temp_config_path("chatgpt-auth");
+    let mut config = SpectacularConfig::default();
+    config
+        .set_provider_oauth(
+            "openai",
+            ChatGptAuthConfig {
+                id_token: "id-token".to_owned(),
+                access_token: "access-token".to_owned(),
+                refresh_token: "refresh-token".to_owned(),
+                account_id: Some("account-1".to_owned()),
+                email: Some("user@example.com".to_owned()),
+                plan_type: Some("plus".to_owned()),
+                user_id: Some("user-1".to_owned()),
+                fedramp: true,
+                last_refresh_epoch_seconds: 42,
+            },
+        )
+        .unwrap();
+
+    write_config_to_path(&path, &config).unwrap();
+    let loaded = read_config_from_path(&path).unwrap();
+
+    assert_eq!(loaded, config);
+    let content = fs::read_to_string(&path).unwrap();
+    assert!(content.contains("\"auth\": \"oauth\""));
+    assert!(content.contains("\"access_token\": \"access-token\""));
+    assert!(!content.contains("\"apikey\""));
+
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn complete_config_accepts_provider_with_chatgpt_auth_without_api_key() {
+    let mut config = SpectacularConfig::default();
+    config
+        .set_provider_oauth(
+            "openai",
+            ChatGptAuthConfig {
+                id_token: "id-token".to_owned(),
+                access_token: "access-token".to_owned(),
+                refresh_token: "refresh-token".to_owned(),
+                account_id: None,
+                email: None,
+                plan_type: None,
+                user_id: None,
+                fedramp: false,
+                last_refresh_epoch_seconds: 42,
+            },
+        )
+        .unwrap();
+    config
+        .add_model(
+            "openai",
+            "gpt-5.5",
+            ReasoningLevel::High,
+            Some("coding-bot".to_owned()),
+        )
+        .unwrap();
+    config
+        .set_task_model(TaskModelSlot::General, "coding-bot")
+        .unwrap();
+    config
+        .set_task_model(TaskModelSlot::Coding, "coding-bot")
+        .unwrap();
+    config
+        .set_task_model(TaskModelSlot::Labeling, "coding-bot")
+        .unwrap();
+
+    assert!(config.validate_complete().is_ok());
 }
 
 #[test]

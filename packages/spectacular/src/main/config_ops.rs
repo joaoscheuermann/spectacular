@@ -14,15 +14,14 @@ fn handle_config_with_io(
             Ok(format_config_report(&config))
         }
         ConfigOperation::AddProvider {
-            name,
             provider_type,
             apikey,
         } => {
             let provider = supported_provider_type(&provider_type)?;
             let mut config = load_config()?;
-            config.add_provider(name.as_str(), provider.id(), apikey)?;
+            config.set_provider_api_key(provider.id(), apikey)?;
             write_config(&config)?;
-            Ok(format_provider_added_output(&name, provider.display_name()))
+            Ok(format_provider_added_output(provider.id(), provider.display_name()))
         }
         ConfigOperation::RemoveProvider { name, confirm } => {
             if !confirm {
@@ -111,10 +110,9 @@ fn config_operation(args: ConfigArgs) -> Result<ConfigOperation, AppError> {
 fn provider_operation(command: ConfigProviderCommand) -> Result<ConfigOperation, AppError> {
     match command {
         ConfigProviderCommand::Add { fields } => {
-            let args = parse_named_fields(&fields, &["name", "type", "apikey"])?;
+            let args = parse_named_fields(&fields, &["provider", "apikey"])?;
             Ok(ConfigOperation::AddProvider {
-                name: args.require("name")?.to_owned(),
-                provider_type: args.require("type")?.to_owned(),
+                provider_type: args.require("provider")?.to_owned(),
                 apikey: args.require("apikey")?.to_owned(),
             })
         }

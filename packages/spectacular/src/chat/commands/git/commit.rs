@@ -3,9 +3,7 @@
 //! Generates a conventional commit message using a standalone AI agent
 //! and commits the currently staged changes.
 
-use crate::chat::commands::{
-    ChatCommandContext, ChatCommandFuture, ChatCommandResult,
-};
+use crate::chat::commands::{ChatCommandContext, ChatCommandFuture, ChatCommandResult};
 
 use crate::chat::provider::provider_for_runtime;
 use spectacular_agent::{Agent, AgentConfig, AgentEvent};
@@ -127,6 +125,7 @@ async fn generate_commit_message(
     let provider = provider_for_runtime(
         context.model.runtime(),
         context.model.debug_logger().clone(),
+        context.model.config_io(),
     )
     .map_err(|e| format!("provider error: {}", e))?;
 

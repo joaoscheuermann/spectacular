@@ -17,6 +17,7 @@ const SCHEMA_CHANGED_MESSAGE: &str =
     "configuration schema changed; reconfigure providers, models, and tasks";
 const BACKUP_EXTENSION: &str = "bak.json";
 
+include!("provider_schema.rs");
 include!("schema.rs");
 include!("persistence.rs");
 include!("config_model.rs");

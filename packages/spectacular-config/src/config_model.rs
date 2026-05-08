@@ -19,6 +19,39 @@ impl SpectacularConfig {
         Ok(())
     }
 
+    /// Stores API-key credentials for the canonical provider type entry.
+    pub fn set_provider_api_key(
+        &mut self,
+        provider_type: impl Into<String>,
+        apikey: impl Into<String>,
+    ) -> Result<(), ConfigError> {
+        let provider_type = require_text("provider type", provider_type.into())?;
+        let apikey = require_text("api key", apikey.into())?;
+        let name = provider_type.clone();
+
+        self.providers
+            .entry(name)
+            .and_modify(|provider| provider.replace_with_api_key(provider_type.clone(), apikey.clone()))
+            .or_insert_with(|| ProviderConfig::new(provider_type, apikey));
+        Ok(())
+    }
+
+    /// Stores OAuth credentials for the canonical provider type entry.
+    pub fn set_provider_oauth(
+        &mut self,
+        provider_type: impl Into<String>,
+        auth: ChatGptAuthConfig,
+    ) -> Result<(), ConfigError> {
+        let provider_type = require_text("provider type", provider_type.into())?;
+        let name = provider_type.clone();
+
+        self.providers
+            .entry(name)
+            .and_modify(|provider| provider.replace_with_oauth(provider_type.clone(), auth.clone()))
+            .or_insert_with(|| ProviderConfig::oauth(provider_type, auth));
+        Ok(())
+    }
+
     /// Applies the remove provider operation to the persisted Spectacular configuration.
     pub fn remove_provider(&mut self, name: &str) -> Result<ProviderConfig, ConfigError> {
         self.providers
@@ -180,7 +213,7 @@ impl SpectacularConfig {
             }
         })?;
 
-        if required_text(Some(provider.apikey.as_str())).is_none() {
+        if !provider.has_credentials() {
             return Err(ConfigError::MissingProviderApiKey {
                 provider: model.provider.clone(),
             });

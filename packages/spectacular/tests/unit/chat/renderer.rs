@@ -225,6 +225,7 @@ fn strip_ansi_codes(value: &str) -> String {
 fn opening_banner_view_uses_runtime_selection() {
     let runtime = RuntimeSelection {
         provider_type: "openrouter".to_owned(),
+        provider_auth: Some(spectacular_config::ProviderAuthMode::ApiKey),
         provider: "openrouter".to_owned(),
         api_key: "sk-or-v1-test".to_owned(),
         model_key: "openai/gpt-5.5".to_owned(),

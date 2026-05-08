@@ -50,8 +50,7 @@ fn provider_add_operation_parses_named_fields() {
         command: Some(ConfigCommand::Provider {
             command: ConfigProviderCommand::Add {
                 fields: vec![
-                    "name:foo".to_owned(),
-                    "type:openrouter".to_owned(),
+                    "provider:openrouter".to_owned(),
                     "apikey:secret".to_owned(),
                 ],
             },
@@ -61,11 +60,25 @@ fn provider_add_operation_parses_named_fields() {
     assert_eq!(
         config_operation(args).unwrap(),
         ConfigOperation::AddProvider {
-            name: "foo".to_owned(),
             provider_type: "openrouter".to_owned(),
             apikey: "secret".to_owned()
         }
     );
+}
+
+#[test]
+fn provider_add_operation_rejects_old_name_type_fields() {
+    let args = ConfigArgs {
+        command: Some(ConfigCommand::Provider {
+            command: ConfigProviderCommand::Add {
+                fields: vec!["name:openai".to_owned(), "type:openai".to_owned()],
+            },
+        }),
+    };
+
+    let error = config_operation(args).unwrap_err();
+
+    assert!(matches!(error, AppError::InvalidConfigCommand(message) if message.contains("unknown argument `name`")));
 }
 
 #[test]
@@ -92,6 +105,43 @@ fn model_add_operation_parses_expanded_reasoning() {
             name: Some("main".to_owned())
         }
     );
+}
+
+#[test]
+fn provider_add_saves_openai_api_key() {
+    let saved_config = RefCell::new(None);
+
+    let output = handle_config_with_io(
+        ConfigArgs {
+            command: Some(ConfigCommand::Provider {
+                command: ConfigProviderCommand::Add {
+                    fields: vec![
+                        "provider:openai".to_owned(),
+                        "apikey:sk-test".to_owned(),
+                    ],
+                },
+            }),
+        },
+        || Ok(SpectacularConfig::default()),
+        || Ok(ModelCache::default()),
+        || Ok(None),
+        |config| {
+            saved_config.replace(Some(config.clone()));
+            Ok(())
+        },
+    )
+    .unwrap();
+    let output = strip_ansi_codes(&output);
+
+    assert!(output.contains("Provider added"));
+    let saved_config = saved_config.into_inner().unwrap();
+    let provider = saved_config.providers.get("openai").unwrap();
+    assert_eq!(provider.provider_type, "openai");
+    assert_eq!(
+        provider.auth_mode(),
+        Some(spectacular_config::ProviderAuthMode::ApiKey)
+    );
+    assert_eq!(provider.api_key(), "sk-test");
 }
 
 #[test]
@@ -123,8 +173,7 @@ fn provider_add_saves_config_without_leaking_key() {
             command: Some(ConfigCommand::Provider {
                 command: ConfigProviderCommand::Add {
                     fields: vec![
-                        "name:foo".to_owned(),
-                        "type:openrouter".to_owned(),
+                        "provider:openrouter".to_owned(),
                         "apikey:sk-or-v1-test".to_owned(),
                     ],
                 },
@@ -148,9 +197,9 @@ fn provider_add_saves_config_without_leaking_key() {
             .into_inner()
             .unwrap()
             .providers
-            .get("foo")
+            .get("openrouter")
             .unwrap()
-            .apikey,
+            .api_key(),
         "sk-or-v1-test"
     );
 }

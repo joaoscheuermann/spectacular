@@ -74,6 +74,13 @@ where
     }
 
     pub async fn dispatch_prompt(&mut self, prompt: String) -> Result<(), ChatError> {
+        if !self.model.runtime().is_ready() {
+            self.renderer.error(
+                "configuration is incomplete; use /provider, /model, and /task commands before sending prompts",
+            );
+            return Ok(());
+        }
+
         let request = ChatRunRequestModel {
             prompt,
             render_user_prompt: true,

@@ -1,9 +1,9 @@
+use crate::chat::model::ChatRunRequestModel;
 use crate::chat::provider::provider_for_runtime;
 use crate::chat::renderer::{has_visible_assistant_text, Renderer};
 use crate::chat::session::{agent_events_from_records, records_before_latest_user_prompt};
 use crate::chat::title::spawn_title_task;
 use crate::chat::{ChatError, ChatModel, RuntimeSelection};
-use crate::chat::model::ChatRunRequestModel;
 
 const CODING_AGENT_SYSTEM_PROMPT: &str = include_str!("prompt/coding-agent.md");
 use spectacular_agent::{
@@ -99,7 +99,11 @@ impl<'a> ChatRunner<'a> {
         };
         let store = Store::from(agent_events_from_records(context_records));
         let agent = Arc::new(main_chat_agent(
-            provider_for_runtime(&request.runtime, self.model.debug_logger().clone())?,
+            provider_for_runtime(
+                &request.runtime,
+                self.model.debug_logger().clone(),
+                self.model.config_io(),
+            )?,
             &request.runtime,
             store,
             self.tools.clone(),

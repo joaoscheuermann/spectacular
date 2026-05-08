@@ -89,7 +89,7 @@ fn title_model(
                 provider.provider_type.clone(),
                 TaskModelSlot::Labeling,
                 labeling.clone(),
-                provider.apikey.clone(),
+                provider.api_key().to_owned(),
             ));
         }
     }

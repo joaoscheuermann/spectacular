@@ -69,6 +69,13 @@ fn format_provider_error(error: &ProviderError) -> String {
         ProviderError::ProviderUnavailable { provider_name } => {
             format!("{provider_name} is unavailable. Try again later.")
         }
+        ProviderError::AuthenticationRequired { provider_name } => {
+            format!("{provider_name} authentication is required.")
+        }
+        ProviderError::AuthenticationFailed {
+            provider_name,
+            reason,
+        } => format!("{provider_name} authentication failed: {reason}."),
         ProviderError::StreamUnavailable { provider_name } => {
             format!("{provider_name} streaming is not available yet.")
         }
@@ -113,7 +120,7 @@ fn format_provider_error(error: &ProviderError) -> String {
 
 fn format_config_error(error: &ConfigError) -> String {
     let setup_instruction =
-        "Run `spectacular config provider add name:<name> type:<type> apikey:<api-key>` to configure a provider.";
+        "Run `spectacular config provider add provider:<provider> apikey:<api-key>` to configure a provider.";
 
     match error {
         ConfigError::MissingConfigFile { .. } => {
@@ -131,7 +138,7 @@ fn format_config_error(error: &ConfigError) -> String {
             format!("Configuration is incomplete: provider `{provider}` has no type.")
         }
         ConfigError::MissingProviderApiKey { provider } => format!(
-            "Configuration is incomplete: provider `{provider}` has no API key. {setup_instruction}"
+            "Configuration is incomplete: provider `{provider}` has no credentials. {setup_instruction}"
         ),
         ConfigError::ModelNotConfigured { model } => format!(
             "Configuration is incomplete: model `{model}` is not configured. Run `spectacular config model add provider:<provider> id:<model-id> reasoning:<level> [name:<name>]`."

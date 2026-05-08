@@ -1,4 +1,6 @@
+mod auth;
 mod commands;
+mod config_mutation;
 mod controller;
 mod model;
 mod paste_burst;
@@ -17,7 +19,8 @@ use model::ChatModel;
 use spectacular_agent::ToolStorage;
 use spectacular_commands::CommandError;
 use spectacular_config::{
-    CachedModelMetadata, ConfigError, ModelCache, ReasoningLevel, SpectacularConfig, TaskModelSlot,
+    CachedModelMetadata, ConfigError, ModelCache, ProviderAuthMode, ReasoningLevel,
+    SpectacularConfig, TaskModelSlot,
 };
 use spectacular_llms::{LlmDebugLogger, LlmProvider};
 use std::error::Error;
@@ -62,7 +65,16 @@ impl ChatBootstrap {
     fn new(debug_logger: LlmDebugLogger) -> Result<Self, ChatError> {
         let config = spectacular_config::read_config_or_default()?;
         let refresh = refresh_model_cache(&config, debug_logger.clone())?;
-        let runtime = RuntimeSelection::from_config(&config)?;
+        let mut warnings = refresh.warnings;
+        let runtime = match RuntimeSelection::from_config(&config) {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                warnings.push(format!(
+                    "configuration is incomplete ({error}); only setup commands are available"
+                ));
+                RuntimeSelection::setup()
+            }
+        };
         let workspace_root = std::env::current_dir().map_err(ChatError::Io)?;
         let tools = main_chat_tool_storage(workspace_root.clone())
             .map_err(|error| ChatError::Session(error.to_string()))?;
@@ -73,7 +85,7 @@ impl ChatBootstrap {
             tools,
             workspace_root,
             debug_logger,
-            warnings: refresh.warnings,
+            warnings,
         })
     }
 }
@@ -81,6 +93,7 @@ impl ChatBootstrap {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RuntimeSelection {
     pub(crate) provider_type: String,
+    pub(crate) provider_auth: Option<ProviderAuthMode>,
     pub(crate) provider: String,
     pub(crate) api_key: String,
     pub(crate) model_key: String,
@@ -89,14 +102,33 @@ pub struct RuntimeSelection {
 }
 
 impl RuntimeSelection {
-    fn from_config(config: &SpectacularConfig) -> Result<Self, ChatError> {
+    /// Creates the setup-only runtime used when configuration is incomplete.
+    pub(crate) fn setup() -> Self {
+        Self {
+            provider_type: "setup".to_owned(),
+            provider_auth: None,
+            provider: "setup".to_owned(),
+            api_key: String::new(),
+            model_key: "not configured".to_owned(),
+            model: "not configured".to_owned(),
+            reasoning: ReasoningLevel::None,
+        }
+    }
+
+    /// Returns whether this runtime can execute normal prompts.
+    pub(crate) fn is_ready(&self) -> bool {
+        self.provider_type != "setup"
+    }
+
+    pub(crate) fn from_config(config: &SpectacularConfig) -> Result<Self, ChatError> {
         let (model_key, coding) = config.model_for_task(TaskModelSlot::Coding)?;
         let provider_config = config.provider_for_model(model_key)?;
 
         Ok(Self {
             provider_type: provider_config.provider_type.clone(),
+            provider_auth: provider_config.auth_mode(),
             provider: coding.provider.clone(),
-            api_key: provider_config.apikey.clone(),
+            api_key: provider_config.api_key().to_owned(),
             model_key: model_key.to_owned(),
             model: coding.model.clone(),
             reasoning: coding.reasoning,
@@ -137,7 +169,7 @@ impl RuntimeSelection {
         let Some(provider_config) = config.providers.get(&provider) else {
             return Ok(None);
         };
-        if provider_config.apikey.trim().is_empty() {
+        if !provider_config.has_credentials() {
             return Ok(None);
         }
         let model_key = config
@@ -149,8 +181,9 @@ impl RuntimeSelection {
 
         Ok(Some(Self {
             provider_type: provider_config.provider_type.clone(),
+            provider_auth: provider_config.auth_mode(),
             provider,
-            api_key: provider_config.apikey.clone(),
+            api_key: provider_config.api_key().to_owned(),
             model_key,
             model,
             reasoning,
@@ -172,18 +205,18 @@ fn refresh_model_cache(
     let now = unix_timestamp();
 
     for (provider_name, provider_config) in &config.providers {
-        if provider_config.apikey.trim().is_empty() {
+        if !provider_config.has_credentials() {
             continue;
         }
 
         let result = crate::chat::provider::provider_for_parts(
             &provider_config.provider_type,
-            provider_config.apikey.clone(),
+            provider_config.api_key().to_owned(),
             debug_logger.clone(),
         )
         .and_then(|provider| {
             provider
-                .models(&provider_config.apikey)
+                .models(provider_config.api_key())
                 .map_err(|error| ChatError::Session(error.to_string()))
         });
 

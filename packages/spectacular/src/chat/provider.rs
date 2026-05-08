@@ -1,14 +1,20 @@
+use crate::chat::auth::{config_openai_auth_store, EmptyOpenAiAuthStore};
+use crate::chat::model::ChatConfigIo;
 use crate::chat::{ChatError, RuntimeSelection};
+use spectacular_config::ProviderAuthMode;
 use spectacular_llms::{
-    Cancellation, LlmDebugLogger, LlmProvider, Model, OpenRouterProvider, ProviderCall,
-    ProviderCapabilities, ProviderError, ProviderMetadata, ProviderRequest, ValidationMode,
-    OPENROUTER_PROVIDER_ID,
+    Cancellation, LlmDebugLogger, LlmProvider, Model, OpenAiProvider, OpenRouterProvider,
+    ProviderCall, ProviderCapabilities, ProviderError, ProviderMetadata, ProviderRequest,
+    ValidationMode, OPENAI_PROVIDER_ID, OPENROUTER_PROVIDER_ID,
 };
+use std::sync::Arc;
 
 /// Chat-facing provider wrapper that keeps concrete LLM implementations behind a local seam.
 pub enum ChatProvider {
     /// OpenRouter-backed provider used by the current chat runtime.
     OpenRouter(OpenRouterProvider),
+    /// OpenAI Codex backend provider authenticated with ChatGPT OAuth.
+    OpenAi(OpenAiProvider),
 }
 
 impl LlmProvider for ChatProvider {
@@ -16,6 +22,7 @@ impl LlmProvider for ChatProvider {
     fn metadata(&self) -> ProviderMetadata {
         match self {
             Self::OpenRouter(provider) => provider.metadata(),
+            Self::OpenAi(provider) => provider.metadata(),
         }
     }
 
@@ -23,6 +30,7 @@ impl LlmProvider for ChatProvider {
     fn validate(&self, mode: ValidationMode, value: &str) -> Result<(), ProviderError> {
         match self {
             Self::OpenRouter(provider) => provider.validate(mode, value),
+            Self::OpenAi(provider) => provider.validate(mode, value),
         }
     }
 
@@ -30,6 +38,7 @@ impl LlmProvider for ChatProvider {
     fn models(&self, api_key: &str) -> Result<Vec<Model>, ProviderError> {
         match self {
             Self::OpenRouter(provider) => provider.models(api_key),
+            Self::OpenAi(provider) => provider.models(api_key),
         }
     }
 
@@ -37,6 +46,7 @@ impl LlmProvider for ChatProvider {
     fn capabilities(&self) -> ProviderCapabilities {
         match self {
             Self::OpenRouter(provider) => provider.capabilities(),
+            Self::OpenAi(provider) => provider.capabilities(),
         }
     }
 
@@ -48,6 +58,7 @@ impl LlmProvider for ChatProvider {
     ) -> ProviderCall<'a> {
         match self {
             Self::OpenRouter(provider) => provider.stream_completion(request, cancellation),
+            Self::OpenAi(provider) => provider.stream_completion(request, cancellation),
         }
     }
 }
@@ -56,11 +67,30 @@ impl LlmProvider for ChatProvider {
 pub fn provider_for_runtime(
     runtime: &RuntimeSelection,
     debug_logger: LlmDebugLogger,
+    config_io: ChatConfigIo,
 ) -> Result<ChatProvider, ChatError> {
     if runtime.provider_type == OPENROUTER_PROVIDER_ID {
         return Ok(ChatProvider::OpenRouter(
             OpenRouterProvider::with_debug_logger(runtime.api_key.clone(), debug_logger),
         ));
+    }
+    if runtime.provider_type == OPENAI_PROVIDER_ID {
+        if runtime.provider_auth == Some(ProviderAuthMode::ApiKey) {
+            return Ok(ChatProvider::OpenAi(
+                OpenAiProvider::with_api_key_and_debug_logger(
+                    runtime.api_key.clone(),
+                    debug_logger,
+                ),
+            ));
+        }
+
+        return Ok(ChatProvider::OpenAi(OpenAiProvider::with_debug_logger(
+            Arc::new(config_openai_auth_store(
+                runtime.provider.clone(),
+                config_io,
+            )),
+            debug_logger,
+        )));
     }
 
     Err(ChatError::Session(format!(
@@ -79,6 +109,18 @@ pub fn provider_for_parts(
         return Ok(ChatProvider::OpenRouter(
             OpenRouterProvider::with_debug_logger(api_key, debug_logger),
         ));
+    }
+    if provider_type == OPENAI_PROVIDER_ID {
+        if !api_key.trim().is_empty() {
+            return Ok(ChatProvider::OpenAi(
+                OpenAiProvider::with_api_key_and_debug_logger(api_key, debug_logger),
+            ));
+        }
+
+        return Ok(ChatProvider::OpenAi(OpenAiProvider::with_debug_logger(
+            Arc::new(EmptyOpenAiAuthStore),
+            debug_logger,
+        )));
     }
 
     Err(ChatError::Session(format!(

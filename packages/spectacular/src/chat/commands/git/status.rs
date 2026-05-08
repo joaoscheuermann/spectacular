@@ -1,6 +1,4 @@
-use crate::chat::commands::{
-    ChatCommandContext, ChatCommandFuture, ChatCommandResult,
-};
+use crate::chat::commands::{ChatCommandContext, ChatCommandFuture, ChatCommandResult};
 use spectacular_commands::CommandError;
 
 use std::process::Command;
