@@ -24,9 +24,10 @@
 
     #[test]
     fn prompt_guidance_identifies_missing_required_field() {
-        let completions = test_completion_catalog();
+        let model = test_model();
+        let completions = test_completion_catalog(&model);
 
-        let guidance = prompt_guidance("/model add provider:work ", 25, &completions);
+        let guidance = prompt_guidance("/test add provider:work ", 25, &completions);
 
         assert_eq!(
             guidance,
@@ -41,11 +42,12 @@
 
     #[test]
     fn prompt_guidance_lists_all_missing_required_fields() {
-        let completions = test_completion_catalog();
+        let model = test_model();
+        let completions = test_completion_catalog(&model);
 
         let guidance = prompt_guidance(
-            "/model add provider:",
-            "/model add provider:".len(),
+            "/test add provider:",
+            "/test add provider:".len(),
             &completions,
         );
 
@@ -82,8 +84,9 @@
     #[test]
     fn value_suggestions_include_more_count_for_long_lists() {
         let registry = test_registry();
-        let completions = test_completion_catalog();
-        let state = state_with("/model add provider:busy id:");
+        let model = test_model();
+        let completions = test_completion_catalog(&model);
+        let state = state_with("/test add provider:busy id:");
 
         let suggestions = state.suggestions(&registry, &completions);
 

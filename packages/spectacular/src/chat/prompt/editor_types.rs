@@ -1,7 +1,7 @@
 pub struct PromptEditor<'a, C> {
     renderer: &'a Renderer,
     registry: &'a Arc<CommandRegistry<C>>,
-    completions: &'a PromptCompletionCatalog,
+    completions: &'a PromptCompletionCatalog<'a>,
     state: PromptState,
     terminal: PromptTerminal,
     rendered_lines: u16,
@@ -9,33 +9,86 @@ pub struct PromptEditor<'a, C> {
     paste_burst: PasteBurst,
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub(crate) struct PromptCompletionCatalog {
-    specs: BTreeMap<&'static str, CompletionCommandSpec>,
-    sources: BTreeMap<String, Vec<String>>,
+pub(crate) struct PromptCompletionCatalog<'a> {
+    specs: &'a [CompletionCommandSpec],
+    environment: Option<CompletionEnvironment>,
 }
 
-impl PromptCompletionCatalog {
-    pub(crate) fn new(
-        specs: &[CompletionCommandSpec],
-        sources: BTreeMap<String, Vec<String>>,
-    ) -> Self {
+impl<'a> PromptCompletionCatalog<'a> {
+    /// Creates a completion catalog backed by command specs and the active chat model.
+    pub(crate) fn new(specs: &'a [CompletionCommandSpec], model: &ChatModel) -> Self {
         Self {
-            specs: specs.iter().map(|spec| (spec.name, *spec)).collect(),
-            sources,
+            specs,
+            environment: Some(model.completion_environment()),
         }
     }
 
+    /// Returns command metadata for a registered completion command.
     fn spec(&self, command: &str) -> Option<CompletionCommandSpec> {
-        self.specs.get(command).copied()
+        self.specs.iter().copied().find(|spec| spec.name == command)
     }
 
-    fn source(&self, name: &str) -> Vec<&str> {
-        self.sources
-            .get(name)
-            .map(|values| values.iter().map(String::as_str).collect())
-            .unwrap_or_default()
+    /// Returns subcommand metadata for a registered command path.
+    fn subcommand(&self, command: &str, subcommand: &str) -> Option<CompletionSubcommandSpec> {
+        find_subcommand(self.spec(command)?.subcommands, subcommand)
     }
+
+    /// Returns field metadata for a registered command/subcommand/field path.
+    fn field(&self, command: &str, subcommand: &str, field: &str) -> Option<CompletionFieldSpec> {
+        find_field(self.subcommand(command, subcommand)?.fields, field)
+    }
+
+    /// Resolves values through the field-owned callback using the active prompt state.
+    fn resolve_values(
+        &self,
+        field: CompletionFieldSpec,
+        subcommand: &str,
+        pairs: &[(String, String)],
+    ) -> Result<Vec<String>, ChatError> {
+        let environment = self.environment.ok_or_else(|| {
+            ChatError::Session("completion catalog has no environment".to_owned())
+        })?;
+        let context = crate::chat::commands::ChatCompletionContext::new(
+            environment,
+            subcommand,
+            pairs,
+        );
+
+        (field.values)(&context)
+    }
+
+    /// Validates a closed-choice field value against the same resolver used for suggestions.
+    fn validate_choice(
+        &self,
+        field: CompletionFieldSpec,
+        value: &str,
+        subcommand: &str,
+        pairs: &[(String, String)],
+    ) -> Result<ChoiceValidation, ChatError> {
+        let allowed = self.resolve_values(field, subcommand, pairs)?;
+        if allowed.is_empty() || allowed.iter().any(|allowed| allowed == value) {
+            return Ok(ChoiceValidation::Valid);
+        }
+
+        Ok(ChoiceValidation::Invalid(allowed))
+    }
+}
+
+impl Default for PromptCompletionCatalog<'_> {
+    /// Creates an empty catalog for tests that only exercise command-name completion.
+    fn default() -> Self {
+        Self {
+            specs: &[],
+            environment: None,
+        }
+    }
+}
+
+/// Result of validating a field value against closed-choice completion values.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum ChoiceValidation {
+    Valid,
+    Invalid(Vec<String>),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

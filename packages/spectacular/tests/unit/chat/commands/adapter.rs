@@ -136,6 +136,7 @@ fn provider_completion_uses_provider_type_for_add_and_auth() {
         .expect("provider add completion should be registered");
     assert_eq!(add.fields[0].name, "provider");
     assert_eq!(add.fields[1].name, "apikey");
+    assert!(add.fields[1].required);
 
     let auth = provider
         .subcommands
@@ -143,10 +144,10 @@ fn provider_completion_uses_provider_type_for_add_and_auth() {
         .find(|subcommand| subcommand.name == "auth")
         .expect("provider auth completion should be registered");
     assert_eq!(auth.fields[0].name, "provider");
-    assert!(matches!(
-        auth.fields[0].value_source,
-        spectacular_commands::CompletionValueSource::Static(values) if values == ["openai"]
-    ));
+    assert_eq!(
+        auth.fields[0].validation,
+        CompletionValueValidation::OneOfValues
+    );
 }
 
 #[test]

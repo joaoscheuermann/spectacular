@@ -48,33 +48,6 @@ pub struct CommandSearchMatch {
     pub metadata: CommandMetadata,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct CompletionCommandSpec {
-    pub name: &'static str,
-    pub subcommands: &'static [CompletionSubcommandSpec],
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct CompletionSubcommandSpec {
-    pub name: &'static str,
-    pub summary: &'static str,
-    pub fields: &'static [CompletionFieldSpec],
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct CompletionFieldSpec {
-    pub name: &'static str,
-    pub summary: &'static str,
-    pub required: bool,
-    pub value_source: CompletionValueSource,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CompletionValueSource {
-    Static(&'static [&'static str]),
-    Dynamic(&'static str),
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NamedArgs {
     values: BTreeMap<String, String>,

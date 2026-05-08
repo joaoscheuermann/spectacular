@@ -1,4 +1,5 @@
 use super::RuntimeSelection;
+use crate::chat::commands::CompletionEnvironment;
 use crate::chat::session::{ChatRecord, HistoryQuery, HistorySummary, SessionManager};
 use crate::chat::ChatError;
 use spectacular_agent::AgentEvent;
@@ -6,7 +7,7 @@ use spectacular_config::{
     ConfigError, ModelCache, ModelConfig, ProviderAuthMode, ProviderConfig, SpectacularConfig,
     TaskAssignments, TaskModelSlot,
 };
-use spectacular_llms::{provider_registry, LlmDebugLogger};
+use spectacular_llms::LlmDebugLogger;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
@@ -214,50 +215,6 @@ impl ChatModel {
         &self.debug_logger
     }
 
-    /// Builds dynamic prompt-completion sources from config and cached model metadata.
-    pub fn prompt_completion_sources(&self) -> BTreeMap<String, Vec<String>> {
-        let config = self.config_io.read_config_or_default().unwrap_or_default();
-        let cache = self
-            .config_io
-            .read_model_cache_or_default()
-            .unwrap_or_default();
-        let mut sources = BTreeMap::new();
-        sources.insert(
-            crate::chat::commands::SOURCE_PROVIDER_TYPES.to_owned(),
-            provider_registry()
-                .iter()
-                .filter(|provider| provider.is_enabled())
-                .map(|provider| provider.id().to_owned())
-                .collect(),
-        );
-        sources.insert(
-            crate::chat::commands::SOURCE_PROVIDERS.to_owned(),
-            config.providers.keys().cloned().collect(),
-        );
-        sources.insert(
-            crate::chat::commands::SOURCE_MODELS.to_owned(),
-            config.models.keys().cloned().collect(),
-        );
-
-        let mut all_model_ids = Vec::new();
-        for (provider, provider_cache) in cache.providers {
-            let model_ids = provider_cache.models.keys().cloned().collect::<Vec<_>>();
-            all_model_ids.extend(model_ids.iter().cloned());
-            sources.insert(
-                format!("{}:{provider}", crate::chat::commands::SOURCE_MODEL_IDS),
-                model_ids,
-            );
-        }
-        all_model_ids.sort();
-        all_model_ids.dedup();
-        sources.insert(
-            crate::chat::commands::SOURCE_MODEL_IDS.to_owned(),
-            all_model_ids,
-        );
-
-        sources
-    }
-
     /// Returns the underlying session manager for controller and runner orchestration.
     pub(super) fn session_manager(&self) -> &SessionManager {
         &self.session
@@ -266,6 +223,11 @@ impl ChatModel {
     /// Returns the injected config I/O used by provider auth stores.
     pub(crate) fn config_io(&self) -> ChatConfigIo {
         self.config_io
+    }
+
+    /// Builds the narrow environment exposed to prompt completion value resolvers.
+    pub(crate) fn completion_environment(&self) -> CompletionEnvironment {
+        CompletionEnvironment::new(self.config_io, spectacular_llms::provider_registry())
     }
 
     /// Restores runtime selection from session metadata, falling back to current config.

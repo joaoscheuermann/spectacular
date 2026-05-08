@@ -1,25 +1,25 @@
+use crate::chat::commands::config::completion_values::{saved_model_values, task_values};
 use crate::chat::commands::{
-    ChatCommand, ChatCommandContext, ChatCommandFuture, ChatCommandResult, SOURCE_MODELS,
+    ChatCommand, ChatCommandContext, ChatCommandFuture, ChatCommandResult, CompletionFieldSpec,
+    CompletionSubcommandSpec, CompletionValueValidation,
 };
 use crate::config_fields::{named_args, parse_task};
-use spectacular_commands::{
-    CommandError, CompletionFieldSpec, CompletionSubcommandSpec, CompletionValueSource,
-};
-
-const TASK_VALUES: &[&str] = &["general", "coding", "labeling"];
+use spectacular_commands::CommandError;
 
 const TASK_SET_FIELDS: &[CompletionFieldSpec] = &[
     CompletionFieldSpec {
         name: "task",
         summary: "task slot",
         required: true,
-        value_source: CompletionValueSource::Static(TASK_VALUES),
+        values: task_values,
+        validation: CompletionValueValidation::OneOfValues,
     },
     CompletionFieldSpec {
         name: "model",
         summary: "saved model key",
         required: true,
-        value_source: CompletionValueSource::Dynamic(SOURCE_MODELS),
+        values: saved_model_values,
+        validation: CompletionValueValidation::None,
     },
 ];
 
@@ -29,6 +29,7 @@ const TASK_SUBCOMMANDS: &[CompletionSubcommandSpec] = &[CompletionSubcommandSpec
     fields: TASK_SET_FIELDS,
 }];
 
+/// Builds the `/task` chat command metadata and completion definition.
 pub fn command() -> ChatCommand {
     ChatCommand {
         name: "task",
@@ -39,6 +40,7 @@ pub fn command() -> ChatCommand {
     }
 }
 
+/// Routes `/task` subcommands to task-model assignment handlers.
 fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatCommandFuture<'a> {
     Box::pin(async move {
         match args.split_first() {
@@ -48,6 +50,7 @@ fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatComman
     })
 }
 
+/// Assigns a saved model to a task slot and reports the updated mapping.
 fn task_set(context: ChatCommandContext<'_>, fields: &[String]) -> ChatCommandResult {
     let args = match named_args(fields, &["task", "model"]) {
         Ok(args) => args,

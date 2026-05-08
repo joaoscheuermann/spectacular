@@ -1,17 +1,17 @@
 /// Finds the required or invalid field that should block command submission.
 fn command_field_needing_attention(
     buffer: &str,
-    completions: &PromptCompletionCatalog,
+    completions: &PromptCompletionCatalog<'_>,
 ) -> Option<CompletionFieldSpec> {
     let (_, subcommand, args, fields) = command_fields(buffer, completions)?;
-    subcommand.as_ref()?;
-    command_validation_state(&args, fields).next_field()
+    let subcommand = subcommand.as_deref()?;
+    command_validation_state(&args, fields, subcommand, completions).next_field()
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct CommandValidationState {
     missing: Vec<CompletionFieldSpec>,
-    invalid: Option<InvalidStaticField>,
+    invalid: Option<InvalidChoiceField>,
 }
 
 impl CommandValidationState {
@@ -26,23 +26,20 @@ impl CommandValidationState {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct InvalidStaticField {
+struct InvalidChoiceField {
     field: CompletionFieldSpec,
     value: String,
-    allowed: Vec<&'static str>,
+    allowed: Vec<String>,
 }
 
-type CommandFields = (
-    String,
-    Option<String>,
-    Vec<String>,
-    &'static [CompletionFieldSpec],
-);
+type CommandFields = (String, Option<String>, Vec<String>, &'static [CompletionFieldSpec]);
 
-/// Summarizes missing required fields and invalid static choices for a command.
+/// Summarizes missing required fields and invalid closed-choice values for a command.
 fn command_validation_state(
     args: &[String],
     fields: &'static [CompletionFieldSpec],
+    subcommand: &str,
+    completions: &PromptCompletionCatalog<'_>,
 ) -> CommandValidationState {
     let pairs = named_pairs(&args[1..]);
     let missing = fields
@@ -58,21 +55,26 @@ fn command_validation_state(
 
     CommandValidationState {
         missing,
-        invalid: invalid_static_field(&pairs, fields),
+        invalid: invalid_choice_field(&pairs, fields, subcommand, completions),
     }
 }
 
 /// Finds a completed command path and its declared field metadata.
 fn command_fields(
     buffer: &str,
-    completions: &PromptCompletionCatalog,
+    completions: &PromptCompletionCatalog<'_>,
 ) -> Option<CommandFields> {
     let (command, args) = parsed_command_line(buffer)?;
-    let spec = completions.spec(&command)?;
     let Some(subcommand) = args.first() else {
-        return Some((command, None, args, &[]));
+        let spec = completions.spec(&command)?;
+        return Some((
+            command,
+            None,
+            args,
+            spec.subcommands.first().map_or(&[], |spec| spec.fields),
+        ));
     };
-    let subcommand_spec = find_subcommand(spec.subcommands, subcommand)?;
+    let subcommand_spec = completions.subcommand(&command, subcommand)?;
 
     Some((
         command,
@@ -86,7 +88,7 @@ fn command_fields(
 fn active_field_spec(
     buffer: &str,
     cursor: usize,
-    completions: &PromptCompletionCatalog,
+    completions: &PromptCompletionCatalog<'_>,
 ) -> Option<CompletionFieldSpec> {
     let CompletionContext {
         target:
@@ -102,35 +104,39 @@ fn active_field_spec(
         return None;
     };
 
-    completions
-        .spec(&command)
-        .and_then(|spec| find_subcommand(spec.subcommands, &subcommand))
-        .and_then(|spec| find_field(spec.fields, &field_query))
+    completions.field(&command, &subcommand, &field_query)
 }
 
-/// Finds the first static-choice field whose value is outside the allowed set.
-fn invalid_static_field(
+/// Finds the first closed-choice field whose value is outside the allowed set.
+fn invalid_choice_field(
     pairs: &[(String, String)],
     fields: &'static [CompletionFieldSpec],
-) -> Option<InvalidStaticField> {
+    subcommand: &str,
+    completions: &PromptCompletionCatalog<'_>,
+) -> Option<InvalidChoiceField> {
     pairs.iter().find_map(|(name, value)| {
         if value.trim().is_empty() {
             return None;
         }
 
         let field = find_field(fields, name)?;
-        let CompletionValueSource::Static(values) = field.value_source else {
-            return None;
-        };
-        if values.is_empty() || values.iter().any(|allowed| allowed == value) {
+        if !field.validates_one_of_values() {
             return None;
         }
 
-        Some(InvalidStaticField {
-            field,
-            value: value.clone(),
-            allowed: values.to_vec(),
-        })
+        match completions.validate_choice(field, value, subcommand, pairs) {
+            Ok(ChoiceValidation::Valid) => None,
+            Ok(ChoiceValidation::Invalid(allowed)) => Some(InvalidChoiceField {
+                field,
+                value: value.clone(),
+                allowed,
+            }),
+            Err(error) => Some(InvalidChoiceField {
+                field,
+                value: value.clone(),
+                allowed: vec![format!("{} values unavailable: {error}", field.name)],
+            }),
+        }
     })
 }
 
@@ -208,33 +214,8 @@ fn append_command_field(buffer: &mut String, cursor: &mut usize, field: &str) {
     *cursor = end + insertion.len();
 }
 
-fn dynamic_values_for_field<'a>(
-    source: &str,
-    field: &str,
-    args: &'a [(String, String)],
-    completions: &'a PromptCompletionCatalog,
-) -> Vec<&'a str> {
-    if source != crate::chat::commands::SOURCE_MODEL_IDS {
-        return completions.source(source);
-    }
 
-    let Some(provider) = args
-        .iter()
-        .find(|(name, _)| name == "provider")
-        .map(|(_, value)| value.as_str())
-    else {
-        return completions.source(source);
-    };
-
-    let provider_source = format!("{}:{provider}", crate::chat::commands::SOURCE_MODEL_IDS);
-    let provider_values = completions.source(&provider_source);
-    if field == "id" && !provider_values.is_empty() {
-        return provider_values;
-    }
-
-    completions.source(source)
-}
-
+/// Replaces the active completion token and optionally inserts trailing spacing.
 fn complete_suggestion(buffer: &mut String, cursor: &mut usize, suggestion: &PromptSuggestion) {
     let Some((token_start, token_end)) =
         completion_context(buffer, *cursor).map(|context| (context.token_start, context.token_end))

@@ -1,3 +1,4 @@
+pub(crate) mod completion;
 pub mod config;
 pub mod git;
 pub mod runtime;
@@ -8,10 +9,13 @@ use crate::chat::renderer::Renderer;
 use crate::chat::runner::ChatTurnRunner;
 use crate::chat::session::ChatRecord;
 use crate::chat::ChatError;
+pub(crate) use completion::{
+    ChatCompletionContext, CompletionCommandSpec, CompletionEnvironment, CompletionFieldSpec,
+    CompletionSubcommandSpec, CompletionValueValidation,
+};
 use spectacular_agent::{AgentEvent, ToolStorage};
 use spectacular_commands::{
     Command, CommandControl, CommandError, CommandFuture, CommandInvocation, CommandRegistry,
-    CompletionCommandSpec, CompletionSubcommandSpec,
 };
 use std::collections::BTreeMap;
 use std::future::Future;
@@ -19,11 +23,6 @@ use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
-
-pub(crate) const SOURCE_PROVIDER_TYPES: &str = "provider-types";
-pub(crate) const SOURCE_PROVIDERS: &str = "providers";
-pub(crate) const SOURCE_MODELS: &str = "models";
-pub(crate) const SOURCE_MODEL_IDS: &str = "model-ids";
 
 pub type ChatCommandFuture<'a> = Pin<Box<dyn Future<Output = ChatCommandResult> + 'a>>;
 
@@ -37,10 +36,12 @@ pub enum ChatCommandResult {
 }
 
 impl ChatCommandResult {
+    /// Creates a successful command result with no extra control flow.
     pub fn success() -> Self {
         Self::Success
     }
 
+    /// Creates a command error result with user-facing text.
     pub fn error(message: impl Into<String>) -> Self {
         Self::Error(message.into())
     }
@@ -52,10 +53,12 @@ pub struct ChatCommandControl {
 }
 
 impl ChatCommandControl {
+    /// Marks that the command loop should exit after the current command finishes.
     pub fn request_exit(&mut self) {
         self.exit_requested = true;
     }
 
+    /// Returns whether a command requested the chat loop to exit.
     pub fn exit_requested(&self) -> bool {
         self.exit_requested
     }
@@ -70,6 +73,7 @@ pub struct ChatCommand {
 }
 
 impl Clone for ChatCommand {
+    /// Copies static command metadata and handler pointers.
     fn clone(&self) -> Self {
         *self
     }
@@ -86,6 +90,7 @@ pub struct ChatCommandContext<'a> {
 }
 
 impl<'a> ChatCommandContext<'a> {
+    /// Creates a command execution context from the active chat services.
     pub fn new(
         model: &'a mut ChatModel,
         renderer: &'a Renderer,
@@ -110,31 +115,38 @@ impl<'a> ChatCommandContext<'a> {
         self.model.append_agent_event(event)
     }
 
+    /// Renders chat records through the injected renderer and tool storage.
     pub async fn render_records(&self, records: &[ChatRecord]) -> Result<(), ChatError> {
         self.renderer.render_records(records, self.tools).await
     }
 
+    /// Renders a chat history table through the injected renderer.
     pub fn render_history(&self, table: &HistoryTableModel) {
         self.renderer.history_table(table);
     }
 
+    /// Clears the terminal screen through the injected renderer.
     pub fn clear_screen(&self) {
         self.renderer.clear_screen();
     }
 
+    /// Renders a session-created notice for a new chat session.
     pub fn session_created(&self, id: &str, directory: &Path) {
         self.renderer
             .session_created(id, self.model.runtime(), directory);
     }
 
+    /// Renders a session-resumed notice for an existing chat session.
     pub fn session_resumed(&self, id: &str) {
         self.renderer.resumed(id);
     }
 
+    /// Renders a low-emphasis informational command message.
     pub fn notice(&self, message: &str) {
         self.renderer.dim(message);
     }
 
+    /// Renders a successful command message.
     pub fn success(&self, message: &str) {
         self.renderer.success(message);
     }
@@ -170,10 +182,12 @@ impl<'a> ChatCommandContext<'a> {
         result
     }
 
+    /// Requests that the chat command loop exit after this command.
     pub fn request_exit(&mut self) {
         self.control.request_exit();
     }
 
+    /// Runs a prompt through the injected turn runner from inside a command.
     pub async fn run_prompt(&mut self, request: ChatRunRequestModel) -> Result<(), ChatError> {
         self.runner
             .run(self.model, self.renderer, self.tools, request)
@@ -188,6 +202,7 @@ pub struct ChatCommandAdapter {
 }
 
 impl ChatCommandAdapter {
+    /// Registers command handlers and builds shared command metadata for prompt completion.
     pub fn new<const N: usize>(commands: [ChatCommand; N]) -> Result<Self, CommandError> {
         let mut handlers = BTreeMap::new();
         let mut metadata = CommandRegistry::new();
@@ -215,6 +230,7 @@ impl ChatCommandAdapter {
         })
     }
 
+    /// Executes a registered chat command invocation against the provided context.
     pub async fn execute(
         &self,
         context: ChatCommandContext<'_>,
@@ -232,19 +248,23 @@ impl ChatCommandAdapter {
         (command.execute)(context, invocation.args).await
     }
 
+    /// Returns command metadata used by the prompt editor command picker.
     pub fn metadata(&self) -> &Arc<CommandRegistry<()>> {
         &self.metadata
     }
 
+    /// Returns subcommand and field metadata used by prompt completion.
     pub fn completion_specs(&self) -> &[CompletionCommandSpec] {
         &self.completion_specs
     }
 }
 
+/// Provides a no-op executor for metadata-only command registry entries.
 fn metadata_execute<'a>(_context: &'a mut (), _args: Vec<String>) -> CommandFuture<'a> {
     Box::pin(async { Ok(CommandControl::Continue) })
 }
 
+/// Builds the default registry of chat commands available in the REPL.
 pub fn registry() -> Result<ChatCommandAdapter, CommandError> {
     ChatCommandAdapter::new([
         session::new::command(),
@@ -268,6 +288,7 @@ pub(crate) mod test_support {
     pub(crate) struct NoopRunner;
 
     impl ChatTurnRunner for NoopRunner {
+        /// Ignores prompt execution for command unit tests that only need a runner seam.
         fn run<'a>(
             &'a self,
             _model: &'a mut ChatModel,

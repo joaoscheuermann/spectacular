@@ -1,28 +1,29 @@
+use crate::chat::commands::config::completion_values::{
+    configured_provider_values, confirm_true_values, enabled_provider_type_values, no_values,
+    openai_provider_values,
+};
 use crate::chat::commands::{
-    ChatCommand, ChatCommandContext, ChatCommandFuture, ChatCommandResult, SOURCE_PROVIDERS,
-    SOURCE_PROVIDER_TYPES,
+    ChatCommand, ChatCommandContext, ChatCommandFuture, ChatCommandResult, CompletionFieldSpec,
+    CompletionSubcommandSpec, CompletionValueValidation,
 };
 use crate::config_fields::{named_args, provider_type_enabled};
-use spectacular_commands::{
-    CommandError, CompletionFieldSpec, CompletionSubcommandSpec, CompletionValueSource,
-};
-use spectacular_llms::{open_browser, start_openai_browser_auth, OPENAI_PROVIDER_ID};
-
-const CONFIRM_VALUES: &[&str] = &["true"];
-const AUTH_PROVIDER_VALUES: &[&str] = &[OPENAI_PROVIDER_ID];
+use spectacular_commands::CommandError;
+use spectacular_llms::{open_browser, start_openai_browser_auth};
 
 const PROVIDER_ADD_FIELDS: &[CompletionFieldSpec] = &[
     CompletionFieldSpec {
         name: "provider",
         summary: "provider backend",
         required: true,
-        value_source: CompletionValueSource::Dynamic(SOURCE_PROVIDER_TYPES),
+        values: enabled_provider_type_values,
+        validation: CompletionValueValidation::OneOfValues,
     },
     CompletionFieldSpec {
         name: "apikey",
         summary: "provider API key",
-        required: false,
-        value_source: CompletionValueSource::Static(&[]),
+        required: true,
+        values: no_values,
+        validation: CompletionValueValidation::None,
     },
 ];
 
@@ -31,13 +32,15 @@ const PROVIDER_REMOVE_FIELDS: &[CompletionFieldSpec] = &[
         name: "name",
         summary: "configured provider name",
         required: true,
-        value_source: CompletionValueSource::Dynamic(SOURCE_PROVIDERS),
+        values: configured_provider_values,
+        validation: CompletionValueValidation::None,
     },
     CompletionFieldSpec {
         name: "confirm",
         summary: "explicit deletion confirmation",
         required: false,
-        value_source: CompletionValueSource::Static(CONFIRM_VALUES),
+        values: confirm_true_values,
+        validation: CompletionValueValidation::OneOfValues,
     },
 ];
 
@@ -45,7 +48,8 @@ const PROVIDER_AUTH_FIELDS: &[CompletionFieldSpec] = &[CompletionFieldSpec {
     name: "provider",
     summary: "OpenAI provider type",
     required: true,
-    value_source: CompletionValueSource::Static(AUTH_PROVIDER_VALUES),
+    values: openai_provider_values,
+    validation: CompletionValueValidation::OneOfValues,
 }];
 
 const PROVIDER_SUBCOMMANDS: &[CompletionSubcommandSpec] = &[
@@ -66,6 +70,7 @@ const PROVIDER_SUBCOMMANDS: &[CompletionSubcommandSpec] = &[
     },
 ];
 
+/// Builds the `/provider` chat command metadata and completion definition.
 pub fn command() -> ChatCommand {
     ChatCommand {
         name: "provider",
@@ -76,6 +81,7 @@ pub fn command() -> ChatCommand {
     }
 }
 
+/// Routes `/provider` subcommands to the matching provider configuration handler.
 fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatCommandFuture<'a> {
     Box::pin(async move {
         match args.split_first() {
@@ -98,6 +104,7 @@ fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatComman
     })
 }
 
+/// Persists API-key credentials for a provider and refreshes its model cache.
 fn provider_add(context: ChatCommandContext<'_>, fields: &[String]) -> ChatCommandResult {
     let args = match named_args(fields, &["provider", "apikey"]) {
         Ok(args) => args,
@@ -118,6 +125,13 @@ fn provider_add(context: ChatCommandContext<'_>, fields: &[String]) -> ChatComma
     }
     if let Err(error) = context.model.set_provider_api_key(provider_type, apikey) {
         return ChatCommandResult::error(error.to_string());
+    }
+
+    match context.model.refresh_provider_model_cache(provider_type) {
+        Ok(count) => context.notice(&format!("cached {count} {provider_type} models")),
+        Err(error) => context.notice(&format!(
+            "could not refresh {provider_type} models: {error}"
+        )),
     }
 
     context.success(&format!("provider added: {provider_type}"));
@@ -177,6 +191,7 @@ async fn provider_auth(context: ChatCommandContext<'_>, fields: &[String]) -> Ch
     ChatCommandResult::success()
 }
 
+/// Removes a provider after explicit confirmation and reports orphaned model keys.
 fn provider_remove(context: ChatCommandContext<'_>, fields: &[String]) -> ChatCommandResult {
     let args = match named_args(fields, &["name", "confirm"]) {
         Ok(args) => args,
@@ -189,15 +204,15 @@ fn provider_remove(context: ChatCommandContext<'_>, fields: &[String]) -> ChatCo
 
     if args.optional("confirm") != Some("true") {
         context
-            .notice("provider removal requires confirm:true and does not delete associated models");
+            .notice("provider removal requires confirm:true; existing models will become invalid");
         return ChatCommandResult::success();
     }
 
     match context.model.remove_provider(name) {
-        Ok(orphaned) => {
+        Ok(models) => {
             context.success(&format!("provider removed: {name}"));
-            if !orphaned.is_empty() {
-                context.notice(&format!("orphaned models: {}", orphaned.join(", ")));
+            if !models.is_empty() {
+                context.notice(&format!("orphaned models: {}", models.join(", ")));
             }
             ChatCommandResult::success()
         }

@@ -62,7 +62,7 @@
 
         let suggestions = state.suggestions(&registry, &completions);
 
-        assert_eq!(suggestions.len(), 3);
+        assert_eq!(suggestions.len(), 4);
     }
 
     #[test]
@@ -88,8 +88,9 @@
     #[test]
     fn prompt_state_suggests_subcommands_after_command() {
         let registry = test_registry();
-        let completions = test_completion_catalog();
-        let state = state_with("/model ");
+        let model = test_model();
+        let completions = test_completion_catalog(&model);
+        let state = state_with("/test ");
 
         let suggestions = state.suggestions(&registry, &completions);
 
@@ -105,8 +106,9 @@
     #[test]
     fn prompt_state_suggests_fields_after_subcommand() {
         let registry = test_registry();
-        let completions = test_completion_catalog();
-        let state = state_with("/model add pro");
+        let model = test_model();
+        let completions = test_completion_catalog(&model);
+        let state = state_with("/test add pro");
 
         let suggestions = state.suggestions(&registry, &completions);
 
@@ -117,8 +119,9 @@
     #[test]
     fn prompt_state_suggests_dynamic_field_values() {
         let registry = test_registry();
-        let completions = test_completion_catalog();
-        let state = state_with("/model add provider:o");
+        let model = test_model();
+        let completions = test_completion_catalog(&model);
+        let state = state_with("/test add provider:o");
 
         let suggestions = state.suggestions(&registry, &completions);
 
@@ -128,8 +131,9 @@
     #[test]
     fn prompt_state_suggests_provider_scoped_model_ids() {
         let registry = test_registry();
-        let completions = test_completion_catalog();
-        let state = state_with("/model add provider:work id:g");
+        let model = test_model();
+        let completions = test_completion_catalog(&model);
+        let state = state_with("/test add provider:work id:g");
 
         let suggestions = state.suggestions(&registry, &completions);
 
@@ -162,9 +166,10 @@
     fn space_accepts_active_value_suggestion_in_command_mode() {
         let renderer = Renderer::default();
         let registry = Arc::new(test_registry());
-        let completions = test_completion_catalog();
+        let model = test_model();
+        let completions = test_completion_catalog(&model);
         let mut editor = PromptEditor::new(&renderer, &registry, &completions);
-        editor.state = state_with("/model add provider:o");
+        editor.state = state_with("/test add provider:o");
 
         let action = editor
             .handle_event(Event::Key(KeyEvent::new(
@@ -174,7 +179,7 @@
             .unwrap();
 
         assert!(matches!(action, PromptAction::Continue));
-        assert_eq!(editor.state.buffer, "/model add provider:openrouter id:");
+        assert_eq!(editor.state.buffer, "/test add provider:openrouter id:");
         assert_eq!(editor.state.cursor, editor.state.buffer.len());
     }
 
@@ -182,16 +187,17 @@
     fn selecting_subcommand_inserts_next_required_field() {
         let renderer = Renderer::default();
         let registry = Arc::new(test_registry());
-        let completions = test_completion_catalog();
+        let model = test_model();
+        let completions = test_completion_catalog(&model);
         let mut editor = PromptEditor::new(&renderer, &registry, &completions);
-        editor.state = state_with("/model ad");
+        editor.state = state_with("/test ad");
 
         let action = editor
             .handle_event(Event::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)))
             .unwrap();
 
         assert!(matches!(action, PromptAction::Continue));
-        assert_eq!(editor.state.buffer, "/model add provider:");
+        assert_eq!(editor.state.buffer, "/test add provider:");
         assert_eq!(editor.state.cursor, editor.state.buffer.len());
     }
 
@@ -199,9 +205,10 @@
     fn enter_advances_to_next_missing_required_field() {
         let renderer = Renderer::default();
         let registry = Arc::new(test_registry());
-        let completions = test_completion_catalog();
+        let model = test_model();
+        let completions = test_completion_catalog(&model);
         let mut editor = PromptEditor::new(&renderer, &registry, &completions);
-        editor.state = state_with("/model add provider:custom");
+        editor.state = state_with("/test add provider:custom");
 
         let action = editor
             .handle_event(Event::Key(KeyEvent::new(
@@ -211,7 +218,7 @@
             .unwrap();
 
         assert!(matches!(action, PromptAction::Continue));
-        assert_eq!(editor.state.buffer, "/model add provider:custom id:");
+        assert_eq!(editor.state.buffer, "/test add provider:custom id:");
         assert_eq!(editor.state.cursor, editor.state.buffer.len());
     }
 
@@ -219,9 +226,10 @@
     fn enter_submits_complete_command_without_forcing_optional_field() {
         let renderer = Renderer::default();
         let registry = Arc::new(test_registry());
-        let completions = test_completion_catalog();
+        let model = test_model();
+        let completions = test_completion_catalog(&model);
         let mut editor = PromptEditor::new(&renderer, &registry, &completions);
-        editor.state = state_with("/model add provider:work id:google/gemini reasoning:high ");
+        editor.state = state_with("/test add provider:work id:google/gemini reasoning:high ");
 
         let action = editor
             .handle_event(Event::Key(KeyEvent::new(
@@ -237,9 +245,10 @@
     fn enter_blocks_invalid_static_choice_before_submit() {
         let renderer = Renderer::default();
         let registry = Arc::new(test_registry());
-        let completions = test_completion_catalog();
+        let model = test_model();
+        let completions = test_completion_catalog(&model);
         let mut editor = PromptEditor::new(&renderer, &registry, &completions);
-        editor.state = state_with("/model add provider:work id:google/gemini reasoning:ultra");
+        editor.state = state_with("/test add provider:work id:google/gemini reasoning:ultra");
 
         let action = editor
             .handle_event(Event::Key(KeyEvent::new(
@@ -251,6 +260,6 @@
         assert!(matches!(action, PromptAction::Continue));
         assert_eq!(
             editor.state.buffer,
-            "/model add provider:work id:google/gemini reasoning:ultra"
+            "/test add provider:work id:google/gemini reasoning:ultra"
         );
     }

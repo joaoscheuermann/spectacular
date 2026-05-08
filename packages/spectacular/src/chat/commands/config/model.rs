@@ -1,41 +1,44 @@
+use crate::chat::commands::config::completion_values::{
+    cached_model_id_values, configured_provider_values, confirm_true_values, reasoning_values,
+    saved_model_values,
+};
 use crate::chat::commands::{
-    ChatCommand, ChatCommandContext, ChatCommandFuture, ChatCommandResult, SOURCE_MODELS,
-    SOURCE_MODEL_IDS, SOURCE_PROVIDERS,
+    ChatCommand, ChatCommandContext, ChatCommandFuture, ChatCommandResult, CompletionFieldSpec,
+    CompletionSubcommandSpec, CompletionValueValidation,
 };
 use crate::chat::validate_cached_model_reasoning;
 use crate::config_fields::{named_args, parse_reasoning};
-use spectacular_commands::{
-    CommandError, CompletionFieldSpec, CompletionSubcommandSpec, CompletionValueSource,
-};
-use spectacular_config::ReasoningLevel;
-
-const REASONING_VALUES: &[&str] = &["none", "minimal", "low", "medium", "high", "xhigh"];
-const CONFIRM_VALUES: &[&str] = &["true"];
+use spectacular_commands::CommandError;
+use spectacular_config::{ModelCache, ReasoningLevel};
 
 const MODEL_ADD_FIELDS: &[CompletionFieldSpec] = &[
     CompletionFieldSpec {
         name: "provider",
         summary: "configured provider name",
         required: true,
-        value_source: CompletionValueSource::Dynamic(SOURCE_PROVIDERS),
+        values: configured_provider_values,
+        validation: CompletionValueValidation::None,
     },
     CompletionFieldSpec {
         name: "id",
         summary: "model ID from the selected provider",
         required: true,
-        value_source: CompletionValueSource::Dynamic(SOURCE_MODEL_IDS),
+        values: cached_model_id_values,
+        validation: CompletionValueValidation::None,
     },
     CompletionFieldSpec {
         name: "reasoning",
         summary: "reasoning level",
         required: true,
-        value_source: CompletionValueSource::Static(REASONING_VALUES),
+        values: reasoning_values,
+        validation: CompletionValueValidation::OneOfValues,
     },
     CompletionFieldSpec {
         name: "name",
         summary: "optional saved model name",
         required: false,
-        value_source: CompletionValueSource::Dynamic(SOURCE_MODELS),
+        values: saved_model_values,
+        validation: CompletionValueValidation::None,
     },
 ];
 
@@ -44,25 +47,29 @@ const MODEL_EDIT_FIELDS: &[CompletionFieldSpec] = &[
         name: "name",
         summary: "saved model key",
         required: true,
-        value_source: CompletionValueSource::Dynamic(SOURCE_MODELS),
+        values: saved_model_values,
+        validation: CompletionValueValidation::None,
     },
     CompletionFieldSpec {
         name: "provider",
         summary: "replacement provider name",
         required: false,
-        value_source: CompletionValueSource::Dynamic(SOURCE_PROVIDERS),
+        values: configured_provider_values,
+        validation: CompletionValueValidation::None,
     },
     CompletionFieldSpec {
         name: "id",
         summary: "replacement model ID",
         required: false,
-        value_source: CompletionValueSource::Dynamic(SOURCE_MODEL_IDS),
+        values: cached_model_id_values,
+        validation: CompletionValueValidation::None,
     },
     CompletionFieldSpec {
         name: "reasoning",
         summary: "replacement reasoning level",
         required: false,
-        value_source: CompletionValueSource::Static(REASONING_VALUES),
+        values: reasoning_values,
+        validation: CompletionValueValidation::OneOfValues,
     },
 ];
 
@@ -71,13 +78,15 @@ const MODEL_REMOVE_FIELDS: &[CompletionFieldSpec] = &[
         name: "name",
         summary: "saved model key",
         required: true,
-        value_source: CompletionValueSource::Dynamic(SOURCE_MODELS),
+        values: saved_model_values,
+        validation: CompletionValueValidation::None,
     },
     CompletionFieldSpec {
         name: "confirm",
         summary: "explicit deletion confirmation",
         required: false,
-        value_source: CompletionValueSource::Static(CONFIRM_VALUES),
+        values: confirm_true_values,
+        validation: CompletionValueValidation::OneOfValues,
     },
 ];
 
@@ -99,6 +108,7 @@ const MODEL_SUBCOMMANDS: &[CompletionSubcommandSpec] = &[
     },
 ];
 
+/// Builds the `/model` chat command metadata and completion definition.
 pub fn command() -> ChatCommand {
     ChatCommand {
         name: "model",
@@ -109,6 +119,7 @@ pub fn command() -> ChatCommand {
     }
 }
 
+/// Routes `/model` subcommands to saved-model configuration handlers.
 fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatCommandFuture<'a> {
     Box::pin(async move {
         match args.split_first() {
@@ -124,6 +135,7 @@ fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatComman
     })
 }
 
+/// Adds a saved model after validating cached provider metadata and reasoning support.
 fn model_add(context: ChatCommandContext<'_>, fields: &[String]) -> ChatCommandResult {
     let args = match named_args(fields, &["provider", "id", "reasoning", "name"]) {
         Ok(args) => args,
@@ -146,7 +158,11 @@ fn model_add(context: ChatCommandContext<'_>, fields: &[String]) -> ChatCommandR
         Err(error) => return ChatCommandResult::error(error.to_string()),
     };
 
-    if let Err(error) = validate_reasoning(provider, model_id, reasoning) {
+    let cache = match context.model.config_io().read_model_cache_or_default() {
+        Ok(cache) => cache,
+        Err(error) => return ChatCommandResult::error(error.to_string()),
+    };
+    if let Err(error) = validate_reasoning(&cache, provider, model_id, reasoning) {
         return ChatCommandResult::error(error.to_string());
     }
 
@@ -164,6 +180,7 @@ fn model_add(context: ChatCommandContext<'_>, fields: &[String]) -> ChatCommandR
     }
 }
 
+/// Updates an existing saved model and refreshes the runtime when needed.
 fn model_edit(context: ChatCommandContext<'_>, fields: &[String]) -> ChatCommandResult {
     let args = match named_args(fields, &["name", "provider", "id", "reasoning"]) {
         Ok(args) => args,
@@ -179,7 +196,7 @@ fn model_edit(context: ChatCommandContext<'_>, fields: &[String]) -> ChatCommand
     };
 
     if args.optional("provider").is_some() || args.optional("id").is_some() || reasoning.is_some() {
-        let config = match spectacular_config::read_config_or_default() {
+        let config = match context.model.config_io().read_config_or_default() {
             Ok(config) => config,
             Err(error) => return ChatCommandResult::error(error.to_string()),
         };
@@ -192,7 +209,11 @@ fn model_edit(context: ChatCommandContext<'_>, fields: &[String]) -> ChatCommand
             .unwrap_or(current.provider.as_str());
         let model_id = args.optional("id").unwrap_or(current.model.as_str());
         let reasoning = reasoning.unwrap_or(current.reasoning);
-        if let Err(error) = validate_reasoning(provider, model_id, reasoning) {
+        let cache = match context.model.config_io().read_model_cache_or_default() {
+            Ok(cache) => cache,
+            Err(error) => return ChatCommandResult::error(error.to_string()),
+        };
+        if let Err(error) = validate_reasoning(&cache, provider, model_id, reasoning) {
             return ChatCommandResult::error(error.to_string());
         }
     }
@@ -211,6 +232,7 @@ fn model_edit(context: ChatCommandContext<'_>, fields: &[String]) -> ChatCommand
     }
 }
 
+/// Removes a saved model after explicit confirmation and reports invalid task references.
 fn model_remove(context: ChatCommandContext<'_>, fields: &[String]) -> ChatCommandResult {
     let args = match named_args(fields, &["name", "confirm"]) {
         Ok(args) => args,
@@ -246,11 +268,12 @@ fn model_remove(context: ChatCommandContext<'_>, fields: &[String]) -> ChatComma
     }
 }
 
+/// Validates requested reasoning settings against already loaded model metadata cache.
 fn validate_reasoning(
+    cache: &ModelCache,
     provider: &str,
     model_id: &str,
     reasoning: ReasoningLevel,
 ) -> Result<(), crate::chat::ChatError> {
-    let cache = spectacular_config::read_model_cache_or_default()?;
-    validate_cached_model_reasoning(&cache, provider, model_id, reasoning)
+    validate_cached_model_reasoning(cache, provider, model_id, reasoning)
 }
