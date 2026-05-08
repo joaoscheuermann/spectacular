@@ -257,6 +257,26 @@
     }
 
     #[test]
+    fn prompt_editor_footer_adds_one_rendered_line() {
+        let renderer = Renderer::default();
+        let registry = Arc::new(test_registry());
+        let completions = PromptCompletionCatalog::default();
+        let footer = ChatPromptFooterModel {
+            directory: std::path::PathBuf::from("workspace"),
+            model: "test/model".to_owned(),
+            reasoning: spectacular_config::ReasoningLevel::Medium,
+        };
+        let mut editor = PromptEditor::new(&renderer, &registry, &completions).with_footer(footer);
+        editor.state = state_with("hello");
+
+        editor.redraw().unwrap();
+
+        assert_eq!(editor.rendered_lines, 2);
+        assert_eq!(editor.rendered_cursor_row, 0);
+        editor.clear_rendered_block().unwrap();
+    }
+
+    #[test]
     fn paste_normalization_uses_lf() {
         assert_eq!(normalize_paste("a\r\nb\rc"), "a\nb\nc");
     }

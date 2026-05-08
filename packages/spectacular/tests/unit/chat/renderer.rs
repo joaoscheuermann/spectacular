@@ -1,5 +1,7 @@
-use super::banner::format_directory_with_home;
+use super::directory::format_directory_with_home;
+use super::footer::{format_user_prompt_footer, UserPromptFooterView};
 use super::*;
+use crate::chat::model::ChatPromptFooterModel;
 use crate::terminal_style;
 use serde_json::{json, Value};
 use spectacular_agent::{Cancellation, Tool, ToolDisplay, ToolExecution, ToolManifest};
@@ -251,4 +253,36 @@ fn directory_label_uses_home_shorthand() {
         format!("~{}repo{}spectacular", MAIN_SEPARATOR, MAIN_SEPARATOR)
     );
     assert_eq!(format_directory_with_home(&home, Some(&home)), "~");
+}
+
+#[test]
+fn directory_label_leaves_paths_outside_home_unchanged() {
+    let home = PathBuf::from("home");
+    let directory = PathBuf::from("workspace");
+
+    assert_eq!(
+        format_directory_with_home(&directory, Some(&home)),
+        directory.display().to_string()
+    );
+}
+
+#[test]
+fn user_prompt_footer_formats_context_in_expected_order() {
+    let footer = ChatPromptFooterModel {
+        directory: PathBuf::from("workspace"),
+        model: "openai/gpt-5.5".to_owned(),
+        reasoning: ReasoningLevel::High,
+    };
+    let view = UserPromptFooterView::from_model(&footer);
+
+    assert_eq!(view.directory, PathBuf::from("workspace").display().to_string());
+    assert_eq!(view.model, "openai/gpt-5.5");
+    assert_eq!(view.reasoning, "high");
+    assert_eq!(
+        format_user_prompt_footer(&view),
+        format!(
+            "cwd: {}  model: openai/gpt-5.5  reasoning: high",
+            PathBuf::from("workspace").display()
+        )
+    );
 }

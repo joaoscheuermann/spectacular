@@ -63,6 +63,18 @@
     }
 
     #[test]
+    fn chat_prompt_footer_model_uses_runtime_and_directory() {
+        let runtime = test_runtime();
+        let directory = PathBuf::from("workspace");
+
+        let footer = ChatPromptFooterModel::from_runtime(&directory, &runtime);
+
+        assert_eq!(footer.directory, directory);
+        assert_eq!(footer.model, "test/model");
+        assert_eq!(footer.reasoning, ReasoningLevel::Medium);
+    }
+
+    #[test]
     fn provider_notice_propagates_config_load_error() {
         let session = crate::chat::session::SessionManager::new_in(temp_session_dir("provider"))
             .expect("session manager should be created");

@@ -1,4 +1,4 @@
-use crate::chat::model::ChatRunRequestModel;
+use crate::chat::model::{ChatPromptFooterModel, ChatRunRequestModel};
 use crate::chat::provider::provider_for_runtime;
 use crate::chat::renderer::{has_visible_assistant_text, Renderer};
 use crate::chat::session::{agent_events_from_records, records_before_latest_user_prompt};
@@ -20,7 +20,9 @@ use tokio::time::MissedTickBehavior;
 
 pub type ChatTurnFuture<'a> = Pin<Box<dyn Future<Output = Result<(), ChatError>> + Send + 'a>>;
 
+/// Service contract for executing one chat turn from controllers and commands.
 pub trait ChatTurnRunner {
+    /// Runs one chat turn for the supplied model, renderer, tools, and request DTO.
     fn run<'a>(
         &'a self,
         model: &'a mut ChatModel,
@@ -30,23 +32,28 @@ pub trait ChatTurnRunner {
     ) -> ChatTurnFuture<'a>;
 }
 
+/// Runtime request for one chat turn after controller-level context has been resolved.
 pub struct ChatRunRequest {
     pub prompt: String,
     pub render_user_prompt: bool,
     pub retry_existing_prompt: bool,
     pub runtime: RuntimeSelection,
+    pub prompt_footer: Option<ChatPromptFooterModel>,
 }
 
+/// Executes chat turns by wiring session context, provider runtime, tools, and rendering.
 pub struct ChatRunner<'a> {
     model: &'a ChatModel,
     renderer: &'a Renderer,
     tools: ToolStorage,
 }
 
+/// Default service adapter that constructs a `ChatRunner` for each prompt turn.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ChatRunnerService;
 
 impl ChatTurnRunner for ChatRunnerService {
+    /// Delegates trait-based prompt execution to the inherent service runner.
     fn run<'a>(
         &'a self,
         model: &'a mut ChatModel,
@@ -59,6 +66,7 @@ impl ChatTurnRunner for ChatRunnerService {
 }
 
 impl ChatRunnerService {
+    /// Runs one prompt through the concrete chat runner using request DTO data.
     pub async fn run(
         &self,
         model: &mut ChatModel,
@@ -72,12 +80,14 @@ impl ChatRunnerService {
                 render_user_prompt: request.render_user_prompt,
                 retry_existing_prompt: request.retry_existing_prompt,
                 runtime: request.runtime,
+                prompt_footer: request.prompt_footer,
             })
             .await
     }
 }
 
 impl<'a> ChatRunner<'a> {
+    /// Creates a chat runner with explicit model, renderer, and tool dependencies.
     pub fn new(model: &'a ChatModel, renderer: &'a Renderer, tools: ToolStorage) -> Self {
         Self {
             model,
@@ -86,9 +96,15 @@ impl<'a> ChatRunner<'a> {
         }
     }
 
+    /// Executes the requested prompt and renders streaming agent events.
     pub async fn run(&self, request: ChatRunRequest) -> Result<(), ChatError> {
         if request.render_user_prompt {
-            self.renderer.user_prompt(&request.prompt);
+            match request.prompt_footer.as_ref() {
+                Some(footer) => self
+                    .renderer
+                    .user_prompt_with_footer(&request.prompt, footer),
+                None => self.renderer.user_prompt(&request.prompt),
+            }
         }
 
         let records = self.model.records()?;
@@ -198,12 +214,14 @@ impl<'a> ChatRunner<'a> {
     }
 }
 
+/// Builds the built-in tool storage scoped to the injected workspace root.
 pub fn main_chat_tool_storage(
     workspace_root: impl Into<PathBuf>,
 ) -> Result<ToolStorage, ToolRegistrationError> {
     spectacular_tools::built_in_tools(workspace_root)
 }
 
+/// Creates the main coding agent configured with runtime model, reasoning, and tools.
 fn main_chat_agent<P>(
     provider: P,
     runtime: &RuntimeSelection,
@@ -229,6 +247,7 @@ where
     .with_tools(tools)
 }
 
+/// Converts a configured reasoning level into an optional provider effort string.
 fn runtime_reasoning_effort(reasoning: ReasoningLevel) -> Option<String> {
     match reasoning {
         ReasoningLevel::None => None,
@@ -248,6 +267,7 @@ struct AssistantDeltaRender {
 }
 
 impl AssistantResponseRenderState {
+    /// Returns newly visible assistant text once accumulated deltas contain nonblank content.
     fn delta(&mut self, content: &str) -> Option<AssistantDeltaRender> {
         if self.visible {
             return Some(AssistantDeltaRender {
@@ -268,6 +288,7 @@ impl AssistantResponseRenderState {
         })
     }
 
+    /// Closes any visible response and reports whether a spacer line should be emitted.
     fn close_visible_response(&mut self) -> bool {
         self.pending.clear();
         if !self.visible {
@@ -279,6 +300,7 @@ impl AssistantResponseRenderState {
     }
 }
 
+/// Renders a persisted or streamed agent event without appending it to session storage.
 pub async fn render_agent_event(
     renderer: &Renderer,
     tools: &ToolStorage,
@@ -325,6 +347,7 @@ pub async fn render_agent_event(
     Ok(())
 }
 
+/// Consumes the replayed retry user prompt so it is not rendered or stored twice.
 fn should_skip_retry_user_prompt(skip_retry_user: &mut bool, event: &AgentEvent) -> bool {
     if *skip_retry_user && matches!(event, AgentEvent::UserPrompt { .. }) {
         *skip_retry_user = false;
@@ -334,14 +357,17 @@ fn should_skip_retry_user_prompt(skip_retry_user: &mut bool, event: &AgentEvent)
     false
 }
 
+/// Returns whether an event should be persisted without immediate terminal rendering.
 fn should_append_without_render(event: &AgentEvent) -> bool {
     matches!(event, AgentEvent::UserPrompt { .. })
 }
 
+/// Returns whether enough assistant text exists to launch title generation once.
 fn should_spawn_title_task(title_spawned: bool, title_text: &str) -> bool {
     !title_spawned && !title_text.trim().is_empty()
 }
 
+/// Returns whether an event ends the active agent stream for the current prompt.
 fn is_terminal_agent_event(event: &AgentEvent) -> bool {
     matches!(
         event,

@@ -73,6 +73,7 @@
             commands::registry().unwrap(),
             Renderer::default(),
             ToolStorage::default(),
+            std::path::PathBuf::from("workspace"),
         );
 
         let control = controller

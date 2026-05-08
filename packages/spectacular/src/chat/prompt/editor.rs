@@ -8,12 +8,19 @@ impl<'a, C> PromptEditor<'a, C> {
             renderer,
             registry,
             completions,
+            footer: None,
             state: PromptState::default(),
             terminal: PromptTerminal,
             rendered_lines: 0,
             rendered_cursor_row: 0,
             paste_burst: PasteBurst::default(),
         }
+    }
+
+    /// Adds contextual footer data to render below the active prompt input.
+    pub fn with_footer(mut self, footer: ChatPromptFooterModel) -> Self {
+        self.footer = Some(footer);
+        self
     }
 
     pub fn read_line(mut self) -> Result<String, ChatError> {
@@ -375,6 +382,11 @@ impl<'a, C> PromptEditor<'a, C> {
         self.terminal
             .render_prompt_rows(self.renderer, &self.state, &rows);
 
+        if let Some(footer) = &self.footer {
+            println!();
+            print!("{}", crate::chat::renderer::format_prompt_footer(footer));
+        }
+
         for line in &guidance {
             println!();
             print!("{}", render_guidance_line(line));
@@ -394,6 +406,7 @@ impl<'a, C> PromptEditor<'a, C> {
 
         self.rendered_lines = saturating_u16(
             rows.len()
+                + usize::from(self.footer.is_some())
                 + guidance.len()
                 + guidance_suggestion_gap(&guidance, &suggestions)
                 + suggestions.len(),

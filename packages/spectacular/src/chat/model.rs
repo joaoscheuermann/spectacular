@@ -9,7 +9,7 @@ use spectacular_config::{
 };
 use spectacular_llms::LlmDebugLogger;
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// State model for chat sessions, runtime selection, and config-backed commands.
 pub struct ChatModel {
@@ -313,12 +313,33 @@ impl From<HistorySummary> for HistoryRowModel {
     }
 }
 
+/// Data carried with a new prompt so the renderer can show contextual footer text.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ChatPromptFooterModel {
+    pub directory: PathBuf,
+    pub model: String,
+    pub reasoning: spectacular_config::ReasoningLevel,
+}
+
+impl ChatPromptFooterModel {
+    /// Builds prompt footer data from the active runtime and injected workspace root.
+    pub fn from_runtime(directory: &Path, runtime: &RuntimeSelection) -> Self {
+        Self {
+            directory: directory.to_path_buf(),
+            model: runtime.model.clone(),
+            reasoning: runtime.reasoning,
+        }
+    }
+}
+
+/// Request data for running one chat turn through the runner service.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ChatRunRequestModel {
     pub prompt: String,
     pub render_user_prompt: bool,
     pub retry_existing_prompt: bool,
     pub runtime: RuntimeSelection,
+    pub prompt_footer: Option<ChatPromptFooterModel>,
 }
 
 /// Truncates display text to a character limit with an ellipsis when needed.

@@ -32,6 +32,7 @@ fn execute<'a>(mut context: ChatCommandContext<'a>, args: Vec<String>) -> ChatCo
             render_user_prompt: false,
             retry_existing_prompt: true,
             runtime: context.model.runtime().clone(),
+            prompt_footer: None,
         };
 
         context.notice("retrying latest prompt...");
