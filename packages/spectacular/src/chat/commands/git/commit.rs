@@ -20,6 +20,12 @@ const MAX_DIFF_CHARS: usize = 15_000;
 const TRUNCATED_DIFF_NOTICE: &str =
     "warning: diff is large and has been truncated for the commit message agent";
 
+/// System prompt for commit message generation
+const COMMIT_SYSTEM_PROMPT: &str = include_str!("prompt/commit-system.md");
+
+/// User prompt template for commit message generation
+const COMMIT_USER_PROMPT_TEMPLATE: &str = include_str!("prompt/commit-user.md");
+
 /// Internal execute function that can be called from the parent git command
 pub fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatCommandFuture<'a> {
     Box::pin(async move {
@@ -125,19 +131,7 @@ async fn generate_commit_message(
     .map_err(|e| format!("provider error: {}", e))?;
 
     let model_name = context.model.runtime().model.clone();
-    let system_prompt = r#"You are a git commit message generator that follows the Conventional Commits specification.
-
-Given a staged git diff, generate an appropriate conventional commit message.
-
-Rules:
-- Format: <type>(<scope>): <description>
-- Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
-- Scope: optional, derived from the affected module/component
-- Description: imperative mood ("add" not "added"), lowercase first letter, no trailing period, max 50 chars
-- Body: optional, explain WHAT and WHY (not HOW), wrap at 72 chars
-- Breaking changes: prefix body with "BREAKING CHANGE: " if applicable
-- Return ONLY the commit message. No explanations, no markdown formatting, no quotes."#
-        .to_owned();
+    let system_prompt = COMMIT_SYSTEM_PROMPT.to_owned();
 
     let config = AgentConfig {
         system_prompt,
@@ -172,22 +166,7 @@ Rules:
 }
 
 fn build_commit_prompt(diff: &str) -> String {
-    format!(
-        r#"Analyze the following staged git diff and generate a conventional commit message:
-
-```diff
-{diff}
-```
-
-Consider:
-- What files were changed?
-- What is the nature of the changes?
-- Is this a feature, fix, refactor, chore, etc.?
-- Are there any breaking changes?
-
-Return only the commit message."#,
-        diff = diff
-    )
+    COMMIT_USER_PROMPT_TEMPLATE.replace("{diff}", diff)
 }
 
 fn truncate_diff_if_needed(diff: &str) -> (String, bool) {
