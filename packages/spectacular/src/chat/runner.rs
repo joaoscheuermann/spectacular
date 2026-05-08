@@ -1,9 +1,11 @@
-use crate::chat::model::{ChatModel, ChatRunRequestModel};
 use crate::chat::provider::provider_for_runtime;
 use crate::chat::renderer::{has_visible_assistant_text, Renderer};
 use crate::chat::session::{agent_events_from_records, records_before_latest_user_prompt};
 use crate::chat::title::spawn_title_task;
-use crate::chat::{ChatError, RuntimeSelection};
+use crate::chat::{ChatError, ChatModel, RuntimeSelection};
+use crate::chat::model::ChatRunRequestModel;
+
+const CODING_AGENT_SYSTEM_PROMPT: &str = include_str!("prompt/coding-agent.md");
 use spectacular_agent::{
     Agent, AgentConfig, AgentEvent, Store, ToolRegistrationError, ToolStorage,
 };
@@ -215,6 +217,7 @@ where
             require_usage_metadata: false,
             include_reasoning: reasoning_effort.is_some(),
             reasoning_effort,
+            system_prompt: CODING_AGENT_SYSTEM_PROMPT.to_string(),
             ..AgentConfig::default()
         },
         store,
