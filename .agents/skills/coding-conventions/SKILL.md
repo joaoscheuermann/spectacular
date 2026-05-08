@@ -1,6 +1,6 @@
 ---
 name: coding-conventions
-description: Shared design principles, Nx Python/Rust scaffolding references, and coding rules for Nx monorepos. Load when designing architecture (with architect) or before implementing code (with developer). Covers SRP, OCP, DIP, ISP, KISS, DRY plus reusability practice, @nxlv/python, @monodon/rust, early returns, functional style, explicit dependency injection, and method documentation.
+description: Shared design principles, Nx Python/Rust scaffolding references, and coding rules for Nx monorepos. Load when designing architecture (with architect) or before implementing code (with developer). Covers SRP, OCP, DIP, ISP, KISS, DRY, deep vs shallow modules, reusability practice, @nxlv/python, @monodon/rust, early returns, functional style, explicit dependency injection, and method documentation.
 ---
 
 # Coding conventions
@@ -11,8 +11,8 @@ Use this skill as the **single source** for principles and coding rules referenc
 
 | Role | What to read |
 |------|----------------|
-| **Architect / planning** | Design principles ([references/srp.md](references/srp.md) through [references/kiss.md](references/kiss.md), [references/dry.md](references/dry.md)). Open [references/nxlv-python.md](references/nxlv-python.md) or [references/monodon-rust.md](references/monodon-rust.md) when scaffolding new packages or crates. |
-| **Developer / implementation** | Read [references/dry.md](references/dry.md) (includes reusability workflow), [references/early-returns.md](references/early-returns.md), [references/functional-programming.md](references/functional-programming.md), [references/dependency-injection.md](references/dependency-injection.md), [references/file-size-limits.md](references/file-size-limits.md), [references/test-location.md](references/test-location.md), [references/method-documentation.md](references/method-documentation.md). Use Nx plugin refs when touching Python or Rust project layout. |
+| **Architect / planning** | Design principles ([references/srp.md](references/srp.md) through [references/kiss.md](references/kiss.md), [references/dry.md](references/dry.md), [references/module-depth.md](references/module-depth.md)). Open [references/nxlv-python.md](references/nxlv-python.md) or [references/monodon-rust.md](references/monodon-rust.md) when scaffolding new packages or crates. |
+| **Developer / implementation** | Read [references/dry.md](references/dry.md) (includes reusability workflow), [references/module-depth.md](references/module-depth.md) when adding or exposing module boundaries, [references/early-returns.md](references/early-returns.md), [references/functional-programming.md](references/functional-programming.md), [references/dependency-injection.md](references/dependency-injection.md), [references/file-size-limits.md](references/file-size-limits.md), [references/test-location.md](references/test-location.md), [references/method-documentation.md](references/method-documentation.md). Use Nx plugin refs when touching Python or Rust project layout. |
 
 ## Reference index
 
@@ -24,6 +24,7 @@ Use this skill as the **single source** for principles and coding rules referenc
 4. [ISP — Interface Segregation](references/isp.md) — small contracts at boundaries
 5. [KISS](references/kiss.md) — prefer simple extensions before new machinery
 6. [DRY + reusability](references/dry.md) — one source of truth; search before adding code
+7. [Deep and shallow modules](references/module-depth.md) — hide meaningful complexity behind simple interfaces
 
 ### Nx scaffolding
 
