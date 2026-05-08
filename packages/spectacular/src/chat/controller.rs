@@ -19,6 +19,7 @@ pub struct ChatController<R = ChatRunnerService> {
 }
 
 impl ChatController<ChatRunnerService> {
+    /// Creates a chat controller wired to the default chat runner service.
     pub fn new(
         model: ChatModel,
         commands: ChatCommandAdapter,
@@ -33,6 +34,7 @@ impl<R> ChatController<R>
 where
     R: ChatTurnRunner,
 {
+    /// Creates a chat controller with an injected runner for tests or alternate execution.
     pub fn with_runner(
         model: ChatModel,
         commands: ChatCommandAdapter,
@@ -49,6 +51,7 @@ where
         }
     }
 
+    /// Executes a parsed slash command and maps command control into REPL control.
     pub async fn dispatch_command(
         &mut self,
         invocation: CommandInvocation,
@@ -73,6 +76,7 @@ where
         Ok(CommandControl::Continue)
     }
 
+    /// Sends a user prompt through the active runner when runtime configuration is complete.
     pub async fn dispatch_prompt(&mut self, prompt: String) -> Result<(), ChatError> {
         if !self.model.runtime().is_ready() {
             self.renderer.error(
@@ -92,6 +96,7 @@ where
             .await
     }
 
+    /// Parses a REPL input line and dispatches it as a command or user prompt.
     pub async fn handle_line(&mut self, line: String) -> Result<CommandControl, ChatError> {
         let line = line.trim_end_matches(['\r', '\n']).to_owned();
         if line.trim().is_empty() {
@@ -115,6 +120,7 @@ where
         }
     }
 
+    /// Runs the interactive chat loop until a command or EOF exits it.
     pub async fn run_loop(&mut self) -> Result<(), ChatError> {
         loop {
             let line = self.read_prompt_line()?;
@@ -124,12 +130,11 @@ where
         }
     }
 
+    /// Reads one prompt line using the rich editor for terminals and stdin otherwise.
     fn read_prompt_line(&self) -> Result<String, ChatError> {
         if io::stdin().is_terminal() && io::stdout().is_terminal() {
-            let completions = PromptCompletionCatalog::new(
-                self.commands.completion_specs(),
-                self.model.prompt_completion_sources(),
-            );
+            let completions =
+                PromptCompletionCatalog::new(self.commands.completion_specs(), &self.model);
             return PromptEditor::new(&self.renderer, self.commands.metadata(), &completions)
                 .read_line();
         }

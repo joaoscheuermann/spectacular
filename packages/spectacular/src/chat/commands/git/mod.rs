@@ -7,9 +7,9 @@ pub mod helpers;
 pub mod status;
 
 use crate::chat::commands::{
-    ChatCommand, ChatCommandContext, ChatCommandFuture, ChatCommandResult,
+    ChatCommand, ChatCommandContext, ChatCommandFuture, ChatCommandResult, CompletionSubcommandSpec,
 };
-use spectacular_commands::{CommandError, CompletionSubcommandSpec};
+use spectacular_commands::CommandError;
 
 /// Git command sub-commands for completion
 const GIT_SUBCOMMANDS: &[CompletionSubcommandSpec] = &[

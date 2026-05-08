@@ -219,7 +219,7 @@ impl PromptState {
     fn dismiss_suggestions<C>(
         &mut self,
         registry: &CommandRegistry<C>,
-        completions: &PromptCompletionCatalog,
+        completions: &PromptCompletionCatalog<'_>,
     ) -> bool {
         let key = completion_context_key(&self.buffer, self.cursor);
         if key == self.dismissed_completion {
@@ -254,7 +254,7 @@ impl PromptState {
     }
 
     /// Advances the command composer to the next field that needs user input.
-    fn guide_command_field(&mut self, completions: &PromptCompletionCatalog) -> bool {
+    fn guide_command_field(&mut self, completions: &PromptCompletionCatalog<'_>) -> bool {
         let Some(field) = command_field_needing_attention(&self.buffer, completions) else {
             return false;
         };
@@ -271,7 +271,7 @@ impl PromptState {
     fn suggestions<C>(
         &self,
         registry: &CommandRegistry<C>,
-        completions: &PromptCompletionCatalog,
+        completions: &PromptCompletionCatalog<'_>,
     ) -> Vec<PromptSuggestion> {
         if completion_context_key(&self.buffer, self.cursor) == self.dismissed_completion {
             return Vec::new();

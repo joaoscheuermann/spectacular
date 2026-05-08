@@ -1,4 +1,5 @@
 #[cfg(test)]
+/// Extracts the slash-command query under the cursor for command-name tests.
 fn suggestion_query(buffer: &str, cursor: usize) -> Option<&str> {
     if !buffer.starts_with('/') || cursor == 0 || cursor > buffer.len() {
         return None;
@@ -12,11 +13,12 @@ fn suggestion_query(buffer: &str, cursor: usize) -> Option<&str> {
     Some(&buffer[1..cursor])
 }
 
+/// Builds prompt suggestions for the active command, subcommand, field, or value token.
 fn prompt_suggestions<C>(
     buffer: &str,
     cursor: usize,
     registry: &CommandRegistry<C>,
-    completions: &PromptCompletionCatalog,
+    completions: &PromptCompletionCatalog<'_>,
 ) -> Vec<PromptSuggestion> {
     let Some(context) = completion_context(buffer, cursor) else {
         return Vec::new();
@@ -43,8 +45,7 @@ fn prompt_suggestions<C>(
             subcommand,
             used_fields,
         } => completions
-            .spec(&command)
-            .and_then(|spec| find_subcommand(spec.subcommands, &subcommand))
+            .subcommand(&command, &subcommand)
             .map(|spec| field_suggestions(spec.fields, &used_fields, context.query))
             .unwrap_or_default(),
         CompletionTarget::Value {
@@ -55,14 +56,24 @@ fn prompt_suggestions<C>(
             value_query,
             args,
         } => completions
-            .spec(&command)
-            .and_then(|spec| find_subcommand(spec.subcommands, &subcommand))
-            .and_then(|spec| find_field(spec.fields, &field_query))
-            .map(|spec| value_suggestions(spec, &field, &value_query, completions, &args))
+            .field(&command, &subcommand, &field_query)
+            .map(|spec| {
+                value_suggestions(
+                    ValueSuggestionRequest {
+                        subcommand: &subcommand,
+                        field: &field,
+                        query: &value_query,
+                        args: &args,
+                        spec,
+                    },
+                    completions,
+                )
+            })
             .unwrap_or_default(),
     }
 }
 
+/// Returns ranked subcommand suggestions for a completion query.
 fn subcommand_suggestions(
     specs: &[CompletionSubcommandSpec],
     query: &str,
@@ -81,6 +92,7 @@ fn subcommand_suggestions(
         .collect()
 }
 
+/// Returns field-name suggestions excluding fields already used in the command line.
 fn field_suggestions(
     specs: &[CompletionFieldSpec],
     used_fields: &[String],
@@ -107,27 +119,32 @@ fn field_suggestions(
         .collect()
 }
 
-fn value_suggestions(
+/// Captures all prompt state needed to resolve values for one command field.
+struct ValueSuggestionRequest<'a> {
+    subcommand: &'a str,
+    field: &'a str,
+    query: &'a str,
+    args: &'a [(String, String)],
     spec: CompletionFieldSpec,
-    field: &str,
-    query: &str,
-    completions: &PromptCompletionCatalog,
-    args: &[(String, String)],
+}
+
+/// Returns ranked field-value suggestions or a non-selectable error suggestion.
+fn value_suggestions(
+    request: ValueSuggestionRequest<'_>,
+    completions: &PromptCompletionCatalog<'_>,
 ) -> Vec<PromptSuggestion> {
-    let values = match spec.value_source {
-        CompletionValueSource::Static(values) => values.to_vec(),
-        CompletionValueSource::Dynamic(source) => {
-            dynamic_values_for_field(source, field, args, completions)
-        }
+    let values = match completions.resolve_values(request.spec, request.subcommand, request.args) {
+        Ok(values) => values,
+        Err(error) => return unavailable_value_suggestion(request.field, &error.to_string()),
     };
-    let (matches, total) = fuzzy_limited_matches(values, query, MAX_SUGGESTIONS);
+    let (matches, total) = fuzzy_limited_matches(values, request.query, MAX_SUGGESTIONS);
 
     let mut suggestions = matches
         .into_iter()
         .map(|value| PromptSuggestion {
-            replacement: format!("{field}:{value}"),
+            replacement: format!("{}:{value}", request.field),
             label: value.to_owned(),
-            summary: format!("{field} value"),
+            summary: format!("{} value", request.field),
             append_space: true,
             kind: PromptSuggestionKind::Value,
         })
@@ -147,15 +164,26 @@ fn value_suggestions(
     suggestions
 }
 
+/// Returns a non-selectable suggestion explaining that values could not be resolved.
+fn unavailable_value_suggestion(field: &str, error: &str) -> Vec<PromptSuggestion> {
+    vec![PromptSuggestion {
+        replacement: String::new(),
+        label: format!("[{field} values unavailable]"),
+        summary: error.to_owned(),
+        append_space: false,
+        kind: PromptSuggestionKind::Info,
+    }]
+}
+
 /// Applies the shared fuzzy ranking while also reporting the hidden match count.
-fn fuzzy_limited_matches<'a>(
-    candidates: Vec<&'a str>,
+fn fuzzy_limited_matches(
+    candidates: Vec<String>,
     query: &str,
     limit: usize,
-) -> (Vec<&'a str>, usize) {
+) -> (Vec<String>, usize) {
     let mut matches = candidates
         .into_iter()
-        .filter_map(|candidate| fuzzy_rank(candidate, query).map(|rank| (rank, candidate)))
+        .filter_map(|candidate| fuzzy_rank(&candidate, query).map(|rank| (rank, candidate)))
         .collect::<Vec<_>>();
 
     matches.sort_by(|(left_rank, left), (right_rank, right)| {
@@ -177,7 +205,7 @@ fn fuzzy_limited_matches<'a>(
 fn prompt_guidance(
     buffer: &str,
     cursor: usize,
-    completions: &PromptCompletionCatalog,
+    completions: &PromptCompletionCatalog<'_>,
 ) -> Vec<PromptGuidanceLine> {
     let Some((_, subcommand, args, fields)) = command_fields(buffer, completions) else {
         return Vec::new();
@@ -186,7 +214,12 @@ fn prompt_guidance(
         return Vec::new();
     }
 
-    let validation = command_validation_state(&args, fields);
+    let validation = command_validation_state(
+        &args,
+        fields,
+        subcommand.as_deref().unwrap_or_default(),
+        completions,
+    );
     let mut lines = Vec::new();
     if !validation.missing.is_empty() {
         lines.push(PromptGuidanceLine::Missing(

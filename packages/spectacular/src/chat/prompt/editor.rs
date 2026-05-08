@@ -2,7 +2,7 @@ impl<'a, C> PromptEditor<'a, C> {
     pub fn new(
         renderer: &'a Renderer,
         registry: &'a Arc<CommandRegistry<C>>,
-        completions: &'a PromptCompletionCatalog,
+        completions: &'a PromptCompletionCatalog<'a>,
     ) -> Self {
         Self {
             renderer,

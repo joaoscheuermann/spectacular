@@ -1,3 +1,7 @@
+use crate::chat::commands::{
+    CompletionCommandSpec, CompletionEnvironment, CompletionFieldSpec, CompletionSubcommandSpec,
+};
+use crate::chat::model::ChatModel;
 use crate::chat::paste_burst::{CharDecision, FlushResult, PasteBurst};
 use crate::chat::renderer::{dim_style, paint, selection_style, user_style, Renderer};
 use crate::chat::ChatError;
@@ -9,11 +13,7 @@ use crossterm::event::{
 };
 use crossterm::queue;
 use crossterm::terminal::{self, disable_raw_mode, enable_raw_mode, Clear, ClearType};
-use spectacular_commands::{
-    fuzzy_filter, fuzzy_rank, parse_line, CommandRegistry, CompletionCommandSpec,
-    CompletionFieldSpec, CompletionSubcommandSpec, CompletionValueSource, ParseOutcome,
-};
-use std::collections::BTreeMap;
+use spectacular_commands::{fuzzy_filter, fuzzy_rank, parse_line, CommandRegistry, ParseOutcome};
 use std::io::{self, Write};
 use std::ops::Range;
 use std::sync::Arc;
@@ -37,6 +37,7 @@ include!("prompt/navigation.rs");
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::chat::commands::{ChatCompletionContext, CompletionValueValidation};
     use spectacular_commands::{Command, CommandControl, CommandFuture};
 
     include!(concat!(
