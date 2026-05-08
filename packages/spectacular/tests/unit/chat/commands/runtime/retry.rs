@@ -32,7 +32,9 @@
 
         assert_eq!(result, ChatCommandResult::Success);
         assert!(recorded.lock().unwrap().as_ref().is_some_and(|request| {
-            request.prompt == "try again" && request.retry_existing_prompt
+            request.prompt == "try again"
+                && request.retry_existing_prompt
+                && request.prompt_footer.is_none()
         }));
     }
 

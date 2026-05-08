@@ -2,6 +2,7 @@ pub struct PromptEditor<'a, C> {
     renderer: &'a Renderer,
     registry: &'a Arc<CommandRegistry<C>>,
     completions: &'a PromptCompletionCatalog<'a>,
+    footer: Option<ChatPromptFooterModel>,
     state: PromptState,
     terminal: PromptTerminal,
     rendered_lines: u16,

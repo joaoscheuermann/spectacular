@@ -47,7 +47,13 @@ pub async fn run(debug_logger: LlmDebugLogger) -> Result<(), ChatError> {
     for warning in warnings {
         renderer.warning(&warning);
     }
-    let mut controller = ChatController::new(model, commands::registry()?, renderer, tools);
+    let mut controller = ChatController::new(
+        model,
+        commands::registry()?,
+        renderer,
+        tools,
+        workspace_root,
+    );
     controller.run_loop().await
 }
 

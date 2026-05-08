@@ -24,6 +24,7 @@ async fn retry_command_runs_prompt_during_dispatch() {
         commands::registry().unwrap(),
         Renderer::default(),
         ToolStorage::default(),
+        test_workspace_root(),
         RecordingRunner {
             recorded: Arc::clone(&recorded),
         },
@@ -57,6 +58,7 @@ async fn retry_runner_error_continues_repl() {
         commands::registry().unwrap(),
         Renderer::default(),
         ToolStorage::default(),
+        test_workspace_root(),
         FailingRunner,
     );
 
@@ -76,6 +78,7 @@ async fn prompt_dispatch_runs_user_prompt_request() {
         commands::registry().unwrap(),
         Renderer::default(),
         ToolStorage::default(),
+        test_workspace_root(),
         RecordingRunner {
             recorded: Arc::clone(&recorded),
         },
@@ -86,9 +89,16 @@ async fn prompt_dispatch_runs_user_prompt_request() {
         .await
         .unwrap();
 
-    assert!(recorded.lock().unwrap().as_ref().is_some_and(|request| {
-        request.prompt == "hello" && request.render_user_prompt && !request.retry_existing_prompt
-    }));
+    let request = recorded
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("normal prompts should run through the runner");
+
+    assert_eq!(request.prompt, "hello");
+    assert!(request.render_user_prompt);
+    assert!(!request.retry_existing_prompt);
+    assert!(request.prompt_footer.is_none());
 }
 
 #[tokio::test]
@@ -99,6 +109,7 @@ async fn setup_runtime_blocks_prompt_without_runner_call() {
         commands::registry().unwrap(),
         Renderer::default(),
         ToolStorage::default(),
+        test_workspace_root(),
         RecordingRunner {
             recorded: Arc::clone(&recorded),
         },
@@ -120,6 +131,7 @@ async fn blank_line_is_ignored_without_runner_call() {
         commands::registry().unwrap(),
         Renderer::default(),
         ToolStorage::default(),
+        test_workspace_root(),
         RecordingRunner {
             recorded: Arc::clone(&recorded),
         },
@@ -138,6 +150,7 @@ async fn command_parse_error_continues_repl_without_runner_call() {
         commands::registry().unwrap(),
         Renderer::default(),
         ToolStorage::default(),
+        test_workspace_root(),
         RecordingRunner {
             recorded: Arc::clone(&recorded),
         },
@@ -206,6 +219,10 @@ fn setup_model() -> ChatModel {
     let mut model = ChatModel::new(session, RuntimeSelection::setup());
     model.start_new_session().unwrap();
     model
+}
+
+fn test_workspace_root() -> PathBuf {
+    PathBuf::from("workspace")
 }
 
 fn temp_session_dir(name: &str) -> PathBuf {

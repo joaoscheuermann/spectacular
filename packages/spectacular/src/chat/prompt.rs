@@ -1,7 +1,7 @@
 use crate::chat::commands::{
     CompletionCommandSpec, CompletionEnvironment, CompletionFieldSpec, CompletionSubcommandSpec,
 };
-use crate::chat::model::ChatModel;
+use crate::chat::model::{ChatModel, ChatPromptFooterModel};
 use crate::chat::paste_burst::{CharDecision, FlushResult, PasteBurst};
 use crate::chat::renderer::{dim_style, paint, selection_style, user_style, Renderer};
 use crate::chat::ChatError;

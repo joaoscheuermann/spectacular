@@ -9,12 +9,14 @@ use crate::chat::ChatError;
 use spectacular_agent::ToolStorage;
 use spectacular_commands::{parse_line, CommandControl, CommandInvocation, ParseOutcome};
 use std::io::{self, IsTerminal, Write};
+use std::path::PathBuf;
 
 pub struct ChatController<R = ChatRunnerService> {
     model: ChatModel,
     commands: ChatCommandAdapter,
     renderer: Renderer,
     tools: ToolStorage,
+    workspace_root: PathBuf,
     runner: R,
 }
 
@@ -25,8 +27,16 @@ impl ChatController<ChatRunnerService> {
         commands: ChatCommandAdapter,
         renderer: Renderer,
         tools: ToolStorage,
+        workspace_root: PathBuf,
     ) -> Self {
-        Self::with_runner(model, commands, renderer, tools, ChatRunnerService)
+        Self::with_runner(
+            model,
+            commands,
+            renderer,
+            tools,
+            workspace_root,
+            ChatRunnerService,
+        )
     }
 }
 
@@ -40,6 +50,7 @@ where
         commands: ChatCommandAdapter,
         renderer: Renderer,
         tools: ToolStorage,
+        workspace_root: PathBuf,
         runner: R,
     ) -> Self {
         Self {
@@ -47,6 +58,7 @@ where
             commands,
             renderer,
             tools,
+            workspace_root,
             runner,
         }
     }
@@ -90,6 +102,7 @@ where
             render_user_prompt: true,
             retry_existing_prompt: false,
             runtime: self.model.runtime().clone(),
+            prompt_footer: None,
         };
         self.runner
             .run(&mut self.model, &self.renderer, &self.tools, request)
@@ -136,6 +149,7 @@ where
             let completions =
                 PromptCompletionCatalog::new(self.commands.completion_specs(), &self.model);
             return PromptEditor::new(&self.renderer, self.commands.metadata(), &completions)
+                .with_footer(self.prompt_footer())
                 .read_line();
         }
 
@@ -148,6 +162,14 @@ where
         }
 
         Ok(line)
+    }
+
+    /// Builds prompt footer data from the controller-owned workspace root and active runtime.
+    fn prompt_footer(&self) -> crate::chat::model::ChatPromptFooterModel {
+        crate::chat::model::ChatPromptFooterModel::from_runtime(
+            &self.workspace_root,
+            self.model.runtime(),
+        )
     }
 }
 

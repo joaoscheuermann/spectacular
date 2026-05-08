@@ -1,4 +1,6 @@
 mod banner;
+mod directory;
+mod footer;
 mod style;
 #[cfg(test)]
 mod tests {
@@ -8,11 +10,12 @@ mod tests {
     ));
 }
 
-use crate::chat::model::HistoryTableModel;
+use crate::chat::model::{ChatPromptFooterModel, HistoryTableModel};
 use crate::chat::runner::render_agent_event;
 use crate::chat::session::ChatRecord;
 use crate::chat::ChatError;
 use banner::{format_opening_banner, OpeningBannerView};
+use footer::{format_user_prompt_footer, UserPromptFooterView};
 use serde_json::Value;
 use spectacular_agent::AgentEvent;
 use spectacular_agent::ToolStorage;
@@ -84,10 +87,12 @@ impl Renderer {
     }
 
     pub fn user_prompt(&self, prompt: &str) {
-        self.with_interrupted_working_line(|| {
-            println!("{}", paint(user_style(), prompt));
-            println!();
-        });
+        self.render_user_prompt(prompt, None);
+    }
+
+    /// Renders a newly submitted user prompt followed by its dim context footer.
+    pub fn user_prompt_with_footer(&self, prompt: &str, footer: &ChatPromptFooterModel) {
+        self.render_user_prompt(prompt, Some(footer));
     }
 
     pub fn prompt(&self) {
@@ -281,6 +286,17 @@ impl Renderer {
         }
     }
 
+    /// Renders a user prompt with an optional footer while preserving working-line state.
+    fn render_user_prompt(&self, prompt: &str, footer: Option<&ChatPromptFooterModel>) {
+        self.with_interrupted_working_line(|| {
+            println!("{}", paint(user_style(), prompt));
+            if let Some(footer) = footer {
+                println!("{}", format_prompt_footer(footer));
+            }
+            println!();
+        });
+    }
+
     fn flush_assistant(&self, buffer: &mut String) {
         if !has_visible_assistant_text(buffer) {
             buffer.clear();
@@ -369,7 +385,7 @@ impl Renderer {
         let frame = WORKING_FRAMES[frame % WORKING_FRAMES.len()];
         print!(
             "\r\x1b[2K{}",
-            paint(dim_style(), format!("working {frame} (Ctrl+C to stop)"))
+            paint(dim_style(), format!("{frame} working (Ctrl+C to stop)"))
         );
         let _ = io::stdout().flush();
     }
@@ -436,6 +452,12 @@ fn result_failed(content: &str, parsed: Option<&Value>) -> bool {
 
 pub(crate) fn has_visible_assistant_text(content: &str) -> bool {
     !content.trim().is_empty()
+}
+
+/// Formats prompt footer data with the dim terminal style used by chat context rows.
+pub(crate) fn format_prompt_footer(footer: &ChatPromptFooterModel) -> String {
+    let view = UserPromptFooterView::from_model(footer);
+    paint(dim_style(), format_user_prompt_footer(&view))
 }
 
 fn format_json_preview(value: &str) -> String {
