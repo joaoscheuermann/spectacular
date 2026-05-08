@@ -19,6 +19,13 @@ pub enum ProviderError {
     ProviderUnavailable {
         provider_name: String,
     },
+    AuthenticationRequired {
+        provider_name: String,
+    },
+    AuthenticationFailed {
+        provider_name: String,
+        reason: String,
+    },
     StreamUnavailable {
         provider_name: String,
     },
@@ -67,6 +74,13 @@ impl Display for ProviderError {
             ProviderError::ProviderUnavailable { provider_name } => {
                 write!(formatter, "{provider_name} is unavailable")
             }
+            ProviderError::AuthenticationRequired { provider_name } => {
+                write!(formatter, "{provider_name} authentication is required")
+            }
+            ProviderError::AuthenticationFailed {
+                provider_name,
+                reason,
+            } => write!(formatter, "{provider_name} authentication failed: {reason}"),
             ProviderError::StreamUnavailable { provider_name } => {
                 write!(
                     formatter,

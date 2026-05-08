@@ -32,6 +32,7 @@
             session,
             RuntimeSelection {
                 provider_type: "openrouter".to_owned(),
+                provider_auth: Some(spectacular_config::ProviderAuthMode::ApiKey),
                 provider: "openrouter".to_owned(),
                 api_key: "sk-or-v1-test".to_owned(),
                 model_key: "test-model".to_owned(),

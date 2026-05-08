@@ -42,7 +42,7 @@ enum ConfigCommand {
 
 #[derive(Debug, Subcommand)]
 enum ConfigProviderCommand {
-    /// Add a provider with fields: name:<name> type:<type> apikey:<apikey>.
+    /// Add a provider with fields: provider:<type> apikey:<apikey>.
     Add { fields: Vec<String> },
     /// Remove a provider with fields: name:<name> confirm:true.
     Remove { fields: Vec<String> },
@@ -68,7 +68,6 @@ enum ConfigTaskCommand {
 enum ConfigOperation {
     Show,
     AddProvider {
-        name: String,
         provider_type: String,
         apikey: String,
     },

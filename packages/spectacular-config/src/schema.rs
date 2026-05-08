@@ -104,25 +104,6 @@ impl TaskAssignments {
     }
 }
 
-/// Persisted configuration for one named provider.
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct ProviderConfig {
-    #[serde(rename = "type")]
-    pub provider_type: String,
-    pub apikey: String,
-}
-
-impl ProviderConfig {
-    /// Provides the new behavior for persisted configuration values.
-    pub fn new(provider_type: impl Into<String>, apikey: impl Into<String>) -> Self {
-        Self {
-            provider_type: provider_type.into(),
-            apikey: apikey.into(),
-        }
-    }
-}
-
 /// Persisted configuration for one saved model alias.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(default, deny_unknown_fields)]

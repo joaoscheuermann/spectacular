@@ -1,9 +1,10 @@
 pub const OPENROUTER_PROVIDER_ID: &str = "openrouter";
+pub const OPENAI_PROVIDER_ID: &str = "openai";
 
-static PROVIDERS: &[ProviderMetadata] = &[ProviderMetadata::enabled(
-    OPENROUTER_PROVIDER_ID,
-    "OpenRouter",
-)];
+static PROVIDERS: &[ProviderMetadata] = &[
+    ProviderMetadata::enabled(OPENROUTER_PROVIDER_ID, "OpenRouter"),
+    ProviderMetadata::enabled(OPENAI_PROVIDER_ID, "OpenAI"),
+];
 
 /// Static provider metadata used by the CLI setup flow.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -64,24 +65,8 @@ pub fn enabled_provider_name() -> &'static str {
 mod tests {
     use super::*;
 
-    #[test]
-    fn enabled_provider_is_openrouter() {
-        assert_eq!(enabled_provider_name(), "OpenRouter");
-    }
-
-    #[test]
-    fn registry_contains_enabled_openrouter_only() {
-        let providers = provider_registry();
-
-        assert_eq!(providers.len(), 1);
-        assert_eq!(providers[0].id(), OPENROUTER_PROVIDER_ID);
-        assert!(providers[0].is_enabled());
-    }
-
-    #[test]
-    fn provider_lookup_uses_stable_ids() {
-        let provider = provider_by_id(OPENROUTER_PROVIDER_ID).unwrap();
-
-        assert_eq!(provider.display_name(), "OpenRouter");
-    }
+    include!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/unit/registry.rs"
+    ));
 }

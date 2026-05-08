@@ -12,6 +12,7 @@
         let tools = main_chat_tool_storage(PathBuf::from("workspace")).unwrap();
         let runtime = RuntimeSelection {
             provider_type: OPENROUTER_PROVIDER_ID.to_owned(),
+            provider_auth: Some(spectacular_config::ProviderAuthMode::ApiKey),
             provider: OPENROUTER_PROVIDER_ID.to_owned(),
             api_key: "sk-or-v1-test".to_owned(),
             model_key: "test-model".to_owned(),

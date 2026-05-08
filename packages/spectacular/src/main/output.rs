@@ -9,12 +9,16 @@ fn format_config_report(config: &SpectacularConfig) -> String {
         lines.push(format!("  {}", paint(missing_style(), "None")));
     } else {
         for (name, provider) in &config.providers {
+            let credential = match provider.auth_mode() {
+                Some(spectacular_config::ProviderAuthMode::Oauth) => "authenticated".to_owned(),
+                _ => mask_api_key(provider.api_key()),
+            };
             lines.push(format!(
                 "  {} {} {} {}",
                 paint(provider_style(), name),
                 paint(label_style(), "type:"),
                 paint(provider_style(), &provider.provider_type),
-                paint(secret_style(), mask_api_key(&provider.apikey))
+                paint(secret_style(), credential)
             ));
         }
     }

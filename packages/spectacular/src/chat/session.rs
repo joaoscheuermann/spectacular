@@ -59,6 +59,10 @@ impl SessionManager {
             path,
         });
         self.append_event(&session_started(&id, SCHEMA_VERSION, UNTITLED))?;
+        if !runtime.is_ready() {
+            return Ok(());
+        }
+
         self.append_runtime_defaults(&runtime, "global_default")
     }
 
