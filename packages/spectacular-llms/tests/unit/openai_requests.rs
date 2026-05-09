@@ -69,7 +69,7 @@ fn openai_responses_request_replays_function_call_and_output() {
 }
 
 #[test]
-fn openai_responses_request_serializes_reasoning_effort() {
+fn openai_responses_request_serializes_reasoning_effort_and_summary() {
     let mut request =
         ProviderRequest::new(vec![ProviderMessage::user("hello")]).with_model("gpt-5.5");
     request.flags.reasoning_effort = Some("high".to_owned());
@@ -78,4 +78,18 @@ fn openai_responses_request_serializes_reasoning_effort() {
     let value = serde_json::to_value(request).unwrap();
 
     assert_eq!(value["reasoning"]["effort"], "high");
+    assert_eq!(value["reasoning"]["summary"], "auto");
+}
+
+#[test]
+fn openai_responses_request_serializes_reasoning_summary_when_included_without_effort() {
+    let mut request =
+        ProviderRequest::new(vec![ProviderMessage::user("hello")]).with_model("gpt-5.5");
+    request.flags.include_reasoning = true;
+
+    let request = OpenAiResponsesRequest::from_provider_request(request).unwrap();
+    let value = serde_json::to_value(request).unwrap();
+
+    assert!(value["reasoning"].get("effort").is_none());
+    assert_eq!(value["reasoning"]["summary"], "auto");
 }

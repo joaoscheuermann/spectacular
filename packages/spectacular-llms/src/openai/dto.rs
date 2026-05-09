@@ -4,6 +4,8 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
+const REASONING_SUMMARY_AUTO: &str = "auto";
+
 #[derive(Serialize)]
 pub(crate) struct OpenAiResponsesRequest {
     pub(crate) model: String,
@@ -46,10 +48,8 @@ impl OpenAiResponsesRequest {
             .collect::<Vec<_>>();
         let tool_choice = if tools.is_empty() { None } else { Some("auto") };
         let parallel_tool_calls = if tools.is_empty() { None } else { Some(false) };
-        let reasoning = flags
-            .reasoning_effort
-            .filter(|effort| !effort.trim().is_empty())
-            .map(|effort| OpenAiReasoningRequest { effort });
+        let reasoning =
+            OpenAiReasoningRequest::from_flags(flags.include_reasoning, flags.reasoning_effort);
 
         Ok(Self {
             model,
@@ -128,7 +128,23 @@ impl OpenAiToolManifest {
 
 #[derive(Serialize)]
 pub(crate) struct OpenAiReasoningRequest {
-    pub(crate) effort: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) effort: Option<String>,
+    pub(crate) summary: &'static str,
+}
+
+impl OpenAiReasoningRequest {
+    fn from_flags(include_reasoning: bool, effort: Option<String>) -> Option<Self> {
+        let effort = effort.filter(|effort| !effort.trim().is_empty());
+        if !include_reasoning && effort.is_none() {
+            return None;
+        }
+
+        Some(Self {
+            effort,
+            summary: REASONING_SUMMARY_AUTO,
+        })
+    }
 }
 
 #[derive(Deserialize)]
