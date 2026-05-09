@@ -1,5 +1,6 @@
 use super::directory::format_directory_with_home;
 use super::footer::{format_user_prompt_footer, UserPromptFooterView};
+use super::tool::ToolStatus;
 use super::*;
 use crate::chat::model::ChatPromptFooterModel;
 use crate::terminal_style;
@@ -128,6 +129,21 @@ fn assistant_visibility_requires_nonblank_trimmed_text() {
     assert!(!has_visible_assistant_text(""));
     assert!(!has_visible_assistant_text(" \n\t"));
     assert!(has_visible_assistant_text(" answer "));
+}
+
+#[test]
+fn reasoning_text_formats_dim_content_without_header() {
+    let output = reasoning::format_reasoning_text("thinking")
+        .expect("visible reasoning should render");
+
+    assert!(output.contains("thinking"));
+    assert!(!output.contains("reasoning"));
+    assert!(output.contains(&terminal_style::dim_style().to_string()));
+}
+
+#[test]
+fn blank_reasoning_text_is_hidden() {
+    assert!(reasoning::format_reasoning_text(" \n\t").is_none());
 }
 
 #[test]

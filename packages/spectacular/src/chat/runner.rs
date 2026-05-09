@@ -1,6 +1,6 @@
 use crate::chat::model::{ChatPromptFooterModel, ChatRunRequestModel};
 use crate::chat::provider::provider_for_runtime;
-use crate::chat::renderer::{has_visible_assistant_text, Renderer};
+use crate::chat::renderer::{has_visible_assistant_text, has_visible_reasoning_text, Renderer};
 use crate::chat::session::{agent_events_from_records, records_before_latest_user_prompt};
 use crate::chat::title::spawn_title_task;
 use crate::chat::{ChatError, ChatModel, RuntimeSelection};
@@ -127,6 +127,7 @@ impl<'a> ChatRunner<'a> {
         let mut stream = agent.run_stream(request.prompt.clone());
         let mut title_text = String::new();
         let mut assistant_output = AssistantResponseRenderState::default();
+        let mut reasoning_output = ReasoningResponseRenderState::default();
         let mut title_spawned = self.model.session_manager().has_title()?;
         let mut spinner_visible = true;
         let mut spinner_frame = 0usize;
@@ -159,6 +160,9 @@ impl<'a> ChatRunner<'a> {
 
                     if let AgentEvent::MessageDelta(delta) = &event {
                         if delta.role == ProviderMessageRole::Assistant {
+                            if reasoning_output.close_visible_response() {
+                                println!("\n");
+                            }
                             if let Some(render) = assistant_output.delta(&delta.content) {
                                 if render.started && !is_streaming {
                                     self.renderer.clear_working();
@@ -183,7 +187,27 @@ impl<'a> ChatRunner<'a> {
                         }
                     }
 
+                    if let AgentEvent::ReasoningDelta(delta) = &event {
+                        if assistant_output.close_visible_response() {
+                            println!("\n");
+                        }
+                        if let Some(render) = reasoning_output.delta(&delta.content) {
+                            if render.started {
+                                if !is_streaming {
+                                    self.renderer.clear_working();
+                                    is_streaming = true;
+                                }
+                            }
+                            self.renderer.reasoning_delta(&render.content).await?;
+                        }
+                        self.model.append_agent_event(&event)?;
+                        continue;
+                    }
+
                     if assistant_output.close_visible_response() {
+                        println!("\n");
+                    }
+                    if reasoning_output.close_visible_response() {
                         println!("\n");
                     }
                     if is_streaming {
@@ -207,6 +231,9 @@ impl<'a> ChatRunner<'a> {
             self.renderer.clear_working();
         }
         if assistant_output.close_visible_response() {
+            println!("\n");
+        }
+        if reasoning_output.close_visible_response() {
             println!("\n");
         }
 
@@ -300,6 +327,51 @@ impl AssistantResponseRenderState {
     }
 }
 
+#[derive(Default)]
+struct ReasoningResponseRenderState {
+    pending: String,
+    visible: bool,
+}
+
+struct ReasoningDeltaRender {
+    content: String,
+    started: bool,
+}
+
+impl ReasoningResponseRenderState {
+    /// Returns newly visible reasoning text once accumulated deltas contain nonblank content.
+    fn delta(&mut self, content: &str) -> Option<ReasoningDeltaRender> {
+        if self.visible {
+            return Some(ReasoningDeltaRender {
+                content: content.to_owned(),
+                started: false,
+            });
+        }
+
+        self.pending.push_str(content);
+        if !has_visible_reasoning_text(&self.pending) {
+            return None;
+        }
+
+        self.visible = true;
+        Some(ReasoningDeltaRender {
+            content: std::mem::take(&mut self.pending),
+            started: true,
+        })
+    }
+
+    /// Closes any visible reasoning block and reports whether a spacer line should be emitted.
+    fn close_visible_response(&mut self) -> bool {
+        self.pending.clear();
+        if !self.visible {
+            return false;
+        }
+
+        self.visible = false;
+        true
+    }
+}
+
 /// Renders a persisted or streamed agent event without appending it to session storage.
 pub async fn render_agent_event(
     renderer: &Renderer,
@@ -315,7 +387,7 @@ pub async fn render_agent_event(
 
             renderer.assistant_delta(&delta.content).await?;
         }
-        AgentEvent::ReasoningDelta(_) => {}
+        AgentEvent::ReasoningDelta(delta) => renderer.reasoning_text(&delta.content),
         AgentEvent::AssistantToolCallRequest {
             tool_call_id,
             name,

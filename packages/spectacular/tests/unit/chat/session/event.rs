@@ -70,6 +70,38 @@ fn agent_event_maps_to_existing_wire_shape() {
 }
 
 #[test]
+fn reasoning_delta_round_trips_through_jsonl_agent_event() {
+    let event = ChatEvent::from_agent_event(
+        &AgentEvent::ReasoningDelta(ReasoningDelta {
+            content: "thinking".to_owned(),
+            metadata: None,
+        }),
+        "2026-04-29T14:01:00Z".to_owned(),
+    )
+    .unwrap();
+    let value = serde_json::to_value(event).unwrap();
+
+    assert_eq!(
+        value,
+        json!({
+            "type": "reasoning_delta",
+            "content": "thinking",
+            "created_at": "2026-04-29T14:01:00Z"
+        })
+    );
+    assert_eq!(
+        ChatEvent::from_value(value)
+            .unwrap()
+            .to_agent_event()
+            .unwrap(),
+        AgentEvent::ReasoningDelta(ReasoningDelta {
+            content: "thinking".to_owned(),
+            metadata: None,
+        })
+    );
+}
+
+#[test]
 fn content_filter_finish_reason_round_trips() {
     let event = ChatEvent::from_agent_event(
         &AgentEvent::Finished {
