@@ -98,7 +98,11 @@ async fn prompt_dispatch_runs_user_prompt_request() {
     assert_eq!(request.prompt, "hello");
     assert!(request.render_user_prompt);
     assert!(!request.retry_existing_prompt);
-    assert!(request.prompt_footer.is_none());
+    assert!(request.prompt_footer.is_some_and(|footer| {
+        footer.directory == test_workspace_root()
+            && footer.model == "test/model"
+            && footer.reasoning == ReasoningLevel::Medium
+    }));
 }
 
 #[tokio::test]

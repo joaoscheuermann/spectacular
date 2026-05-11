@@ -102,7 +102,7 @@ where
             render_user_prompt: true,
             retry_existing_prompt: false,
             runtime: self.model.runtime().clone(),
-            prompt_footer: None,
+            prompt_footer: Some(self.prompt_footer()),
         };
         self.runner
             .run(&mut self.model, &self.renderer, &self.tools, request)

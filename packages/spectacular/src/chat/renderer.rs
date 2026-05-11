@@ -323,6 +323,7 @@ impl Renderer {
         self.with_interrupted_working_line(|| {
             println!("{}", paint(user_style(), prompt));
             if let Some(footer) = footer {
+                println!();
                 println!("{}", format_prompt_footer(footer));
             }
             println!();
