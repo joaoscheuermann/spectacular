@@ -133,8 +133,8 @@ fn assistant_visibility_requires_nonblank_trimmed_text() {
 
 #[test]
 fn reasoning_text_formats_dim_content_without_header() {
-    let output = reasoning::format_reasoning_text("thinking")
-        .expect("visible reasoning should render");
+    let output =
+        reasoning::format_reasoning_text("thinking").expect("visible reasoning should render");
 
     assert!(output.contains("thinking"));
     assert!(!output.contains("reasoning"));
@@ -291,13 +291,16 @@ fn user_prompt_footer_formats_context_in_expected_order() {
     };
     let view = UserPromptFooterView::from_model(&footer);
 
-    assert_eq!(view.directory, PathBuf::from("workspace").display().to_string());
+    assert_eq!(
+        view.directory,
+        PathBuf::from("workspace").display().to_string()
+    );
     assert_eq!(view.model, "openai/gpt-5.5");
     assert_eq!(view.reasoning, "high");
     assert_eq!(
         format_user_prompt_footer(&view),
         format!(
-            "cwd: {}  model: openai/gpt-5.5  reasoning: high",
+            "{} · openai/gpt-5.5 (high)",
             PathBuf::from("workspace").display()
         )
     );

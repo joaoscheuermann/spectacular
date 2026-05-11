@@ -22,8 +22,5 @@ impl UserPromptFooterView {
 
 /// Formats prompt footer values as one compact terminal line.
 pub(super) fn format_user_prompt_footer(view: &UserPromptFooterView) -> String {
-    format!(
-        "cwd: {}  model: {}  reasoning: {}",
-        view.directory, view.model, view.reasoning
-    )
+    format!("{} · {} ({})", view.directory, view.model, view.reasoning)
 }
