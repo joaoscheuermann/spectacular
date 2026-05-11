@@ -360,4 +360,45 @@ fn format_output_receives_raw_and_optional_parsed_output() {
         tool.format_output(raw_output, None),
         r#"raw={"status":"ready"}; status=unparsed"#
     );
+    assert_eq!(
+        tool.format_output_with_input(raw_output, Some(&parsed_output), None),
+        r#"raw={"status":"ready"}; status=ready"#
+    );
+}
+
+#[test]
+fn format_call_defaults_to_name_plus_formatted_input() {
+    #[derive(Clone, Debug)]
+    struct CallFormattingTool;
+
+    impl Tool for CallFormattingTool {
+        fn name(&self) -> &str {
+            "call_formatting"
+        }
+
+        fn manifest(&self) -> ToolManifest {
+            ToolManifest::new(
+                self.name(),
+                "Formats default calls.",
+                json!({"type": "object"}),
+            )
+        }
+
+        fn format_input(&self, arguments: &Value) -> ToolDisplay {
+            arguments["path"].as_str().unwrap().to_owned()
+        }
+
+        fn execute<'a>(
+            &'a self,
+            _arguments: Value,
+            _cancellation: Cancellation,
+        ) -> ToolExecution<'a> {
+            Box::pin(async { Ok("{}".to_owned()) })
+        }
+    }
+
+    assert_eq!(
+        CallFormattingTool.format_call(&json!({"path": "src/lib.rs"})),
+        "call_formatting src/lib.rs"
+    );
 }

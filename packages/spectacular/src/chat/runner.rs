@@ -192,11 +192,9 @@ impl<'a> ChatRunner<'a> {
                             println!("\n");
                         }
                         if let Some(render) = reasoning_output.delta(&delta.content) {
-                            if render.started {
-                                if !is_streaming {
-                                    self.renderer.clear_working();
-                                    is_streaming = true;
-                                }
+                            if render.started && !is_streaming {
+                                self.renderer.clear_working();
+                                is_streaming = true;
                             }
                             self.renderer.reasoning_delta(&render.content).await?;
                         }
@@ -378,6 +376,16 @@ pub async fn render_agent_event(
     tools: &ToolStorage,
     event: &AgentEvent,
 ) -> Result<(), ChatError> {
+    render_agent_event_with_replay_state(renderer, tools, event, None).await
+}
+
+/// Renders an agent event with optional replay tool-call argument state.
+async fn render_agent_event_with_replay_state(
+    renderer: &Renderer,
+    tools: &ToolStorage,
+    event: &AgentEvent,
+    replay_tool_arguments: Option<&mut std::collections::BTreeMap<String, serde_json::Value>>,
+) -> Result<(), ChatError> {
     match event {
         AgentEvent::UserPrompt { content } => renderer.user_prompt(content),
         AgentEvent::MessageDelta(delta) if delta.role == ProviderMessageRole::Assistant => {
@@ -393,13 +401,23 @@ pub async fn render_agent_event(
             name,
             arguments,
         } => {
+            if let Some(replay_tool_arguments) = replay_tool_arguments {
+                if let Ok(arguments) = serde_json::from_str::<serde_json::Value>(arguments) {
+                    replay_tool_arguments.insert(tool_call_id.clone(), arguments);
+                }
+            }
             renderer.clear_working();
             renderer.tool_call(tool_call_id, name, arguments, tools);
             renderer.working();
         }
-        AgentEvent::ToolResult { name, content, .. } => {
+        AgentEvent::ToolResult {
+            tool_call_id,
+            name,
+            content,
+        } => {
+            let _ = replay_tool_arguments.and_then(|arguments| arguments.remove(tool_call_id));
             renderer.clear_working();
-            renderer.tool_result(name, content, tools);
+            renderer.tool_result(tool_call_id, name, content, tools);
             renderer.working();
         }
         AgentEvent::ValidationError { message } | AgentEvent::Error { message } => {

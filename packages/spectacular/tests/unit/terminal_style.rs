@@ -1,9 +1,24 @@
-    use super::*;
+use crate::terminal_style::*;
+use spectacular_terminal_ui::tool_style;
 
-    #[test]
-    fn styles_emit_truecolor_escape_sequences() {
-        assert!(paint(user_style(), "user").contains("\x1b[38;2;34;197;94m"));
-        assert!(paint(dim_style(), "dim").contains("\x1b[38;2;148;163;184m"));
-        assert!(paint(error_style(), "error").contains("\x1b[38;2;248;113;113m"));
-        assert!(paint(selection_style(), "selected").contains("\x1b[48;2;51;65;85m"));
-    }
+#[test]
+fn paint_wraps_value_with_style_and_reset() {
+    let rendered = paint(error_style(), "boom");
+
+    assert!(rendered.contains("boom"));
+    assert!(rendered.ends_with(&format!("{}", error_style().render_reset())));
+}
+
+#[test]
+fn named_styles_use_expected_color_sequences() {
+    assert!(paint(command_output_style(), "output").contains("\x1b[38;2;107;114;128m"));
+    assert!(paint(tool_style(), "tool").contains("\x1b[1m\x1b[38;2;217;70;239m"));
+    assert!(paint(user_style(), "user").contains("\x1b[38;2;34;197;94m"));
+}
+
+#[test]
+fn semantic_styles_share_expected_base_styles() {
+    assert_eq!(assistant_style(), text_style());
+    assert_eq!(model_style(), text_style());
+    assert_eq!(task_style(), tool_style());
+}

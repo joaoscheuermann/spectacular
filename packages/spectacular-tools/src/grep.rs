@@ -1,7 +1,8 @@
-use crate::display::{error_style, paint};
+use crate::display::tool_arg_tool_arg_line;
+use crate::fs_helpers::{files_to_search, to_posix};
+use crate::output_preview::preview_lines;
 use crate::path::resolve_workspace_path;
 use glob::Pattern;
-use ignore::WalkBuilder;
 use regex::RegexBuilder;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -23,6 +24,7 @@ pub struct GrepTool {
 }
 
 impl GrepTool {
+    /// Creates a grep tool scoped to the provided workspace root.
     pub fn new(workspace_root: impl Into<PathBuf>) -> Self {
         Self {
             workspace_root: workspace_root.into(),
@@ -31,10 +33,12 @@ impl GrepTool {
 }
 
 impl Tool for GrepTool {
+    /// Returns the stable tool name used for registration and dispatch.
     fn name(&self) -> &str {
         GREP_TOOL_NAME
     }
 
+    /// Builds the grep tool manifest and JSON parameter schema.
     fn manifest(&self) -> ToolManifest {
         ToolManifest::new(
             GREP_TOOL_NAME,
@@ -48,7 +52,7 @@ impl Tool for GrepTool {
                     },
                     "path": {
                         "type": "string",
-                        "description": "Directory or file to search (default: current directory)"
+                        "description": "Directory or file to search (default: current directory). Relative paths resolve against the workspace root; absolute paths and .. traversal are allowed intentionally."
                     },
                     "glob": {
                         "type": "string",
@@ -77,6 +81,7 @@ impl Tool for GrepTool {
         )
     }
 
+    /// Formats grep arguments as a pattern and search path summary.
     fn format_input(&self, arguments: &Value) -> ToolDisplay {
         let pattern = arguments
             .get("pattern")
@@ -86,25 +91,26 @@ impl Tool for GrepTool {
         format!("{pattern} in {path}")
     }
 
-    fn format_output(&self, raw_output: &str, parsed_output: Option<&Value>) -> ToolDisplay {
-        let Some(output) = parsed_output else {
-            return raw_output.to_string();
-        };
-
-        if let Some(error) = output.get("error").and_then(Value::as_str) {
-            let status = paint(error_style(), "failed");
-            return format!("{status}: {error}");
-        }
-
-        let total = output.get("total").and_then(Value::as_u64).unwrap_or(0);
-        let truncated = output
-            .get("truncated")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        let suffix = if truncated { " (truncated)" } else { "" };
-        format!("{total} match(es){suffix}")
+    /// Formats grep arguments as a styled renderer call line.
+    fn format_call(&self, arguments: &Value) -> ToolDisplay {
+        let pattern = arguments
+            .get("pattern")
+            .and_then(Value::as_str)
+            .unwrap_or("<missing pattern>");
+        let path = arguments.get("path").and_then(Value::as_str).unwrap_or(".");
+        tool_arg_tool_arg_line("Search", pattern, "in", path)
     }
 
+    /// Formats grep output as bounded match preview lines or raw fallback text.
+    fn format_output(&self, raw_output: &str, parsed_output: Option<&Value>) -> ToolDisplay {
+        let Some(output) = parsed_output else {
+            return crate::output_preview::preview_text(raw_output);
+        };
+
+        preview_lines(grep_output_lines(output))
+    }
+
+    /// Executes the content search and serializes the grep output payload.
     fn execute<'a>(&'a self, arguments: Value, _cancellation: Cancellation) -> ToolExecution<'a> {
         let workspace_root = self.workspace_root.clone();
 
@@ -159,6 +165,7 @@ pub struct GrepOutput {
     pub error: Option<String>,
 }
 
+/// Validates grep input, compiles filters, and collects content matches.
 fn execute_grep(workspace_root: &Path, input: GrepInput) -> GrepOutput {
     let search_dir = input.path.as_deref().unwrap_or(".");
     let search_path = resolve_workspace_path(workspace_root, search_dir);
@@ -221,31 +228,7 @@ fn execute_grep(workspace_root: &Path, input: GrepInput) -> GrepOutput {
     )
 }
 
-fn files_to_search(search_path: &Path) -> Vec<PathBuf> {
-    if search_path.is_file() {
-        return vec![search_path.to_path_buf()];
-    }
-
-    WalkBuilder::new(search_path)
-        .hidden(false)
-        .git_ignore(true)
-        .git_global(true)
-        .git_exclude(true)
-        .filter_entry(|entry| {
-            let name = entry.file_name().to_string_lossy();
-            name != "node_modules" && name != ".git"
-        })
-        .build()
-        .filter_map(Result::ok)
-        .filter(|entry| {
-            entry
-                .file_type()
-                .is_some_and(|file_type| file_type.is_file())
-        })
-        .map(ignore::DirEntry::into_path)
-        .collect()
-}
-
+/// Reads candidate files and collects matching lines within result and byte limits.
 fn collect_matches(
     search_path: &Path,
     files: Vec<PathBuf>,
@@ -316,6 +299,7 @@ fn collect_matches(
     }
 }
 
+/// Reports whether a file passes the optional glob filter by name or relative path.
 fn matches_optional_glob(file_path: &Path, relative: &str, glob_pattern: Option<&Pattern>) -> bool {
     let Some(pattern) = glob_pattern else {
         return true;
@@ -328,6 +312,7 @@ fn matches_optional_glob(file_path: &Path, relative: &str, glob_pattern: Option<
     pattern.matches(&name) || pattern.matches(relative)
 }
 
+/// Formats a file path relative to the search root for output.
 fn relative_file_path(search_path: &Path, file_path: &Path, is_file: bool) -> String {
     if is_file {
         return file_path
@@ -342,6 +327,7 @@ fn relative_file_path(search_path: &Path, file_path: &Path, is_file: bool) -> St
         .unwrap_or_else(|_| to_posix(file_path))
 }
 
+/// Returns truncated context lines before a matching line.
 fn context_before(lines: &[&str], line_idx: usize, context_lines: usize) -> (Vec<String>, bool) {
     if context_lines == 0 {
         return (vec![], false);
@@ -360,6 +346,7 @@ fn context_before(lines: &[&str], line_idx: usize, context_lines: usize) -> (Vec
     (context, truncated)
 }
 
+/// Returns truncated context lines after a matching line.
 fn context_after(lines: &[&str], line_idx: usize, context_lines: usize) -> (Vec<String>, bool) {
     if context_lines == 0 {
         return (vec![], false);
@@ -378,6 +365,7 @@ fn context_after(lines: &[&str], line_idx: usize, context_lines: usize) -> (Vec<
     (context, truncated)
 }
 
+/// Truncates long grep lines at a UTF-8 boundary and reports whether truncation occurred.
 fn truncate_line(line: &str) -> (String, bool) {
     if line.len() <= MAX_LINE_LENGTH {
         return (line.to_owned(), false);
@@ -392,10 +380,7 @@ fn truncate_line(line: &str) -> (String, bool) {
     (format!("{}... [truncated]", &line[..split_at]), true)
 }
 
-fn to_posix(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/")
-}
-
+/// Serializes a failed grep output payload with a user-facing error message.
 fn grep_error(message: impl Into<String>) -> String {
     serialize_output(&GrepOutput {
         matches: vec![],
@@ -406,111 +391,33 @@ fn grep_error(message: impl Into<String>) -> String {
     })
 }
 
+/// Serializes a grep output payload to JSON.
 fn serialize_output(output: &GrepOutput) -> String {
     serde_json::to_string(output).expect("grep output should serialize")
 }
 
+/// Extracts grep match previews or error text from the result payload.
+fn grep_output_lines(output: &Value) -> Vec<String> {
+    if let Some(error) = output.get("error").and_then(Value::as_str) {
+        return vec![error.to_owned()];
+    }
+
+    output
+        .get("matches")
+        .and_then(Value::as_array)
+        .map(|matches| matches.iter().map(grep_match_line).collect::<Vec<_>>())
+        .unwrap_or_else(|| vec![output.to_string()])
+}
+
+/// Formats one grep match as `file:line:text` for display.
+fn grep_match_line(matched: &Value) -> String {
+    let file = matched.get("file").and_then(Value::as_str).unwrap_or("");
+    let line = matched.get("line").and_then(Value::as_u64).unwrap_or(0);
+    let text = matched.get("text").and_then(Value::as_str).unwrap_or("");
+    format!("{file}:{line}: {text}")
+}
+
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::test_support::{remove_workspace, temp_workspace, write_file};
-    use serde_json::json;
-
-    #[tokio::test]
-    async fn grep_finds_symbol_in_multiple_files_with_context() {
-        let workspace_root = temp_workspace("grep_symbol_context").await;
-        write_file(
-            &workspace_root,
-            "src/one.rs",
-            "before one\nlet symbol = TargetSymbol;\nafter one\n",
-        )
-        .await;
-        write_file(
-            &workspace_root,
-            "src/two.rs",
-            "before two\nTargetSymbol::call();\nafter two\n",
-        )
-        .await;
-        write_file(&workspace_root, "src/ignored.txt", "TargetSymbol\n").await;
-
-        let tool = GrepTool::new(&workspace_root);
-        let result = tool
-            .execute(
-                json!({
-                    "pattern": "TargetSymbol",
-                    "path": "src",
-                    "glob": "*.rs",
-                    "context": 1
-                }),
-                Cancellation::default(),
-            )
-            .await
-            .unwrap();
-        let output: GrepOutput = serde_json::from_str(&result).unwrap();
-
-        assert_eq!(output.total, 2);
-        assert!(!output.truncated);
-        assert_match(
-            &output,
-            "one.rs",
-            2,
-            "let symbol = TargetSymbol;",
-            "before one",
-            "after one",
-        );
-        assert_match(
-            &output,
-            "two.rs",
-            2,
-            "TargetSymbol::call();",
-            "before two",
-            "after two",
-        );
-
-        remove_workspace(workspace_root).await;
-    }
-
-    #[tokio::test]
-    async fn invalid_glob_returns_clear_error_payload() {
-        let workspace_root = temp_workspace("grep_invalid_glob").await;
-        write_file(&workspace_root, "src/one.rs", "TargetSymbol\n").await;
-
-        let tool = GrepTool::new(&workspace_root);
-        let result = tool
-            .execute(
-                json!({"pattern": "TargetSymbol", "path": "src", "glob": "["}),
-                Cancellation::default(),
-            )
-            .await
-            .unwrap();
-        let output: GrepOutput = serde_json::from_str(&result).unwrap();
-
-        assert_eq!(output.matches, vec![]);
-        assert_eq!(output.total, 0);
-        assert!(output
-            .error
-            .unwrap()
-            .starts_with("Invalid glob pattern '[': "));
-
-        remove_workspace(workspace_root).await;
-    }
-
-    fn assert_match(
-        output: &GrepOutput,
-        file_suffix: &str,
-        line: usize,
-        text: &str,
-        before: &str,
-        after: &str,
-    ) {
-        let found = output.matches.iter().any(|matched| {
-            matched.file.ends_with(file_suffix)
-                && matched.line == line
-                && matched.text == text
-                && matched.context_before == vec![before.to_owned()]
-                && matched.context_after == vec![after.to_owned()]
-        });
-
-        assert!(found, "missing grep match for {file_suffix}");
-    }
+    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/unit/grep.rs"));
 }

@@ -15,12 +15,33 @@ pub trait Tool: Send + Sync {
 
     fn manifest(&self) -> ToolManifest;
 
+    /// Formats the model-facing summary of the tool arguments without renderer-owned prefixes.
     fn format_input(&self, arguments: &Value) -> ToolDisplay {
         serde_json::to_string(arguments).unwrap_or_else(|_| arguments.to_string())
     }
 
+    /// Formats the complete visible tool-call line.
+    fn format_call(&self, arguments: &Value) -> ToolDisplay {
+        let input = self.format_input(arguments);
+        if input.trim().is_empty() {
+            return self.name().to_owned();
+        }
+
+        format!("{} {}", self.name(), input)
+    }
+
     fn format_output(&self, raw_output: &str, _parsed_output: Option<&Value>) -> ToolDisplay {
         raw_output.to_owned()
+    }
+
+    /// Formats visible tool output with the original call arguments when available.
+    fn format_output_with_input(
+        &self,
+        raw_output: &str,
+        parsed_output: Option<&Value>,
+        _arguments: Option<&Value>,
+    ) -> ToolDisplay {
+        self.format_output(raw_output, parsed_output)
     }
 
     fn execute<'a>(&'a self, arguments: Value, cancellation: Cancellation) -> ToolExecution<'a>;

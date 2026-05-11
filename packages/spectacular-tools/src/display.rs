@@ -1,23 +1,8 @@
-use anstyle::{RgbColor, Style};
-
-const GREEN: RgbColor = RgbColor(34, 197, 94);
-const RED: RgbColor = RgbColor(248, 113, 113);
-#[cfg(test)]
-const CYAN: RgbColor = RgbColor(34, 211, 238);
-
-pub(crate) fn paint(style: Style, value: impl AsRef<str>) -> String {
-    format!("{style}{}{style:#}", value.as_ref())
-}
-
-pub(crate) fn success_style() -> Style {
-    GREEN.on_default().bold()
-}
-
-pub(crate) fn error_style() -> Style {
-    RED.on_default().bold()
-}
+pub(crate) use spectacular_terminal_ui::{
+    error_style, paint, tool_arg_line, tool_arg_tool_arg_line, tool_line,
+};
 
 #[cfg(test)]
-pub(crate) fn tool_name_style() -> Style {
-    CYAN.on_default().bold()
-}
+pub(crate) use spectacular_terminal_ui::{
+    dim_style, text_style, tool_style, tool_style as tool_name_style,
+};
