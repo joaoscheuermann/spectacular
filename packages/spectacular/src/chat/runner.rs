@@ -242,8 +242,9 @@ impl<'a> ChatRunner<'a> {
 /// Builds the built-in tool storage scoped to the injected workspace root.
 pub fn main_chat_tool_storage(
     workspace_root: impl Into<PathBuf>,
+    trace_dir: impl Into<PathBuf>,
 ) -> Result<ToolStorage, ToolRegistrationError> {
-    spectacular_tools::built_in_tools(workspace_root)
+    spectacular_tools::built_in_tools_with_trace_dir(workspace_root, trace_dir)
 }
 
 /// Creates the main coding agent configured with runtime model, reasoning, and tools.

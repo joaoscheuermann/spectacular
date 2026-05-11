@@ -82,7 +82,8 @@ impl ChatBootstrap {
             }
         };
         let workspace_root = std::env::current_dir().map_err(ChatError::Io)?;
-        let tools = main_chat_tool_storage(workspace_root.clone())
+        let trace_dir = spectacular_config::config_dir()?.join("tool-output");
+        let tools = main_chat_tool_storage(workspace_root.clone(), trace_dir)
             .map_err(|error| ChatError::Session(error.to_string()))?;
         Ok(Self {
             session: SessionManager::new()?,
