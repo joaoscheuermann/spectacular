@@ -384,6 +384,7 @@ impl<'a, C> PromptEditor<'a, C> {
 
         if let Some(footer) = &self.footer {
             println!();
+            println!();
             print!("{}", crate::chat::renderer::format_prompt_footer(footer));
         }
 
@@ -406,7 +407,7 @@ impl<'a, C> PromptEditor<'a, C> {
 
         self.rendered_lines = saturating_u16(
             rows.len()
-                + usize::from(self.footer.is_some())
+                + footer_rendered_lines(self.footer.as_ref())
                 + guidance.len()
                 + guidance_suggestion_gap(&guidance, &suggestions)
                 + suggestions.len(),

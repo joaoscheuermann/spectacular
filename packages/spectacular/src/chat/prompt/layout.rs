@@ -36,6 +36,11 @@ fn guidance_suggestion_gap(
     usize::from(!guidance.is_empty() && !suggestions.is_empty())
 }
 
+/// Counts the spacer and footer rows rendered below the editable prompt.
+fn footer_rendered_lines(footer: Option<&ChatPromptFooterModel>) -> usize {
+    footer.map_or(0, |_| PROMPT_FOOTER_RENDERED_LINES)
+}
+
 /// Styles the missing-label prefix as dim orange and bold.
 fn missing_label_style() -> anstyle::Style {
     MISSING_ORANGE.on_default().dimmed().bold()

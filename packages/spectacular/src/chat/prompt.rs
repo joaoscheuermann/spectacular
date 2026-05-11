@@ -23,6 +23,7 @@ use unicode_width::UnicodeWidthChar;
 const DEFAULT_TERMINAL_WIDTH: u16 = 80;
 const MAX_SUGGESTIONS: usize = 8;
 const PROMPT_WIDTH: u16 = 2;
+const PROMPT_FOOTER_RENDERED_LINES: usize = 2;
 const MISSING_ORANGE: RgbColor = RgbColor(251, 191, 36);
 
 include!("prompt/editor_types.rs");

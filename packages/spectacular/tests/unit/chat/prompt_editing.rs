@@ -257,7 +257,7 @@
     }
 
     #[test]
-    fn prompt_editor_footer_adds_one_rendered_line() {
+    fn prompt_editor_footer_adds_spacer_and_footer_lines() {
         let renderer = Renderer::default();
         let registry = Arc::new(test_registry());
         let completions = PromptCompletionCatalog::default();
@@ -271,7 +271,7 @@
 
         editor.redraw().unwrap();
 
-        assert_eq!(editor.rendered_lines, 2);
+        assert_eq!(editor.rendered_lines, 3);
         assert_eq!(editor.rendered_cursor_row, 0);
         editor.clear_rendered_block().unwrap();
     }
