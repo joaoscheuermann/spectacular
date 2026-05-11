@@ -1,5 +1,10 @@
-use crate::display::{error_style, paint, success_style};
+#[path = "edit/display.rs"]
+mod edit_display;
+
+use crate::diff_preview::diff_preview;
+use crate::display::{error_style, paint, tool_line};
 use crate::path::resolve_workspace_path;
+use edit_display::diff_summary;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use similar::{ChangeTag, TextDiff};
@@ -17,6 +22,7 @@ pub struct EditTool {
 }
 
 impl EditTool {
+    /// Creates an edit tool scoped to the provided workspace root.
     pub fn new(workspace_root: impl Into<PathBuf>) -> Self {
         Self {
             workspace_root: workspace_root.into(),
@@ -25,10 +31,12 @@ impl EditTool {
 }
 
 impl Tool for EditTool {
+    /// Returns the stable tool name used for registration and dispatch.
     fn name(&self) -> &str {
         EDIT_TOOL_NAME
     }
 
+    /// Builds the edit tool manifest and JSON parameter schema.
     fn manifest(&self) -> ToolManifest {
         ToolManifest::new(
             EDIT_TOOL_NAME,
@@ -38,7 +46,7 @@ impl Tool for EditTool {
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Path to the file to edit (relative or absolute)"
+                        "description": "Path to the file to edit. Relative paths resolve against the workspace root; absolute paths and .. traversal are allowed intentionally."
                     },
                     "edits": {
                         "type": "array",
@@ -79,6 +87,7 @@ impl Tool for EditTool {
         )
     }
 
+    /// Formats edit arguments as concise path and edit-count text.
     fn format_input(&self, arguments: &Value) -> ToolDisplay {
         let path = arguments
             .get("path")
@@ -89,9 +98,27 @@ impl Tool for EditTool {
             .and_then(Value::as_array)
             .map(Vec::len)
             .unwrap_or_default();
-        format!("{path} ({edit_count} edit(s))")
+        let noun = if edit_count == 1 { "edit" } else { "edits" };
+        format!("{path} ({edit_count} {noun})")
     }
 
+    /// Formats edit arguments as a styled renderer call line.
+    fn format_call(&self, arguments: &Value) -> ToolDisplay {
+        let path = arguments
+            .get("path")
+            .and_then(Value::as_str)
+            .unwrap_or("<missing path>");
+        let edit_count = arguments
+            .get("edits")
+            .and_then(Value::as_array)
+            .map(Vec::len)
+            .unwrap_or_default();
+        let noun = if edit_count == 1 { "edit" } else { "edits" };
+        let metadata = format!("({edit_count} {noun})");
+        tool_line("Edited", path, Some(&metadata))
+    }
+
+    /// Formats edit output as either an error, diff body, or raw fallback text.
     fn format_output(&self, raw_output: &str, parsed_output: Option<&Value>) -> ToolDisplay {
         let Some(output) = parsed_output else {
             return raw_output.to_string();
@@ -102,15 +129,37 @@ impl Tool for EditTool {
             return format!("{status}: {error}");
         }
 
-        let first_changed_line = output
-            .get("first_changed_line")
-            .and_then(Value::as_u64)
-            .map(|line| format!(" at line {line}"))
-            .unwrap_or_default();
-        let status = paint(success_style(), "edited");
-        format!("{status}{first_changed_line}")
+        output
+            .get("diff")
+            .and_then(Value::as_str)
+            .filter(|diff| !diff.is_empty())
+            .map(str::to_owned)
+            .unwrap_or_else(|| output.to_string())
     }
 
+    /// Adds the edited path and summary counts to multiline diff output when input is available.
+    fn format_output_with_input(
+        &self,
+        raw_output: &str,
+        parsed_output: Option<&Value>,
+        arguments: Option<&Value>,
+    ) -> ToolDisplay {
+        let Some(path) = arguments
+            .and_then(|input| input.get("path"))
+            .and_then(Value::as_str)
+        else {
+            return self.format_output(raw_output, parsed_output);
+        };
+        let output = self.format_output(raw_output, parsed_output);
+        if output.contains('\n') && !output.starts_with("Edited ") {
+            let summary = diff_summary(parsed_output);
+            return format!("Edited {path}{summary}\n{output}");
+        }
+
+        output
+    }
+
+    /// Executes exact replacements against the target file and serializes the output payload.
     fn execute<'a>(&'a self, arguments: Value, _cancellation: Cancellation) -> ToolExecution<'a> {
         let workspace_root = self.workspace_root.clone();
 
@@ -163,6 +212,7 @@ struct MatchedEdit {
     new_text: String,
 }
 
+/// Applies all requested edits to one file and returns a structured edit result.
 fn execute_edit(workspace_root: &Path, input: EditInput) -> EditOutput {
     let file_path = resolve_workspace_path(workspace_root, &input.path);
 
@@ -220,7 +270,8 @@ fn execute_edit(workspace_root: &Path, input: EditInput) -> EditOutput {
         return error_output(format!("Failed to write file: {error}"));
     }
 
-    let (diff, first_changed_line) = generate_diff(&base_content, &new_content);
+    let first_changed_line = first_changed_line(&base_content, &new_content);
+    let diff = diff_preview(&base_content, &new_content).lines;
     EditOutput {
         success: true,
         diff,
@@ -229,6 +280,7 @@ fn execute_edit(workspace_root: &Path, input: EditInput) -> EditOutput {
     }
 }
 
+/// Normalizes edit text to LF endings and fuzzy trailing-whitespace matching semantics.
 fn normalize_edits(edits: &[EditEntry]) -> Vec<NormalizedEdit> {
     edits
         .iter()
@@ -243,6 +295,7 @@ fn normalize_edits(edits: &[EditEntry]) -> Vec<NormalizedEdit> {
         .collect()
 }
 
+/// Validates edit entries before matching and returns the first user-facing error.
 fn validate_edits(path: &str, edits: &[NormalizedEdit]) -> Option<String> {
     for (index, edit) in edits.iter().enumerate() {
         if edit.old_text.is_empty() {
@@ -267,6 +320,7 @@ fn validate_edits(path: &str, edits: &[NormalizedEdit]) -> Option<String> {
     None
 }
 
+/// Locates unique, non-overlapping edit ranges in the original content.
 fn locate_edits(
     path: &str,
     edits: &[NormalizedEdit],
@@ -298,6 +352,7 @@ fn locate_edits(
     Ok(matched_edits)
 }
 
+/// Rejects matched edits whose original ranges overlap.
 fn reject_overlaps(path: &str, matched_edits: &[MatchedEdit]) -> Result<(), String> {
     for index in 1..matched_edits.len() {
         let previous = &matched_edits[index - 1];
@@ -313,6 +368,7 @@ fn reject_overlaps(path: &str, matched_edits: &[MatchedEdit]) -> Result<(), Stri
     Ok(())
 }
 
+/// Applies matched edits from the end of the file toward the start to preserve byte offsets.
 fn apply_edits(base_content: &str, matched_edits: &[MatchedEdit]) -> String {
     let mut new_content = base_content.to_owned();
     for edit in matched_edits.iter().rev() {
@@ -327,6 +383,7 @@ fn apply_edits(base_content: &str, matched_edits: &[MatchedEdit]) -> String {
     new_content
 }
 
+/// Builds the user-facing error for an edit whose old text was not found.
 fn missing_match_error(path: &str, edit_index: usize, edit_count: usize) -> String {
     if edit_count == 1 {
         return format!(
@@ -339,6 +396,7 @@ fn missing_match_error(path: &str, edit_index: usize, edit_count: usize) -> Stri
     )
 }
 
+/// Builds the user-facing error for old text that appears more than once.
 fn duplicate_match_error(
     path: &str,
     edit_index: usize,
@@ -356,10 +414,12 @@ fn duplicate_match_error(
     )
 }
 
+/// Converts CRLF and CR line endings to LF for matching.
 fn normalize_to_lf(text: &str) -> String {
     text.replace("\r\n", "\n").replace('\r', "\n")
 }
 
+/// Detects whether the original content primarily starts with CRLF or LF endings.
 fn detect_line_ending(content: &str) -> &'static str {
     let crlf_position = content.find("\r\n");
     let lf_position = content.find('\n');
@@ -369,6 +429,7 @@ fn detect_line_ending(content: &str) -> &'static str {
     }
 }
 
+/// Restores normalized LF content to the original line-ending style.
 fn restore_line_endings(text: &str, ending: &str) -> String {
     if ending == "\r\n" {
         return text.replace('\n', "\r\n");
@@ -377,6 +438,7 @@ fn restore_line_endings(text: &str, ending: &str) -> String {
     text.to_owned()
 }
 
+/// Separates a leading UTF-8 BOM marker from editable content.
 fn strip_bom(content: &str) -> (&str, &str) {
     if let Some(stripped) = content.strip_prefix('\u{FEFF}') {
         return ("\u{FEFF}", stripped);
@@ -385,6 +447,7 @@ fn strip_bom(content: &str) -> (&str, &str) {
     ("", content)
 }
 
+/// Trims trailing whitespace from each line to support tolerant matching.
 fn normalize_for_fuzzy(text: &str) -> String {
     text.lines()
         .map(str::trim_end)
@@ -392,46 +455,22 @@ fn normalize_for_fuzzy(text: &str) -> String {
         .join("\n")
 }
 
-fn generate_diff(old: &str, new: &str) -> (String, Option<usize>) {
+/// Returns the first new-file line number touched by a diff.
+fn first_changed_line(old: &str, new: &str) -> Option<usize> {
     let diff = TextDiff::from_lines(old, new);
-    let mut output = Vec::new();
-    let mut first_changed_line = None;
-    let max_line = old.lines().count().max(new.lines().count());
-    let width = format!("{max_line}").len();
-
-    let mut old_line = 1;
     let mut new_line = 1;
 
     for change in diff.iter_all_changes() {
         match change.tag() {
-            ChangeTag::Equal => {
-                let text = change.value().trim_end_matches('\n');
-                output.push(format!(" {old_line:>width$} {text}"));
-                old_line += 1;
-                new_line += 1;
-            }
-            ChangeTag::Delete => {
-                if first_changed_line.is_none() {
-                    first_changed_line = Some(new_line);
-                }
-                let text = change.value().trim_end_matches('\n');
-                output.push(format!("-{old_line:>width$} {text}"));
-                old_line += 1;
-            }
-            ChangeTag::Insert => {
-                if first_changed_line.is_none() {
-                    first_changed_line = Some(new_line);
-                }
-                let text = change.value().trim_end_matches('\n');
-                output.push(format!("+{new_line:>width$} {text}"));
-                new_line += 1;
-            }
+            ChangeTag::Equal => new_line += 1,
+            ChangeTag::Delete | ChangeTag::Insert => return Some(new_line),
         }
     }
 
-    (output.join("\n"), first_changed_line)
+    None
 }
 
+/// Builds a failed edit output payload with a user-facing error message.
 fn error_output(message: impl Into<String>) -> EditOutput {
     EditOutput {
         success: false,
@@ -441,238 +480,17 @@ fn error_output(message: impl Into<String>) -> EditOutput {
     }
 }
 
+/// Serializes a failed edit output payload for invalid tool input.
 fn edit_error(message: impl Into<String>) -> String {
     serialize_output(&error_output(message))
 }
 
+/// Serializes an edit output payload to JSON.
 fn serialize_output(output: &EditOutput) -> String {
     serde_json::to_string(output).expect("edit output should serialize")
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::test_support::{remove_workspace, temp_workspace, write_file};
-    use serde_json::json;
-
-    #[tokio::test]
-    async fn real_edit_updates_file_and_returns_diff_with_first_changed_line() {
-        let workspace_root = temp_workspace("edit_real_file").await;
-        write_file(
-            &workspace_root,
-            "src/lib.rs",
-            "fn main() {\n    old_call();\n}\n",
-        )
-        .await;
-        let tool = EditTool::new(&workspace_root);
-
-        let result = tool
-            .execute(
-                json!({
-                    "path": "src/lib.rs",
-                    "edits": [{
-                        "oldText": "    old_call();",
-                        "newText": "    new_call();"
-                    }]
-                }),
-                Cancellation::default(),
-            )
-            .await
-            .unwrap();
-        let output: EditOutput = serde_json::from_str(&result).unwrap();
-
-        assert!(output.success);
-        assert_eq!(output.first_changed_line, Some(2));
-        assert!(output.diff.contains("-2     old_call();"));
-        assert!(output.diff.contains("+2     new_call();"));
-        assert_eq!(
-            tokio::fs::read_to_string(workspace_root.join("src/lib.rs"))
-                .await
-                .unwrap(),
-            "fn main() {\n    new_call();\n}\n"
-        );
-
-        remove_workspace(workspace_root).await;
-    }
-
-    #[tokio::test]
-    async fn crlf_input_preserves_crlf_after_edit() {
-        let workspace_root = temp_workspace("edit_preserves_crlf").await;
-        write_file(&workspace_root, "src/lib.rs", "one\r\ntwo\r\nthree\r\n").await;
-        let tool = EditTool::new(&workspace_root);
-
-        let output = execute_edit_json(
-            &tool,
-            json!({
-                "path": "src/lib.rs",
-                "edits": [{
-                    "oldText": "two",
-                    "newText": "TWO"
-                }]
-            }),
-        )
-        .await;
-        let bytes = tokio::fs::read(workspace_root.join("src/lib.rs"))
-            .await
-            .unwrap();
-        let content = String::from_utf8(bytes).unwrap();
-
-        assert!(output.success);
-        assert_eq!(content, "one\r\nTWO\r\nthree\r\n");
-        assert!(!content.contains("one\nTWO"));
-
-        remove_workspace(workspace_root).await;
-    }
-
-    #[tokio::test]
-    async fn utf8_bom_is_preserved() {
-        let workspace_root = temp_workspace("edit_preserves_bom").await;
-        let path = workspace_root.join("bom.txt");
-        tokio::fs::write(&path, b"\xEF\xBB\xBFalpha\nbeta\n")
-            .await
-            .unwrap();
-        let tool = EditTool::new(&workspace_root);
-
-        let output = execute_edit_json(
-            &tool,
-            json!({
-                "path": "bom.txt",
-                "edits": [{
-                    "oldText": "beta",
-                    "newText": "gamma"
-                }]
-            }),
-        )
-        .await;
-        let bytes = tokio::fs::read(path).await.unwrap();
-
-        assert!(output.success);
-        assert!(bytes.starts_with(b"\xEF\xBB\xBF"));
-        assert_eq!(String::from_utf8(bytes).unwrap(), "\u{FEFF}alpha\ngamma\n");
-
-        remove_workspace(workspace_root).await;
-    }
-
-    #[tokio::test]
-    async fn duplicate_old_text_returns_more_context_error() {
-        let workspace_root = temp_workspace("edit_duplicate_old_text").await;
-        write_file(&workspace_root, "src/lib.rs", "same\nsame\n").await;
-        let tool = EditTool::new(&workspace_root);
-
-        let output = execute_edit_json(
-            &tool,
-            json!({
-                "path": "src/lib.rs",
-                "edits": [{
-                    "oldText": "same",
-                    "newText": "changed"
-                }]
-            }),
-        )
-        .await;
-
-        assert!(!output.success);
-        assert!(output
-            .error
-            .unwrap()
-            .contains("Please provide more context."));
-
-        remove_workspace(workspace_root).await;
-    }
-
-    #[tokio::test]
-    async fn overlapping_edits_return_error() {
-        let workspace_root = temp_workspace("edit_overlapping").await;
-        write_file(&workspace_root, "src/lib.rs", "abcdef\n").await;
-        let tool = EditTool::new(&workspace_root);
-
-        let output = execute_edit_json(
-            &tool,
-            json!({
-                "path": "src/lib.rs",
-                "edits": [
-                    {
-                        "oldText": "abc",
-                        "newText": "ABC"
-                    },
-                    {
-                        "oldText": "bcd",
-                        "newText": "BCD"
-                    }
-                ]
-            }),
-        )
-        .await;
-
-        assert!(!output.success);
-        assert!(output.error.unwrap().contains("overlap"));
-
-        remove_workspace(workspace_root).await;
-    }
-
-    #[tokio::test]
-    async fn old_text_and_new_text_aliases_are_accepted() {
-        let workspace_root = temp_workspace("edit_aliases").await;
-        write_file(&workspace_root, "src/lib.rs", "alpha\n").await;
-        let tool = EditTool::new(&workspace_root);
-
-        let output = execute_edit_json(
-            &tool,
-            json!({
-                "path": "src/lib.rs",
-                "edits": [{
-                    "old_text": "alpha",
-                    "new_text": "beta"
-                }]
-            }),
-        )
-        .await;
-
-        assert!(output.success);
-        assert_eq!(
-            tokio::fs::read_to_string(workspace_root.join("src/lib.rs"))
-                .await
-                .unwrap(),
-            "beta\n"
-        );
-
-        remove_workspace(workspace_root).await;
-    }
-
-    #[tokio::test]
-    async fn trailing_whitespace_tolerance_matches_old_text() {
-        let workspace_root = temp_workspace("edit_trailing_whitespace").await;
-        write_file(&workspace_root, "src/lib.rs", "alpha   \nbeta\n").await;
-        let tool = EditTool::new(&workspace_root);
-
-        let output = execute_edit_json(
-            &tool,
-            json!({
-                "path": "src/lib.rs",
-                "edits": [{
-                    "oldText": "alpha\nbeta",
-                    "newText": "gamma\nbeta"
-                }]
-            }),
-        )
-        .await;
-
-        assert!(output.success);
-        assert_eq!(
-            tokio::fs::read_to_string(workspace_root.join("src/lib.rs"))
-                .await
-                .unwrap(),
-            "gamma\nbeta"
-        );
-
-        remove_workspace(workspace_root).await;
-    }
-
-    async fn execute_edit_json(tool: &EditTool, arguments: Value) -> EditOutput {
-        let result = tool
-            .execute(arguments, Cancellation::default())
-            .await
-            .unwrap();
-        serde_json::from_str(&result).unwrap()
-    }
+    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/unit/edit.rs"));
 }

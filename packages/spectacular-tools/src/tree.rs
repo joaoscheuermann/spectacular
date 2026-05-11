@@ -1,4 +1,5 @@
-use crate::display::{error_style, paint};
+use crate::display::tool_arg_line;
+use crate::output_preview::preview_text;
 use crate::path::resolve_workspace_path;
 use glob::Pattern;
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
@@ -19,6 +20,7 @@ pub struct TreeTool {
 }
 
 impl TreeTool {
+    /// Creates a tree tool scoped to the provided workspace root.
     pub fn new(workspace_root: impl Into<PathBuf>) -> Self {
         Self {
             workspace_root: workspace_root.into(),
@@ -27,10 +29,12 @@ impl TreeTool {
 }
 
 impl Tool for TreeTool {
+    /// Returns the stable tool name used for registration and dispatch.
     fn name(&self) -> &str {
         TREE_TOOL_NAME
     }
 
+    /// Builds the tree tool manifest and JSON parameter schema.
     fn manifest(&self) -> ToolManifest {
         ToolManifest::new(
             TREE_TOOL_NAME,
@@ -40,7 +44,7 @@ impl Tool for TreeTool {
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Root directory to display (default: current directory)"
+                        "description": "Root directory to display (default: current directory). Relative paths resolve against the workspace root; absolute paths and .. traversal are allowed intentionally."
                     },
                     "exclude": {
                         "type": "array",
@@ -53,21 +57,24 @@ impl Tool for TreeTool {
         )
     }
 
+    /// Formats tree arguments as the requested root path.
     fn format_input(&self, arguments: &Value) -> ToolDisplay {
         let path = arguments.get("path").and_then(Value::as_str).unwrap_or(".");
         path.to_owned()
     }
 
-    fn format_output(&self, raw_output: &str, _parsed_output: Option<&Value>) -> ToolDisplay {
-        if raw_output.starts_with("Error:") {
-            let status = paint(error_style(), "failed");
-            return format!("{status}: {raw_output}");
-        }
-
-        let lines = raw_output.lines().count();
-        format!("{lines} line(s)")
+    /// Formats tree arguments as a styled renderer call line.
+    fn format_call(&self, arguments: &Value) -> ToolDisplay {
+        let path = arguments.get("path").and_then(Value::as_str).unwrap_or(".");
+        tool_arg_line("List", path)
     }
 
+    /// Formats tree output as a bounded text preview.
+    fn format_output(&self, raw_output: &str, _parsed_output: Option<&Value>) -> ToolDisplay {
+        preview_text(raw_output)
+    }
+
+    /// Executes tree rendering and returns the plain-text tree output.
     fn execute<'a>(&'a self, arguments: Value, _cancellation: Cancellation) -> ToolExecution<'a> {
         let workspace_root = self.workspace_root.clone();
 
@@ -92,6 +99,7 @@ struct TreeInput {
     exclude: Option<Vec<String>>,
 }
 
+/// Resolves tree input, validates the root, and renders the directory tree.
 fn execute_tree(workspace_root: &Path, input: TreeInput) -> String {
     let raw_path = input.path.unwrap_or_default();
     let display_path = if raw_path.is_empty() { "." } else { &raw_path };
@@ -131,6 +139,7 @@ fn execute_tree(workspace_root: &Path, input: TreeInput) -> String {
     output
 }
 
+/// Parses exclude glob patterns and returns a user-facing error for invalid patterns.
 fn parse_exclude_patterns(patterns: Vec<String>) -> Result<Vec<Pattern>, String> {
     patterns
         .into_iter()
@@ -141,6 +150,7 @@ fn parse_exclude_patterns(patterns: Vec<String>) -> Result<Vec<Pattern>, String>
         .collect()
 }
 
+/// Recursively appends sorted visible entries to the ASCII tree output.
 fn build_tree(
     dir: &Path,
     prefix: &str,
@@ -191,6 +201,7 @@ fn build_tree(
     }
 }
 
+/// Reads visible directory entries, applies ignore/exclude rules, and sorts directories before files.
 fn filtered_sorted_entries(
     dir: &Path,
     gitignores: &[Gitignore],
@@ -236,12 +247,14 @@ fn filtered_sorted_entries(
     Ok(entries)
 }
 
+/// Reports whether a path is a symbolic link that should be skipped.
 fn is_symlink(path: &Path) -> bool {
     std::fs::symlink_metadata(path)
         .map(|metadata| metadata.file_type().is_symlink())
         .unwrap_or(false)
 }
 
+/// Reports whether a path matches any user-supplied exclude pattern.
 fn is_excluded(path: &Path, exclude_patterns: &[Pattern]) -> bool {
     if exclude_patterns.is_empty() {
         return false;
@@ -254,6 +267,7 @@ fn is_excluded(path: &Path, exclude_patterns: &[Pattern]) -> bool {
         .any(|pattern| pattern.matches(&name) || pattern.matches(&path_str))
 }
 
+/// Reports whether stacked gitignore matchers ignore the given path.
 fn is_gitignored(path: &Path, is_dir: bool, gitignores: &[Gitignore]) -> bool {
     for gitignore in gitignores.iter().rev() {
         match gitignore.matched(path, is_dir) {
@@ -265,6 +279,7 @@ fn is_gitignored(path: &Path, is_dir: bool, gitignores: &[Gitignore]) -> bool {
     false
 }
 
+/// Loads a directory-local .gitignore onto the matcher stack when present.
 fn maybe_push_gitignore(dir: &Path, gitignores: &mut Vec<Gitignore>) -> bool {
     let gitignore_path = dir.join(".gitignore");
     if !gitignore_path.is_file() {
@@ -282,6 +297,7 @@ fn maybe_push_gitignore(dir: &Path, gitignores: &mut Vec<Gitignore>) -> bool {
     }
 }
 
+/// Returns a lowercase file name used for stable case-insensitive sorting.
 fn case_insensitive_name(path: &Path) -> String {
     path.file_name()
         .unwrap_or_default()
@@ -291,36 +307,5 @@ fn case_insensitive_name(path: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::test_support::{remove_workspace, temp_workspace, write_file};
-    use serde_json::json;
-
-    #[tokio::test]
-    async fn tree_uses_ascii_connectors_and_includes_agents_but_excludes_other_hidden() {
-        let workspace_root = temp_workspace("tree_hidden_ascii").await;
-        write_file(&workspace_root, ".agents/skill.md", "skill").await;
-        write_file(&workspace_root, ".hidden/secret.txt", "secret").await;
-        write_file(&workspace_root, "src/lib.rs", "lib").await;
-        write_file(&workspace_root, "visible.txt", "visible").await;
-
-        let tool = TreeTool::new(&workspace_root);
-        let output = tool
-            .execute(json!({"path": "."}), Cancellation::default())
-            .await
-            .unwrap();
-
-        assert!(output.contains("|-- .agents/"));
-        assert!(output.contains("|   `-- skill.md") || output.contains("    `-- skill.md"));
-        assert!(output.contains("`-- visible.txt") || output.contains("|-- visible.txt"));
-        assert!(output.contains("|--"));
-        assert!(output.contains("`-- "));
-        assert!(output.contains("|   "));
-        assert!(!output.contains(".hidden"));
-        assert!(!output.contains('\u{251C}'));
-        assert!(!output.contains('\u{2514}'));
-        assert!(!output.contains('\u{2502}'));
-        assert!(!output.contains('\u{2500}'));
-
-        remove_workspace(workspace_root).await;
-    }
+    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/unit/tree.rs"));
 }

@@ -4,8 +4,7 @@ use spectacular_agent::ToolStorage;
 
 /// Display model for a tool call line.
 pub struct ToolCallView {
-    pub name: String,
-    pub input: String,
+    pub line: String,
 }
 
 /// Display model for a tool result block.
@@ -25,24 +24,26 @@ impl ToolCallView {
     pub fn from_parts(name: &str, arguments: &str, tools: &ToolStorage) -> Self {
         let name = if name.trim().is_empty() { "tool" } else { name };
         let parsed_arguments = serde_json::from_str::<Value>(arguments).ok();
-        let input = match (tools.get(name), parsed_arguments.as_ref()) {
-            (Some(tool), Some(arguments)) => tool.format_input(arguments),
-            _ => format_json_preview(arguments),
+        let line = match (tools.get(name), parsed_arguments.as_ref()) {
+            (Some(tool), Some(arguments)) => tool.format_call(arguments),
+            _ => format_fallback_call(name, arguments),
         };
 
-        Self {
-            name: name.to_owned(),
-            input,
-        }
+        Self { line }
     }
 }
 
 impl ToolResultView {
-    /// Builds display data for a tool result, preferring registered tool formatting.
-    pub fn from_parts(name: &str, content: &str, tools: &ToolStorage) -> Self {
+    /// Builds display data for a tool result, passing original call arguments when available.
+    pub fn from_parts_with_arguments(
+        name: &str,
+        content: &str,
+        tools: &ToolStorage,
+        arguments: Option<&Value>,
+    ) -> Self {
         let parsed = serde_json::from_str::<Value>(content).ok();
         let output = match tools.get(name) {
-            Some(tool) => tool.format_output(content, parsed.as_ref()),
+            Some(tool) => tool.format_output_with_input(content, parsed.as_ref(), arguments),
             None => format_json_preview(content),
         };
 
@@ -55,6 +56,17 @@ impl ToolResultView {
             },
         }
     }
+}
+
+/// Formats unregistered or malformed tool calls with generic display parts.
+fn format_fallback_call(name: &str, arguments: &str) -> String {
+    let preview = format_json_preview(arguments);
+    format_tool_call_parts(name, &preview, None)
+}
+
+/// Formats compatibility display parts with renderer styles.
+pub(crate) fn format_tool_call_parts(label: &str, input: &str, metadata: Option<&str>) -> String {
+    spectacular_terminal_ui::tool_line(label, input, metadata)
 }
 
 /// Reports whether a tool output matches the renderer's common failure markers.

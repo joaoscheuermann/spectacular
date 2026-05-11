@@ -75,15 +75,41 @@ fn stream_output_pauses_working_indicator() {
 
 #[test]
 fn terminal_glyphs_are_not_mojibake() {
-    assert_eq!(TOOL_RESULT_PREFIX, "└");
     assert_eq!(
         WORKING_FRAMES,
         &["⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     );
-    assert!(!TOOL_RESULT_PREFIX.contains('\u{00e2}'));
     assert!(WORKING_FRAMES
         .iter()
         .all(|frame| !frame.contains('\u{00e2}')));
+}
+
+#[test]
+fn command_output_style_is_distinct_from_reasoning_and_footer_style() {
+    let command_style = command_output_style().to_string();
+    let dim_style = terminal_style::dim_style().to_string();
+    let assistant_style = terminal_style::assistant_style().to_string();
+
+    assert_ne!(command_style, dim_style);
+    assert_ne!(command_style, assistant_style);
+    assert!(paint(command_output_style(), "output").contains("\x1b[38;2;107;114;128m"));
+}
+
+#[test]
+fn tool_call_view_uses_tool_owned_formatted_line() {
+    let view = ToolCallView {
+        line: tool::format_tool_call_parts(
+            "Edited",
+            "packages/spectacular/tests/unit/chat/renderer.rs",
+            Some("(1 edit)"),
+        ),
+    };
+
+    let rendered = format_tool_call_view(&view);
+
+    assert!(rendered.contains("Edited"));
+    assert!(rendered.contains("packages/spectacular/tests/unit/chat/renderer.rs"));
+    assert!(rendered.contains("(1 edit)"));
 }
 
 #[test]
@@ -91,10 +117,15 @@ fn registered_tool_display_is_used_for_tool_call_and_result() {
     let tools = ToolStorage::try_with_tool(DisplayTool).unwrap();
 
     let call = ToolCallView::from_parts("display_tool", r#"{"path":"foo.txt"}"#, &tools);
-    let result = ToolResultView::from_parts("display_tool", r#"{"success":true}"#, &tools);
+    let result = ToolResultView::from_parts_with_arguments(
+        "display_tool",
+        r#"{"success":true}"#,
+        &tools,
+        None,
+    );
 
-    assert_eq!(call.name, "display_tool");
-    assert_eq!(call.input, "registered input: foo.txt");
+    assert!(call.line.contains("display_tool"));
+    assert!(call.line.contains("registered input: foo.txt"));
     assert_eq!(
         result.output,
         r#"registered output: success=true; raw={"success":true}"#
@@ -108,14 +139,16 @@ fn malformed_registered_tool_arguments_use_generic_fallback() {
 
     let call = ToolCallView::from_parts("display_tool", "{", &tools);
 
-    assert_eq!(call.input, "{");
+    assert!(call.line.contains("display_tool"));
+    assert!(call.line.contains("{"));
 }
 
 #[test]
 fn registered_tool_receives_none_for_non_json_output() {
     let tools = ToolStorage::try_with_tool(DisplayTool).unwrap();
 
-    let result = ToolResultView::from_parts("display_tool", "not json", &tools);
+    let result =
+        ToolResultView::from_parts_with_arguments("display_tool", "not json", &tools, None);
 
     assert_eq!(
         result.output,
@@ -151,19 +184,27 @@ fn result_status_marks_common_failures() {
     let tools = ToolStorage::default();
 
     assert_eq!(
-        ToolResultView::from_parts("missing", r#"{"exit_code":1}"#, &tools).status,
+        ToolResultView::from_parts_with_arguments("missing", r#"{"exit_code":1}"#, &tools, None)
+            .status,
         ToolStatus::Failed
     );
     assert_eq!(
-        ToolResultView::from_parts("missing", r#"{"error_kind":"timeout"}"#, &tools).status,
+        ToolResultView::from_parts_with_arguments(
+            "missing",
+            r#"{"error_kind":"timeout"}"#,
+            &tools,
+            None
+        )
+        .status,
         ToolStatus::Failed
     );
     assert_eq!(
-        ToolResultView::from_parts("missing", "Error: failed", &tools).status,
+        ToolResultView::from_parts_with_arguments("missing", "Error: failed", &tools, None).status,
         ToolStatus::Failed
     );
     assert_eq!(
-        ToolResultView::from_parts("missing", r#"{"exit_code":0}"#, &tools).status,
+        ToolResultView::from_parts_with_arguments("missing", r#"{"exit_code":0}"#, &tools, None)
+            .status,
         ToolStatus::Done
     );
 }
@@ -173,10 +214,15 @@ fn missing_tool_uses_generic_preview_for_session_replay() {
     let tools = ToolStorage::default();
 
     let call = ToolCallView::from_parts("missing_tool", r#"{"path":"foo.txt"}"#, &tools);
-    let result = ToolResultView::from_parts("missing_tool", r#"{"success":true}"#, &tools);
+    let result = ToolResultView::from_parts_with_arguments(
+        "missing_tool",
+        r#"{"success":true}"#,
+        &tools,
+        None,
+    );
 
-    assert_eq!(call.name, "missing_tool");
-    assert_eq!(call.input, "path: foo.txt");
+    assert!(call.line.contains("missing_tool"));
+    assert!(call.line.contains("path: foo.txt"));
     assert_eq!(result.output, "success: true");
     assert_eq!(result.status, ToolStatus::Done);
 }

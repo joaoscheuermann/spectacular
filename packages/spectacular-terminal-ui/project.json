@@ -1,14 +1,14 @@
 {
-  "name": "spectacular-tools",
+  "name": "spectacular-terminal-ui",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "library",
-  "sourceRoot": "packages/spectacular-tools/src",
+  "sourceRoot": "packages/spectacular-terminal-ui/src",
   "targets": {
     "build": {
       "executor": "@monodon/rust:check",
       "outputs": ["{options.target-dir}"],
       "options": {
-        "target-dir": "dist/target/spectacular-tools"
+        "target-dir": "dist/target/spectacular-terminal-ui"
       }
     },
     "test": {
@@ -16,7 +16,7 @@
       "executor": "@monodon/rust:test",
       "outputs": ["{options.target-dir}"],
       "options": {
-        "target-dir": "dist/target/spectacular-tools"
+        "target-dir": "dist/target/spectacular-terminal-ui"
       },
       "configurations": {
         "production": {
@@ -29,7 +29,7 @@
       "executor": "@monodon/rust:lint",
       "outputs": ["{options.target-dir}"],
       "options": {
-        "target-dir": "dist/target/spectacular-tools"
+        "target-dir": "dist/target/spectacular-terminal-ui"
       }
     },
     "clean": {

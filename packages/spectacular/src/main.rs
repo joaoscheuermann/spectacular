@@ -1,6 +1,13 @@
 mod chat;
 mod config_fields;
-mod terminal_style;
+pub(crate) mod terminal_style;
+#[cfg(test)]
+mod terminal_style_tests {
+    include!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/unit/terminal_style.rs"
+    ));
+}
 
 use anstyle::Style;
 use clap::{Args, Parser, Subcommand};

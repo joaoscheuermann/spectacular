@@ -1,7 +1,8 @@
-use crate::display::{error_style, paint};
+use crate::display::tool_arg_tool_arg_line;
+use crate::fs_helpers::{to_posix, workspace_walker};
+use crate::output_preview::preview_lines;
 use crate::path::resolve_workspace_path;
 use glob::Pattern;
-use ignore::WalkBuilder;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use spectacular_agent::{Cancellation, Tool, ToolDisplay, ToolExecution, ToolManifest};
@@ -11,7 +12,6 @@ pub const FIND_TOOL_NAME: &str = "find";
 
 const DEFAULT_LIMIT: usize = 1000;
 const MAX_OUTPUT_BYTES: usize = 50 * 1024;
-const FILTERED_ENTRIES: &[&str] = &["node_modules", ".git"];
 
 const FIND_TOOL_DESCRIPTION: &str = "Search for files by glob pattern. Returns matching file paths relative to the search directory. Respects .gitignore. Output is truncated to 1000 results or 50KB (whichever is hit first).";
 
@@ -21,6 +21,7 @@ pub struct FindTool {
 }
 
 impl FindTool {
+    /// Creates a find tool scoped to the provided workspace root.
     pub fn new(workspace_root: impl Into<PathBuf>) -> Self {
         Self {
             workspace_root: workspace_root.into(),
@@ -29,10 +30,12 @@ impl FindTool {
 }
 
 impl Tool for FindTool {
+    /// Returns the stable tool name used for registration and dispatch.
     fn name(&self) -> &str {
         FIND_TOOL_NAME
     }
 
+    /// Builds the find tool manifest and JSON parameter schema.
     fn manifest(&self) -> ToolManifest {
         ToolManifest::new(
             FIND_TOOL_NAME,
@@ -46,7 +49,7 @@ impl Tool for FindTool {
                     },
                     "path": {
                         "type": "string",
-                        "description": "Directory to search in (default: current directory)"
+                        "description": "Directory to search in (default: current directory). Relative paths resolve against the workspace root; absolute paths and .. traversal are allowed intentionally."
                     },
                     "limit": {
                         "type": "integer",
@@ -59,6 +62,7 @@ impl Tool for FindTool {
         )
     }
 
+    /// Formats find arguments as a pattern and search path summary.
     fn format_input(&self, arguments: &Value) -> ToolDisplay {
         let pattern = arguments
             .get("pattern")
@@ -68,25 +72,26 @@ impl Tool for FindTool {
         format!("{pattern} in {path}")
     }
 
-    fn format_output(&self, raw_output: &str, parsed_output: Option<&Value>) -> ToolDisplay {
-        let Some(output) = parsed_output else {
-            return raw_output.to_string();
-        };
-
-        if let Some(error) = output.get("error").and_then(Value::as_str) {
-            let status = paint(error_style(), "failed");
-            return format!("{status}: {error}");
-        }
-
-        let total = output.get("total").and_then(Value::as_u64).unwrap_or(0);
-        let truncated = output
-            .get("truncated")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        let suffix = if truncated { " (truncated)" } else { "" };
-        format!("{total} result(s){suffix}")
+    /// Formats find arguments as a styled renderer call line.
+    fn format_call(&self, arguments: &Value) -> ToolDisplay {
+        let pattern = arguments
+            .get("pattern")
+            .and_then(Value::as_str)
+            .unwrap_or("<missing pattern>");
+        let path = arguments.get("path").and_then(Value::as_str).unwrap_or(".");
+        tool_arg_tool_arg_line("Search files", pattern, "in", path)
     }
 
+    /// Formats find output as a bounded list of paths or an error preview.
+    fn format_output(&self, raw_output: &str, parsed_output: Option<&Value>) -> ToolDisplay {
+        let Some(output) = parsed_output else {
+            return crate::output_preview::preview_text(raw_output);
+        };
+
+        preview_lines(find_output_lines(output))
+    }
+
+    /// Executes the glob search and serializes the output payload.
     fn execute<'a>(&'a self, arguments: Value, _cancellation: Cancellation) -> ToolExecution<'a> {
         let workspace_root = self.workspace_root.clone();
 
@@ -121,6 +126,7 @@ pub struct FindOutput {
     pub error: Option<String>,
 }
 
+/// Validates find input, resolves the search path, and collects matching files.
 fn execute_find(workspace_root: &Path, input: FindInput) -> FindOutput {
     let search_dir = input.path.as_deref().unwrap_or(".");
     let search_path = resolve_workspace_path(workspace_root, search_dir);
@@ -156,6 +162,7 @@ fn execute_find(workspace_root: &Path, input: FindInput) -> FindOutput {
     )
 }
 
+/// Walks the search path and collects glob matches within result and byte limits.
 fn collect_matches(
     search_path: &Path,
     glob_pattern: &Pattern,
@@ -166,18 +173,7 @@ fn collect_matches(
     let mut truncated = false;
     let mut total_matched = 0;
 
-    let walker = WalkBuilder::new(search_path)
-        .hidden(false)
-        .git_ignore(true)
-        .git_global(true)
-        .git_exclude(true)
-        .filter_entry(|entry| {
-            let name = entry.file_name().to_string_lossy();
-            !FILTERED_ENTRIES.contains(&name.as_ref())
-        })
-        .build();
-
-    for entry in walker {
+    for entry in workspace_walker(search_path) {
         let entry = match entry {
             Ok(entry) => entry,
             Err(_) => continue,
@@ -228,10 +224,7 @@ fn collect_matches(
     }
 }
 
-fn to_posix(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/")
-}
-
+/// Serializes a failed find output payload with a user-facing error message.
 fn find_error(message: impl Into<String>) -> String {
     serialize_output(&FindOutput {
         results: vec![],
@@ -241,44 +234,31 @@ fn find_error(message: impl Into<String>) -> String {
     })
 }
 
+/// Serializes a find output payload to JSON.
 fn serialize_output(output: &FindOutput) -> String {
     serde_json::to_string(output).expect("find output should serialize")
 }
 
+/// Extracts returned paths or error text from the find result payload.
+fn find_output_lines(output: &Value) -> Vec<String> {
+    if let Some(error) = output.get("error").and_then(Value::as_str) {
+        return vec![error.to_owned()];
+    }
+
+    output
+        .get("results")
+        .and_then(Value::as_array)
+        .map(|results| {
+            results
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_else(|| vec![output.to_string()])
+}
+
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::test_support::{remove_workspace, temp_workspace, write_file};
-    use serde_json::json;
-
-    #[tokio::test]
-    async fn find_locates_matching_files_and_respects_default_limit_truncation() {
-        let workspace_root = temp_workspace("find_default_limit").await;
-        for index in 0..=DEFAULT_LIMIT {
-            write_file(
-                &workspace_root,
-                &format!("matches/file_{index:04}.target"),
-                "content",
-            )
-            .await;
-        }
-        write_file(&workspace_root, "matches/other.txt", "content").await;
-
-        let tool = FindTool::new(&workspace_root);
-        let result = tool
-            .execute(
-                json!({"pattern": "*.target", "path": "matches"}),
-                Cancellation::default(),
-            )
-            .await
-            .unwrap();
-        let output: FindOutput = serde_json::from_str(&result).unwrap();
-
-        assert_eq!(output.results.len(), DEFAULT_LIMIT);
-        assert_eq!(output.total, DEFAULT_LIMIT + 1);
-        assert!(output.truncated);
-        assert!(output.results.iter().all(|path| path.ends_with(".target")));
-
-        remove_workspace(workspace_root).await;
-    }
+    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/unit/find.rs"));
 }

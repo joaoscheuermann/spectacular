@@ -23,13 +23,18 @@ use footer::{format_user_prompt_footer, UserPromptFooterView};
 use reasoning::{
     format_reasoning_text, has_visible_reasoning_text as contains_visible_reasoning_text,
 };
+use serde_json::Value;
 use spectacular_agent::AgentEvent;
 use spectacular_agent::ToolStorage;
+use std::collections::BTreeMap;
 use std::io::{self, Write};
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
-use style::{assistant_style, error_style, success_style, tool_style, warning_style};
+use style::{
+    assistant_style, command_output_style, diff_added_style, diff_removed_style, error_style,
+    success_style, warning_style,
+};
 pub(crate) use style::{dim_style, paint, selection_style, user_style};
 pub use tool::{ToolCallView, ToolResultView};
 
@@ -43,12 +48,12 @@ use super::RuntimeSelection;
 pub(crate) const TYPEWRITER_CHARS_PER_TICK: usize = 30;
 const TYPEWRITER_TICK_INTERVAL: Duration = Duration::from_millis(50);
 const OPENING_BANNER_MIN_WIDTH: usize = 52;
-const TOOL_RESULT_PREFIX: &str = "└";
 const WORKING_FRAMES: &[&str] = &["⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 #[derive(Default)]
 pub struct Renderer {
     working: Mutex<WorkingLineState>,
+    tool_call_arguments: Mutex<BTreeMap<String, Value>>,
 }
 
 #[derive(Default)]
@@ -139,27 +144,34 @@ impl Renderer {
     }
 
     /// Renders a tool call request using the registered tool display formatter when available.
-    pub fn tool_call(&self, _tool_call_id: &str, name: &str, arguments: &str, tools: &ToolStorage) {
+    pub fn tool_call(&self, tool_call_id: &str, name: &str, arguments: &str, tools: &ToolStorage) {
+        self.remember_tool_call_arguments(tool_call_id, arguments);
         self.render_tool_call(&ToolCallView::from_parts(name, arguments, tools));
     }
 
     /// Renders a preformatted tool call view without resolving tool metadata.
     pub fn render_tool_call(&self, view: &ToolCallView) {
         self.with_interrupted_working_line(|| {
-            println!("{} {}", paint(tool_style(), &view.name), view.input);
+            println!("{}", format_tool_call_view(view));
         });
     }
 
     /// Renders a tool result using the registered tool display formatter when available.
-    pub fn tool_result(&self, name: &str, content: &str, tools: &ToolStorage) {
-        self.render_tool_result(&ToolResultView::from_parts(name, content, tools));
+    pub fn tool_result(&self, tool_call_id: &str, name: &str, content: &str, tools: &ToolStorage) {
+        let arguments = self.take_tool_call_arguments(tool_call_id);
+        self.render_tool_result(&ToolResultView::from_parts_with_arguments(
+            name,
+            content,
+            tools,
+            arguments.as_ref(),
+        ));
     }
 
     /// Renders a preformatted tool result view without resolving tool metadata.
     pub fn render_tool_result(&self, view: &ToolResultView) {
         let _ = &view.status;
         self.with_interrupted_working_line(|| {
-            println!("{TOOL_RESULT_PREFIX} {}", view.output);
+            print_tool_output(&view.output);
             println!();
         });
     }
@@ -381,6 +393,26 @@ impl Renderer {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
+    /// Caches parsed tool-call arguments so result renderers can include input context.
+    fn remember_tool_call_arguments(&self, tool_call_id: &str, arguments: &str) {
+        let Ok(arguments) = serde_json::from_str::<Value>(arguments) else {
+            return;
+        };
+
+        self.tool_call_arguments
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(tool_call_id.to_owned(), arguments);
+    }
+
+    /// Removes and returns cached arguments for a completed tool call.
+    fn take_tool_call_arguments(&self, tool_call_id: &str) -> Option<Value> {
+        self.tool_call_arguments
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .remove(tool_call_id)
+    }
+
     /// Marks the working indicator inactive and unpaused.
     fn reset_working(&self) {
         let mut state = self.working_state();
@@ -463,6 +495,75 @@ impl Renderer {
         print!("\r\x1b[2K");
         let _ = io::stdout().flush();
     }
+}
+
+/// Returns the already formatted tool-owned call line.
+fn format_tool_call_view(view: &ToolCallView) -> String {
+    view.line.to_owned()
+}
+
+/// Prints tool output with special text styling for diff additions and deletions.
+fn print_tool_output(output: &str) {
+    let is_diff_output = output
+        .lines()
+        .next()
+        .is_some_and(|line| line.starts_with("Edited "));
+    for line in output.lines() {
+        println!("{}", format_tool_output_line(line, is_diff_output));
+    }
+}
+
+/// Applies command-output or diff-row styling to one tool output line.
+fn format_tool_output_line(line: &str, is_diff_output: bool) -> String {
+    let style = if is_diff_output && is_added_diff_line(line) {
+        diff_added_style()
+    } else if is_diff_output && is_removed_diff_line(line) {
+        diff_removed_style()
+    } else {
+        command_output_style()
+    };
+
+    paint(style, line)
+}
+
+/// Reports whether a rendered diff line represents an insertion.
+fn is_added_diff_line(line: &str) -> bool {
+    diff_line_marker(line) == Some('+')
+}
+
+/// Reports whether a rendered diff line represents a deletion.
+fn is_removed_diff_line(line: &str) -> bool {
+    diff_line_marker(line) == Some('-')
+}
+
+/// Returns the marker character after a rendered diff line number.
+fn diff_line_marker(line: &str) -> Option<char> {
+    let mut characters = line.trim_start().chars().peekable();
+    let mut saw_digit = false;
+    while characters.peek().is_some_and(char::is_ascii_digit) {
+        saw_digit = true;
+        characters.next();
+    }
+    if !saw_digit {
+        return None;
+    }
+
+    if !characters
+        .peek()
+        .is_some_and(|character| character.is_whitespace())
+    {
+        return None;
+    }
+    while characters
+        .peek()
+        .is_some_and(|character| character.is_whitespace())
+    {
+        characters.next();
+    }
+
+    characters
+        .next()
+        .filter(|marker| matches!(marker, '+' | '-'))
 }
 
 /// Reports whether assistant content contains non-whitespace visible text.
