@@ -13,16 +13,25 @@
 //! direct child is also killed as a fallback, but OS permissions and shell
 //! behavior can still leave grandchildren behind.
 
+#[path = "terminal/compact.rs"]
+mod compact;
+#[path = "terminal/diagnostics.rs"]
+mod diagnostics;
 #[path = "terminal/io.rs"]
 mod io;
 #[path = "terminal/process.rs"]
 mod process;
+#[path = "terminal/reducers.rs"]
+mod reducers;
 #[path = "terminal/shell.rs"]
 mod shell;
+#[path = "terminal/trace.rs"]
+mod trace;
 
 use crate::display::tool_arg_tool_arg_line;
 use crate::output_preview::preview_text;
 use crate::path::resolve_workspace_path;
+use chrono::{DateTime, Utc};
 use io::{append_message, read_joined, spawn_reader};
 use process::{configure_process_group, wait_for_completion, CommandCompletion};
 use serde::{Deserialize, Serialize};
@@ -31,6 +40,7 @@ use shell::ShellSpec;
 use spectacular_agent::{Cancellation, Tool, ToolDisplay, ToolExecution, ToolManifest};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::time::Instant;
 
 pub const TERMINAL_TOOL_NAME: &str = "terminal";
 
@@ -39,11 +49,12 @@ const MAX_TIMEOUT_MS: u64 = 600_000;
 const CANCELLATION_POLL_MS: u64 = 25;
 const OUTPUT_DRAIN_TIMEOUT_MS: u64 = 1_000;
 const TERMINAL_TOOL_DESCRIPTION: &str =
-    "Executes shell commands on the host machine. Returns stdout, stderr, and exit_code.";
+    "Executes shell commands on the host machine. Returns compact stdout/stderr summaries, diagnostics, exit_code, duration, and a raw_output_ref when trace storage is enabled.";
 
 #[derive(Clone, Debug)]
 pub struct TerminalTool {
     workspace_root: PathBuf,
+    trace_dir: Option<PathBuf>,
 }
 
 impl TerminalTool {
@@ -51,6 +62,18 @@ impl TerminalTool {
     pub fn new(workspace_root: impl Into<PathBuf>) -> Self {
         Self {
             workspace_root: workspace_root.into(),
+            trace_dir: None,
+        }
+    }
+
+    /// Creates a terminal tool that writes full raw output under the supplied trace directory.
+    pub fn with_trace_dir(
+        workspace_root: impl Into<PathBuf>,
+        trace_dir: impl Into<PathBuf>,
+    ) -> Self {
+        Self {
+            workspace_root: workspace_root.into(),
+            trace_dir: Some(trace_dir.into()),
         }
     }
 }
@@ -122,24 +145,32 @@ impl Tool for TerminalTool {
             return preview_text(raw_output);
         };
 
-        preview_text(&terminal_output_text(output))
+        if is_compact_terminal_output(output) {
+            return compact::format_compact_output(output);
+        }
+
+        preview_text(&legacy_terminal_output_text(output))
     }
 
     /// Executes the shell command and serializes the terminal output payload.
     fn execute<'a>(&'a self, arguments: Value, cancellation: Cancellation) -> ToolExecution<'a> {
         let workspace_root = self.workspace_root.clone();
+        let trace_dir = self.trace_dir.clone();
 
         Box::pin(async move {
             let input = match serde_json::from_value::<TerminalInput>(arguments) {
                 Ok(input) => input,
                 Err(error) => {
-                    return Ok(terminal_error(format!("Invalid input JSON: {error}")));
+                    return Ok(terminal_error(
+                        &workspace_root,
+                        trace_dir.as_deref(),
+                        format!("Invalid input JSON: {error}"),
+                    ));
                 }
             };
 
-            Ok(serialize_output(
-                &execute_terminal(&workspace_root, input, cancellation).await,
-            ))
+            let execution = execute_terminal(&workspace_root, input, cancellation).await;
+            Ok(serialize_execution_output(&execution, trace_dir.as_deref()))
         })
     }
 }
@@ -160,18 +191,76 @@ pub struct TerminalOutput {
     pub exit_code: i32,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct TerminalExecution {
+    pub(crate) command: String,
+    pub(crate) working_directory: PathBuf,
+    pub(crate) started_at: DateTime<Utc>,
+    pub(crate) completed_at: DateTime<Utc>,
+    pub(crate) duration_ms: u128,
+    pub(crate) stdout: String,
+    pub(crate) stderr: String,
+    pub(crate) exit_code: i32,
+}
+
+impl TerminalExecution {
+    /// Builds a completed execution record from captured process output.
+    fn completed(
+        command: String,
+        working_directory: PathBuf,
+        started_at: DateTime<Utc>,
+        started_instant: Instant,
+        stdout: String,
+        stderr: String,
+        exit_code: i32,
+    ) -> Self {
+        Self {
+            command,
+            working_directory,
+            started_at,
+            completed_at: Utc::now(),
+            duration_ms: started_instant.elapsed().as_millis(),
+            stdout,
+            stderr,
+            exit_code,
+        }
+    }
+
+    /// Builds a failed execution record for errors that occur before process output exists.
+    fn failed(
+        command: String,
+        working_directory: PathBuf,
+        started_at: DateTime<Utc>,
+        started_instant: Instant,
+        stderr: String,
+    ) -> Self {
+        Self::completed(
+            command,
+            working_directory,
+            started_at,
+            started_instant,
+            String::new(),
+            stderr,
+            -1,
+        )
+    }
+}
+
 /// Runs one terminal command with shell detection, timeout, cancellation, and output capture.
 async fn execute_terminal(
     workspace_root: &Path,
     input: TerminalInput,
     cancellation: Cancellation,
-) -> TerminalOutput {
+) -> TerminalExecution {
     let timeout_ms = effective_timeout_ms(input.timeout_ms);
+    let command_text = input.command;
     let working_directory = resolve_working_directory(workspace_root, input.working_directory);
+    let started_at = Utc::now();
+    let started_instant = Instant::now();
     let shell = ShellSpec::detect();
-    let mut command = shell.command(&input.command);
+    let mut command = shell.command(&command_text);
     command
-        .current_dir(working_directory)
+        .current_dir(&working_directory)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -181,11 +270,13 @@ async fn execute_terminal(
     let mut child = match command.spawn() {
         Ok(child) => child,
         Err(error) => {
-            return TerminalOutput {
-                stdout: String::new(),
-                stderr: format!("Failed to spawn command: {error}"),
-                exit_code: -1,
-            };
+            return TerminalExecution::failed(
+                command_text,
+                working_directory,
+                started_at,
+                started_instant,
+                format!("Failed to spawn command: {error}"),
+            );
         }
     };
 
@@ -198,26 +289,42 @@ async fn execute_terminal(
     let stderr = read_joined(stderr_reader, output_drain_timeout).await;
 
     match completion {
-        CommandCompletion::Exited(status) => TerminalOutput {
+        CommandCompletion::Exited(status) => TerminalExecution::completed(
+            command_text,
+            working_directory,
+            started_at,
+            started_instant,
             stdout,
             stderr,
-            exit_code: status.code().unwrap_or(-1),
-        },
-        CommandCompletion::WaitError(error) => TerminalOutput {
+            status.code().unwrap_or(-1),
+        ),
+        CommandCompletion::WaitError(error) => TerminalExecution::completed(
+            command_text,
+            working_directory,
+            started_at,
+            started_instant,
             stdout,
-            stderr: append_message(stderr, format!("Command execution error: {error}")),
-            exit_code: -1,
-        },
-        CommandCompletion::TimedOut => TerminalOutput {
+            append_message(stderr, format!("Command execution error: {error}")),
+            -1,
+        ),
+        CommandCompletion::TimedOut => TerminalExecution::completed(
+            command_text,
+            working_directory,
+            started_at,
+            started_instant,
             stdout,
-            stderr: append_message(stderr, format!("Command timed out after {timeout_ms}ms")),
-            exit_code: -1,
-        },
-        CommandCompletion::Cancelled => TerminalOutput {
+            append_message(stderr, format!("Command timed out after {timeout_ms}ms")),
+            -1,
+        ),
+        CommandCompletion::Cancelled => TerminalExecution::completed(
+            command_text,
+            working_directory,
+            started_at,
+            started_instant,
             stdout,
-            stderr: append_message(stderr, "Command cancelled".to_owned()),
-            exit_code: -1,
-        },
+            append_message(stderr, "Command cancelled".to_owned()),
+            -1,
+        ),
     }
 }
 
@@ -237,22 +344,53 @@ fn effective_timeout_ms(timeout_ms: Option<u64>) -> u64 {
     timeout_ms.unwrap_or(DEFAULT_TIMEOUT_MS).min(MAX_TIMEOUT_MS)
 }
 
-/// Serializes a failed terminal output payload with stderr populated.
-fn terminal_error(message: impl Into<String>) -> String {
-    serialize_output(&TerminalOutput {
-        stdout: String::new(),
-        stderr: message.into(),
-        exit_code: -1,
-    })
+/// Serializes a failed compact terminal payload with stderr populated.
+fn terminal_error(
+    workspace_root: &Path,
+    trace_dir: Option<&Path>,
+    message: impl Into<String>,
+) -> String {
+    let started_at = Utc::now();
+    let started_instant = Instant::now();
+    let execution = TerminalExecution::failed(
+        "<invalid input>".to_owned(),
+        workspace_root.to_path_buf(),
+        started_at,
+        started_instant,
+        message.into(),
+    );
+    serialize_execution_output(&execution, trace_dir)
 }
 
-/// Serializes a terminal output payload to JSON.
-fn serialize_output(output: &TerminalOutput) -> String {
-    serde_json::to_string(output).expect("terminal output should serialize")
+/// Serializes compact terminal output after optional trace writing and reducer enrichment.
+fn serialize_execution_output(execution: &TerminalExecution, trace_dir: Option<&Path>) -> String {
+    let trace = trace_metadata(execution, trace_dir);
+    let compact = compact::compact_terminal_execution(execution, trace);
+    let reduced = reducers::reduce_terminal_output(execution, compact);
+    serde_json::to_string(&reduced).expect("compact terminal output should serialize")
+}
+
+/// Writes a raw trace when trace storage is enabled and returns compact trace metadata.
+fn trace_metadata(
+    execution: &TerminalExecution,
+    trace_dir: Option<&Path>,
+) -> compact::CompactTraceMetadata {
+    let Some(trace_dir) = trace_dir else {
+        return compact::CompactTraceMetadata::none();
+    };
+
+    trace::TerminalTraceStore::new(trace_dir)
+        .write(execution)
+        .into_compact_metadata()
+}
+
+/// Reports whether a parsed terminal output value is the compact v1 schema.
+fn is_compact_terminal_output(output: &Value) -> bool {
+    output.get("schema").and_then(Value::as_str) == Some(compact::TERMINAL_COMPACT_SCHEMA)
 }
 
 /// Joins command stdout and stderr so the visible preview shows actual process output.
-fn terminal_output_text(output: &Value) -> String {
+fn legacy_terminal_output_text(output: &Value) -> String {
     let stdout = output.get("stdout").and_then(Value::as_str).unwrap_or("");
     let stderr = output.get("stderr").and_then(Value::as_str).unwrap_or("");
 

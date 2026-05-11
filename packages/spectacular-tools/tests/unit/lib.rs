@@ -26,6 +26,30 @@ fn built_in_factory_registers_all_current_tools() {
     );
 }
 
+/// Verifies trace-enabled built-in registration preserves the provider-visible tool order.
+#[test]
+fn trace_enabled_built_in_factory_preserves_tool_order() {
+    let storage =
+        built_in_tools_with_trace_dir(PathBuf::from("workspace"), PathBuf::from("trace")).unwrap();
+
+    assert_eq!(
+        storage
+            .manifests()
+            .into_iter()
+            .map(|manifest| manifest.name)
+            .collect::<Vec<_>>(),
+        vec![
+            EDIT_TOOL_NAME,
+            FIND_TOOL_NAME,
+            GREP_TOOL_NAME,
+            TERMINAL_TOOL_NAME,
+            TREE_TOOL_NAME,
+            WEB_SEARCH_TOOL_NAME,
+            WRITE_TOOL_NAME
+        ]
+    );
+}
+
 /// Verifies that tool-specific formatters do not duplicate the renderer-owned tool prefix.
 #[test]
 fn built_in_tool_formatters_omit_redundant_tool_prefixes() {

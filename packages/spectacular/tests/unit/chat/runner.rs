@@ -9,7 +9,7 @@
 
     #[test]
     fn main_chat_agent_gets_built_in_tools_and_title_agent_stays_text_only() {
-        let tools = main_chat_tool_storage(PathBuf::from("workspace")).unwrap();
+        let tools = main_chat_tool_storage(PathBuf::from("workspace"), PathBuf::from("trace")).unwrap();
         let runtime = RuntimeSelection {
             provider_type: OPENROUTER_PROVIDER_ID.to_owned(),
             provider_auth: Some(spectacular_config::ProviderAuthMode::ApiKey),
