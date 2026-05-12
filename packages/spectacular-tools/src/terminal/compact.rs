@@ -1,5 +1,6 @@
 use super::diagnostics::{extract_diagnostics, Diagnostic};
 use super::TerminalExecution;
+use crate::output_preview::{preview_lines_with_total, PreviewLines};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -412,30 +413,25 @@ fn append_diagnostic_context(lines: &mut Vec<String>, diagnostic: &Diagnostic) {
     }
 }
 
-/// Appends visible head and tail blocks for one compact stream.
+/// Appends a UI-only preview for one compact stream without changing provider content.
 fn append_stream_blocks(lines: &mut Vec<String>, name: &str, stream: &CompactStream) {
-    if stream.head.is_empty() && stream.tail.is_empty() {
+    let visible_lines = stream
+        .head
+        .iter()
+        .chain(stream.tail.iter())
+        .cloned()
+        .collect::<Vec<_>>();
+    if visible_lines.is_empty() {
         return;
     }
 
-    if stream.tail.is_empty() {
-        lines.push(String::new());
-        lines.push(format!("{name}:"));
-        lines.extend(stream.head.iter().cloned());
-        return;
-    }
-
-    if !stream.head.is_empty() {
-        lines.push(String::new());
-        lines.push(format!("{name} head:"));
-        lines.extend(stream.head.iter().cloned());
-    }
-    lines.push(format!(
-        "[omitted {} lines, {} bytes]",
-        stream.omitted_lines, stream.omitted_bytes
-    ));
-    lines.push(format!("{name} tail:"));
-    lines.extend(stream.tail.iter().cloned());
+    lines.push(String::new());
+    lines.push(format!("{name}:"));
+    lines.extend(
+        preview_lines_with_total(PreviewLines::new(visible_lines, stream.lines))
+            .lines()
+            .map(str::to_owned),
+    );
 }
 
 /// Appends trace file or trace error details to visible compact terminal output.
