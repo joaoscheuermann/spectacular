@@ -1,9 +1,14 @@
 mod support;
 
 use spectacular_agent::{Agent, AgentError, AgentEvent};
-use spectacular_llms::{ProviderMessage, ProviderRequest};
+use spectacular_llms::{
+    provider_by_id, LlmProvider, Model, ProviderCall, ProviderCapabilities, ProviderError,
+    ProviderMessage, ProviderMetadata, ProviderRequest, ProviderStream, ValidationMode,
+    OPENROUTER_PROVIDER_ID,
+};
 use std::sync::Arc;
-use support::{FakeProvider, SlowProvider};
+use std::time::{Duration, Instant};
+use support::{capabilities, FakeProvider, SlowProvider};
 
 #[tokio::test]
 /// Verifies cancelling an active run records cancellation and cancels queued waiters.
@@ -44,6 +49,38 @@ async fn cancelling_active_run_keeps_partial_events_and_drops_waiters() {
 }
 
 #[tokio::test]
+/// Verifies hard-aborting an active run drops non-cooperative provider work.
+async fn hard_aborting_active_run_drops_non_cooperative_provider_work() {
+    let started = Arc::new(tokio::sync::Notify::new());
+    let provider = NonCooperativeProvider {
+        started: Arc::clone(&started),
+    };
+    let agent = Arc::new(Agent::new(provider));
+    let active = tokio::spawn({
+        let agent = Arc::clone(&agent);
+        async move { agent.run("active").await }
+    });
+    started.notified().await;
+
+    let start = Instant::now();
+    assert!(agent.hard_abort_active().await);
+    let result = tokio::time::timeout(Duration::from_millis(500), active)
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert!(matches!(result, Err(AgentError::CancellationError)));
+    assert!(start.elapsed() < Duration::from_millis(500));
+    assert_eq!(
+        agent.events(),
+        vec![
+            AgentEvent::user_prompt("active"),
+            AgentEvent::cancelled("active run hard-aborted")
+        ]
+    );
+}
+
+#[tokio::test]
 /// Verifies run streams emit events in the same order as the backing store.
 async fn streaming_run_emits_events_in_store_order() {
     let agent = Arc::new(Agent::new(FakeProvider::text("hello")));
@@ -65,7 +102,7 @@ async fn streaming_run_emits_events_in_store_order() {
 }
 
 #[tokio::test]
-/// Verifies dropping an active stream cancels the active run and pending queue.
+/// Verifies dropping an active stream hard-aborts the active run and pending queue.
 async fn dropping_stream_cancels_active_run_and_pending_queue() {
     let started = Arc::new(tokio::sync::Notify::new());
     let provider = SlowProvider {
@@ -87,7 +124,7 @@ async fn dropping_stream_cancels_active_run_and_pending_queue() {
         if matches!(agent.events().last(), Some(AgentEvent::Cancelled { .. })) {
             break;
         }
-        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        tokio::time::sleep(Duration::from_millis(5)).await;
     }
 
     assert!(matches!(
@@ -98,13 +135,45 @@ async fn dropping_stream_cancels_active_run_and_pending_queue() {
         agent.events(),
         vec![
             AgentEvent::user_prompt("active"),
-            AgentEvent::cancelled("active run cancelled")
+            AgentEvent::cancelled("active run hard-aborted")
         ]
     );
 }
 
 #[tokio::test]
-/// Verifies dropping a queued stream propagates cancellation to the active run.
+/// Verifies hard-aborting a stream returns promptly when providers ignore cancellation.
+async fn hard_aborting_stream_drops_non_cooperative_provider_work() {
+    let started = Arc::new(tokio::sync::Notify::new());
+    let provider = NonCooperativeProvider {
+        started: Arc::clone(&started),
+    };
+    let agent = Arc::new(Agent::new(provider));
+    let stream = Arc::clone(&agent).run_stream("active");
+    started.notified().await;
+
+    let start = Instant::now();
+    stream.hard_abort();
+    drop(stream);
+
+    for _ in 0..100 {
+        if matches!(agent.events().last(), Some(AgentEvent::Cancelled { .. })) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+
+    assert!(start.elapsed() < Duration::from_millis(500));
+    assert_eq!(
+        agent.events(),
+        vec![
+            AgentEvent::user_prompt("active"),
+            AgentEvent::cancelled("active run hard-aborted")
+        ]
+    );
+}
+
+#[tokio::test]
+/// Verifies dropping a queued stream propagates hard abort to the active run.
 async fn dropping_queued_stream_cancels_current_active_run() {
     let started = Arc::new(tokio::sync::Notify::new());
     let provider = SlowProvider {
@@ -130,7 +199,7 @@ async fn dropping_queued_stream_cancels_current_active_run() {
         agent.events(),
         vec![
             AgentEvent::user_prompt("active"),
-            AgentEvent::cancelled("active run cancelled")
+            AgentEvent::cancelled("active run hard-aborted")
         ]
     );
 }
@@ -156,6 +225,46 @@ async fn dropping_completed_stream_does_not_reject_next_run() {
     assert!(agent.events().iter().any(|event| {
         matches!(event, AgentEvent::UserPrompt { content } if content == "second")
     }));
+}
+
+#[derive(Clone, Debug)]
+struct NonCooperativeProvider {
+    started: Arc<tokio::sync::Notify>,
+}
+
+impl LlmProvider for NonCooperativeProvider {
+    /// Returns provider metadata for this implementation.
+    fn metadata(&self) -> ProviderMetadata {
+        provider_by_id(OPENROUTER_PROVIDER_ID).unwrap()
+    }
+
+    /// Validates provider-specific input for the requested validation mode.
+    fn validate(&self, _mode: ValidationMode, _value: &str) -> Result<(), ProviderError> {
+        Ok(())
+    }
+
+    /// Fetches model metadata available to the supplied API key.
+    fn models(&self, _api_key: &str) -> Result<Vec<Model>, ProviderError> {
+        Ok(Vec::new())
+    }
+
+    /// Returns provider capabilities advertised by this implementation.
+    fn capabilities(&self) -> ProviderCapabilities {
+        capabilities()
+    }
+
+    /// Starts a streaming completion request and ignores cooperative cancellation.
+    fn stream_completion<'a>(
+        &'a self,
+        _request: ProviderRequest,
+        _cancellation: spectacular_agent::Cancellation,
+    ) -> ProviderCall<'a> {
+        let started = Arc::clone(&self.started);
+        Box::pin(async move {
+            started.notify_one();
+            std::future::pending::<Result<ProviderStream, ProviderError>>().await
+        })
+    }
 }
 
 #[test]

@@ -4,6 +4,7 @@ mod provider_events;
 mod provider_stream;
 mod recorder;
 mod request;
+mod run_control;
 
 use crate::context::{
     ApproximateTokenCounter, ContextAssembler, ContextAssembly, ContextAssemblyError,
@@ -20,9 +21,8 @@ use provider_events::{AgentProviderEventHandler, ProviderEventOutcome};
 use provider_stream::{run_retryable_provider_stream, ProviderRetryConfig};
 use recorder::RunRecorder;
 use request::{effective_system_prompt, validate_provider_capabilities};
-use spectacular_llms::{
-    Cancellation, LlmProvider, ProviderRequest, ProviderToolCall, ToolManifest,
-};
+use run_control::{RunControl, HARD_ABORT_GRACE};
+use spectacular_llms::{LlmProvider, ProviderRequest, ProviderToolCall, ToolManifest};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex, RwLock,
@@ -41,7 +41,7 @@ pub struct Agent<P, C = ApproximateTokenCounter> {
     token_counter: C,
     queue: Arc<RunQueue>,
     store: Mutex<Store>,
-    active_cancellation: Arc<Mutex<Option<Cancellation>>>,
+    active_run_control: Arc<Mutex<Option<Arc<RunControl>>>>,
     tools: RwLock<ToolStorage>,
     config: AgentConfig,
 }
@@ -74,27 +74,27 @@ pub struct AgentConfig {
 /// Streaming handle for a background agent run.
 pub struct AgentRunStream {
     receiver: mpsc::Receiver<AgentEvent>,
-    cancellation: Cancellation,
+    control: Arc<RunControl>,
     queue: Arc<RunQueue>,
     completed: Arc<AtomicBool>,
-    active_cancellation: Arc<Mutex<Option<Cancellation>>>,
+    active_run_control: Arc<Mutex<Option<Arc<RunControl>>>>,
 }
 
 impl AgentRunStream {
     /// Creates a stream handle around a background run channel and cancellation state.
     fn new(
         receiver: mpsc::Receiver<AgentEvent>,
-        cancellation: Cancellation,
+        control: Arc<RunControl>,
         queue: Arc<RunQueue>,
         completed: Arc<AtomicBool>,
-        active_cancellation: Arc<Mutex<Option<Cancellation>>>,
+        active_run_control: Arc<Mutex<Option<Arc<RunControl>>>>,
     ) -> Self {
         Self {
             receiver,
-            cancellation,
+            control,
             queue,
             completed,
-            active_cancellation,
+            active_run_control,
         }
     }
 
@@ -114,18 +114,31 @@ impl AgentRunStream {
             return;
         }
 
-        self.cancellation.cancel();
-        if let Some(active_cancellation) = self.active_cancellation.lock().unwrap().as_ref() {
-            active_cancellation.cancel();
+        self.control.cancel();
+        if let Some(active_control) = self.active_run_control.lock().unwrap().as_ref() {
+            active_control.cancel();
+        }
+        self.queue.cancel_pending_now();
+    }
+
+    /// Hard-aborts the active run and any queued waiters unless the stream already completed.
+    pub fn hard_abort(&self) {
+        if self.completed.load(Ordering::SeqCst) {
+            return;
+        }
+
+        self.control.request_hard_abort();
+        if let Some(active_control) = self.active_run_control.lock().unwrap().as_ref() {
+            active_control.request_hard_abort();
         }
         self.queue.cancel_pending_now();
     }
 }
 
 impl Drop for AgentRunStream {
-    /// Cancels unfinished background work when the stream handle is dropped.
+    /// Hard-aborts unfinished background work when the stream handle is dropped.
     fn drop(&mut self) {
-        self.cancel();
+        self.hard_abort();
     }
 }
 
@@ -197,8 +210,8 @@ where
             .enqueue_and_wait(prompt)
             .await
             .map_err(|_| AgentError::CancellationError)?;
-        let cancellation = self.start_cancellation();
-        let result = self.run_request(run, cancellation, None).await;
+        let control = self.start_run_control();
+        let result = self.run_request_with_abort(run, control, None).await;
         self.finish_run(&result).await;
         result
     }
@@ -210,8 +223,8 @@ where
             .start_next()
             .await
             .ok_or(AgentError::EmptyRunQueue)?;
-        let cancellation = self.start_cancellation();
-        let result = self.run_request(run, cancellation, None).await;
+        let control = self.start_run_control();
+        let result = self.run_request_with_abort(run, control, None).await;
         self.finish_run(&result).await;
         result
     }
@@ -219,12 +232,27 @@ where
     /// Cancels the currently active run and pending queued prompts.
     pub async fn cancel_active(&self) -> bool {
         let cancelled = {
-            let active_cancellation = self.active_cancellation.lock().unwrap();
-            let Some(cancellation) = active_cancellation.as_ref() else {
+            let active_control = self.active_run_control.lock().unwrap();
+            let Some(control) = active_control.as_ref() else {
                 return false;
             };
 
-            cancellation.cancel();
+            control.cancel();
+            true
+        };
+        self.queue.cancel_pending().await;
+        cancelled
+    }
+
+    /// Hard-aborts the currently active run and pending queued prompts.
+    pub async fn hard_abort_active(&self) -> bool {
+        let cancelled = {
+            let active_control = self.active_run_control.lock().unwrap();
+            let Some(control) = active_control.as_ref() else {
+                return false;
+            };
+
+            control.request_hard_abort();
             true
         };
         self.queue.cancel_pending().await;
@@ -254,28 +282,34 @@ where
 {
     /// Starts a background run and returns a stream of stored events.
     pub fn run_stream(self: Arc<Self>, prompt: impl Into<String>) -> AgentRunStream {
-        let cancellation = Cancellation::default();
+        let control = Arc::new(RunControl::new());
         let (sender, receiver) = mpsc::channel(128);
         let completed = Arc::new(AtomicBool::new(false));
         let stream = AgentRunStream::new(
             receiver,
-            cancellation.clone(),
+            Arc::clone(&control),
             Arc::clone(&self.queue),
             Arc::clone(&completed),
-            Arc::clone(&self.active_cancellation),
+            Arc::clone(&self.active_run_control),
         );
         let prompt = prompt.into();
         let agent = Arc::clone(&self);
 
         tokio::spawn(async move {
+            let mut acquired_active_run = false;
             let result = match agent.queue.enqueue_and_wait(prompt).await {
                 Ok(run) => {
-                    agent.activate_cancellation(cancellation.clone());
-                    agent.run_request(run, cancellation, Some(sender)).await
+                    acquired_active_run = true;
+                    agent.activate_run_control(Arc::clone(&control));
+                    agent
+                        .run_request_with_abort(run, control, Some(sender))
+                        .await
                 }
                 Err(_) => Err(AgentError::CancellationError),
             };
-            agent.finish_run(&result).await;
+            if acquired_active_run {
+                agent.finish_run(&result).await;
+            }
             completed.store(true, Ordering::SeqCst);
         });
 
@@ -288,14 +322,42 @@ where
     P: LlmProvider,
     C: TokenCounter + Clone,
 {
+    /// Supervises a started run and drops non-cooperative work after hard abort grace.
+    async fn run_request_with_abort(
+        &self,
+        run: RunRequest,
+        control: Arc<RunControl>,
+        sender: Option<mpsc::Sender<AgentEvent>>,
+    ) -> Result<RunId, AgentError> {
+        let abort_sender = sender.clone();
+        let run_future = self.run_request(run, Arc::clone(&control), sender);
+        tokio::pin!(run_future);
+
+        tokio::select! {
+            biased;
+            result = &mut run_future => result,
+            _ = control.hard_abort_requested() => {
+                control.cancel();
+                tokio::select! {
+                    biased;
+                    result = &mut run_future => result,
+                    _ = tokio::time::sleep(HARD_ABORT_GRACE) => {
+                        self.record_cancelled_after_abort(Arc::clone(&control), abort_sender.as_ref()).await;
+                        Err(AgentError::CancellationError)
+                    }
+                }
+            }
+        }
+    }
+
     /// Executes a started run through context assembly, provider streaming, and tool loops.
     async fn run_request(
         &self,
         run: RunRequest,
-        cancellation: Cancellation,
+        control: Arc<RunControl>,
         sender: Option<mpsc::Sender<AgentEvent>>,
     ) -> Result<RunId, AgentError> {
-        let mut recorder = RunRecorder::new(self, cancellation, sender);
+        let mut recorder = RunRecorder::new(self, control, sender);
         let prompt = run.prompt().to_owned();
         let run_event_start = self.store.lock().unwrap().checkpoint() + 1;
         recorder.record(AgentEvent::user_prompt(prompt)).await?;
@@ -408,21 +470,39 @@ where
         Ok(run.id())
     }
 
-    /// Creates a cancellation token and marks it as the active run cancellation.
-    fn start_cancellation(&self) -> Cancellation {
-        let cancellation = Cancellation::default();
-        self.activate_cancellation(cancellation.clone());
-        cancellation
+    /// Creates run control state and marks it as active.
+    fn start_run_control(&self) -> Arc<RunControl> {
+        let control = Arc::new(RunControl::new());
+        self.activate_run_control(Arc::clone(&control));
+        control
     }
 
-    /// Replaces the active cancellation token with the provided token.
-    fn activate_cancellation(&self, cancellation: Cancellation) {
-        *self.active_cancellation.lock().unwrap() = Some(cancellation);
+    /// Replaces the active run control with the provided handle.
+    fn activate_run_control(&self, control: Arc<RunControl>) {
+        *self.active_run_control.lock().unwrap() = Some(control);
     }
 
-    /// Clears active cancellation and marks the queue state according to run outcome.
+    /// Records hard-abort cancellation when the dropped run future cannot do it itself.
+    async fn record_cancelled_after_abort(
+        &self,
+        control: Arc<RunControl>,
+        sender: Option<&mpsc::Sender<AgentEvent>>,
+    ) {
+        self.queue.cancel_pending().await;
+        if !control.try_record_cancelled() {
+            return;
+        }
+
+        let event = AgentEvent::cancelled(control.cancellation_reason());
+        self.store.lock().unwrap().append(event.clone());
+        if let Some(sender) = sender {
+            let _ = sender.send(event).await;
+        }
+    }
+
+    /// Clears active run control and marks the queue state according to run outcome.
     async fn finish_run(&self, result: &Result<RunId, AgentError>) {
-        *self.active_cancellation.lock().unwrap() = None;
+        *self.active_run_control.lock().unwrap() = None;
         if matches!(result, Err(AgentError::CancellationError)) {
             self.queue.finish_cancelled_active().await;
             return;
