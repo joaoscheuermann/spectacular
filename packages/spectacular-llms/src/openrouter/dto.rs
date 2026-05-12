@@ -18,6 +18,7 @@ pub(crate) struct OpenRouterChatRequest {
 }
 
 impl OpenRouterChatRequest {
+    /// Converts a provider completion request into an OpenRouter chat request.
     pub(crate) fn from_provider_request(request: ProviderRequest) -> Result<Self, ProviderError> {
         let ProviderRequest {
             model,
@@ -73,6 +74,7 @@ pub(crate) struct OpenRouterChatMessage {
 }
 
 impl OpenRouterChatMessage {
+    /// Converts a provider message into the OpenRouter chat message shape.
     fn from_provider_message(message: ProviderMessage) -> Self {
         let role = match message.role {
             ProviderMessageRole::System => "system",
@@ -109,6 +111,7 @@ pub(crate) struct OpenRouterToolManifest {
 }
 
 impl OpenRouterToolManifest {
+    /// Converts a tool manifest into the OpenRouter tool schema.
     fn from_tool_manifest(manifest: ToolManifest) -> Self {
         Self {
             kind: "function",
@@ -139,6 +142,7 @@ pub(crate) struct OpenRouterAssistantToolCall {
 }
 
 impl OpenRouterAssistantToolCall {
+    /// Converts a provider tool call into the OpenRouter assistant tool-call shape.
     fn from_provider_tool_call(tool_call: ProviderToolCall) -> Self {
         Self {
             id: tool_call.id,
@@ -205,6 +209,7 @@ pub(crate) struct OpenRouterChatMessageToolCall {
 }
 
 impl OpenRouterChatMessageToolCall {
+    /// Converts an OpenRouter tool-call response into provider tool-call metadata.
     pub(crate) fn into_provider_tool_call(
         self,
         index: usize,
@@ -270,4 +275,5 @@ pub(crate) struct OpenRouterModelResponse {
     pub(crate) name: Option<String>,
     #[serde(default)]
     pub(crate) supported_parameters: Vec<String>,
+    pub(crate) context_length: Option<usize>,
 }

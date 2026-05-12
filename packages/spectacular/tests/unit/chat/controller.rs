@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// Verifies that retry command runs prompt during dispatch.
 #[tokio::test]
 async fn retry_command_runs_prompt_during_dispatch() {
     let recorded = Arc::new(Mutex::new(None));
@@ -45,6 +46,7 @@ async fn retry_command_runs_prompt_during_dispatch() {
         .is_some_and(|request| request.retry_existing_prompt));
 }
 
+/// Verifies that retry runner error continues repl.
 #[tokio::test]
 async fn retry_runner_error_continues_repl() {
     let model = test_model();
@@ -70,6 +72,7 @@ async fn retry_runner_error_continues_repl() {
     assert_eq!(control, CommandControl::Continue);
 }
 
+/// Verifies that prompt dispatch runs user prompt request.
 #[tokio::test]
 async fn prompt_dispatch_runs_user_prompt_request() {
     let recorded = Arc::new(Mutex::new(None));
@@ -98,13 +101,10 @@ async fn prompt_dispatch_runs_user_prompt_request() {
     assert_eq!(request.prompt, "hello");
     assert!(request.render_user_prompt);
     assert!(!request.retry_existing_prompt);
-    assert!(request.prompt_footer.is_some_and(|footer| {
-        footer.directory == test_workspace_root()
-            && footer.model == "test/model"
-            && footer.reasoning == ReasoningLevel::Medium
-    }));
+    assert_eq!(request.runtime, test_runtime());
 }
 
+/// Verifies that setup runtime blocks prompt without runner call.
 #[tokio::test]
 async fn setup_runtime_blocks_prompt_without_runner_call() {
     let recorded = Arc::new(Mutex::new(None));
@@ -127,6 +127,7 @@ async fn setup_runtime_blocks_prompt_without_runner_call() {
     assert!(recorded.lock().unwrap().is_none());
 }
 
+/// Verifies that blank line is ignored without runner call.
 #[tokio::test]
 async fn blank_line_is_ignored_without_runner_call() {
     let recorded = Arc::new(Mutex::new(None));
@@ -146,6 +147,7 @@ async fn blank_line_is_ignored_without_runner_call() {
     assert!(control == CommandControl::Continue && recorded.lock().unwrap().is_none());
 }
 
+/// Verifies that command parse error continues repl without runner call.
 #[tokio::test]
 async fn command_parse_error_continues_repl_without_runner_call() {
     let recorded = Arc::new(Mutex::new(None));
@@ -171,6 +173,7 @@ struct RecordingRunner {
 }
 
 impl ChatTurnRunner for RecordingRunner {
+    /// Runs the test command implementation and returns its command future.
     fn run<'a>(
         &'a self,
         _model: &'a mut ChatModel,
@@ -189,6 +192,7 @@ impl ChatTurnRunner for RecordingRunner {
 struct FailingRunner;
 
 impl ChatTurnRunner for FailingRunner {
+    /// Runs the test command implementation and returns its command future.
     fn run<'a>(
         &'a self,
         _model: &'a mut ChatModel,
@@ -200,24 +204,29 @@ impl ChatTurnRunner for FailingRunner {
     }
 }
 
+/// Builds a chat model configured for command tests.
 fn test_model() -> ChatModel {
     let session = SessionManager::new_in(temp_session_dir("controller-retry")).unwrap();
-    let mut model = ChatModel::new(
-        session,
-        RuntimeSelection {
-            provider_type: "openrouter".to_owned(),
-            provider_auth: Some(spectacular_config::ProviderAuthMode::ApiKey),
-            provider: "openrouter".to_owned(),
-            api_key: "sk-or-v1-test".to_owned(),
-            model_key: "test-model".to_owned(),
-            model: "test/model".to_owned(),
-            reasoning: ReasoningLevel::Medium,
-        },
-    );
+    let mut model = ChatModel::new(session, test_runtime());
     model.start_new_session().unwrap();
     model
 }
 
+/// Builds a runtime selection for chat tests.
+fn test_runtime() -> RuntimeSelection {
+    RuntimeSelection {
+        provider_type: "openrouter".to_owned(),
+        provider_auth: Some(spectacular_config::ProviderAuthMode::ApiKey),
+        provider: "openrouter".to_owned(),
+        api_key: "sk-or-v1-test".to_owned(),
+        model_key: "test-model".to_owned(),
+        model: "test/model".to_owned(),
+        reasoning: ReasoningLevel::Medium,
+        context_window_tokens: None,
+    }
+}
+
+/// Builds a setup-only chat model for controller tests.
 fn setup_model() -> ChatModel {
     let session = SessionManager::new_in(temp_session_dir("controller-setup")).unwrap();
     let mut model = ChatModel::new(session, RuntimeSelection::setup());
@@ -225,10 +234,12 @@ fn setup_model() -> ChatModel {
     model
 }
 
+/// Returns the workspace root path used by controller tests.
 fn test_workspace_root() -> PathBuf {
     PathBuf::from("workspace")
 }
 
+/// Builds a temporary session directory path for a named test case.
 fn temp_session_dir(name: &str) -> PathBuf {
     let suffix = SystemTime::now()
         .duration_since(UNIX_EPOCH)

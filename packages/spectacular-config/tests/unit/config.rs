@@ -1,5 +1,6 @@
 use super::*;
 
+/// Verifies that default config is incomplete without tasks.
 #[test]
 fn default_config_is_incomplete_without_tasks() {
     let error = SpectacularConfig::default()
@@ -14,6 +15,7 @@ fn default_config_is_incomplete_without_tasks() {
     ));
 }
 
+/// Verifies that config round trips flat schema.
 #[test]
 fn config_round_trips_flat_schema() {
     let path = temp_config_path("round-trip");
@@ -37,6 +39,7 @@ fn config_round_trips_flat_schema() {
     let _ = fs::remove_file(path);
 }
 
+/// Verifies that config round trips chatgpt provider auth.
 #[test]
 fn config_round_trips_chatgpt_provider_auth() {
     let path = temp_config_path("chatgpt-auth");
@@ -70,6 +73,7 @@ fn config_round_trips_chatgpt_provider_auth() {
     let _ = fs::remove_file(path);
 }
 
+/// Verifies that complete config accepts provider with chatgpt auth without API key.
 #[test]
 fn complete_config_accepts_provider_with_chatgpt_auth_without_api_key() {
     let mut config = SpectacularConfig::default();
@@ -110,6 +114,7 @@ fn complete_config_accepts_provider_with_chatgpt_auth_without_api_key() {
     assert!(config.validate_complete().is_ok());
 }
 
+/// Verifies that legacy top level schema fails clearly.
 #[test]
 fn legacy_top_level_schema_fails_clearly() {
     let path = temp_config_path("legacy-top");
@@ -128,6 +133,7 @@ fn legacy_top_level_schema_fails_clearly() {
     let _ = fs::remove_file(path);
 }
 
+/// Verifies that legacy nested schema fails clearly.
 #[test]
 fn legacy_nested_schema_fails_clearly() {
     let path = temp_config_path("legacy-nested");
@@ -148,6 +154,7 @@ fn legacy_nested_schema_fails_clearly() {
     let _ = fs::remove_file(path);
 }
 
+/// Verifies that complete config requires task references to saved models.
 #[test]
 fn complete_config_requires_task_references_to_saved_models() {
     let mut config = complete_config();
@@ -164,6 +171,7 @@ fn complete_config_requires_task_references_to_saved_models() {
     ));
 }
 
+/// Verifies that complete config requires model provider to exist.
 #[test]
 fn complete_config_requires_model_provider_to_exist() {
     let mut config = complete_config();
@@ -177,6 +185,7 @@ fn complete_config_requires_model_provider_to_exist() {
     ));
 }
 
+/// Verifies that complete config passes validation.
 #[test]
 fn complete_config_passes_validation() {
     let config = complete_config();
@@ -185,6 +194,7 @@ fn complete_config_passes_validation() {
     assert!(config.is_complete());
 }
 
+/// Verifies that add model uses composite key by default.
 #[test]
 fn add_model_uses_composite_key_by_default() {
     let mut config = SpectacularConfig::default();
@@ -203,6 +213,7 @@ fn add_model_uses_composite_key_by_default() {
     );
 }
 
+/// Verifies that add model allows custom key and keeps internal key.
 #[test]
 fn add_model_allows_custom_key_and_keeps_internal_key() {
     let mut config = SpectacularConfig::default();
@@ -226,6 +237,7 @@ fn add_model_allows_custom_key_and_keeps_internal_key() {
     );
 }
 
+/// Verifies that model removal preserves task references.
 #[test]
 fn model_removal_preserves_task_references() {
     let mut config = complete_config();
@@ -242,6 +254,7 @@ fn model_removal_preserves_task_references() {
     assert_eq!(config.tasks.coding.as_deref(), Some("coding-bot"));
 }
 
+/// Verifies that backup config file copies existing config.
 #[test]
 fn backup_config_file_copies_existing_config() {
     let path = temp_config_path("backup");
@@ -260,6 +273,7 @@ fn backup_config_file_copies_existing_config() {
     let _ = fs::remove_file(backup);
 }
 
+/// Verifies that model cache round trips.
 #[test]
 fn model_cache_round_trips() {
     let path = temp_config_path("cache").with_file_name(MODEL_CACHE_FILE_NAME);
@@ -272,7 +286,8 @@ fn model_cache_round_trips() {
             "openai/gpt-5.5",
             "GPT-5.5",
             ["reasoning".to_owned(), "tools".to_owned()],
-        )],
+        )
+        .with_context_window_tokens(Some(128_000))],
     );
 
     write_model_cache_to_path(&path, &cache).unwrap();
@@ -283,10 +298,54 @@ fn model_cache_round_trips() {
         .model("foo", "openai/gpt-5.5")
         .unwrap()
         .supports_reasoning());
+    assert_eq!(
+        loaded
+            .model("foo", "openai/gpt-5.5")
+            .unwrap()
+            .context_window_tokens,
+        Some(128_000)
+    );
 
     let _ = fs::remove_file(path);
 }
 
+/// Verifies that model cache accepts entries without context window.
+#[test]
+fn model_cache_accepts_entries_without_context_window() {
+    let path = temp_config_path("cache-old").with_file_name(MODEL_CACHE_FILE_NAME);
+    write_text(
+        &path,
+        r#"{
+  "providers": {
+    "foo": {
+      "provider_type": "openrouter",
+      "fetched_at": 42,
+      "models": {
+        "openai/gpt-5.5": {
+          "id": "openai/gpt-5.5",
+          "name": "GPT-5.5",
+          "supported_parameters": ["reasoning", "tools"]
+        }
+      }
+    }
+  }
+}"#,
+    );
+
+    let loaded = read_model_cache_from_path(&path).unwrap();
+
+    assert_eq!(
+        loaded
+            .model("foo", "openai/gpt-5.5")
+            .unwrap()
+            .context_window_tokens,
+        None
+    );
+
+    let _ = fs::remove_file(path);
+}
+
+/// Verifies that parsing accepts expanded reasoning values.
 #[test]
 fn parsing_accepts_expanded_reasoning_values() {
     assert_eq!(
@@ -299,6 +358,7 @@ fn parsing_accepts_expanded_reasoning_values() {
     );
 }
 
+/// Verifies that parsing rejects old planning task name.
 #[test]
 fn parsing_rejects_old_planning_task_name() {
     let error = "planning".parse::<TaskModelSlot>().unwrap_err();
@@ -306,12 +366,14 @@ fn parsing_rejects_old_planning_task_name() {
     assert!(matches!(error, ConfigParseError::InvalidTask { .. }));
 }
 
+/// Verifies that API key masking never returns full key.
 #[test]
 fn api_key_masking_never_returns_full_key() {
     assert_eq!(mask_api_key("sk-or-v1-test"), "sk-o...test");
     assert_ne!(mask_api_key("sk-or-v1-test"), "sk-or-v1-test");
 }
 
+/// Verifies that windows config dir uses appdata.
 #[cfg(windows)]
 #[test]
 fn windows_config_dir_uses_appdata() {
@@ -328,6 +390,7 @@ fn windows_config_dir_uses_appdata() {
     assert_eq!(config_dir, appdata.join(APP_CONFIG_DIR_NAME));
 }
 
+/// Builds a complete configuration for test scenarios.
 fn complete_config() -> SpectacularConfig {
     let mut config = SpectacularConfig::default();
     config
@@ -356,6 +419,7 @@ fn complete_config() -> SpectacularConfig {
     config
 }
 
+/// Builds a temporary configuration path for a named test case.
 fn temp_config_path(name: &str) -> PathBuf {
     let suffix = timestamp();
 
@@ -364,6 +428,7 @@ fn temp_config_path(name: &str) -> PathBuf {
         .join(CONFIG_FILE_NAME)
 }
 
+/// Writes test fixture text to the supplied path.
 fn write_text(path: &Path, content: &str) {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).unwrap();

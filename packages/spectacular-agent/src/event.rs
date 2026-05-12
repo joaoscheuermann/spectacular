@@ -35,18 +35,31 @@ pub enum AgentEvent {
     Finished {
         finish_reason: FinishReason,
     },
+    ContextSummaryCreated(ContextSummary),
     Internal {
         message: String,
     },
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContextSummary {
+    pub id: String,
+    pub replaces: Option<String>,
+    pub source_event_start: usize,
+    pub source_event_end: usize,
+    pub content: String,
+    pub estimated_tokens: usize,
+}
+
 impl AgentEvent {
+    /// Creates a stored user prompt event.
     pub fn user_prompt(content: impl Into<String>) -> Self {
         Self::UserPrompt {
             content: content.into(),
         }
     }
 
+    /// Creates a stored assistant tool-call request event.
     pub fn assistant_tool_call_request(
         tool_call_id: impl Into<String>,
         name: impl Into<String>,
@@ -59,6 +72,7 @@ impl AgentEvent {
         }
     }
 
+    /// Creates a stored tool result event tied to a provider tool-call id.
     pub fn tool_result(
         tool_call_id: impl Into<String>,
         name: impl Into<String>,
@@ -71,30 +85,54 @@ impl AgentEvent {
         }
     }
 
+    /// Creates a structured-output validation error event.
     pub fn validation_error(message: impl Into<String>) -> Self {
         Self::ValidationError {
             message: message.into(),
         }
     }
 
+    /// Creates a terminal run error event.
     pub fn error(message: impl Into<String>) -> Self {
         Self::Error {
             message: message.into(),
         }
     }
 
+    /// Creates a terminal run cancellation event.
     pub fn cancelled(reason: impl Into<String>) -> Self {
         Self::Cancelled {
             reason: reason.into(),
         }
     }
 
+    /// Creates a terminal run finish event from provider finish metadata.
     pub fn finished(finished: spectacular_llms::ProviderFinished) -> Self {
         Self::Finished {
             finish_reason: finished.finish_reason,
         }
     }
 
+    /// Creates an event that stores a compact summary replacing earlier transcript context.
+    pub fn context_summary_created(
+        id: impl Into<String>,
+        replaces: Option<String>,
+        source_event_start: usize,
+        source_event_end: usize,
+        content: impl Into<String>,
+        estimated_tokens: usize,
+    ) -> Self {
+        Self::ContextSummaryCreated(ContextSummary {
+            id: id.into(),
+            replaces,
+            source_event_start,
+            source_event_end,
+            content: content.into(),
+            estimated_tokens,
+        })
+    }
+
+    /// Creates an internal diagnostic event not replayed to providers.
     pub fn internal(message: impl Into<String>) -> Self {
         Self::Internal {
             message: message.into(),
@@ -103,6 +141,7 @@ impl AgentEvent {
 }
 
 impl Display for AgentEvent {
+    /// Formats an agent event for compact logs and debug output.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AgentEvent::UserPrompt { content } => write!(formatter, "UserPrompt({content})"),
@@ -152,6 +191,14 @@ impl Display for AgentEvent {
             AgentEvent::Finished { finish_reason } => {
                 write!(formatter, "Finished(reason={finish_reason:?})")
             }
+            AgentEvent::ContextSummaryCreated(summary) => write!(
+                formatter,
+                "ContextSummaryCreated(id={}, source={}..{}, tokens={})",
+                summary.id,
+                summary.source_event_start,
+                summary.source_event_end,
+                summary.estimated_tokens
+            ),
             AgentEvent::Internal { message } => write!(formatter, "Internal({message})"),
         }
     }

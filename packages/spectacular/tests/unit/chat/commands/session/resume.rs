@@ -11,6 +11,7 @@
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    /// Verifies that resume returns success after replaying records.
     #[tokio::test]
     async fn resume_returns_success_after_replaying_records() {
         let mut model = test_model();
@@ -27,6 +28,7 @@
         assert_eq!(result, ChatCommandResult::Success);
     }
 
+    /// Builds a chat model configured for command tests.
     fn test_model() -> ChatModel {
         ChatModel::new(
             SessionManager::new_in(temp_session_dir("resume-command")).unwrap(),
@@ -38,10 +40,12 @@
                 model_key: "test-model".to_owned(),
                 model: "test/model".to_owned(),
                 reasoning: ReasoningLevel::Medium,
+                context_window_tokens: None,
             },
         )
     }
 
+    /// Builds a temporary session directory path for a named test case.
     fn temp_session_dir(name: &str) -> PathBuf {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)

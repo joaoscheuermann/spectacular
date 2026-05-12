@@ -1,7 +1,7 @@
 use super::auth::chatgpt_auth_config;
 use super::{ChatError, RuntimeSelection};
 use crate::chat::model::{ChatConfigIo, ChatModel};
-use spectacular_config::{CachedModelMetadata, ReasoningLevel, SpectacularConfig, TaskModelSlot};
+use spectacular_config::{ReasoningLevel, SpectacularConfig, TaskModelSlot};
 use spectacular_llms::{LlmProvider, OpenAiAuthRecord};
 
 impl ChatModel {
@@ -62,13 +62,7 @@ impl ChatModel {
             name.to_owned(),
             provider_config.provider_type.clone(),
             crate::chat::unix_timestamp(),
-            models.into_iter().map(|model| {
-                CachedModelMetadata::new(
-                    model.id().to_owned(),
-                    model.display_name().to_owned(),
-                    model.supported_parameters().iter().cloned(),
-                )
-            }),
+            models.into_iter().map(super::cached_model_metadata),
         );
         config_io.write_model_cache(&cache)?;
         Ok(count)
@@ -144,7 +138,8 @@ impl ChatModel {
             return Ok(None);
         }
 
-        let runtime = RuntimeSelection::from_config(&config)?;
+        let cache = self.config_io().read_model_cache_or_default()?;
+        let runtime = RuntimeSelection::from_config_and_cache(&config, &cache)?;
         self.replace_runtime(runtime.clone());
         self.append_runtime_defaults("command")?;
         Ok(Some(runtime))

@@ -6,6 +6,7 @@ use spectacular_config::ReasoningLevel;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// Verifies that adapter executes registered command success.
 #[tokio::test]
 async fn adapter_executes_registered_command_success() {
     let adapter = ChatCommandAdapter::new([session::clear::command()]).unwrap();
@@ -29,6 +30,7 @@ async fn adapter_executes_registered_command_success() {
     assert_eq!(result, ChatCommandResult::Success);
 }
 
+/// Verifies that registry exposes command metadata.
 #[test]
 fn registry_exposes_command_metadata() {
     let adapter = registry().unwrap();
@@ -40,6 +42,7 @@ fn registry_exposes_command_metadata() {
         .any(|entry| entry.metadata.name == "retry"));
 }
 
+/// Verifies that adapter builds completion specs from registered commands.
 #[test]
 fn adapter_builds_completion_specs_from_registered_commands() {
     const SUBCOMMANDS: &[CompletionSubcommandSpec] = &[CompletionSubcommandSpec {
@@ -48,6 +51,7 @@ fn adapter_builds_completion_specs_from_registered_commands() {
         fields: &[],
     }];
 
+    /// Executes the tool with the provided arguments and cancellation handle.
     fn execute<'a>(_context: ChatCommandContext<'a>, _args: Vec<String>) -> ChatCommandFuture<'a> {
         Box::pin(async { ChatCommandResult::success() })
     }
@@ -70,6 +74,7 @@ fn adapter_builds_completion_specs_from_registered_commands() {
     );
 }
 
+/// Verifies that registry exposes completion specs from commands.
 #[test]
 fn registry_exposes_completion_specs_from_commands() {
     let adapter = registry().unwrap();
@@ -120,6 +125,7 @@ fn registry_exposes_completion_specs_from_commands() {
     assert_eq!(task.subcommands[0].fields[1].name, "model");
 }
 
+/// Verifies that provider completion uses provider type for add and auth.
 #[test]
 fn provider_completion_uses_provider_type_for_add_and_auth() {
     let adapter = registry().unwrap();
@@ -150,6 +156,7 @@ fn provider_completion_uses_provider_type_for_add_and_auth() {
     );
 }
 
+/// Verifies that context append agent event persists chat record.
 #[test]
 fn context_append_agent_event_persists_chat_record() {
     let mut model = test_model();
@@ -174,6 +181,7 @@ fn context_append_agent_event_persists_chat_record() {
     )));
 }
 
+/// Verifies that context render records accepts transient records.
 #[tokio::test]
 async fn context_render_records_accepts_transient_records() {
     let mut model = test_model();
@@ -186,6 +194,7 @@ async fn context_render_records_accepts_transient_records() {
     context.render_records(&[]).await.unwrap();
 }
 
+/// Verifies that context render history accepts transient history.
 #[test]
 fn context_render_history_accepts_transient_history() {
     let mut model = test_model();
@@ -201,6 +210,7 @@ fn context_render_history_accepts_transient_history() {
     context.render_history(&table);
 }
 
+/// Builds a chat model configured for command tests.
 fn test_model() -> ChatModel {
     let session = crate::chat::session::SessionManager::new_in(temp_session_dir("adapter"))
         .expect("session manager should be created");
@@ -214,12 +224,14 @@ fn test_model() -> ChatModel {
             model_key: "test-model".to_owned(),
             model: "test/model".to_owned(),
             reasoning: ReasoningLevel::Medium,
+            context_window_tokens: None,
         },
     );
     model.start_new_session().unwrap();
     model
 }
 
+/// Builds a temporary session directory path for a named test case.
 fn temp_session_dir(name: &str) -> PathBuf {
     let suffix = SystemTime::now()
         .duration_since(UNIX_EPOCH)

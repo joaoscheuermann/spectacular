@@ -11,6 +11,7 @@
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    /// Verifies that exit returns success and requests exit.
     #[tokio::test]
     async fn exit_returns_success_and_requests_exit() {
         let mut model = test_model();
@@ -26,6 +27,7 @@
         assert!(control.exit_requested());
     }
 
+    /// Builds a chat model configured for command tests.
     fn test_model() -> ChatModel {
         let session = SessionManager::new_in(temp_session_dir("exit")).unwrap();
         let mut model = ChatModel::new(
@@ -38,12 +40,14 @@
                 model_key: "test-model".to_owned(),
                 model: "test/model".to_owned(),
                 reasoning: ReasoningLevel::Medium,
+                context_window_tokens: None,
             },
         );
         model.start_new_session().unwrap();
         model
     }
 
+    /// Builds a temporary session directory path for a named test case.
     fn temp_session_dir(name: &str) -> PathBuf {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)

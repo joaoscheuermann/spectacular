@@ -12,7 +12,9 @@ use crate::{
     ValidationMode, OPENROUTER_PROVIDER_ID,
 };
 use client::OpenRouterHttpClient;
-use models::{fetch_openrouter_models, validate_openrouter_api_key};
+use models::{
+    fetch_openrouter_models, openrouter_context_window_tokens, validate_openrouter_api_key,
+};
 use serde_json::json;
 use stream::openrouter_stream_completion;
 
@@ -23,14 +25,17 @@ pub struct OpenRouterProvider {
 }
 
 impl OpenRouterProvider {
+    /// Creates a new value from the supplied inputs.
     pub fn new(api_key: String) -> Self {
         Self::with_debug_logger(api_key, LlmDebugLogger::disabled())
     }
 
+    /// Returns this value with debug logger.
     pub fn with_debug_logger(api_key: String, debug_logger: LlmDebugLogger) -> Self {
         Self::with_client_and_debug_logger(api_key, OpenRouterHttpClient::new(), debug_logger)
     }
 
+    /// Returns this value with client and debug logger.
     pub(crate) fn with_client_and_debug_logger(
         api_key: String,
         client: OpenRouterHttpClient,
@@ -45,10 +50,12 @@ impl OpenRouterProvider {
 }
 
 impl LlmProvider for OpenRouterProvider {
+    /// Returns provider metadata for this implementation.
     fn metadata(&self) -> ProviderMetadata {
         provider_by_id(OPENROUTER_PROVIDER_ID).expect("OpenRouter metadata should be registered")
     }
 
+    /// Validates provider-specific input for the requested validation mode.
     fn validate(&self, mode: ValidationMode, value: &str) -> Result<(), ProviderError> {
         if mode != ValidationMode::ApiKey {
             return Err(ProviderError::UnsupportedValidationMode);
@@ -72,6 +79,7 @@ impl LlmProvider for OpenRouterProvider {
         result
     }
 
+    /// Fetches model metadata available to the supplied API key.
     fn models(&self, api_key: &str) -> Result<Vec<Model>, ProviderError> {
         let logger = self.debug_logger.clone();
         let result = fetch_openrouter_models(api_key, |api_key| {
@@ -92,6 +100,7 @@ impl LlmProvider for OpenRouterProvider {
         result
     }
 
+    /// Returns provider capabilities advertised by this implementation.
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
             streaming: true,
@@ -105,6 +114,12 @@ impl LlmProvider for OpenRouterProvider {
         }
     }
 
+    /// Resolves OpenRouter context windows from provider-owned defaults.
+    fn context_window_tokens(&self, model: &str) -> Option<usize> {
+        openrouter_context_window_tokens(model)
+    }
+
+    /// Starts a streaming completion request and returns the provider call future.
     fn stream_completion<'a>(
         &'a self,
         request: ProviderRequest,

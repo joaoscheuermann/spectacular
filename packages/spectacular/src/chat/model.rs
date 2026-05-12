@@ -232,23 +232,31 @@ impl ChatModel {
 
     /// Restores runtime selection from session metadata, falling back to current config.
     fn restore_runtime_from_records(&mut self, records: &[ChatRecord]) -> Result<(), ChatError> {
+        let cache = self
+            .config_io
+            .read_model_cache_or_default()
+            .unwrap_or_default();
         let config = self
             .config_io
             .read_config_or_default()
             .unwrap_or_else(|_| config_for_runtime(&self.runtime));
-        if let Some(runtime) = RuntimeSelection::from_session_records(&config, records)? {
-            self.runtime = runtime;
-            return Ok(());
-        }
-
         if let Some(runtime) =
-            RuntimeSelection::from_session_records(&config_for_runtime(&self.runtime), records)?
+            RuntimeSelection::from_session_records_and_cache(&config, &cache, records)?
         {
             self.runtime = runtime;
             return Ok(());
         }
 
-        self.runtime = RuntimeSelection::from_config(&config)?;
+        if let Some(runtime) = RuntimeSelection::from_session_records_and_cache(
+            &config_for_runtime(&self.runtime),
+            &cache,
+            records,
+        )? {
+            self.runtime = runtime;
+            return Ok(());
+        }
+
+        self.runtime = RuntimeSelection::from_config_and_cache(&config, &cache)?;
         self.append_runtime_defaults("resume_fallback")
     }
 
@@ -262,7 +270,8 @@ impl ChatModel {
             return Ok(None);
         }
 
-        let runtime = RuntimeSelection::from_config(config)?;
+        let cache = self.config_io.read_model_cache_or_default()?;
+        let runtime = RuntimeSelection::from_config_and_cache(config, &cache)?;
         self.replace_runtime(runtime.clone());
         self.append_runtime_defaults("command")?;
         Ok(Some(runtime))
@@ -339,7 +348,6 @@ pub struct ChatRunRequestModel {
     pub render_user_prompt: bool,
     pub retry_existing_prompt: bool,
     pub runtime: RuntimeSelection,
-    pub prompt_footer: Option<ChatPromptFooterModel>,
 }
 
 /// Truncates display text to a character limit with an ellipsis when needed.
