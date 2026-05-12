@@ -1,8 +1,10 @@
+use super::run_control::RunControl;
 use super::Agent;
 use crate::context::TokenCounter;
 use crate::error::AgentError;
 use crate::event::AgentEvent;
 use spectacular_llms::{Cancellation, LlmProvider};
+use std::sync::Arc;
 use tokio::sync::mpsc;
 
 /// Records run events into storage and optional live stream output.
@@ -12,9 +14,8 @@ where
     C: TokenCounter + Clone,
 {
     agent: &'a Agent<P, C>,
-    cancellation: Cancellation,
+    control: Arc<RunControl>,
     sender: Option<mpsc::Sender<AgentEvent>>,
-    cancelled_recorded: bool,
 }
 
 impl<'a, P, C> RunRecorder<'a, P, C>
@@ -25,25 +26,24 @@ where
     /// Creates a recorder for one run using shared agent state and optional event sender.
     pub(super) fn new(
         agent: &'a Agent<P, C>,
-        cancellation: Cancellation,
+        control: Arc<RunControl>,
         sender: Option<mpsc::Sender<AgentEvent>>,
     ) -> Self {
         Self {
             agent,
-            cancellation,
+            control,
             sender,
-            cancelled_recorded: false,
         }
     }
 
     /// Returns a clone of the run cancellation token for provider or tool calls.
     pub(super) fn cancellation(&self) -> Cancellation {
-        self.cancellation.clone()
+        self.control.cancellation()
     }
 
     /// Signals cancellation through the run token.
     pub(super) fn cancel(&self) {
-        self.cancellation.cancel();
+        self.control.cancel();
     }
 
     /// Appends an event to the store and sends it to live stream listeners when present.
@@ -60,14 +60,14 @@ where
             return Ok(());
         }
 
-        self.cancellation.cancel();
+        self.control.cancel();
         self.record_cancelled().await;
         Err(AgentError::CancellationError)
     }
 
     /// Records an error event unless cancellation has already won the run outcome.
     pub(super) async fn record_error<T>(&mut self, error: AgentError) -> Result<T, AgentError> {
-        if self.cancellation.is_cancelled() {
+        if self.control.cancellation().is_cancelled() {
             self.record_cancelled().await;
             return Err(AgentError::CancellationError);
         }
@@ -78,7 +78,7 @@ where
 
     /// Returns a cancellation error after recording a cancellation event when needed.
     pub(super) async fn return_if_cancelled(&mut self) -> Result<(), AgentError> {
-        if !self.cancellation.is_cancelled() {
+        if !self.control.cancellation().is_cancelled() {
             return Ok(());
         }
 
@@ -86,21 +86,21 @@ where
         Err(AgentError::CancellationError)
     }
 
-    /// Records the default active-run cancellation event.
+    /// Records the run cancellation event with the current cancellation reason.
     pub(super) async fn record_cancelled(&mut self) {
-        self.record_cancelled_with_reason("active run cancelled")
-            .await;
+        let reason = self.control.cancellation_reason();
+        self.record_cancelled_with_reason(reason).await;
     }
 
     /// Records a single cancellation event with a caller-provided reason.
     pub(super) async fn record_cancelled_with_reason(&mut self, reason: impl Into<String>) {
         self.agent.queue.cancel_pending().await;
-        if self.cancelled_recorded {
+        self.control.set_cancellation_reason(reason);
+        if !self.control.try_record_cancelled() {
             return;
         }
-        self.cancelled_recorded = true;
 
-        let event = AgentEvent::cancelled(reason);
+        let event = AgentEvent::cancelled(self.control.cancellation_reason());
         {
             self.agent.store.lock().unwrap().append(event.clone());
         }

@@ -47,7 +47,7 @@ where
             token_counter,
             queue: Arc::new(Default::default()),
             store: Mutex::new(store),
-            active_cancellation: Arc::new(Mutex::new(None)),
+            active_run_control: Arc::new(Mutex::new(None)),
             tools: RwLock::new(ToolStorage::default()),
             config,
         }
