@@ -414,6 +414,24 @@ fn terminal_format_output_renders_compact_payload() {
     assert!(rendered.contains(r"C:\tmp\trace.json"));
 }
 
+/// Verifies compact payload display uses the common UI preview without changing provider data.
+#[test]
+fn terminal_format_output_truncates_only_visible_stream_preview() {
+    let tool = TerminalTool::new(PathBuf::from("workspace"));
+    let output = compact_for(&numbered_lines("stdout-line", 200), "", 0);
+    let value = serde_json::to_value(&output).unwrap();
+
+    let rendered = tool.format_output(&value.to_string(), Some(&value));
+
+    assert_eq!(output.stdout.head.len(), 24);
+    assert_eq!(output.stdout.tail.len(), 48);
+    assert!(rendered.contains("stdout-line-000"));
+    assert!(rendered.contains("stdout-line-004"));
+    assert!(!rendered.contains("stdout-line-005"));
+    assert!(!rendered.contains("stdout-line-199"));
+    assert!(rendered.contains("[truncated 195 lines]"));
+}
+
 /// Verifies command summaries identify cargo commands behind environment prefixes.
 #[test]
 fn command_summary_parses_cargo_after_env_prefix() {
