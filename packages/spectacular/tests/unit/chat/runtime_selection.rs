@@ -1,8 +1,11 @@
     use super::*;
     use spectacular_commands::CommandControl;
-    use spectacular_config::{ModelConfig, ProviderConfig, TaskAssignments};
+    use spectacular_config::{
+        CachedModelMetadata, ModelCache, ModelConfig, ProviderConfig, TaskAssignments,
+    };
     use std::collections::BTreeMap;
 
+    /// Verifies that runtime selection uses latest session provider and model events.
     #[test]
     fn runtime_selection_uses_latest_session_provider_and_model_events() {
         let records = vec![
@@ -29,9 +32,13 @@
             }),
         ];
 
-        let runtime = RuntimeSelection::from_session_records(&complete_config(), &records)
-            .unwrap()
-            .unwrap();
+        let runtime = RuntimeSelection::from_session_records_and_cache(
+            &complete_config(),
+            &ModelCache::default(),
+            &records,
+        )
+        .unwrap()
+        .unwrap();
 
         assert_eq!(runtime.provider, "openrouter");
         assert_eq!(runtime.api_key, "sk-or-v1-test");
@@ -39,6 +46,7 @@
         assert_eq!(runtime.reasoning, ReasoningLevel::High);
     }
 
+    /// Verifies that runtime selection falls back when session provider is unavailable.
     #[test]
     fn runtime_selection_falls_back_when_session_provider_is_unavailable() {
         let records = vec![
@@ -57,11 +65,34 @@
             }),
         ];
 
-        let runtime = RuntimeSelection::from_session_records(&complete_config(), &records).unwrap();
+        let runtime = RuntimeSelection::from_session_records_and_cache(
+            &complete_config(),
+            &ModelCache::default(),
+            &records,
+        )
+        .unwrap();
 
         assert!(runtime.is_none());
     }
 
+    /// Verifies that runtime selection uses cached context window metadata.
+    #[test]
+    fn runtime_selection_uses_cached_context_window_metadata() {
+        let mut cache = ModelCache::default();
+        cache.put_provider(
+            "openrouter",
+            "openrouter",
+            42,
+            [CachedModelMetadata::new("global/coding", "Global Coding", Vec::<String>::new())
+                .with_context_window_tokens(Some(64_000))],
+        );
+
+        let runtime = RuntimeSelection::from_config_and_cache(&complete_config(), &cache).unwrap();
+
+        assert_eq!(runtime.context_window_tokens, Some(64_000));
+    }
+
+    /// Verifies that chat controller dispatches exit command.
     #[tokio::test]
     async fn chat_controller_dispatches_exit_command() {
         let session = session::SessionManager::new_in(temp_session_dir("controller-exit"))
@@ -87,6 +118,7 @@
         assert_eq!(control, CommandControl::Exit);
     }
 
+    /// Builds a complete configuration for test scenarios.
     fn complete_config() -> SpectacularConfig {
         let mut providers = BTreeMap::new();
         providers.insert(
@@ -110,6 +142,7 @@
         }
     }
 
+    /// Builds a runtime selection for chat tests.
     fn test_runtime() -> RuntimeSelection {
         RuntimeSelection {
             provider_type: "openrouter".to_owned(),
@@ -119,13 +152,16 @@
             model_key: "test-model".to_owned(),
             model: "test/model".to_owned(),
             reasoning: ReasoningLevel::Medium,
+            context_window_tokens: None,
         }
     }
 
+    /// Wraps a chat event in a session record for runtime-selection tests.
     fn chat_record(event: ChatEvent) -> session::ChatRecord {
         session::ChatRecord::Known { line: 1, event }
     }
 
+    /// Builds a temporary session directory path for a named test case.
     fn temp_session_dir(name: &str) -> std::path::PathBuf {
         let suffix = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

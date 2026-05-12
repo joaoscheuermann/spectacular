@@ -10,6 +10,6 @@ pub(super) fn format_reasoning_text(content: &str) -> Option<String> {
 }
 
 /// Reports whether a reasoning delta contains visible non-whitespace text.
-pub(super) fn has_visible_reasoning_text(content: &str) -> bool {
+pub(crate) fn has_visible_reasoning_text(content: &str) -> bool {
     !content.trim().is_empty()
 }

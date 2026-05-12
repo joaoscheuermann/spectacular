@@ -9,6 +9,7 @@
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    /// Verifies that git status returns success.
     #[tokio::test]
     async fn git_status_returns_success() {
         let mut model = test_model();
@@ -23,6 +24,7 @@
         assert_eq!(result, ChatCommandResult::Success);
     }
 
+    /// Verifies that git status rejects args.
     #[tokio::test]
     async fn git_status_rejects_args() {
         let mut model = test_model();
@@ -37,6 +39,7 @@
         assert!(matches!(result, ChatCommandResult::Error(_)));
     }
 
+    /// Builds a chat model configured for command tests.
     fn test_model() -> ChatModel {
         let session = SessionManager::new_in(temp_session_dir("git-status")).unwrap();
         let mut model = ChatModel::new(
@@ -49,12 +52,14 @@
                 model_key: "test-model".to_owned(),
                 model: "test/model".to_owned(),
                 reasoning: ReasoningLevel::Medium,
+                context_window_tokens: None,
             },
         );
         model.start_new_session().unwrap();
         model
     }
 
+    /// Builds a temporary session directory path for a named test case.
     fn temp_session_dir(name: &str) -> PathBuf {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)

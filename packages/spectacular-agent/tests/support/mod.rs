@@ -1,5 +1,7 @@
+use serde_json::{json, Value};
+use spectacular_agent::{Cancellation, Tool, ToolExecution, ToolManifest};
 use spectacular_llms::{
-    provider_by_id, Cancellation, FinishReason, LlmProvider, MessageDelta, Model, ProviderCall,
+    provider_by_id, FinishReason, LlmProvider, MessageDelta, Model, ProviderCall,
     ProviderCapabilities, ProviderContextLimits, ProviderError, ProviderFinished, ProviderMetadata,
     ProviderRequest, ProviderStream, ProviderStreamEvent, UsageMetadata, ValidationMode,
     OPENROUTER_PROVIDER_ID,
@@ -9,6 +11,7 @@ use std::sync::{
     Arc, Mutex,
 };
 
+/// Returns provider capabilities advertised by this implementation.
 pub(crate) fn capabilities() -> ProviderCapabilities {
     ProviderCapabilities {
         streaming: true,
@@ -22,6 +25,7 @@ pub(crate) fn capabilities() -> ProviderCapabilities {
     }
 }
 
+/// Builds a finished stream event with usage metadata for the supplied reason.
 pub(crate) fn finished_with_reason(finish_reason: FinishReason) -> ProviderFinished {
     ProviderFinished {
         finish_reason,
@@ -35,10 +39,12 @@ pub(crate) fn finished_with_reason(finish_reason: FinishReason) -> ProviderFinis
     }
 }
 
+/// Builds a stop-finished stream event that includes usage metadata.
 pub(crate) fn finished_stop_with_usage() -> ProviderFinished {
     finished_with_reason(FinishReason::Stop)
 }
 
+/// Builds a length-finished stream event without usage metadata.
 pub(crate) fn finished_length_without_usage() -> ProviderFinished {
     ProviderFinished {
         finish_reason: FinishReason::Length,
@@ -48,12 +54,14 @@ pub(crate) fn finished_length_without_usage() -> ProviderFinished {
     }
 }
 
+/// Builds a fake provider-unavailable error for retry tests.
 pub(crate) fn provider_unavailable() -> ProviderError {
     ProviderError::ProviderUnavailable {
         provider_name: "Fake".to_owned(),
     }
 }
 
+/// Builds the recovered provider stream used by retry tests.
 pub(crate) fn recovered_events() -> Vec<Result<ProviderStreamEvent, ProviderError>> {
     vec![
         Ok(ProviderStreamEvent::MessageDelta(MessageDelta::assistant(
@@ -71,6 +79,7 @@ pub(crate) struct FakeProvider {
 }
 
 impl FakeProvider {
+    /// Builds a fake provider that streams the supplied assistant text.
     pub(crate) fn text(content: impl Into<String>) -> Self {
         Self::with_events(vec![
             ProviderStreamEvent::MessageDelta(MessageDelta::assistant(content)),
@@ -78,6 +87,7 @@ impl FakeProvider {
         ])
     }
 
+    /// Builds a fake provider with the supplied stream events.
     pub(crate) fn with_events(events: Vec<ProviderStreamEvent>) -> Self {
         Self {
             calls: Arc::new(AtomicUsize::new(0)),
@@ -88,22 +98,27 @@ impl FakeProvider {
 }
 
 impl LlmProvider for FakeProvider {
+    /// Returns provider metadata for this implementation.
     fn metadata(&self) -> ProviderMetadata {
         provider_by_id(OPENROUTER_PROVIDER_ID).unwrap()
     }
 
+    /// Validates provider-specific input for the requested validation mode.
     fn validate(&self, _mode: ValidationMode, _value: &str) -> Result<(), ProviderError> {
         Ok(())
     }
 
+    /// Fetches model metadata available to the supplied API key.
     fn models(&self, _api_key: &str) -> Result<Vec<Model>, ProviderError> {
         Ok(Vec::new())
     }
 
+    /// Returns provider capabilities advertised by this implementation.
     fn capabilities(&self) -> ProviderCapabilities {
         self.capabilities
     }
 
+    /// Starts a streaming completion request and returns the provider call future.
     fn stream_completion<'a>(
         &'a self,
         request: ProviderRequest,
@@ -146,6 +161,7 @@ pub(crate) enum ProviderAttempt {
 }
 
 impl RecordingProvider {
+    /// Creates a new value from the supplied inputs.
     pub(crate) fn new(call_events: Vec<Vec<ProviderStreamEvent>>) -> Self {
         Self {
             calls: Arc::new(AtomicUsize::new(0)),
@@ -157,6 +173,7 @@ impl RecordingProvider {
         }
     }
 
+    /// Builds a recording provider with explicit call attempts.
     pub(crate) fn with_attempts(call_attempts: Vec<ProviderAttempt>) -> Self {
         Self {
             calls: Arc::new(AtomicUsize::new(0)),
@@ -167,22 +184,27 @@ impl RecordingProvider {
 }
 
 impl LlmProvider for RecordingProvider {
+    /// Returns provider metadata for this implementation.
     fn metadata(&self) -> ProviderMetadata {
         provider_by_id(OPENROUTER_PROVIDER_ID).unwrap()
     }
 
+    /// Validates provider-specific input for the requested validation mode.
     fn validate(&self, _mode: ValidationMode, _value: &str) -> Result<(), ProviderError> {
         Ok(())
     }
 
+    /// Fetches model metadata available to the supplied API key.
     fn models(&self, _api_key: &str) -> Result<Vec<Model>, ProviderError> {
         Ok(Vec::new())
     }
 
+    /// Returns provider capabilities advertised by this implementation.
     fn capabilities(&self) -> ProviderCapabilities {
         capabilities()
     }
 
+    /// Starts a streaming completion request and returns the provider call future.
     fn stream_completion<'a>(
         &'a self,
         request: ProviderRequest,
@@ -217,22 +239,27 @@ pub(crate) struct FailingProvider {
 }
 
 impl LlmProvider for FailingProvider {
+    /// Returns provider metadata for this implementation.
     fn metadata(&self) -> ProviderMetadata {
         provider_by_id(OPENROUTER_PROVIDER_ID).unwrap()
     }
 
+    /// Validates provider-specific input for the requested validation mode.
     fn validate(&self, _mode: ValidationMode, _value: &str) -> Result<(), ProviderError> {
         Ok(())
     }
 
+    /// Fetches model metadata available to the supplied API key.
     fn models(&self, _api_key: &str) -> Result<Vec<Model>, ProviderError> {
         Ok(Vec::new())
     }
 
+    /// Returns provider capabilities advertised by this implementation.
     fn capabilities(&self) -> ProviderCapabilities {
         capabilities()
     }
 
+    /// Starts a streaming completion request and returns the provider call future.
     fn stream_completion<'a>(
         &'a self,
         _request: ProviderRequest,
@@ -253,22 +280,27 @@ impl LlmProvider for FailingProvider {
 pub(crate) struct StreamErrorProvider;
 
 impl LlmProvider for StreamErrorProvider {
+    /// Returns provider metadata for this implementation.
     fn metadata(&self) -> ProviderMetadata {
         provider_by_id(OPENROUTER_PROVIDER_ID).unwrap()
     }
 
+    /// Validates provider-specific input for the requested validation mode.
     fn validate(&self, _mode: ValidationMode, _value: &str) -> Result<(), ProviderError> {
         Ok(())
     }
 
+    /// Fetches model metadata available to the supplied API key.
     fn models(&self, _api_key: &str) -> Result<Vec<Model>, ProviderError> {
         Ok(Vec::new())
     }
 
+    /// Returns provider capabilities advertised by this implementation.
     fn capabilities(&self) -> ProviderCapabilities {
         capabilities()
     }
 
+    /// Starts a streaming completion request and returns the provider call future.
     fn stream_completion<'a>(
         &'a self,
         _request: ProviderRequest,
@@ -295,22 +327,27 @@ pub(crate) struct SlowProvider {
 }
 
 impl LlmProvider for SlowProvider {
+    /// Returns provider metadata for this implementation.
     fn metadata(&self) -> ProviderMetadata {
         provider_by_id(OPENROUTER_PROVIDER_ID).unwrap()
     }
 
+    /// Validates provider-specific input for the requested validation mode.
     fn validate(&self, _mode: ValidationMode, _value: &str) -> Result<(), ProviderError> {
         Ok(())
     }
 
+    /// Fetches model metadata available to the supplied API key.
     fn models(&self, _api_key: &str) -> Result<Vec<Model>, ProviderError> {
         Ok(Vec::new())
     }
 
+    /// Returns provider capabilities advertised by this implementation.
     fn capabilities(&self) -> ProviderCapabilities {
         capabilities()
     }
 
+    /// Starts a streaming completion request and returns the provider call future.
     fn stream_completion<'a>(
         &'a self,
         _request: ProviderRequest,
@@ -326,6 +363,68 @@ impl LlmProvider for SlowProvider {
 
                 tokio::time::sleep(std::time::Duration::from_millis(5)).await;
             }
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct EchoTool;
+
+impl Tool for EchoTool {
+    /// Returns the stable tool name used in manifests and calls.
+    fn name(&self) -> &str {
+        "echo"
+    }
+
+    /// Builds the tool manifest exposed to provider requests.
+    fn manifest(&self) -> ToolManifest {
+        ToolManifest::new(
+            self.name(),
+            "Echo parsed arguments as provider-visible JSON.",
+            json!({"type": "object", "additionalProperties": true}),
+        )
+    }
+
+    /// Executes the tool with the provided arguments and cancellation handle.
+    fn execute<'a>(&'a self, arguments: Value, _cancellation: Cancellation) -> ToolExecution<'a> {
+        Box::pin(async move { Ok(arguments.to_string()) })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct BuiltInStyleWriteTool;
+
+impl Tool for BuiltInStyleWriteTool {
+    /// Returns the stable tool name used in manifests and calls.
+    fn name(&self) -> &str {
+        "write"
+    }
+
+    /// Builds the tool manifest exposed to provider requests.
+    fn manifest(&self) -> ToolManifest {
+        ToolManifest::new(
+            self.name(),
+            "Writes UTF-8 text to a file in the workspace.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "content": {"type": "string"}
+                },
+                "required": ["path", "content"],
+                "additionalProperties": false
+            }),
+        )
+    }
+
+    /// Executes the tool with the provided arguments and cancellation handle.
+    fn execute<'a>(&'a self, arguments: Value, _cancellation: Cancellation) -> ToolExecution<'a> {
+        Box::pin(async move {
+            Ok(json!({
+                "success": true,
+                "path": arguments.get("path").and_then(Value::as_str).unwrap_or_default()
+            })
+            .to_string())
         })
     }
 }

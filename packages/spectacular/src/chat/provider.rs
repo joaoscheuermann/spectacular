@@ -50,6 +50,14 @@ impl LlmProvider for ChatProvider {
         }
     }
 
+    /// Delegates provider-owned model context-window lookup to the wrapped provider.
+    fn context_window_tokens(&self, model: &str) -> Option<usize> {
+        match self {
+            Self::OpenRouter(provider) => provider.context_window_tokens(model),
+            Self::OpenAi(provider) => provider.context_window_tokens(model),
+        }
+    }
+
     /// Delegates streaming completion calls to the wrapped provider implementation.
     fn stream_completion<'a>(
         &'a self,

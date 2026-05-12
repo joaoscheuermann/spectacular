@@ -4,6 +4,7 @@ mod footer;
 mod json_preview;
 mod reasoning;
 mod style;
+mod terminal_output;
 mod tool;
 #[cfg(test)]
 mod tests {
@@ -13,16 +14,14 @@ mod tests {
     ));
 }
 
-use crate::chat::model::{ChatPromptFooterModel, HistoryTableModel};
+use crate::chat::model::HistoryTableModel;
 use crate::chat::runner::render_agent_event;
 use crate::chat::session::ChatRecord;
 use crate::chat::ChatError;
 use anstyle::Style;
 use banner::{format_opening_banner, OpeningBannerView};
-use footer::{format_user_prompt_footer, UserPromptFooterView};
-use reasoning::{
-    format_reasoning_text, has_visible_reasoning_text as contains_visible_reasoning_text,
-};
+use reasoning::format_reasoning_text;
+pub(crate) use reasoning::has_visible_reasoning_text;
 use serde_json::Value;
 use spectacular_agent::AgentEvent;
 use spectacular_agent::ToolStorage;
@@ -31,11 +30,10 @@ use std::io::{self, Write};
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
-use style::{
-    assistant_style, command_output_style, diff_added_style, diff_removed_style, error_style,
-    success_style, warning_style,
-};
+use style::{assistant_style, error_style, success_style, warning_style};
 pub(crate) use style::{dim_style, paint, selection_style, user_style};
+pub(crate) use terminal_output::{format_prompt_footer, has_visible_assistant_text};
+use terminal_output::{format_tool_call_view, print_tool_output};
 pub use tool::{ToolCallView, ToolResultView};
 
 use super::RuntimeSelection;
@@ -87,12 +85,7 @@ impl Renderer {
 
     /// Renders a submitted user prompt without contextual footer metadata.
     pub fn user_prompt(&self, prompt: &str) {
-        self.render_user_prompt(prompt, None);
-    }
-
-    /// Renders a newly submitted user prompt followed by its dim context footer.
-    pub fn user_prompt_with_footer(&self, prompt: &str, footer: &ChatPromptFooterModel) {
-        self.render_user_prompt(prompt, Some(footer));
+        self.render_user_prompt(prompt);
     }
 
     /// Renders the interactive input prompt marker after interrupting the working line.
@@ -318,14 +311,10 @@ impl Renderer {
         }
     }
 
-    /// Renders a user prompt with an optional footer while preserving working-line state.
-    fn render_user_prompt(&self, prompt: &str, footer: Option<&ChatPromptFooterModel>) {
+    /// Renders a user prompt while preserving working-line state.
+    fn render_user_prompt(&self, prompt: &str) {
         self.with_interrupted_working_line(|| {
             println!("{}", paint(user_style(), prompt));
-            if let Some(footer) = footer {
-                println!();
-                println!("{}", format_prompt_footer(footer));
-            }
             println!();
         });
     }
@@ -343,7 +332,7 @@ impl Renderer {
 
     /// Flushes accumulated reasoning replay text and clears the caller-owned buffer.
     fn flush_reasoning(&self, buffer: &mut String) {
-        if !contains_visible_reasoning_text(buffer) {
+        if !has_visible_reasoning_text(buffer) {
             buffer.clear();
             return;
         }
@@ -496,89 +485,4 @@ impl Renderer {
         print!("\r\x1b[2K");
         let _ = io::stdout().flush();
     }
-}
-
-/// Returns the already formatted tool-owned call line.
-fn format_tool_call_view(view: &ToolCallView) -> String {
-    view.line.to_owned()
-}
-
-/// Prints tool output with special text styling for diff additions and deletions.
-fn print_tool_output(output: &str) {
-    let is_diff_output = output
-        .lines()
-        .next()
-        .is_some_and(|line| line.starts_with("Edited "));
-    for line in output.lines() {
-        println!("{}", format_tool_output_line(line, is_diff_output));
-    }
-}
-
-/// Applies command-output or diff-row styling to one tool output line.
-fn format_tool_output_line(line: &str, is_diff_output: bool) -> String {
-    let style = if is_diff_output && is_added_diff_line(line) {
-        diff_added_style()
-    } else if is_diff_output && is_removed_diff_line(line) {
-        diff_removed_style()
-    } else {
-        command_output_style()
-    };
-
-    paint(style, line)
-}
-
-/// Reports whether a rendered diff line represents an insertion.
-fn is_added_diff_line(line: &str) -> bool {
-    diff_line_marker(line) == Some('+')
-}
-
-/// Reports whether a rendered diff line represents a deletion.
-fn is_removed_diff_line(line: &str) -> bool {
-    diff_line_marker(line) == Some('-')
-}
-
-/// Returns the marker character after a rendered diff line number.
-fn diff_line_marker(line: &str) -> Option<char> {
-    let mut characters = line.trim_start().chars().peekable();
-    let mut saw_digit = false;
-    while characters.peek().is_some_and(char::is_ascii_digit) {
-        saw_digit = true;
-        characters.next();
-    }
-    if !saw_digit {
-        return None;
-    }
-
-    if !characters
-        .peek()
-        .is_some_and(|character| character.is_whitespace())
-    {
-        return None;
-    }
-    while characters
-        .peek()
-        .is_some_and(|character| character.is_whitespace())
-    {
-        characters.next();
-    }
-
-    characters
-        .next()
-        .filter(|marker| matches!(marker, '+' | '-'))
-}
-
-/// Reports whether assistant content contains non-whitespace visible text.
-pub(crate) fn has_visible_assistant_text(content: &str) -> bool {
-    !content.trim().is_empty()
-}
-
-/// Reports whether reasoning content contains non-whitespace visible text.
-pub(crate) fn has_visible_reasoning_text(content: &str) -> bool {
-    contains_visible_reasoning_text(content)
-}
-
-/// Formats prompt footer data with the dim terminal style used by chat context rows.
-pub(crate) fn format_prompt_footer(footer: &ChatPromptFooterModel) -> String {
-    let view = UserPromptFooterView::from_model(footer);
-    paint(dim_style(), format_user_prompt_footer(&view))
 }

@@ -22,7 +22,7 @@ use spectacular_config::{
     CachedModelMetadata, ConfigError, ModelCache, ProviderAuthMode, ReasoningLevel,
     SpectacularConfig, TaskModelSlot,
 };
-use spectacular_llms::{LlmDebugLogger, LlmProvider};
+use spectacular_llms::{LlmDebugLogger, LlmProvider, Model};
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::io;
@@ -30,6 +30,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// Runs the test command implementation and returns its command future.
 pub async fn run(debug_logger: LlmDebugLogger) -> Result<(), ChatError> {
     let ChatBootstrap {
         session,
@@ -68,11 +69,12 @@ struct ChatBootstrap {
 }
 
 impl ChatBootstrap {
+    /// Creates a new value from the supplied inputs.
     fn new(debug_logger: LlmDebugLogger) -> Result<Self, ChatError> {
         let config = spectacular_config::read_config_or_default()?;
         let refresh = refresh_model_cache(&config, debug_logger.clone())?;
         let mut warnings = refresh.warnings;
-        let runtime = match RuntimeSelection::from_config(&config) {
+        let runtime = match RuntimeSelection::from_config_and_cache(&config, &refresh.cache) {
             Ok(runtime) => runtime,
             Err(error) => {
                 warnings.push(format!(
@@ -106,6 +108,7 @@ pub struct RuntimeSelection {
     pub(crate) model_key: String,
     pub(crate) model: String,
     pub(crate) reasoning: ReasoningLevel,
+    pub(crate) context_window_tokens: Option<usize>,
 }
 
 impl RuntimeSelection {
@@ -119,6 +122,7 @@ impl RuntimeSelection {
             model_key: "not configured".to_owned(),
             model: "not configured".to_owned(),
             reasoning: ReasoningLevel::None,
+            context_window_tokens: None,
         }
     }
 
@@ -127,7 +131,11 @@ impl RuntimeSelection {
         self.provider_type != "setup"
     }
 
-    pub(crate) fn from_config(config: &SpectacularConfig) -> Result<Self, ChatError> {
+    /// Creates a runtime selection using cached provider metadata for the selected model.
+    pub(crate) fn from_config_and_cache(
+        config: &SpectacularConfig,
+        cache: &ModelCache,
+    ) -> Result<Self, ChatError> {
         let (model_key, coding) = config.model_for_task(TaskModelSlot::Coding)?;
         let provider_config = config.provider_for_model(model_key)?;
 
@@ -139,11 +147,18 @@ impl RuntimeSelection {
             model_key: model_key.to_owned(),
             model: coding.model.clone(),
             reasoning: coding.reasoning,
+            context_window_tokens: cached_context_window_tokens(
+                cache,
+                &coding.provider,
+                &coding.model,
+            ),
         })
     }
 
-    fn from_session_records(
+    /// Restores runtime selection from session records and cached provider metadata.
+    fn from_session_records_and_cache(
         config: &SpectacularConfig,
+        cache: &ModelCache,
         records: &[session::ChatRecord],
     ) -> Result<Option<Self>, ChatError> {
         let model = records
@@ -186,6 +201,8 @@ impl RuntimeSelection {
             .map(|(key, _)| key.clone())
             .unwrap_or_else(|| spectacular_config::composite_model_key(&provider, &model));
 
+        let context_window_tokens = cached_context_window_tokens(cache, &provider, &model);
+
         Ok(Some(Self {
             provider_type: provider_config.provider_type.clone(),
             provider_auth: provider_config.auth_mode(),
@@ -194,14 +211,17 @@ impl RuntimeSelection {
             model_key,
             model,
             reasoning,
+            context_window_tokens,
         }))
     }
 }
 
 struct ModelCacheRefresh {
+    cache: ModelCache,
     warnings: Vec<String>,
 }
 
+/// Refreshes provider model metadata and records non-fatal cache warnings.
 fn refresh_model_cache(
     config: &SpectacularConfig,
     debug_logger: LlmDebugLogger,
@@ -233,13 +253,7 @@ fn refresh_model_cache(
                     provider_name.clone(),
                     provider_config.provider_type.clone(),
                     now,
-                    models.into_iter().map(|model| {
-                        CachedModelMetadata::new(
-                            model.id().to_owned(),
-                            model.display_name().to_owned(),
-                            model.supported_parameters().iter().cloned(),
-                        )
-                    }),
+                    models.into_iter().map(cached_model_metadata),
                 );
                 changed = true;
             }
@@ -258,9 +272,27 @@ fn refresh_model_cache(
         spectacular_config::write_model_cache(&cache)?;
     }
 
-    Ok(ModelCacheRefresh { warnings })
+    Ok(ModelCacheRefresh { cache, warnings })
 }
 
+/// Converts provider model metadata into the persisted model-cache shape.
+fn cached_model_metadata(model: Model) -> CachedModelMetadata {
+    CachedModelMetadata::new(
+        model.id().to_owned(),
+        model.display_name().to_owned(),
+        model.supported_parameters().iter().cloned(),
+    )
+    .with_context_window_tokens(model.context_window_tokens())
+}
+
+/// Looks up a cached context window for a provider/model pair.
+fn cached_context_window_tokens(cache: &ModelCache, provider: &str, model: &str) -> Option<usize> {
+    cache
+        .model(provider, model)
+        .and_then(|metadata| metadata.context_window_tokens)
+}
+
+/// Validates that cached provider metadata supports the requested reasoning level.
 pub(crate) fn validate_cached_model_reasoning(
     cache: &ModelCache,
     provider: &str,
@@ -282,6 +314,7 @@ pub(crate) fn validate_cached_model_reasoning(
     )))
 }
 
+/// Formats a user-facing warning for model metadata refresh failures.
 fn format_model_cache_warning(
     provider_name: &str,
     cached: Option<&spectacular_config::ProviderModelCache>,
@@ -306,6 +339,7 @@ fn format_model_cache_warning(
     )
 }
 
+/// Returns the current Unix timestamp in seconds.
 fn unix_timestamp() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -323,18 +357,21 @@ pub enum ChatError {
 }
 
 impl From<ConfigError> for ChatError {
+    /// Converts the source value into this error type.
     fn from(error: ConfigError) -> Self {
         Self::Config(error)
     }
 }
 
 impl From<CommandError> for ChatError {
+    /// Converts the source value into this error type.
     fn from(error: CommandError) -> Self {
         Self::Command(error)
     }
 }
 
 impl Display for ChatError {
+    /// Formats this value for user-facing display.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ChatError::Config(error) => write!(formatter, "{error}"),

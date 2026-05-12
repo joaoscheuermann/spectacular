@@ -1,7 +1,8 @@
 use super::*;
 use serde_json::json;
-use spectacular_agent::{provider_messages_from_store, Store};
+use spectacular_agent::{provider_messages_from_store, ContextSummary, Store};
 
+/// Verifies that recognized JSONL event deserializes.
 #[test]
 fn recognized_jsonl_event_deserializes() {
     let event = ChatEvent::from_value(json!({
@@ -20,6 +21,7 @@ fn recognized_jsonl_event_deserializes() {
     );
 }
 
+/// Verifies that unknown valid JSONL event is preserved.
 #[test]
 fn unknown_valid_jsonl_event_is_preserved() {
     let value = json!({"type": "future_event", "payload": true});
@@ -27,6 +29,7 @@ fn unknown_valid_jsonl_event_is_preserved() {
     assert_eq!(ChatEvent::from_value(value.clone()).unwrap_err(), value);
 }
 
+/// Verifies that minimal known events default optional fields.
 #[test]
 fn minimal_known_events_default_optional_fields() {
     let event = ChatEvent::from_value(json!({
@@ -46,6 +49,7 @@ fn minimal_known_events_default_optional_fields() {
     );
 }
 
+/// Verifies that agent event maps to existing wire shape.
 #[test]
 fn agent_event_maps_to_existing_wire_shape() {
     let event = ChatEvent::from_agent_event(
@@ -69,6 +73,7 @@ fn agent_event_maps_to_existing_wire_shape() {
     );
 }
 
+/// Verifies that reasoning delta round trips through JSONL agent event.
 #[test]
 fn reasoning_delta_round_trips_through_jsonl_agent_event() {
     let event = ChatEvent::from_agent_event(
@@ -101,6 +106,7 @@ fn reasoning_delta_round_trips_through_jsonl_agent_event() {
     );
 }
 
+/// Verifies that content filter finish reason round trips.
 #[test]
 fn content_filter_finish_reason_round_trips() {
     let event = ChatEvent::from_agent_event(
@@ -119,6 +125,7 @@ fn content_filter_finish_reason_round_trips() {
     ));
 }
 
+/// Verifies that structured tool events round trip through JSONL to agent events.
 #[test]
 fn structured_tool_events_round_trip_through_jsonl_to_agent_events() {
     let events = vec![
@@ -161,6 +168,7 @@ fn structured_tool_events_round_trip_through_jsonl_to_agent_events() {
     assert_eq!(round_trip, events);
 }
 
+/// Verifies that legacy tool call content replays as structured agent event.
 #[test]
 fn legacy_tool_call_content_replays_as_structured_agent_event() {
     let event = ChatEvent::from_value(json!({
@@ -180,6 +188,7 @@ fn legacy_tool_call_content_replays_as_structured_agent_event() {
     );
 }
 
+/// Verifies that structured tool events replay into provider messages.
 #[test]
 fn structured_tool_events_replay_into_provider_messages() {
     let records = [
@@ -216,4 +225,41 @@ fn structured_tool_events_replay_into_provider_messages() {
     assert_eq!(messages[1].tool_calls[0].arguments, r#"{"path":"foo.txt"}"#);
     assert_eq!(messages[2].tool_call_id.as_deref(), Some("call-1"));
     assert_eq!(messages[2].content, r#"{"success":true}"#);
+}
+
+/// Verifies that context summary round trips through JSONL to agent event.
+#[test]
+fn context_summary_round_trips_through_jsonl_to_agent_event() {
+    let summary = AgentEvent::ContextSummaryCreated(ContextSummary {
+        id: "summary-1".to_owned(),
+        replaces: Some("summary-0".to_owned()),
+        source_event_start: 0,
+        source_event_end: 5,
+        content: "# Goal\nKeep context compact.".to_owned(),
+        estimated_tokens: 42,
+    });
+    let event =
+        ChatEvent::from_agent_event(&summary, "2026-04-29T14:01:00Z".to_owned()).unwrap();
+    let value = serde_json::to_value(event).unwrap();
+
+    assert_eq!(
+        value,
+        json!({
+            "type": "context_summary",
+            "id": "summary-1",
+            "replaces": "summary-0",
+            "source_event_start": 0,
+            "source_event_end": 5,
+            "content": "# Goal\nKeep context compact.",
+            "estimated_tokens": 42,
+            "created_at": "2026-04-29T14:01:00Z"
+        })
+    );
+    assert_eq!(
+        ChatEvent::from_value(value)
+            .unwrap()
+            .to_agent_event()
+            .unwrap(),
+        summary
+    );
 }

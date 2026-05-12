@@ -8,7 +8,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use spectacular_agent::AgentEvent;
+use spectacular_agent::{AgentEvent, ContextSummary};
 use spectacular_llms::{FinishReason, MessageDelta, ProviderMessageRole, ReasoningDelta};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -93,15 +93,28 @@ pub enum ChatEvent {
     Cancelled { reason: String, created_at: String },
     #[serde(rename = "finished")]
     Finished { reason: String, created_at: String },
+    #[serde(rename = "context_summary")]
+    ContextSummary {
+        id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        replaces: Option<String>,
+        source_event_start: usize,
+        source_event_end: usize,
+        content: String,
+        estimated_tokens: usize,
+        created_at: String,
+    },
 }
 
 impl ChatEvent {
+    /// Deserializes a chat event value while preserving unknown input on failure.
     pub fn from_value(value: Value) -> Result<Self, Value> {
         let original = value.clone();
         let value = normalize_legacy_tool_call(value);
         serde_json::from_value(value).map_err(|_| original)
     }
 
+    /// Converts an agent event into a persisted chat event when it is session-visible.
     pub fn from_agent_event(event: &AgentEvent, created_at: String) -> Option<Self> {
         match event {
             AgentEvent::UserPrompt { content } => Some(Self::UserPrompt {
@@ -159,11 +172,21 @@ impl ChatEvent {
                 reason: finish_reason_to_str(*finish_reason).to_owned(),
                 created_at,
             }),
+            AgentEvent::ContextSummaryCreated(summary) => Some(Self::ContextSummary {
+                id: summary.id.clone(),
+                replaces: summary.replaces.clone(),
+                source_event_start: summary.source_event_start,
+                source_event_end: summary.source_event_end,
+                content: summary.content.clone(),
+                estimated_tokens: summary.estimated_tokens,
+                created_at,
+            }),
             AgentEvent::ReasoningMetadata(_) | AgentEvent::Internal { .. } => None,
             _ => None,
         }
     }
 
+    /// Converts a persisted chat event back into an agent event when replayable.
     pub fn to_agent_event(&self) -> Option<AgentEvent> {
         match self {
             Self::UserPrompt { content, .. } => Some(AgentEvent::user_prompt(content)),
@@ -205,6 +228,22 @@ impl ChatEvent {
             Self::Finished { reason, .. } => Some(AgentEvent::Finished {
                 finish_reason: finish_reason_from_str(reason),
             }),
+            Self::ContextSummary {
+                id,
+                replaces,
+                source_event_start,
+                source_event_end,
+                content,
+                estimated_tokens,
+                ..
+            } => Some(AgentEvent::ContextSummaryCreated(ContextSummary {
+                id: id.clone(),
+                replaces: replaces.clone(),
+                source_event_start: *source_event_start,
+                source_event_end: *source_event_end,
+                content: content.clone(),
+                estimated_tokens: *estimated_tokens,
+            })),
             Self::SessionStarted { .. }
             | Self::ProviderChanged { .. }
             | Self::ModelChanged { .. }
@@ -213,12 +252,14 @@ impl ChatEvent {
         }
     }
 
+    /// Parses the event creation timestamp as UTC when present.
     pub fn created_at(&self) -> Option<DateTime<Utc>> {
         DateTime::parse_from_rfc3339(self.created_at_str()?)
             .ok()
             .map(|value| value.with_timezone(&Utc))
     }
 
+    /// Returns the raw event creation timestamp when present.
     pub fn created_at_str(&self) -> Option<&str> {
         match self {
             Self::SessionStarted { created_at, .. }
@@ -234,14 +275,17 @@ impl ChatEvent {
             | Self::ValidationError { created_at, .. }
             | Self::Error { created_at, .. }
             | Self::Cancelled { created_at, .. }
-            | Self::Finished { created_at, .. } => Some(created_at),
+            | Self::Finished { created_at, .. }
+            | Self::ContextSummary { created_at, .. } => Some(created_at),
         }
     }
 
+    /// Returns whether this event records a user prompt.
     pub fn is_user_prompt(&self) -> bool {
         matches!(self, Self::UserPrompt { .. })
     }
 
+    /// Returns the prompt content when this event is a user prompt.
     pub fn user_prompt(&self) -> Option<&str> {
         match self {
             Self::UserPrompt { content, .. } => Some(content),
@@ -250,6 +294,7 @@ impl ChatEvent {
     }
 }
 
+/// Converts a provider message role into its serialized chat role.
 fn role(role: ProviderMessageRole) -> &'static str {
     match role {
         ProviderMessageRole::System => "system",
@@ -259,6 +304,7 @@ fn role(role: ProviderMessageRole) -> &'static str {
     }
 }
 
+/// Converts a serialized chat role into a provider message role.
 fn provider_role(role: &str) -> ProviderMessageRole {
     match role {
         "system" => ProviderMessageRole::System,
@@ -268,6 +314,7 @@ fn provider_role(role: &str) -> ProviderMessageRole {
     }
 }
 
+/// Converts a finish reason into its persisted string form.
 fn finish_reason_to_str(reason: FinishReason) -> &'static str {
     match reason {
         FinishReason::Stop => "stop",
@@ -279,6 +326,7 @@ fn finish_reason_to_str(reason: FinishReason) -> &'static str {
     }
 }
 
+/// Converts a persisted finish reason string into a provider finish reason.
 fn finish_reason_from_str(reason: &str) -> FinishReason {
     match reason {
         "length" => FinishReason::Length,
@@ -290,14 +338,17 @@ fn finish_reason_from_str(reason: &str) -> FinishReason {
     }
 }
 
+/// Returns the default title used for sessions without a stored title.
 fn untitled() -> String {
     "Untitled session".to_owned()
 }
 
+/// Returns the default assistant role used for legacy assistant deltas.
 fn assistant_role() -> String {
     "assistant".to_owned()
 }
 
+/// Normalizes legacy tool-call JSON into the structured session schema.
 fn normalize_legacy_tool_call(mut value: Value) -> Value {
     let Some(object) = value.as_object_mut() else {
         return value;

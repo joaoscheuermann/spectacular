@@ -1,13 +1,13 @@
-use crate::chat::model::{ChatPromptFooterModel, ChatRunRequestModel};
+use crate::chat::model::ChatRunRequestModel;
 use crate::chat::provider::provider_for_runtime;
-use crate::chat::renderer::{has_visible_assistant_text, has_visible_reasoning_text, Renderer};
+use crate::chat::renderer::Renderer;
 use crate::chat::session::{agent_events_from_records, records_before_latest_user_prompt};
 use crate::chat::title::spawn_title_task;
 use crate::chat::{ChatError, ChatModel, RuntimeSelection};
 
 const CODING_AGENT_SYSTEM_PROMPT: &str = include_str!("prompt/coding-agent.md");
 use spectacular_agent::{
-    Agent, AgentConfig, AgentEvent, Store, ToolRegistrationError, ToolStorage,
+    Agent, AgentConfig, AgentEvent, ContextPolicy, Store, ToolRegistrationError, ToolStorage,
 };
 use spectacular_config::ReasoningLevel;
 use spectacular_llms::{LlmProvider, ProviderMessageRole};
@@ -17,6 +17,12 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::MissedTickBehavior;
+
+mod event_rendering;
+mod render_state;
+
+pub use event_rendering::render_agent_event;
+use render_state::{AssistantResponseRenderState, ReasoningResponseRenderState};
 
 pub type ChatTurnFuture<'a> = Pin<Box<dyn Future<Output = Result<(), ChatError>> + Send + 'a>>;
 
@@ -38,7 +44,6 @@ pub struct ChatRunRequest {
     pub render_user_prompt: bool,
     pub retry_existing_prompt: bool,
     pub runtime: RuntimeSelection,
-    pub prompt_footer: Option<ChatPromptFooterModel>,
 }
 
 /// Executes chat turns by wiring session context, provider runtime, tools, and rendering.
@@ -80,7 +85,6 @@ impl ChatRunnerService {
                 render_user_prompt: request.render_user_prompt,
                 retry_existing_prompt: request.retry_existing_prompt,
                 runtime: request.runtime,
-                prompt_footer: request.prompt_footer,
             })
             .await
     }
@@ -99,12 +103,7 @@ impl<'a> ChatRunner<'a> {
     /// Executes the requested prompt and renders streaming agent events.
     pub async fn run(&self, request: ChatRunRequest) -> Result<(), ChatError> {
         if request.render_user_prompt {
-            match request.prompt_footer.as_ref() {
-                Some(footer) => self
-                    .renderer
-                    .user_prompt_with_footer(&request.prompt, footer),
-                None => self.renderer.user_prompt(&request.prompt),
-            }
+            self.renderer.user_prompt(&request.prompt);
         }
 
         let records = self.model.records()?;
@@ -258,6 +257,7 @@ where
     P: LlmProvider,
 {
     let reasoning_effort = runtime_reasoning_effort(runtime.reasoning);
+    let context_window_tokens = runtime_context_window_tokens(&provider, runtime);
     Agent::with_config_and_store(
         provider,
         AgentConfig {
@@ -266,11 +266,43 @@ where
             include_reasoning: reasoning_effort.is_some(),
             reasoning_effort,
             system_prompt: CODING_AGENT_SYSTEM_PROMPT.to_string(),
+            context_policy: context_policy_for_runtime(runtime, context_window_tokens),
             ..AgentConfig::default()
         },
         store,
     )
     .with_tools(tools)
+}
+
+/// Resolves the context window from cached runtime metadata before consulting the provider.
+fn runtime_context_window_tokens<P>(provider: &P, runtime: &RuntimeSelection) -> Option<usize>
+where
+    P: LlmProvider,
+{
+    runtime
+        .context_window_tokens
+        .or_else(|| provider.context_window_tokens(&runtime.model))
+}
+
+/// Builds the context policy used by normal chat runs for the selected runtime model.
+fn context_policy_for_runtime(
+    runtime: &RuntimeSelection,
+    context_window_tokens: Option<usize>,
+) -> ContextPolicy {
+    let mut policy = ContextPolicy::default();
+    policy.model_context_window_tokens = context_window_tokens;
+    policy.reasoning_reserve_tokens = reasoning_reserve_tokens(runtime.reasoning);
+    policy.max_summary_passes_per_request = 4;
+    policy
+}
+
+/// Reserves additional input budget for models configured to spend reasoning tokens.
+fn reasoning_reserve_tokens(reasoning: ReasoningLevel) -> usize {
+    if reasoning.non_none() {
+        return 8_192;
+    }
+
+    0
 }
 
 /// Converts a configured reasoning level into an optional provider effort string.
@@ -279,163 +311,6 @@ fn runtime_reasoning_effort(reasoning: ReasoningLevel) -> Option<String> {
         ReasoningLevel::None => None,
         level => Some(level.as_str().to_owned()),
     }
-}
-
-#[derive(Default)]
-struct AssistantResponseRenderState {
-    pending: String,
-    visible: bool,
-}
-
-struct AssistantDeltaRender {
-    content: String,
-    started: bool,
-}
-
-impl AssistantResponseRenderState {
-    /// Returns newly visible assistant text once accumulated deltas contain nonblank content.
-    fn delta(&mut self, content: &str) -> Option<AssistantDeltaRender> {
-        if self.visible {
-            return Some(AssistantDeltaRender {
-                content: content.to_owned(),
-                started: false,
-            });
-        }
-
-        self.pending.push_str(content);
-        if !has_visible_assistant_text(&self.pending) {
-            return None;
-        }
-
-        self.visible = true;
-        Some(AssistantDeltaRender {
-            content: std::mem::take(&mut self.pending),
-            started: true,
-        })
-    }
-
-    /// Closes any visible response and reports whether a spacer line should be emitted.
-    fn close_visible_response(&mut self) -> bool {
-        self.pending.clear();
-        if !self.visible {
-            return false;
-        }
-
-        self.visible = false;
-        true
-    }
-}
-
-#[derive(Default)]
-struct ReasoningResponseRenderState {
-    pending: String,
-    visible: bool,
-}
-
-struct ReasoningDeltaRender {
-    content: String,
-    started: bool,
-}
-
-impl ReasoningResponseRenderState {
-    /// Returns newly visible reasoning text once accumulated deltas contain nonblank content.
-    fn delta(&mut self, content: &str) -> Option<ReasoningDeltaRender> {
-        if self.visible {
-            return Some(ReasoningDeltaRender {
-                content: content.to_owned(),
-                started: false,
-            });
-        }
-
-        self.pending.push_str(content);
-        if !has_visible_reasoning_text(&self.pending) {
-            return None;
-        }
-
-        self.visible = true;
-        Some(ReasoningDeltaRender {
-            content: std::mem::take(&mut self.pending),
-            started: true,
-        })
-    }
-
-    /// Closes any visible reasoning block and reports whether a spacer line should be emitted.
-    fn close_visible_response(&mut self) -> bool {
-        self.pending.clear();
-        if !self.visible {
-            return false;
-        }
-
-        self.visible = false;
-        true
-    }
-}
-
-/// Renders a persisted or streamed agent event without appending it to session storage.
-pub async fn render_agent_event(
-    renderer: &Renderer,
-    tools: &ToolStorage,
-    event: &AgentEvent,
-) -> Result<(), ChatError> {
-    render_agent_event_with_replay_state(renderer, tools, event, None).await
-}
-
-/// Renders an agent event with optional replay tool-call argument state.
-async fn render_agent_event_with_replay_state(
-    renderer: &Renderer,
-    tools: &ToolStorage,
-    event: &AgentEvent,
-    replay_tool_arguments: Option<&mut std::collections::BTreeMap<String, serde_json::Value>>,
-) -> Result<(), ChatError> {
-    match event {
-        AgentEvent::UserPrompt { content } => renderer.user_prompt(content),
-        AgentEvent::MessageDelta(delta) if delta.role == ProviderMessageRole::Assistant => {
-            if !has_visible_assistant_text(&delta.content) {
-                return Ok(());
-            }
-
-            renderer.assistant_delta(&delta.content).await?;
-        }
-        AgentEvent::ReasoningDelta(delta) => renderer.reasoning_text(&delta.content),
-        AgentEvent::AssistantToolCallRequest {
-            tool_call_id,
-            name,
-            arguments,
-        } => {
-            if let Some(replay_tool_arguments) = replay_tool_arguments {
-                if let Ok(arguments) = serde_json::from_str::<serde_json::Value>(arguments) {
-                    replay_tool_arguments.insert(tool_call_id.clone(), arguments);
-                }
-            }
-            renderer.clear_working();
-            renderer.tool_call(tool_call_id, name, arguments, tools);
-            renderer.working();
-        }
-        AgentEvent::ToolResult {
-            tool_call_id,
-            name,
-            content,
-        } => {
-            let _ = replay_tool_arguments.and_then(|arguments| arguments.remove(tool_call_id));
-            renderer.clear_working();
-            renderer.tool_result(tool_call_id, name, content, tools);
-            renderer.working();
-        }
-        AgentEvent::ValidationError { message } | AgentEvent::Error { message } => {
-            renderer.clear_working();
-            renderer.error(message);
-            renderer.working();
-        }
-        AgentEvent::Cancelled { reason } => renderer.cancelled(reason),
-        AgentEvent::Finished { .. }
-        | AgentEvent::UsageMetadata(_)
-        | AgentEvent::ReasoningMetadata(_)
-        | AgentEvent::Internal { .. } => {}
-        AgentEvent::MessageDelta(_) => {}
-        _ => {}
-    }
-
-    Ok(())
 }
 
 /// Consumes the replayed retry user prompt so it is not rendered or stored twice.

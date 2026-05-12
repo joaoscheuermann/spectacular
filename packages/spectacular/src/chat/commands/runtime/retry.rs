@@ -4,6 +4,7 @@ use crate::chat::commands::{
 use crate::chat::model::ChatRunRequestModel;
 use spectacular_commands::CommandError;
 
+/// Handles command for this module.
 pub fn command() -> ChatCommand {
     ChatCommand {
         name: "retry",
@@ -14,6 +15,7 @@ pub fn command() -> ChatCommand {
     }
 }
 
+/// Executes the tool with the provided arguments and cancellation handle.
 fn execute<'a>(mut context: ChatCommandContext<'a>, args: Vec<String>) -> ChatCommandFuture<'a> {
     Box::pin(async move {
         if !args.is_empty() {
@@ -32,7 +34,6 @@ fn execute<'a>(mut context: ChatCommandContext<'a>, args: Vec<String>) -> ChatCo
             render_user_prompt: false,
             retry_existing_prompt: true,
             runtime: context.model.runtime().clone(),
-            prompt_footer: None,
         };
 
         context.notice("retrying latest prompt...");

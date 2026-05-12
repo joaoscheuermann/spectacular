@@ -232,6 +232,8 @@ pub struct CachedModelMetadata {
     pub id: String,
     pub name: String,
     pub supported_parameters: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context_window_tokens: Option<usize>,
 }
 
 impl CachedModelMetadata {
@@ -245,7 +247,14 @@ impl CachedModelMetadata {
             id: id.into(),
             name: name.into(),
             supported_parameters: supported_parameters.into_iter().collect(),
+            context_window_tokens: None,
         }
+    }
+
+    /// Returns this cached model with provider-reported context-window metadata attached.
+    pub fn with_context_window_tokens(mut self, context_window_tokens: Option<usize>) -> Self {
+        self.context_window_tokens = context_window_tokens.filter(|tokens| *tokens > 0);
+        self
     }
 
     /// Provides the supports parameter behavior for persisted configuration values.

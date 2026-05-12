@@ -15,7 +15,7 @@ use crate::{
 };
 pub use auth::{open_browser, OpenAiAuthRecord, OpenAiAuthStore, OpenAiBrowserAuthFlow};
 use client::OpenAiHttpClient;
-use models::openai_codex_models;
+use models::{openai_codex_models, openai_context_window_tokens};
 use std::sync::Arc;
 use stream::openai_stream_completion;
 
@@ -106,6 +106,11 @@ impl LlmProvider for OpenAiProvider {
         }
     }
 
+    /// Resolves OpenAI model context windows using OpenAI-owned model metadata.
+    fn context_window_tokens(&self, model: &str) -> Option<usize> {
+        openai_context_window_tokens(model)
+    }
+
     /// Starts a streaming completion call using the configured OpenAI auth mode.
     fn stream_completion<'a>(
         &'a self,
@@ -124,4 +129,14 @@ impl LlmProvider for OpenAiProvider {
 /// Starts the browser OAuth flow using the default OpenAI HTTP client.
 pub fn start_openai_browser_auth() -> Result<OpenAiBrowserAuthFlow, ProviderError> {
     OpenAiBrowserAuthFlow::start(OpenAiHttpClient::new())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    include!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/unit/openai_models.rs"
+    ));
 }

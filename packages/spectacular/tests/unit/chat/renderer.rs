@@ -14,10 +14,12 @@ use unicode_width::UnicodeWidthStr;
 struct DisplayTool;
 
 impl Tool for DisplayTool {
+    /// Returns the stable tool name used in manifests and calls.
     fn name(&self) -> &str {
         "display_tool"
     }
 
+    /// Builds the tool manifest exposed to provider requests.
     fn manifest(&self) -> ToolManifest {
         ToolManifest::new(
             self.name(),
@@ -26,10 +28,12 @@ impl Tool for DisplayTool {
         )
     }
 
+    /// Formats tool input arguments for terminal display.
     fn format_input(&self, arguments: &Value) -> ToolDisplay {
         format!("registered input: {}", arguments["path"].as_str().unwrap())
     }
 
+    /// Formats tool output for terminal display.
     fn format_output(&self, raw_output: &str, parsed_output: Option<&Value>) -> ToolDisplay {
         let state = parsed_output
             .and_then(|value| value.get("success"))
@@ -39,11 +43,13 @@ impl Tool for DisplayTool {
         format!("registered output: {state}; raw={raw_output}")
     }
 
+    /// Executes the tool with the provided arguments and cancellation handle.
     fn execute<'a>(&'a self, _arguments: Value, _cancellation: Cancellation) -> ToolExecution<'a> {
         Box::pin(async { Ok(r#"{"success":true}"#.to_owned()) })
     }
 }
 
+/// Verifies that line output keeps working indicator active.
 #[test]
 fn line_output_keeps_working_indicator_active() {
     let renderer = Renderer::default();
@@ -54,6 +60,7 @@ fn line_output_keeps_working_indicator_active() {
     assert_eq!(renderer.renderable_working_frame(), Some(1));
 }
 
+/// Verifies that stream output pauses working indicator.
 #[test]
 fn stream_output_pauses_working_indicator() {
     let renderer = Renderer::default();
@@ -73,6 +80,7 @@ fn stream_output_pauses_working_indicator() {
     assert_eq!(renderer.renderable_working_frame(), None);
 }
 
+/// Verifies that terminal glyphs are not mojibake.
 #[test]
 fn terminal_glyphs_are_not_mojibake() {
     assert_eq!(
@@ -84,6 +92,7 @@ fn terminal_glyphs_are_not_mojibake() {
         .all(|frame| !frame.contains('\u{00e2}')));
 }
 
+/// Verifies that command output style is distinct from reasoning and footer style.
 #[test]
 fn command_output_style_is_distinct_from_reasoning_and_footer_style() {
     let command_style = command_output_style().to_string();
@@ -95,6 +104,7 @@ fn command_output_style_is_distinct_from_reasoning_and_footer_style() {
     assert!(paint(command_output_style(), "output").contains("\x1b[38;2;107;114;128m"));
 }
 
+/// Verifies that tool call view uses tool owned formatted line.
 #[test]
 fn tool_call_view_uses_tool_owned_formatted_line() {
     let view = ToolCallView {
@@ -112,6 +122,7 @@ fn tool_call_view_uses_tool_owned_formatted_line() {
     assert!(rendered.contains("(1 edit)"));
 }
 
+/// Verifies that registered tool display is used for tool call and result.
 #[test]
 fn registered_tool_display_is_used_for_tool_call_and_result() {
     let tools = ToolStorage::try_with_tool(DisplayTool).unwrap();
@@ -133,6 +144,7 @@ fn registered_tool_display_is_used_for_tool_call_and_result() {
     assert_eq!(result.status, ToolStatus::Done);
 }
 
+/// Verifies that malformed registered tool arguments use generic fallback.
 #[test]
 fn malformed_registered_tool_arguments_use_generic_fallback() {
     let tools = ToolStorage::try_with_tool(DisplayTool).unwrap();
@@ -143,6 +155,7 @@ fn malformed_registered_tool_arguments_use_generic_fallback() {
     assert!(call.line.contains("{"));
 }
 
+/// Verifies that registered tool receives none for non JSON output.
 #[test]
 fn registered_tool_receives_none_for_non_json_output() {
     let tools = ToolStorage::try_with_tool(DisplayTool).unwrap();
@@ -157,6 +170,7 @@ fn registered_tool_receives_none_for_non_json_output() {
     assert_eq!(result.status, ToolStatus::Done);
 }
 
+/// Verifies that assistant visibility requires nonblank trimmed text.
 #[test]
 fn assistant_visibility_requires_nonblank_trimmed_text() {
     assert!(!has_visible_assistant_text(""));
@@ -164,6 +178,7 @@ fn assistant_visibility_requires_nonblank_trimmed_text() {
     assert!(has_visible_assistant_text(" answer "));
 }
 
+/// Verifies that reasoning text formats dim content without header.
 #[test]
 fn reasoning_text_formats_dim_content_without_header() {
     let output =
@@ -174,11 +189,13 @@ fn reasoning_text_formats_dim_content_without_header() {
     assert!(output.contains(&terminal_style::dim_style().to_string()));
 }
 
+/// Verifies that blank reasoning text is hidden.
 #[test]
 fn blank_reasoning_text_is_hidden() {
     assert!(reasoning::format_reasoning_text(" \n\t").is_none());
 }
 
+/// Verifies that result status marks common failures.
 #[test]
 fn result_status_marks_common_failures() {
     let tools = ToolStorage::default();
@@ -209,6 +226,7 @@ fn result_status_marks_common_failures() {
     );
 }
 
+/// Verifies that missing tool uses generic preview for session replay.
 #[test]
 fn missing_tool_uses_generic_preview_for_session_replay() {
     let tools = ToolStorage::default();
@@ -227,6 +245,7 @@ fn missing_tool_uses_generic_preview_for_session_replay() {
     assert_eq!(result.status, ToolStatus::Done);
 }
 
+/// Verifies that opening banner renders codex style session summary.
 #[test]
 fn opening_banner_renders_codex_style_session_summary() {
     let view = OpeningBannerView {
@@ -262,6 +281,7 @@ fn opening_banner_renders_codex_style_session_summary() {
     assert!(widths.windows(2).all(|pair| pair[0] == pair[1]));
 }
 
+/// Removes ANSI escape sequences from rendered terminal text for assertions.
 fn strip_ansi_codes(value: &str) -> String {
     let mut output = String::new();
     let mut chars = value.chars().peekable();
@@ -285,6 +305,7 @@ fn strip_ansi_codes(value: &str) -> String {
     output
 }
 
+/// Verifies that opening banner view uses runtime selection.
 #[test]
 fn opening_banner_view_uses_runtime_selection() {
     let runtime = RuntimeSelection {
@@ -295,6 +316,7 @@ fn opening_banner_view_uses_runtime_selection() {
         model_key: "openai/gpt-5.5".to_owned(),
         model: "openai/gpt-5.5".to_owned(),
         reasoning: ReasoningLevel::High,
+        context_window_tokens: None,
     };
 
     let view = OpeningBannerView::from_runtime("b7d4201f", &runtime, Path::new("workspace"));
@@ -305,6 +327,7 @@ fn opening_banner_view_uses_runtime_selection() {
     assert_eq!(view.session_id, "b7d4201f");
 }
 
+/// Verifies that directory label uses home shorthand.
 #[test]
 fn directory_label_uses_home_shorthand() {
     let home = PathBuf::from("home");
@@ -317,6 +340,7 @@ fn directory_label_uses_home_shorthand() {
     assert_eq!(format_directory_with_home(&home, Some(&home)), "~");
 }
 
+/// Verifies that directory label leaves paths outside home unchanged.
 #[test]
 fn directory_label_leaves_paths_outside_home_unchanged() {
     let home = PathBuf::from("home");
@@ -328,6 +352,7 @@ fn directory_label_leaves_paths_outside_home_unchanged() {
     );
 }
 
+/// Verifies that user prompt footer formats context in expected order.
 #[test]
 fn user_prompt_footer_formats_context_in_expected_order() {
     let footer = ChatPromptFooterModel {

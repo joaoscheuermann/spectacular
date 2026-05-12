@@ -1,3 +1,4 @@
+/// Verifies that openrouter validation rejects blank key without http call.
 #[test]
 fn openrouter_validation_rejects_blank_key_without_http_call() {
     let error = validate_openrouter_api_key("   ", |_| panic!("HTTP must not be called")).unwrap_err();
@@ -5,6 +6,7 @@ fn openrouter_validation_rejects_blank_key_without_http_call() {
     assert!(matches!(error, ProviderError::InvalidApiKey));
 }
 
+/// Verifies that openrouter validation accepts success status.
 #[test]
 fn openrouter_validation_accepts_success_status() {
     let result = validate_openrouter_api_key("sk-or-v1-valid", |_| Ok(200));
@@ -12,6 +14,7 @@ fn openrouter_validation_accepts_success_status() {
     assert!(result.is_ok());
 }
 
+/// Verifies that openrouter validation rejects unauthorized status.
 #[test]
 fn openrouter_validation_rejects_unauthorized_status() {
     let error = validate_openrouter_api_key("sk-or-v1-invalid", |_| Ok(401)).unwrap_err();
@@ -19,6 +22,7 @@ fn openrouter_validation_rejects_unauthorized_status() {
     assert!(matches!(error, ProviderError::InvalidApiKey));
 }
 
+/// Verifies that openrouter validation maps other statuses to unavailable.
 #[test]
 fn openrouter_validation_maps_other_statuses_to_unavailable() {
     let error = validate_openrouter_api_key("sk-or-v1-valid", |_| Ok(500)).unwrap_err();
@@ -26,6 +30,7 @@ fn openrouter_validation_maps_other_statuses_to_unavailable() {
     assert!(matches!(error, ProviderError::ProviderUnavailable { .. }));
 }
 
+/// Verifies that openrouter model fetch rejects blank key without http call.
 #[test]
 fn openrouter_model_fetch_rejects_blank_key_without_http_call() {
     let error = fetch_openrouter_models("   ", |_| panic!("HTTP must not be called")).unwrap_err();
@@ -33,6 +38,7 @@ fn openrouter_model_fetch_rejects_blank_key_without_http_call() {
     assert!(matches!(error, ProviderError::InvalidApiKey));
 }
 
+/// Verifies that openrouter model fetch parses model ids and names.
 #[test]
 fn openrouter_model_fetch_parses_model_ids_and_names() {
     let models = fetch_openrouter_models("sk-or-v1-valid", |_| {
@@ -40,7 +46,7 @@ fn openrouter_model_fetch_parses_model_ids_and_names() {
                 200,
                 r#"{
                     "data": [
-                        {"id": "openai/gpt-4o", "name": "GPT-4o", "supported_parameters": ["reasoning", "tools"]},
+                        {"id": "openai/gpt-4o", "name": "GPT-4o", "supported_parameters": ["reasoning", "tools"], "context_length": 128000},
                         {"id": "anthropic/claude-sonnet-4.5", "name": null}
                     ]
                 }"#
@@ -56,6 +62,7 @@ fn openrouter_model_fetch_parses_model_ids_and_names() {
             "GPT-4o",
             ["reasoning".to_owned(), "tools".to_owned()]
         )
+        .with_context_window_tokens(Some(128_000))
     );
     assert_eq!(
         models[1],
@@ -63,8 +70,20 @@ fn openrouter_model_fetch_parses_model_ids_and_names() {
     );
     assert!(models[0].supports_parameter("reasoning"));
     assert!(!models[1].supports_parameter("reasoning"));
+    assert_eq!(models[0].context_window_tokens(), Some(128_000));
+    assert_eq!(models[1].context_window_tokens(), None);
 }
 
+/// Verifies that openrouter provider returns conservative context window fallback.
+#[test]
+fn openrouter_provider_returns_conservative_context_window_fallback() {
+    let provider = OpenRouterProvider::new(String::new());
+
+    assert_eq!(provider.context_window_tokens("unknown/model"), Some(32_768));
+    assert_eq!(provider.context_window_tokens("  "), None);
+}
+
+/// Verifies that openrouter model fetch rejects unauthorized status.
 #[test]
 fn openrouter_model_fetch_rejects_unauthorized_status() {
     let error =
@@ -73,6 +92,7 @@ fn openrouter_model_fetch_rejects_unauthorized_status() {
     assert!(matches!(error, ProviderError::InvalidApiKey));
 }
 
+/// Verifies that openrouter model fetch rejects empty model list.
 #[test]
 fn openrouter_model_fetch_rejects_empty_model_list() {
     let error =
@@ -82,6 +102,7 @@ fn openrouter_model_fetch_rejects_empty_model_list() {
     assert!(matches!(error, ProviderError::NoModelsReturned { .. }));
 }
 
+/// Verifies that openrouter model fetch maps invalid JSON to parse error.
 #[test]
 fn openrouter_model_fetch_maps_invalid_json_to_parse_error() {
     let error = fetch_openrouter_models("sk-or-v1-valid", |_| Ok((200, "not json".to_owned())))
@@ -90,6 +111,7 @@ fn openrouter_model_fetch_maps_invalid_json_to_parse_error() {
     assert!(matches!(error, ProviderError::ResponseParsingFailed { .. }));
 }
 
+/// Verifies that openrouter model fetch maps bad shape to malformed response.
 #[test]
 fn openrouter_model_fetch_maps_bad_shape_to_malformed_response() {
     let error = fetch_openrouter_models("sk-or-v1-valid", |_| {
@@ -100,6 +122,7 @@ fn openrouter_model_fetch_maps_bad_shape_to_malformed_response() {
     assert!(matches!(error, ProviderError::MalformedResponse { .. }));
 }
 
+/// Verifies that openrouter exposes async stream seam.
 #[test]
 fn openrouter_exposes_async_stream_seam() {
     let provider = OpenRouterProvider::new(String::new());
@@ -115,6 +138,7 @@ fn openrouter_exposes_async_stream_seam() {
     assert!(matches!(error, ProviderError::InvalidApiKey));
 }
 
+/// Verifies that openrouter provider drops inside async context without nested runtime panic.
 #[test]
 fn openrouter_provider_drops_inside_async_context_without_nested_runtime_panic() {
     let runtime = tokio::runtime::Builder::new_current_thread()
@@ -128,6 +152,7 @@ fn openrouter_provider_drops_inside_async_context_without_nested_runtime_panic()
     });
 }
 
+/// Verifies that openrouter chat chunk parses content and finish.
 #[test]
 fn openrouter_chat_chunk_parses_content_and_finish() {
     let events = parse_openrouter_chat_chunk(
@@ -148,6 +173,7 @@ fn openrouter_chat_chunk_parses_content_and_finish() {
     ));
 }
 
+/// Verifies that openrouter chat request maps model and messages.
 #[test]
 fn openrouter_chat_request_maps_model_and_messages() {
     let request = OpenRouterChatRequest::from_provider_request(
@@ -169,6 +195,7 @@ fn openrouter_chat_request_maps_model_and_messages() {
     assert_eq!(request.messages[3].role, "tool");
 }
 
+/// Verifies that openrouter chat request serializes strict tool manifest.
 #[test]
 fn openrouter_chat_request_serializes_strict_tool_manifest() {
     let request = OpenRouterChatRequest::from_provider_request(
@@ -195,6 +222,7 @@ fn openrouter_chat_request_serializes_strict_tool_manifest() {
     assert_eq!(value["parallel_tool_calls"], false);
 }
 
+/// Verifies that openrouter chat request serializes tool call and tool result replay.
 #[test]
 fn openrouter_chat_request_serializes_tool_call_and_tool_result_replay() {
     let request = OpenRouterChatRequest::from_provider_request(
@@ -228,6 +256,7 @@ fn openrouter_chat_request_serializes_tool_call_and_tool_result_replay() {
     assert_eq!(value["messages"][1]["content"], r#"{"ok":true}"#);
 }
 
+/// Verifies that openrouter chat request serializes reasoning effort.
 #[test]
 fn openrouter_chat_request_serializes_reasoning_effort() {
     let mut provider_request =
