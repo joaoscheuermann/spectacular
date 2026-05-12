@@ -5,10 +5,14 @@ use crate::{
 use serde::{Deserialize, Serialize};
 
 const REASONING_SUMMARY_AUTO: &str = "auto";
+const FAST_MODEL_SUFFIX: &str = "-fast";
+const FAST_SERVICE_TIER: &str = "priority";
 
 #[derive(Serialize)]
 pub(crate) struct OpenAiResponsesRequest {
     pub(crate) model: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) service_tier: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) instructions: Option<String>,
     pub(crate) input: Vec<OpenAiInputItem>,
@@ -40,6 +44,7 @@ impl OpenAiResponsesRequest {
                 provider_name: "OpenAI".to_owned(),
                 reason: "missing model for Responses request".to_owned(),
             })?;
+        let model_request = OpenAiModelRequest::from_configured_model(model);
         let instructions = instructions_from_messages(&messages);
         let input = input_from_messages(messages);
         let tools = tools
@@ -52,7 +57,8 @@ impl OpenAiResponsesRequest {
             OpenAiReasoningRequest::from_flags(flags.include_reasoning, flags.reasoning_effort);
 
         Ok(Self {
-            model,
+            model: model_request.model,
+            service_tier: model_request.service_tier,
             instructions,
             input,
             store: false,
@@ -62,6 +68,35 @@ impl OpenAiResponsesRequest {
             parallel_tool_calls,
             reasoning,
         })
+    }
+}
+
+struct OpenAiModelRequest {
+    model: String,
+    service_tier: Option<&'static str>,
+}
+
+impl OpenAiModelRequest {
+    /// Converts Spectacular's model aliases into the OpenAI Responses wire model.
+    fn from_configured_model(model: String) -> Self {
+        let Some(base_model) = model.strip_suffix(FAST_MODEL_SUFFIX) else {
+            return Self {
+                model,
+                service_tier: None,
+            };
+        };
+
+        if base_model.trim().is_empty() {
+            return Self {
+                model,
+                service_tier: None,
+            };
+        }
+
+        Self {
+            model: base_model.to_owned(),
+            service_tier: Some(FAST_SERVICE_TIER),
+        }
     }
 }
 

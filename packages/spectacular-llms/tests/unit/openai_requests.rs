@@ -21,6 +21,30 @@ fn openai_responses_request_maps_messages_and_instructions() {
 }
 
 #[test]
+fn openai_responses_request_maps_fast_alias_to_priority_service_tier() {
+    let request = OpenAiResponsesRequest::from_provider_request(
+        ProviderRequest::new(vec![ProviderMessage::user("hello")]).with_model("gpt-5.5-fast"),
+    )
+    .unwrap();
+    let value = serde_json::to_value(request).unwrap();
+
+    assert_eq!(value["model"], "gpt-5.5");
+    assert_eq!(value["service_tier"], "priority");
+}
+
+#[test]
+fn openai_responses_request_omits_service_tier_for_base_model() {
+    let request = OpenAiResponsesRequest::from_provider_request(
+        ProviderRequest::new(vec![ProviderMessage::user("hello")]).with_model("gpt-5.5"),
+    )
+    .unwrap();
+    let value = serde_json::to_value(request).unwrap();
+
+    assert_eq!(value["model"], "gpt-5.5");
+    assert!(value.get("service_tier").is_none());
+}
+
+#[test]
 fn openai_responses_request_serializes_tools_for_responses_api() {
     let request = OpenAiResponsesRequest::from_provider_request(
         ProviderRequest::new(vec![ProviderMessage::user("hello")])
@@ -78,6 +102,21 @@ fn openai_responses_request_serializes_reasoning_effort_and_summary() {
     let value = serde_json::to_value(request).unwrap();
 
     assert_eq!(value["reasoning"]["effort"], "high");
+    assert_eq!(value["reasoning"]["summary"], "auto");
+}
+
+#[test]
+fn openai_responses_request_keeps_fast_service_tier_independent_from_reasoning() {
+    let mut request =
+        ProviderRequest::new(vec![ProviderMessage::user("hello")]).with_model("gpt-5.5-fast");
+    request.flags.reasoning_effort = Some("low".to_owned());
+
+    let request = OpenAiResponsesRequest::from_provider_request(request).unwrap();
+    let value = serde_json::to_value(request).unwrap();
+
+    assert_eq!(value["model"], "gpt-5.5");
+    assert_eq!(value["service_tier"], "priority");
+    assert_eq!(value["reasoning"]["effort"], "low");
     assert_eq!(value["reasoning"]["summary"], "auto");
 }
 
