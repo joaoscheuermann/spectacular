@@ -31,7 +31,9 @@ use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
 use style::{assistant_style, error_style, success_style, warning_style};
-pub(crate) use style::{dim_style, paint, selection_style, user_style};
+#[cfg(test)]
+pub(crate) use style::command_output_style;
+pub(crate) use style::{dim_style, paint, selection_style, title_style, user_style};
 pub(crate) use terminal_output::{format_prompt_footer, has_visible_assistant_text};
 use terminal_output::{format_tool_call_view, print_tool_output};
 pub use tool::{ToolCallView, ToolResultView};

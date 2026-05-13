@@ -4,6 +4,8 @@
 //! and commits the currently staged changes.
 
 use crate::chat::commands::{ChatCommandContext, ChatCommandFuture, ChatCommandResult};
+use crate::chat::prompt::{SelectionPromptAnswer, SelectionPromptChoice, SelectionPromptRequest};
+use crate::chat::ChatError;
 
 use crate::chat::provider::provider_for_runtime;
 use spectacular_agent::{Agent, AgentConfig, AgentEvent};
@@ -81,16 +83,25 @@ pub fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatCo
         }
 
         // 6. Show generated message
-        context.success("generated commit message:");
-        context.notice(&format!(
-            "  {}",
-            commit_message.lines().next().unwrap_or("")
-        ));
-        if commit_message.lines().count() > 1 {
-            for line in commit_message.lines().skip(1) {
-                context.notice(&format!("  {}", line));
+        // context.success("generated commit message:");
+        // context.notice(&format!(
+        //     "  {}",
+        //     commit_message.lines().next().unwrap_or("")
+        // ));
+        // if commit_message.lines().count() > 1 {
+        //     for line in commit_message.lines().skip(1) {
+        //         context.notice(&format!("  {}", line));
+        //     }
+        // }
+
+        let commit_message = match select_commit_message(&context, &commit_message) {
+            Ok(Some(message)) => message,
+            Ok(None) => {
+                context.notice("commit cancelled");
+                return ChatCommandResult::success();
             }
-        }
+            Err(error) => return ChatCommandResult::error(error.to_string()),
+        };
 
         // 7. Commit
         match context
@@ -107,6 +118,64 @@ pub fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatCo
             Err(e) => ChatCommandResult::error(format!("commit failed: {}", e)),
         }
     })
+}
+
+fn select_commit_message(
+    context: &ChatCommandContext<'_>,
+    generated_message: &str,
+) -> Result<Option<String>, ChatError> {
+    match context.ask(commit_message_selection_request(generated_message)) {
+        Ok(answer) => commit_message_from_selection(answer, generated_message),
+        Err(ChatError::Exit) => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+fn commit_message_selection_request(generated_message: &str) -> SelectionPromptRequest {
+    SelectionPromptRequest::new(
+        "Use generated commit message?",
+        format!("Message: \"{generated_message}\""),
+        vec![
+            "Use generated message".to_owned(),
+            "Cancel commit".to_owned(),
+        ],
+    )
+    .with_inputs(true, false)
+}
+
+fn commit_message_from_selection(
+    answer: SelectionPromptAnswer,
+    generated_message: &str,
+) -> Result<Option<String>, ChatError> {
+    match answer.choice {
+        SelectionPromptChoice::Option { index: 0, .. } => Ok(Some(generated_message.to_owned())),
+        SelectionPromptChoice::Option { index: 1, .. } => Ok(None),
+        SelectionPromptChoice::Option { label, .. } => Err(ChatError::Session(format!(
+            "unsupported commit message selection: {label}"
+        ))),
+        SelectionPromptChoice::Custom(message) => Ok(Some(format_commit_message_with_comment(
+            &message,
+            answer.comment.as_deref(),
+        ))),
+    }
+}
+
+fn format_commit_message_with_comment(message: &str, comment: Option<&str>) -> String {
+    let message = sanitize_commit_message(message);
+    let Some(comment) = comment.and_then(non_empty_selection_comment) else {
+        return message;
+    };
+
+    format!("{message}\n\n{comment}")
+}
+
+fn non_empty_selection_comment(comment: &str) -> Option<&str> {
+    let comment = comment.trim();
+    if comment.is_empty() {
+        return None;
+    }
+
+    Some(comment)
 }
 
 async fn generate_commit_message_with_work(
