@@ -114,6 +114,49 @@
     }
 
     #[tokio::test]
+    async fn command_lifecycle_persists_commit_output_before_success() {
+        let mut model = test_model();
+        let renderer = Renderer::default();
+        let tools = ToolStorage::default();
+        let runner = NoopRunner;
+        let mut control = ChatCommandControl::default();
+
+        {
+            let context =
+                ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
+            let mut lifecycle = CommitLifecycle::new(&context);
+            lifecycle.start().unwrap();
+            lifecycle.delta("committing changes").unwrap();
+            lifecycle
+                .delta("[feat/test abc1234] feat: persist commit output")
+                .unwrap();
+            lifecycle
+                .finish(CommandStatus::Success, "changes committed successfully")
+                .unwrap();
+        }
+
+        let records = model.records().unwrap();
+        let command_events = records
+            .iter()
+            .filter_map(|record| record.event())
+            .filter_map(|event| match event {
+                ChatEvent::CommandDelta { content, .. } => Some(content.as_str()),
+                ChatEvent::CommandFinished { summary, .. } => Some(summary.as_str()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            command_events,
+            vec![
+                "committing changes",
+                "[feat/test abc1234] feat: persist commit output",
+                "changes committed successfully",
+            ]
+        );
+    }
+
+    #[tokio::test]
     async fn command_lifecycle_persists_cancelled_status() {
         let mut model = test_model();
         let renderer = Renderer::default();

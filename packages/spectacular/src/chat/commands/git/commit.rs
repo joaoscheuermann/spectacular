@@ -151,10 +151,14 @@ pub fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatCo
             .await
         {
             Ok(output) => {
-                let _ = lifecycle.finish(CommandStatus::Success, "changes committed successfully");
-                if !output.trim().is_empty() {
-                    context.notice(&output);
+                let commit_output = output.trim();
+                if !commit_output.is_empty() {
+                    if let Err(error) = lifecycle.delta(commit_output) {
+                        return ChatCommandResult::error(error);
+                    }
                 }
+
+                let _ = lifecycle.finish(CommandStatus::Success, "changes committed successfully");
                 ChatCommandResult::success()
             }
             Err(e) => {
