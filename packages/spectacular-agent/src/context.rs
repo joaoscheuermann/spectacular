@@ -6,6 +6,7 @@ use std::fmt::{self, Display};
 
 pub(crate) mod assembler;
 pub(crate) mod diagnostics;
+pub(crate) use diagnostics::ContextDiagnostics;
 mod policy;
 pub(crate) mod token_count;
 
@@ -14,8 +15,8 @@ pub(crate) use assembler::{
     ContextSummaryRequest,
 };
 pub use policy::ContextPolicy;
-pub(crate) use token_count::ApproximateTokenCounter;
-pub use token_count::TokenCounter;
+pub(crate) use token_count::TokenCounterChoice;
+pub use token_count::{TiktokenTokenCounter, TokenCounter};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContextLimitFailure {
@@ -95,6 +96,7 @@ fn append_transcript_messages(messages: &mut Vec<ProviderMessage>, events: &[Age
             }
             AgentEvent::ReasoningDelta(_)
             | AgentEvent::UsageMetadata(_)
+            | AgentEvent::ContextTokenUsage(_)
             | AgentEvent::ReasoningMetadata(_)
             | AgentEvent::ValidationError { .. }
             | AgentEvent::Error { .. }

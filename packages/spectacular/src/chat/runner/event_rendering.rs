@@ -45,6 +45,7 @@ pub async fn render_agent_event(
         AgentEvent::Cancelled { reason } => renderer.cancelled(reason),
         AgentEvent::Finished { .. }
         | AgentEvent::UsageMetadata(_)
+        | AgentEvent::ContextTokenUsage(_)
         | AgentEvent::ReasoningMetadata(_)
         | AgentEvent::Internal { .. } => {}
         AgentEvent::MessageDelta(_) => {}

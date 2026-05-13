@@ -1,6 +1,6 @@
 use super::diagnostics::{ContextDiagnostics, ContextSection, ContextSectionUsage};
 use super::policy::ContextPolicy;
-use super::token_count::{ApproximateTokenCounter, TokenCounter};
+use super::token_count::{TokenCounter, TokenCounterChoice};
 use super::{transcript_messages_from_events, validate_context_limits, ContextLimitFailure};
 use crate::event::{AgentEvent, ContextSummary};
 use crate::store::Store;
@@ -19,7 +19,7 @@ use self::formatting::{build_messages, format_messages_for_summary, format_summa
 
 /// Builds provider-visible working context from the durable transcript.
 #[derive(Clone, Debug)]
-pub struct ContextAssembler<C = ApproximateTokenCounter> {
+pub struct ContextAssembler<C = TokenCounterChoice> {
     token_counter: C,
     policy: ContextPolicy,
 }
@@ -67,10 +67,10 @@ pub enum ContextAssemblyError {
     },
 }
 
-impl Default for ContextAssembler<ApproximateTokenCounter> {
-    /// Creates an assembler using approximate token counts and default context policy.
+impl Default for ContextAssembler<TokenCounterChoice> {
+    /// Creates an assembler using default tiktoken-backed token counts and policy.
     fn default() -> Self {
-        Self::new(ApproximateTokenCounter, ContextPolicy::default())
+        Self::new(TokenCounterChoice::default(), ContextPolicy::default())
     }
 }
 

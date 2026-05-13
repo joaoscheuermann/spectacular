@@ -69,7 +69,7 @@ where
         invocation: CommandInvocation,
     ) -> Result<CommandControl, ChatError> {
         let mut command_control = ChatCommandControl::default();
-        let prompt_footer = ChatPromptFooterModel::from_runtime(&self.workspace_root, self.model.runtime());
+        let prompt_footer = self.prompt_footer();
         let context = ChatCommandContext::new_with_footer(
             &mut self.model,
             &self.renderer,
@@ -167,9 +167,10 @@ where
 
     /// Builds prompt footer data from the controller-owned workspace root and active runtime.
     fn prompt_footer(&self) -> ChatPromptFooterModel {
-        ChatPromptFooterModel::from_runtime(
+        ChatPromptFooterModel::from_runtime_and_usage(
             &self.workspace_root,
             self.model.runtime(),
+            self.model.context_token_usage(),
         )
     }
 }

@@ -1,5 +1,5 @@
 use super::footer::{format_user_prompt_footer, UserPromptFooterView};
-use super::style::{command_output_style, diff_added_style, diff_removed_style, dim_style, paint};
+use super::style::{command_output_style, diff_added_style, diff_removed_style, paint};
 use super::tool::ToolCallView;
 use crate::chat::model::ChatPromptFooterModel;
 
@@ -77,8 +77,8 @@ pub(crate) fn has_visible_assistant_text(content: &str) -> bool {
     !content.trim().is_empty()
 }
 
-/// Formats prompt footer data with the dim terminal style used by chat context rows.
+/// Formats prompt footer data with styles owned by each footer segment.
 pub(crate) fn format_prompt_footer(footer: &ChatPromptFooterModel) -> String {
     let view = UserPromptFooterView::from_model(footer);
-    paint(dim_style(), format_user_prompt_footer(&view))
+    format_user_prompt_footer(&view)
 }

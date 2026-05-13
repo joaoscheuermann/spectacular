@@ -5,9 +5,12 @@ use super::*;
 use crate::chat::model::ChatPromptFooterModel;
 use crate::terminal_style;
 use serde_json::{json, Value};
-use spectacular_agent::{Cancellation, Tool, ToolDisplay, ToolExecution, ToolManifest};
+use spectacular_agent::{
+    Cancellation, ContextTokenUsage, Tool, ToolDisplay, ToolExecution, ToolManifest,
+};
 use spectacular_config::ReasoningLevel;
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
+use std::time::Duration;
 use unicode_width::UnicodeWidthStr;
 
 #[derive(Clone, Debug)]
@@ -54,30 +57,83 @@ impl Tool for DisplayTool {
 fn line_output_keeps_working_indicator_active() {
     let renderer = Renderer::default();
 
-    renderer.working_frame(1);
+    renderer.working_frame(1, Some(42));
     renderer.dim("status update");
 
-    assert_eq!(renderer.renderable_working_frame(), Some(1));
+    assert_eq!(renderer.renderable_working_frame(), Some((1, Some(42))));
 }
 
-/// Verifies that stream output pauses working indicator.
+/// Verifies working text includes current assistant-turn tokens when present.
 #[test]
-fn stream_output_pauses_working_indicator() {
+fn working_line_includes_turn_tokens_when_present() {
+    assert_eq!(
+        working_line::format_working_line("⠋", Some(100)),
+        "⠋ Working (CTRL + C to stop · 100 tokens)"
+    );
+}
+
+/// Verifies working text omits token segment when no count is available.
+#[test]
+fn working_line_omits_turn_tokens_when_absent() {
+    assert_eq!(
+        working_line::format_working_line("⠋", None),
+        "⠋ Working (CTRL + C to stop)"
+    );
+}
+
+/// Verifies worked text includes elapsed time and total turn tokens.
+#[test]
+fn worked_line_includes_elapsed_time_and_total_tokens() {
+    assert_eq!(
+        working_line::format_worked_line(Duration::from_secs(62), Some(100)),
+        "Worked for 1m 2s · total 100 tokens"
+    );
+}
+
+/// Verifies that paused stream output stores working frames without rendering them.
+#[test]
+fn paused_stream_output_stores_working_frame() {
     let renderer = Renderer::default();
 
-    renderer.working_frame(2);
-    assert!(renderer.pause_working());
+    renderer.working_frame(2, None);
+    renderer.pause_working_line();
 
     assert_eq!(renderer.renderable_working_frame(), None);
 
-    renderer.working_frame(3);
+    renderer.working_frame(3, Some(7));
     assert_eq!(renderer.renderable_working_frame(), None);
 
-    renderer.resume_working();
-    assert_eq!(renderer.renderable_working_frame(), Some(3));
+    renderer.resume_working_line();
+    assert_eq!(renderer.renderable_working_frame(), Some((3, Some(7))));
 
     renderer.clear_working();
     assert_eq!(renderer.renderable_working_frame(), None);
+}
+
+/// Verifies that resume without a matching pause leaves visible working state unchanged.
+#[test]
+fn unpaired_resume_preserves_visible_working_frame() {
+    let renderer = Renderer::default();
+
+    renderer.working_frame(4, Some(11));
+    renderer.resume_working_line();
+
+    assert_eq!(renderer.renderable_working_frame(), Some((4, Some(11))));
+}
+
+/// Verifies that response spacing does not deactivate a paused working indicator.
+#[test]
+fn response_spacer_preserves_paused_working_indicator() {
+    let renderer = Renderer::default();
+
+    renderer.working_frame(2, Some(9));
+    renderer.pause_working_line();
+
+    renderer.response_spacer();
+
+    assert_eq!(renderer.renderable_working_frame(), None);
+    renderer.resume_working_line();
+    assert_eq!(renderer.renderable_working_frame(), Some((2, Some(9))));
 }
 
 /// Verifies that terminal glyphs are not mojibake.
@@ -95,13 +151,14 @@ fn terminal_glyphs_are_not_mojibake() {
 /// Verifies that command output style is distinct from reasoning and footer style.
 #[test]
 fn command_output_style_is_distinct_from_reasoning_and_footer_style() {
-    let command_style = command_output_style().to_string();
+    let command_style = terminal_style::command_output_style().to_string();
     let dim_style = terminal_style::dim_style().to_string();
     let assistant_style = terminal_style::assistant_style().to_string();
 
     assert_ne!(command_style, dim_style);
     assert_ne!(command_style, assistant_style);
-    assert!(paint(command_output_style(), "output").contains("\x1b[38;2;107;114;128m"));
+    assert!(paint(terminal_style::command_output_style(), "output")
+        .contains("\x1b[38;2;107;114;128m"));
 }
 
 /// Verifies that tool call view uses tool owned formatted line.
@@ -359,6 +416,7 @@ fn user_prompt_footer_formats_context_in_expected_order() {
         directory: PathBuf::from("workspace"),
         model: "openai/gpt-5.5".to_owned(),
         reasoning: ReasoningLevel::High,
+        token_usage: None,
     };
     let view = UserPromptFooterView::from_model(&footer);
 
@@ -368,11 +426,65 @@ fn user_prompt_footer_formats_context_in_expected_order() {
     );
     assert_eq!(view.model, "openai/gpt-5.5");
     assert_eq!(view.reasoning, "high");
+    assert_eq!(view.token_usage, None);
+    let formatted = format_user_prompt_footer(&view);
+    assert!(formatted.contains(&format!(
+        "{} · openai/gpt-5.5 (high)",
+        PathBuf::from("workspace").display()
+    )));
+}
+
+/// Verifies that user prompt footer appends compact context token usage.
+#[test]
+fn user_prompt_footer_formats_token_usage() {
+    let footer = ChatPromptFooterModel {
+        directory: PathBuf::from("workspace"),
+        model: "gpt-5.5".to_owned(),
+        reasoning: ReasoningLevel::High,
+        token_usage: Some(ContextTokenUsage {
+            input_tokens: 100,
+            context_window_tokens: Some(240_000),
+        }),
+    };
+    let formatted = format_user_prompt_footer(&UserPromptFooterView::from_model(&footer));
+
+    assert!(formatted.contains("gpt-5.5 (high)"));
+    assert!(formatted.contains("100/240k tks"));
+}
+
+/// Verifies compact token formatting for footer context usage.
+#[test]
+fn formats_context_usage_compactly() {
+    let formatted = token_usage::format_context_token_usage(ContextTokenUsage {
+        input_tokens: 100,
+        context_window_tokens: Some(240_000),
+    });
+
+    assert!(formatted.contains("100/240k tks"));
+}
+
+/// Verifies context pressure styling thresholds.
+#[test]
+fn classifies_context_pressure_thresholds() {
     assert_eq!(
-        format_user_prompt_footer(&view),
-        format!(
-            "{} · openai/gpt-5.5 (high)",
-            PathBuf::from("workspace").display()
-        )
+        token_usage::context_pressure_style(ContextTokenUsage {
+            input_tokens: 79,
+            context_window_tokens: Some(100),
+        }),
+        dim_style()
+    );
+    assert_eq!(
+        token_usage::context_pressure_style(ContextTokenUsage {
+            input_tokens: 80,
+            context_window_tokens: Some(100),
+        }),
+        warning_style()
+    );
+    assert_eq!(
+        token_usage::context_pressure_style(ContextTokenUsage {
+            input_tokens: 90,
+            context_window_tokens: Some(100),
+        }),
+        error_style()
     );
 }

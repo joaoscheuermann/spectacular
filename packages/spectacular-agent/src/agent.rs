@@ -1,14 +1,16 @@
 mod constructors;
 mod context_compaction;
+mod context_usage;
 mod provider_events;
 mod provider_stream;
 mod recorder;
 mod request;
 mod run_control;
+mod run_stream;
 
 use crate::context::{
-    ApproximateTokenCounter, ContextAssembler, ContextAssembly, ContextAssemblyError,
-    ContextAssemblyInput, ContextPolicy, TokenCounter,
+    ContextAssembler, ContextAssembly, ContextAssemblyError, ContextAssemblyInput, ContextPolicy,
+    TokenCounter, TokenCounterChoice,
 };
 use crate::error::AgentError;
 use crate::event::AgentEvent;
@@ -17,11 +19,13 @@ use crate::schema::OutputSchema;
 use crate::store::Store;
 use crate::tool::{Tool, ToolRegistrationError, ToolStorage};
 use context_compaction::ContextCompactor;
+use context_usage::record_context_token_usage;
 use provider_events::{AgentProviderEventHandler, ProviderEventOutcome};
 use provider_stream::{run_retryable_provider_stream, ProviderRetryConfig};
 use recorder::RunRecorder;
 use request::{effective_system_prompt, validate_provider_capabilities};
 use run_control::{RunControl, HARD_ABORT_GRACE};
+pub use run_stream::AgentRunStream;
 use spectacular_llms::{LlmProvider, ProviderRequest, ProviderToolCall, ToolManifest};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -36,7 +40,7 @@ pub(super) const LENGTH_CONTINUATION_PROMPT: &str = "Continue from exactly where
 
 /// Coordinates queued agent runs, provider calls, tool execution, and event storage.
 #[derive(Debug)]
-pub struct Agent<P, C = ApproximateTokenCounter> {
+pub struct Agent<P, C = TokenCounterChoice> {
     provider: P,
     token_counter: C,
     queue: Arc<RunQueue>,
@@ -69,85 +73,6 @@ pub struct AgentConfig {
     pub provider_retry_delay: Duration,
     /// Token budget and automatic context compaction policy.
     pub context_policy: ContextPolicy,
-}
-
-/// Streaming handle for a background agent run.
-pub struct AgentRunStream {
-    receiver: mpsc::Receiver<AgentEvent>,
-    control: Arc<RunControl>,
-    queue: Arc<RunQueue>,
-    completed: Arc<AtomicBool>,
-    active_run_control: Arc<Mutex<Option<Arc<RunControl>>>>,
-}
-
-impl AgentRunStream {
-    /// Creates a stream handle around a background run channel and cancellation state.
-    fn new(
-        receiver: mpsc::Receiver<AgentEvent>,
-        control: Arc<RunControl>,
-        queue: Arc<RunQueue>,
-        completed: Arc<AtomicBool>,
-        active_run_control: Arc<Mutex<Option<Arc<RunControl>>>>,
-    ) -> Self {
-        Self {
-            receiver,
-            control,
-            queue,
-            completed,
-            active_run_control,
-        }
-    }
-
-    /// Receives the next persisted run event and marks terminal streams completed.
-    pub async fn next(&mut self) -> Option<AgentEvent> {
-        let event = self.receiver.recv().await;
-        if is_terminal_event(&event) {
-            self.completed.store(true, Ordering::SeqCst);
-        }
-
-        event
-    }
-
-    /// Cancels the active run and any queued waiters unless the stream already completed.
-    pub fn cancel(&self) {
-        if self.completed.load(Ordering::SeqCst) {
-            return;
-        }
-
-        self.control.cancel();
-        if let Some(active_control) = self.active_run_control.lock().unwrap().as_ref() {
-            active_control.cancel();
-        }
-        self.queue.cancel_pending_now();
-    }
-
-    /// Hard-aborts the active run and any queued waiters unless the stream already completed.
-    pub fn hard_abort(&self) {
-        if self.completed.load(Ordering::SeqCst) {
-            return;
-        }
-
-        self.control.request_hard_abort();
-        if let Some(active_control) = self.active_run_control.lock().unwrap().as_ref() {
-            active_control.request_hard_abort();
-        }
-        self.queue.cancel_pending_now();
-    }
-}
-
-impl Drop for AgentRunStream {
-    /// Hard-aborts unfinished background work when the stream handle is dropped.
-    fn drop(&mut self) {
-        self.hard_abort();
-    }
-}
-
-/// Returns true when an optional event represents a terminal run state.
-fn is_terminal_event(event: &Option<AgentEvent>) -> bool {
-    matches!(
-        event,
-        Some(AgentEvent::Finished { .. } | AgentEvent::Error { .. } | AgentEvent::Cancelled { .. })
-    )
 }
 
 impl Default for AgentConfig {
@@ -391,7 +316,10 @@ where
                 })
             };
             let messages = match assembled_context {
-                Ok(ContextAssembly::Ready(context)) => context.messages,
+                Ok(ContextAssembly::Ready(context)) => {
+                    record_context_token_usage(self, &mut recorder, &context.diagnostics).await?;
+                    context.messages
+                }
                 Ok(ContextAssembly::NeedsSummary(summary_request)) => {
                     if summary_passes_for_request
                         >= self.config.context_policy.max_summary_passes_per_request
