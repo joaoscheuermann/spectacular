@@ -8,7 +8,9 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use spectacular_agent::{AgentEvent, ContextSummary};
+use spectacular_agent::{
+    AgentEvent, CommandDelta, CommandFinished, CommandStart, CommandStatus, ContextSummary,
+};
 use spectacular_llms::{FinishReason, MessageDelta, ProviderMessageRole, ReasoningDelta};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -76,6 +78,33 @@ pub enum ChatEvent {
         #[serde(default)]
         name: String,
         content: String,
+        created_at: String,
+    },
+    #[serde(rename = "command_start")]
+    CommandStart {
+        command_id: String,
+        source: String,
+        name: String,
+        title: String,
+        command: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        working_directory: Option<String>,
+        created_at: String,
+    },
+    #[serde(rename = "command_delta")]
+    CommandDelta {
+        command_id: String,
+        #[serde(alias = "stream")]
+        channel: String,
+        content: String,
+        sequence: u64,
+        created_at: String,
+    },
+    #[serde(rename = "command_finished")]
+    CommandFinished {
+        command_id: String,
+        status: String,
+        summary: String,
         created_at: String,
     },
     #[serde(rename = "usage_metadata")]
@@ -148,6 +177,28 @@ impl ChatEvent {
                 tool_call_id: tool_call_id.clone(),
                 name: name.clone(),
                 content: content.clone(),
+                created_at,
+            }),
+            AgentEvent::CommandStart(start) => Some(Self::CommandStart {
+                command_id: start.command_id.clone(),
+                source: start.source.clone(),
+                name: start.name.clone(),
+                title: start.title.clone(),
+                command: start.command.clone(),
+                working_directory: start.working_directory.clone(),
+                created_at,
+            }),
+            AgentEvent::CommandDelta(delta) => Some(Self::CommandDelta {
+                command_id: delta.command_id.clone(),
+                channel: delta.channel.clone(),
+                content: delta.content.clone(),
+                sequence: delta.sequence,
+                created_at,
+            }),
+            AgentEvent::CommandFinished(finished) => Some(Self::CommandFinished {
+                command_id: finished.command_id.clone(),
+                status: command_status_to_str(finished.status).to_owned(),
+                summary: finished.summary.clone(),
                 created_at,
             }),
             AgentEvent::UsageMetadata(usage) => Some(Self::UsageMetadata {
@@ -224,6 +275,44 @@ impl ChatEvent {
                 name.clone(),
                 content.clone(),
             )),
+            Self::CommandStart {
+                command_id,
+                source,
+                name,
+                title,
+                command,
+                working_directory,
+                ..
+            } => Some(AgentEvent::CommandStart(CommandStart {
+                command_id: command_id.clone(),
+                source: source.clone(),
+                name: name.clone(),
+                title: title.clone(),
+                command: command.clone(),
+                working_directory: working_directory.clone(),
+            })),
+            Self::CommandDelta {
+                command_id,
+                channel,
+                content,
+                sequence,
+                ..
+            } => Some(AgentEvent::CommandDelta(CommandDelta {
+                command_id: command_id.clone(),
+                channel: channel.clone(),
+                content: content.clone(),
+                sequence: *sequence,
+            })),
+            Self::CommandFinished {
+                command_id,
+                status,
+                summary,
+                ..
+            } => Some(AgentEvent::CommandFinished(CommandFinished {
+                command_id: command_id.clone(),
+                status: command_status_from_str(status),
+                summary: summary.clone(),
+            })),
             Self::ValidationError { message, .. } => Some(AgentEvent::validation_error(message)),
             Self::Error { message, .. } => Some(AgentEvent::error(message)),
             Self::Cancelled { reason, .. } => Some(AgentEvent::cancelled(reason)),
@@ -273,6 +362,9 @@ impl ChatEvent {
             | Self::ReasoningDelta { created_at, .. }
             | Self::ToolCall { created_at, .. }
             | Self::ToolResult { created_at, .. }
+            | Self::CommandStart { created_at, .. }
+            | Self::CommandDelta { created_at, .. }
+            | Self::CommandFinished { created_at, .. }
             | Self::UsageMetadata { created_at, .. }
             | Self::ValidationError { created_at, .. }
             | Self::Error { created_at, .. }
@@ -337,6 +429,26 @@ fn finish_reason_from_str(reason: &str) -> FinishReason {
         "content_filter" => FinishReason::ContentFilter,
         "error" => FinishReason::Error,
         _ => FinishReason::Stop,
+    }
+}
+
+fn command_status_to_str(status: CommandStatus) -> &'static str {
+    match status {
+        CommandStatus::Success => "success",
+        CommandStatus::Failed => "failed",
+        CommandStatus::Cancelled => "cancelled",
+        CommandStatus::TimedOut => "timed_out",
+        CommandStatus::Error => "error",
+    }
+}
+
+fn command_status_from_str(status: &str) -> CommandStatus {
+    match status {
+        "success" => CommandStatus::Success,
+        "cancelled" => CommandStatus::Cancelled,
+        "timed_out" => CommandStatus::TimedOut,
+        "error" => CommandStatus::Error,
+        _ => CommandStatus::Failed,
     }
 }
 

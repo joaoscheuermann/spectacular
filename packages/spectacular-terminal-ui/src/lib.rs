@@ -33,6 +33,11 @@ pub fn command_output_style() -> Style {
     COMMAND_OUTPUT.on_default()
 }
 
+/// Returns the bold blue style for command invocation lines.
+pub fn command_style() -> Style {
+    BLUE.on_default().bold()
+}
+
 /// Returns the bold green style for successful status messages.
 pub fn success_style() -> Style {
     GREEN.on_default().bold()

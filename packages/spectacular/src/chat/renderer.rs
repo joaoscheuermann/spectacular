@@ -25,17 +25,15 @@ use banner::{format_opening_banner, OpeningBannerView};
 use reasoning::format_reasoning_text;
 pub(crate) use reasoning::has_visible_reasoning_text;
 use serde_json::Value;
-use spectacular_agent::AgentEvent;
 use spectacular_agent::ToolStorage;
+use spectacular_agent::{AgentEvent, CommandStatus};
 use std::collections::BTreeMap;
 use std::io::{self, Write};
 use std::path::Path;
 use std::sync::Mutex;
 use std::time::Duration;
-use style::{assistant_style, error_style, success_style, warning_style};
-#[cfg(test)]
-pub(crate) use style::command_output_style;
-pub(crate) use style::{dim_style, paint, selection_style, title_style, user_style};
+use style::{assistant_style, command_style, error_style, success_style, warning_style};
+pub(crate) use style::{command_output_style, dim_style, paint, selection_style, title_style, user_style};
 pub(crate) use terminal_output::{format_prompt_footer, has_visible_assistant_text};
 use terminal_output::{format_tool_call_view, print_tool_output};
 pub use tool::{ToolCallView, ToolResultView};
@@ -206,6 +204,36 @@ impl Renderer {
         self.with_interrupted_working_line(|| {
             println!("{}", paint(success_style(), message));
         });
+    }
+
+    /// Renders a blank line while preserving working indicator state.
+    pub fn blank_line(&self) {
+        self.with_interrupted_working_line(|| {
+            println!();
+        });
+    }
+
+    /// Renders a command lifecycle start record.
+    pub fn command_start(&self, _title: &str, command: &str) {
+        self.with_interrupted_working_line(|| {
+            println!("{}", paint(command_style(), command));
+        });
+    }
+
+    /// Renders a command lifecycle progress record.
+    pub fn command_delta(&self, content: &str) {
+        self.with_interrupted_working_line(|| {
+            println!("{}", paint(command_output_style(), format!("• {content}")));
+        });
+    }
+
+    /// Renders a command lifecycle completion record.
+    pub fn command_finished(&self, status: CommandStatus, summary: &str) {
+        match status {
+            CommandStatus::Success => self.success(summary),
+            CommandStatus::Failed | CommandStatus::Error => self.error(summary),
+            CommandStatus::Cancelled | CommandStatus::TimedOut => self.warning(summary),
+        }
     }
 
     /// Replays persisted chat records with assistant deltas coalesced into readable blocks.
