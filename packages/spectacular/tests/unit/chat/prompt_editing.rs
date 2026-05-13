@@ -278,6 +278,44 @@
     }
 
     #[test]
+    fn selection_prompt_static_option_has_no_editable_cursor() {
+        let renderer = Renderer::default();
+        let prompt = SelectionPrompt::new(
+            &renderer,
+            SelectionPromptRequest::new(
+                "Use generated commit message?",
+                "Generated message:\nfeat(git): add selection prompt",
+                vec!["Use generated message".to_owned(), "Cancel commit".to_owned()],
+            )
+            .with_inputs(true, true),
+        );
+        let lines = prompt.render_lines();
+
+        assert_eq!(prompt.editable_cursor_position(&lines), None);
+    }
+
+    #[test]
+    fn selection_prompt_custom_option_cursor_uses_description_rows() {
+        let renderer = Renderer::default();
+        let mut prompt = SelectionPrompt::new(
+            &renderer,
+            SelectionPromptRequest::new(
+                "Use generated commit message?",
+                "Generated message:\nfeat(git): add selection prompt",
+                vec!["Use generated message".to_owned(), "Cancel commit".to_owned()],
+            )
+            .with_inputs(true, true),
+        );
+        prompt.select_custom();
+        let lines = prompt.render_lines();
+
+        assert_eq!(
+            prompt.editable_cursor_position(&lines),
+            Some(SelectionCursorPosition { row: 6, column: 5 })
+        );
+    }
+
+    #[test]
     fn paste_normalization_uses_lf() {
         assert_eq!(normalize_paste("a\r\nb\rc"), "a\nb\nc");
     }

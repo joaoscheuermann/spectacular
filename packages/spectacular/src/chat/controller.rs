@@ -1,7 +1,7 @@
 use crate::chat::commands::{
     ChatCommandAdapter, ChatCommandContext, ChatCommandControl, ChatCommandResult,
 };
-use crate::chat::model::{ChatModel, ChatRunRequestModel};
+use crate::chat::model::{ChatModel, ChatPromptFooterModel, ChatRunRequestModel};
 use crate::chat::prompt::{PromptCompletionCatalog, PromptEditor};
 use crate::chat::renderer::Renderer;
 use crate::chat::runner::{ChatRunnerService, ChatTurnRunner};
@@ -69,12 +69,14 @@ where
         invocation: CommandInvocation,
     ) -> Result<CommandControl, ChatError> {
         let mut command_control = ChatCommandControl::default();
-        let context = ChatCommandContext::new(
+        let prompt_footer = self.prompt_footer();
+        let context = ChatCommandContext::new_with_footer(
             &mut self.model,
             &self.renderer,
             &self.tools,
             &self.runner,
             &mut command_control,
+            Some(prompt_footer),
         );
         let result = self.commands.execute(context, invocation).await;
         if let ChatCommandResult::Error(message) = result {
@@ -164,8 +166,8 @@ where
     }
 
     /// Builds prompt footer data from the controller-owned workspace root and active runtime.
-    fn prompt_footer(&self) -> crate::chat::model::ChatPromptFooterModel {
-        crate::chat::model::ChatPromptFooterModel::from_runtime_and_usage(
+    fn prompt_footer(&self) -> ChatPromptFooterModel {
+        ChatPromptFooterModel::from_runtime_and_usage(
             &self.workspace_root,
             self.model.runtime(),
             self.model.context_token_usage(),

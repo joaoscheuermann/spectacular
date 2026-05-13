@@ -4,7 +4,8 @@ pub mod git;
 pub mod runtime;
 pub mod session;
 
-use crate::chat::model::{ChatModel, ChatRunRequestModel, HistoryTableModel};
+use crate::chat::model::{ChatModel, ChatPromptFooterModel, ChatRunRequestModel, HistoryTableModel};
+use crate::chat::prompt::{SelectionPrompt, SelectionPromptAnswer, SelectionPromptRequest};
 use crate::chat::renderer::Renderer;
 use crate::chat::runner::ChatTurnRunner;
 use crate::chat::session::ChatRecord;
@@ -87,10 +88,12 @@ pub struct ChatCommandContext<'a> {
     pub tools: &'a ToolStorage,
     runner: &'a dyn ChatTurnRunner,
     control: &'a mut ChatCommandControl,
+    prompt_footer: Option<ChatPromptFooterModel>,
 }
 
 impl<'a> ChatCommandContext<'a> {
     /// Creates a command execution context from the active chat services.
+    #[allow(dead_code, reason = "unit tests and embedders use contexts without prompt footer metadata")]
     pub fn new(
         model: &'a mut ChatModel,
         renderer: &'a Renderer,
@@ -98,12 +101,25 @@ impl<'a> ChatCommandContext<'a> {
         runner: &'a dyn ChatTurnRunner,
         control: &'a mut ChatCommandControl,
     ) -> Self {
+        Self::new_with_footer(model, renderer, tools, runner, control, None)
+    }
+
+    /// Creates a command execution context with optional prompt footer metadata.
+    pub fn new_with_footer(
+        model: &'a mut ChatModel,
+        renderer: &'a Renderer,
+        tools: &'a ToolStorage,
+        runner: &'a dyn ChatTurnRunner,
+        control: &'a mut ChatCommandControl,
+        prompt_footer: Option<ChatPromptFooterModel>,
+    ) -> Self {
         Self {
             model,
             renderer,
             tools,
             runner,
             control,
+            prompt_footer,
         }
     }
 
@@ -149,6 +165,16 @@ impl<'a> ChatCommandContext<'a> {
     /// Renders a successful command message.
     pub fn success(&self, message: &str) {
         self.renderer.success(message);
+    }
+
+    /// Renders an interactive option selection prompt and returns the user's answer.
+    pub fn ask(&self, request: SelectionPromptRequest) -> Result<SelectionPromptAnswer, ChatError> {
+        let prompt = SelectionPrompt::new(self.renderer, request);
+        if let Some(footer) = &self.prompt_footer {
+            return prompt.with_footer(footer.clone()).read_selection();
+        }
+
+        prompt.read_selection()
     }
 
     /// Runs async command work with a transient "working" indicator until the
