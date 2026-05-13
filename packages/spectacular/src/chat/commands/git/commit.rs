@@ -8,17 +8,24 @@ use crate::chat::prompt::{SelectionPromptAnswer, SelectionPromptChoice, Selectio
 use crate::chat::ChatError;
 
 use crate::chat::provider::provider_for_runtime;
-use spectacular_agent::{Agent, AgentConfig, AgentEvent};
+use spectacular_agent::{Agent, AgentConfig, AgentEvent, CommandStatus};
 use spectacular_commands::CommandError;
 use spectacular_llms::ProviderMessageRole;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::helpers;
 
 /// Maximum diff length sent to the agent. Diffs larger than this are truncated.
 const MAX_DIFF_CHARS: usize = 15_000;
-const TRUNCATED_DIFF_NOTICE: &str =
-    "warning: diff is large and has been truncated for the commit message agent";
+
+const MAX_COMMAND_TEXT_CHARS: usize = 80;
+const MAX_COMMAND_DELTA_EVENTS: usize = 32;
+const MAX_COMMAND_DELTA_BYTES: usize = 4_096;
+const MAX_COMMAND_DELTA_CONTENT_CHARS: usize = 240;
+const MAX_COMMAND_SUMMARY_CHARS: usize = 240;
+const TEXT_TRUNCATION_MARKER: &str = "... [truncated]";
+const COMMAND_DELTA_TRUNCATED_NOTICE: &str = "command output truncated: persistence limit reached";
 
 /// System prompt for commit message generation
 const COMMIT_SYSTEM_PROMPT: &str = include_str!("prompt/commit-system.md");
@@ -29,93 +36,138 @@ const COMMIT_USER_PROMPT_TEMPLATE: &str = include_str!("prompt/commit-user.md");
 /// Internal execute function that can be called from the parent git command
 pub fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatCommandFuture<'a> {
     Box::pin(async move {
+        let mut lifecycle = CommitLifecycle::new(&context);
+
+        if let Err(error) = lifecycle.start() {
+            return ChatCommandResult::error(error);
+        }
+
         if !args.is_empty() {
+            let _ = lifecycle.finish(
+                CommandStatus::Failed,
+                "/git commit failed: invalid arguments",
+            );
             return ChatCommandResult::error(CommandError::usage("/git commit").to_string());
         }
 
         // 1. Check for staged changes
+        if let Err(error) = lifecycle.delta("checking staged changes") {
+            return ChatCommandResult::error(error);
+        }
         let has_staged = match context
             .work(async { helpers::has_staged_changes().await })
             .await
         {
             Ok(v) => v,
-            Err(e) => return ChatCommandResult::error(e.to_string()),
+            Err(e) => {
+                let message = e.to_string();
+                let _ = lifecycle.delta(&format!("staged changes check failed: {message}"));
+                let _ = lifecycle.finish(
+                    CommandStatus::Failed,
+                    format!("/git commit failed while checking staged changes: {message}"),
+                );
+                return ChatCommandResult::error(message);
+            }
         };
+
         if !has_staged {
-            return ChatCommandResult::error(
-                "no staged changes to commit. Use `git add` to stage changes first.".to_string(),
-            );
+            let message = "no staged changes to commit. Use `git add` to stage changes first.";
+            let _ = lifecycle.finish(CommandStatus::Failed, message);
+            return ChatCommandResult::error(message.to_owned());
         }
 
         // 2. Get the staged diff
+        if let Err(error) = lifecycle.delta("loading staged diff") {
+            return ChatCommandResult::error(error);
+        }
         let diff = match context
             .work(async { helpers::get_staged_diff().await })
             .await
         {
             Ok(v) => v,
-            Err(e) => return ChatCommandResult::error(e.to_string()),
+            Err(e) => {
+                let message = e.to_string();
+                let _ = lifecycle.delta(&format!("staged diff load failed: {message}"));
+                let _ = lifecycle.finish(
+                    CommandStatus::Failed,
+                    format!("/git commit failed while loading staged diff: {message}"),
+                );
+                return ChatCommandResult::error(message);
+            }
         };
 
-        // 3. Truncate diff if needed
-        let (diff_for_prompt, truncated) = truncate_diff_if_needed(&diff);
-        if truncated {
-            context.notice(TRUNCATED_DIFF_NOTICE);
-        }
-
-        // 4. Build prompt
+        let (diff_for_prompt, _) = truncate_diff_if_needed(&diff);
         let prompt = build_commit_prompt(&diff_for_prompt);
 
-        // 5. Generate commit message using standalone agent
+        // 3. Generate commit message using standalone agent
+        if let Err(error) = lifecycle.delta("generating commit message.") {
+            return ChatCommandResult::error(error);
+        }
         let commit_message = match generate_commit_message_with_work(&context, prompt).await {
             Ok(msg) => msg,
-            Err(e) => {
+            Err(CommitMessageGenerationError::Cancelled(reason)) => {
+                let summary = format!("commit message generation cancelled: {reason}");
+                let _ = lifecycle.delta(&summary);
+                let _ = lifecycle.finish(CommandStatus::Cancelled, summary);
+                return ChatCommandResult::success();
+            }
+            Err(CommitMessageGenerationError::Failed(message)) => {
+                let _ = lifecycle.delta(&format!("commit message generation failed: {message}"));
+                let _ = lifecycle.finish(
+                    CommandStatus::Failed,
+                    format!("failed to generate commit message: {message}"),
+                );
                 return ChatCommandResult::error(format!(
                     "failed to generate commit message: {}",
-                    e
-                ))
+                    message
+                ));
             }
         };
 
         if commit_message.trim().is_empty() {
-            return ChatCommandResult::error(
-                "generated commit message is empty. Please commit manually.".to_string(),
-            );
+            let message = "generated commit message is empty. Please commit manually.";
+            let _ = lifecycle.finish(CommandStatus::Failed, message);
+            return ChatCommandResult::error(message.to_owned());
         }
 
-        // 6. Show generated message
-        // context.success("generated commit message:");
-        // context.notice(&format!(
-        //     "  {}",
-        //     commit_message.lines().next().unwrap_or("")
-        // ));
-        // if commit_message.lines().count() > 1 {
-        //     for line in commit_message.lines().skip(1) {
-        //         context.notice(&format!("  {}", line));
-        //     }
-        // }
-
+        // 4. Show generated message
+        context.renderer.blank_line();
         let commit_message = match select_commit_message(&context, &commit_message) {
             Ok(Some(message)) => message,
             Ok(None) => {
+                let _ = lifecycle.finish(CommandStatus::Cancelled, "commit cancelled");
                 context.notice("commit cancelled");
                 return ChatCommandResult::success();
             }
             Err(error) => return ChatCommandResult::error(error.to_string()),
         };
 
-        // 7. Commit
+        // 5. Commit
+        if let Err(error) = lifecycle.delta("committing changes") {
+            return ChatCommandResult::error(error);
+        }
         match context
             .work(async { helpers::commit_with_message(&commit_message).await })
             .await
         {
             Ok(output) => {
-                context.success("changes committed successfully!");
-                if !output.trim().is_empty() {
-                    context.notice(&output);
+                let commit_output = output.trim();
+                if !commit_output.is_empty() {
+                    if let Err(error) = lifecycle.delta(commit_output) {
+                        return ChatCommandResult::error(error);
+                    }
                 }
+
+                let _ = lifecycle.finish(CommandStatus::Success, "changes committed successfully");
                 ChatCommandResult::success()
             }
-            Err(e) => ChatCommandResult::error(format!("commit failed: {}", e)),
+            Err(e) => {
+                let message = e.to_string();
+                let _ = lifecycle.delta(&format!("git commit failed: {message}"));
+                let _ =
+                    lifecycle.finish(CommandStatus::Failed, format!("commit failed: {message}"));
+                ChatCommandResult::error(format!("commit failed: {}", e))
+            }
         }
     })
 }
@@ -178,10 +230,157 @@ fn non_empty_selection_comment(comment: &str) -> Option<&str> {
     Some(comment)
 }
 
+struct CommitLifecycle<'a, 'context> {
+    context: &'a ChatCommandContext<'context>,
+    command_id: String,
+    sequence: u64,
+    persisted_delta_bytes: usize,
+    persisted_delta_events: usize,
+    delta_truncated: bool,
+}
+
+impl<'a, 'context> CommitLifecycle<'a, 'context> {
+    fn new(context: &'a ChatCommandContext<'context>) -> Self {
+        Self {
+            context,
+            command_id: command_id(),
+            sequence: 0,
+            persisted_delta_bytes: 0,
+            persisted_delta_events: 0,
+            delta_truncated: false,
+        }
+    }
+
+    fn start(&self) -> Result<(), String> {
+        let command = bounded_text("/git commit", MAX_COMMAND_TEXT_CHARS);
+        self.context
+            .append_agent_event(&AgentEvent::command_start(
+                self.command_id.clone(),
+                "slash_command",
+                "/git commit",
+                "Git commit",
+                command.clone(),
+                working_directory(),
+            ))
+            .map_err(|error| error.to_string())?;
+        self.context.renderer.command_start("Git commit", &command);
+        Ok(())
+    }
+
+    fn delta(&mut self, content: &str) -> Result<(), String> {
+        if self.delta_truncated {
+            return Ok(());
+        }
+
+        let content = bounded_text(content, MAX_COMMAND_DELTA_CONTENT_CHARS);
+        if self.should_append_truncation_notice(content.len()) {
+            return self.append_delta_truncation_notice();
+        }
+
+        self.append_delta_record(content)
+    }
+
+    fn should_append_truncation_notice(&self, next_delta_bytes: usize) -> bool {
+        if self.persisted_delta_events.saturating_add(1) >= MAX_COMMAND_DELTA_EVENTS {
+            return true;
+        }
+
+        self.persisted_delta_bytes
+            .saturating_add(next_delta_bytes)
+            .saturating_add(COMMAND_DELTA_TRUNCATED_NOTICE.len())
+            > MAX_COMMAND_DELTA_BYTES
+    }
+
+    fn append_delta_truncation_notice(&mut self) -> Result<(), String> {
+        self.delta_truncated = true;
+        if self.persisted_delta_events >= MAX_COMMAND_DELTA_EVENTS {
+            return Ok(());
+        }
+
+        let remaining_bytes = MAX_COMMAND_DELTA_BYTES.saturating_sub(self.persisted_delta_bytes);
+        if remaining_bytes == 0 {
+            return Ok(());
+        }
+
+        self.append_delta_record(bounded_text(
+            COMMAND_DELTA_TRUNCATED_NOTICE,
+            remaining_bytes.min(MAX_COMMAND_DELTA_CONTENT_CHARS),
+        ))
+    }
+
+    fn append_delta_record(&mut self, content: String) -> Result<(), String> {
+        let bytes = content.len();
+        self.sequence += 1;
+        self.context
+            .append_agent_event(&AgentEvent::command_delta(
+                self.command_id.clone(),
+                "status",
+                content.clone(),
+                self.sequence,
+            ))
+            .map_err(|error| error.to_string())?;
+        self.context.renderer.command_delta(&content);
+        self.persisted_delta_bytes += bytes;
+        self.persisted_delta_events += 1;
+        Ok(())
+    }
+
+    fn finish(&self, status: CommandStatus, summary: impl AsRef<str>) -> Result<(), String> {
+        let summary = bounded_text(summary.as_ref(), MAX_COMMAND_SUMMARY_CHARS);
+        self.context
+            .append_agent_event(&AgentEvent::command_finished(
+                self.command_id.clone(),
+                status,
+                summary.clone(),
+            ))
+            .map_err(|error| error.to_string())?;
+        self.context.renderer.command_finished(status, &summary);
+        Ok(())
+    }
+}
+
+fn command_id() -> String {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    format!("git-commit-{nanos}")
+}
+
+fn working_directory() -> Option<String> {
+    std::env::current_dir()
+        .ok()
+        .map(|path| path.display().to_string())
+}
+
+
+fn bounded_text(value: &str, max_chars: usize) -> String {
+    let mut chars = value.chars();
+    let bounded = chars.by_ref().take(max_chars).collect::<String>();
+    if chars.next().is_none() {
+        return bounded;
+    }
+
+    let marker_chars = TEXT_TRUNCATION_MARKER.chars().count();
+    if max_chars <= marker_chars {
+        return ".".repeat(max_chars);
+    }
+
+    let prefix_chars = max_chars - marker_chars;
+    let mut bounded = value.chars().take(prefix_chars).collect::<String>();
+    bounded.push_str(TEXT_TRUNCATION_MARKER);
+    bounded
+}
+
+enum CommitMessageGenerationError {
+    Cancelled(String),
+    Failed(String),
+}
+
 async fn generate_commit_message_with_work(
     context: &ChatCommandContext<'_>,
     prompt: String,
-) -> Result<String, String> {
+) -> Result<String, CommitMessageGenerationError> {
     context
         .work(async { generate_commit_message(context, prompt).await })
         .await
@@ -190,13 +389,13 @@ async fn generate_commit_message_with_work(
 async fn generate_commit_message(
     context: &ChatCommandContext<'_>,
     prompt: String,
-) -> Result<String, String> {
+) -> Result<String, CommitMessageGenerationError> {
     let provider = provider_for_runtime(
         context.model.runtime(),
         context.model.debug_logger().clone(),
         context.model.config_io(),
     )
-    .map_err(|e| format!("provider error: {}", e))?;
+    .map_err(|e| CommitMessageGenerationError::Failed(format!("provider error: {}", e)))?;
 
     let model_name = context.model.runtime().model.clone();
     let system_prompt = COMMIT_SYSTEM_PROMPT.to_owned();
@@ -221,10 +420,13 @@ async fn generate_commit_message(
             }
             AgentEvent::Finished { .. } => break,
             AgentEvent::Error { message: err } => {
-                return Err(format!("agent error: {}", err));
+                return Err(CommitMessageGenerationError::Failed(format!(
+                    "agent error: {}",
+                    err
+                )));
             }
             AgentEvent::Cancelled { reason } => {
-                return Err(format!("agent cancelled: {}", reason));
+                return Err(CommitMessageGenerationError::Cancelled(reason));
             }
             _ => {}
         }

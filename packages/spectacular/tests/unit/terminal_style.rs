@@ -12,6 +12,7 @@ fn paint_wraps_value_with_style_and_reset() {
 #[test]
 fn named_styles_use_expected_color_sequences() {
     assert!(paint(command_output_style(), "output").contains("\x1b[38;2;107;114;128m"));
+    assert!(paint(command_style(), "command").contains("\x1b[1m\x1b[38;2;96;165;250m"));
     assert!(paint(tool_style(), "tool").contains("\x1b[1m\x1b[38;2;217;70;239m"));
     assert!(paint(user_style(), "user").contains("\x1b[38;2;34;197;94m"));
 }

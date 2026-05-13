@@ -1,6 +1,6 @@
 use super::*;
 use serde_json::json;
-use spectacular_agent::{provider_messages_from_store, ContextSummary, Store};
+use spectacular_agent::{provider_messages_from_store, CommandStatus, ContextSummary, Store};
 
 /// Verifies that recognized JSONL event deserializes.
 #[test]
@@ -166,6 +166,137 @@ fn structured_tool_events_round_trip_through_jsonl_to_agent_events() {
         .collect::<Vec<_>>();
 
     assert_eq!(round_trip, events);
+}
+
+/// Verifies command lifecycle events round trip through JSONL to agent events.
+#[test]
+fn command_lifecycle_events_round_trip_through_jsonl_to_agent_events() {
+    let events = vec![
+        AgentEvent::command_start(
+            "cmd-1",
+            "slash_command",
+            "/git commit",
+            "Git commit",
+            "/git commit",
+            Some("/repo".to_owned()),
+        ),
+        AgentEvent::command_delta("cmd-1", "status", "staged diff loaded", 1),
+        AgentEvent::command_finished("cmd-1", CommandStatus::Success, "changes committed successfully"),
+    ];
+
+    let lines = events
+        .iter()
+        .map(|event| {
+            serde_json::to_string(
+                &ChatEvent::from_agent_event(event, "2026-04-29T14:01:00Z".to_owned()).unwrap(),
+            )
+            .unwrap()
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        serde_json::from_str::<Value>(&lines[0]).unwrap(),
+        json!({
+            "type": "command_start",
+            "command_id": "cmd-1",
+            "source": "slash_command",
+            "name": "/git commit",
+            "title": "Git commit",
+            "command": "/git commit",
+            "working_directory": "/repo",
+            "created_at": "2026-04-29T14:01:00Z"
+        })
+    );
+    assert_eq!(
+        serde_json::from_str::<Value>(&lines[1]).unwrap(),
+        json!({
+            "type": "command_delta",
+            "command_id": "cmd-1",
+            "channel": "status",
+            "content": "staged diff loaded",
+            "sequence": 1,
+            "created_at": "2026-04-29T14:01:00Z"
+        })
+    );
+    assert_eq!(
+        serde_json::from_str::<Value>(&lines[2]).unwrap(),
+        json!({
+            "type": "command_finished",
+            "command_id": "cmd-1",
+            "status": "success",
+            "summary": "changes committed successfully",
+            "created_at": "2026-04-29T14:01:00Z"
+        })
+    );
+
+    let round_trip = lines
+        .iter()
+        .map(|line| {
+            let value = serde_json::from_str::<Value>(line).unwrap();
+            ChatEvent::from_value(value)
+                .unwrap()
+                .to_agent_event()
+                .unwrap()
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(round_trip, events);
+}
+
+/// Verifies legacy command delta stream fields replay as command channels.
+#[test]
+fn legacy_command_delta_stream_replays_as_channel() {
+    let event = ChatEvent::from_value(json!({
+        "type": "command_delta",
+        "command_id": "cmd-1",
+        "stream": "status",
+        "content": "staged diff loaded",
+        "sequence": 1,
+        "created_at": "2026-04-29T14:01:00Z"
+    }))
+    .unwrap();
+
+    assert_eq!(
+        event.to_agent_event(),
+        Some(AgentEvent::command_delta(
+            "cmd-1",
+            "status",
+            "staged diff loaded",
+            1,
+        ))
+    );
+}
+
+/// Verifies command lifecycle events replay without provider-visible context.
+#[test]
+fn command_lifecycle_events_are_excluded_from_provider_messages() {
+    let store = Store::from(vec![
+        AgentEvent::user_prompt("write a commit"),
+        AgentEvent::command_start(
+            "cmd-1",
+            "slash_command",
+            "/git commit",
+            "Git commit",
+            "/git commit",
+            None,
+        ),
+        AgentEvent::command_delta("cmd-1", "status", "generated commit message: fix: bug", 1),
+        AgentEvent::command_finished("cmd-1", CommandStatus::Success, "changes committed successfully"),
+        AgentEvent::MessageDelta(MessageDelta::assistant("done")),
+    ]);
+
+    let messages = provider_messages_from_store("system", &store);
+    let text = messages
+        .iter()
+        .map(|message| message.content.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    assert!(text.contains("system"));
+    assert!(text.contains("write a commit"));
+    assert!(text.contains("done"));
+    assert!(!text.contains("generated commit message"));
+    assert!(!text.contains("changes committed successfully"));
 }
 
 /// Verifies that legacy tool call content replays as structured agent event.

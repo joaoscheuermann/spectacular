@@ -4,7 +4,9 @@ pub mod git;
 pub mod runtime;
 pub mod session;
 
-use crate::chat::model::{ChatModel, ChatPromptFooterModel, ChatRunRequestModel, HistoryTableModel};
+use crate::chat::model::{
+    ChatModel, ChatPromptFooterModel, ChatRunRequestModel, HistoryTableModel,
+};
 use crate::chat::prompt::{SelectionPrompt, SelectionPromptAnswer, SelectionPromptRequest};
 use crate::chat::renderer::Renderer;
 use crate::chat::runner::ChatTurnRunner;
@@ -93,7 +95,10 @@ pub struct ChatCommandContext<'a> {
 
 impl<'a> ChatCommandContext<'a> {
     /// Creates a command execution context from the active chat services.
-    #[allow(dead_code, reason = "unit tests and embedders use contexts without prompt footer metadata")]
+    #[allow(
+        dead_code,
+        reason = "unit tests and embedders use contexts without prompt footer metadata"
+    )]
     pub fn new(
         model: &'a mut ChatModel,
         renderer: &'a Renderer,

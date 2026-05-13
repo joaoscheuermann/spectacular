@@ -270,7 +270,6 @@ impl SelectionPrompt {
 
         if let Some(footer) = &self.footer {
             lines.push(String::new());
-            lines.push(String::new());
             lines.push(crate::chat::renderer::format_prompt_footer(footer));
         }
 

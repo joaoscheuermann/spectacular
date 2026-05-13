@@ -1,45 +1,32 @@
 ---
 name: coding-conventions
-description: Shared design principles, Nx Python/Rust scaffolding references, and coding rules for Nx monorepos. Load when designing architecture (with architect) or before implementing code (with developer). Covers SRP, OCP, DIP, ISP, KISS, DRY, deep vs shallow modules, reusability practice, @nxlv/python, @monodon/rust, early returns, functional style, explicit dependency injection, and method documentation.
+description: Shared design principles, Nx Python/Rust scaffolding references, and coding rules for Nx monorepos. Defines standards for architecture, SOLID principles, DRY, module depth, early returns, TS/JS functional style, and testing. Use to ensure codebase consistency.
 ---
 
 # Coding conventions
 
-Use this skill as the **single source** for principles and coding rules referenced by the `architect` and `developer` skills.
+Use this skill to ensure code and architectural designs adhere to our Nx monorepo standards. 
 
-## When to load
+## Success criteria
+- **Architecture/Planning**: The proposed design successfully implements SOLID principles, maintains deep modules with simple boundaries, and reuses existing code.
+- **Implementation**: The delivered code respects file size limits (250-500 lines), uses early returns, applies explicit dependency injection, documents methods natively, and places tests in the correct folder structure.
+- **Scaffolding**: New projects correctly implement the `@nxlv/python` or `@monodon/rust` templates and targets.
 
-| Role | What to read |
-|------|----------------|
-| **Architect / planning** | Design principles ([references/srp.md](references/srp.md) through [references/kiss.md](references/kiss.md), [references/dry.md](references/dry.md), [references/module-depth.md](references/module-depth.md)). Open [references/nxlv-python.md](references/nxlv-python.md) or [references/monodon-rust.md](references/monodon-rust.md) when scaffolding new packages or crates. |
-| **Developer / implementation** | Read [references/dry.md](references/dry.md) (includes reusability workflow), [references/module-depth.md](references/module-depth.md) when adding or exposing module boundaries, [references/early-returns.md](references/early-returns.md), [references/functional-programming.md](references/functional-programming.md), [references/dependency-injection.md](references/dependency-injection.md), [references/file-size-limits.md](references/file-size-limits.md), [references/test-location.md](references/test-location.md), [references/method-documentation.md](references/method-documentation.md). Use Nx plugin refs when touching Python or Rust project layout. |
+## Retrieval & Stop Rules
+- Read the specific reference files below to gather context before implementing code or proposing architecture.
+- **Do not read every file.** Use the minimum evidence sufficient to understand the standard, then stop reading.
+- Assume standard industry practices for anything not explicitly covered in these docs. Make another retrieval call only if the missing context would materially change the code or create meaningful risk.
 
 ## Reference index
 
-### Design principles
+### Architecture & Design
+[references/architecture-principles.md](references/architecture-principles.md)
+Contains: SOLID Principles (SRP, OCP, DIP, ISP), KISS, DRY/Reusability, and Deep vs. Shallow Modules.
 
-1. [SRP — Single Responsibility](references/srp.md) — who owns what layer
-2. [OCP — Open/Closed](references/ocp.md) — extend via seams, not rewrites
-3. [DIP — Dependency Inversion](references/dip.md) — dependency direction across stack
-4. [ISP — Interface Segregation](references/isp.md) — small contracts at boundaries
-5. [KISS](references/kiss.md) — prefer simple extensions before new machinery
-6. [DRY + reusability](references/dry.md) — one source of truth; search before adding code
-7. [Deep and shallow modules](references/module-depth.md) — hide meaningful complexity behind simple interfaces
+### Implementation Standards
+[references/implementation-standards.md](references/implementation-standards.md)
+Contains: Invariant Test Locations, File Size Limits, Early Returns, Functional Programming (TS/JS), Dependency Injection, and Method Documentation.
 
-### Nx scaffolding
-
-- [@nxlv/python](references/nxlv-python.md) — uv-based Python projects, targets, `project.json` template
-- [@monodon/rust](references/monodon-rust.md) — Rust crates in Nx, generators, `project.json` template
-
-### Coding rules
-
-- [Early returns & guard clauses](references/early-returns.md)
-- [Functional programming standard (TS/JS-oriented)](references/functional-programming.md)
-- [Dependency injection & explicit parameters](references/dependency-injection.md)
-- [File size limits (250–500 lines)](references/file-size-limits.md)
-- [Test file location (`tests/<name>.<ext>`)](references/test-location.md)
-- [Method & function documentation](references/method-documentation.md)
-
-## Progressive disclosure
-
-Load only the reference files relevant to the current task. Keep principle files small; avoid pasting entire docs into chat when a link path suffices.
+### Nx Scaffolding
+- [Python setup (@nxlv/python)](references/nxlv-python.md) — uv-based projects, `project.json` targets.
+- [Rust setup (@monodon/rust)](references/monodon-rust.md) — Crates in Nx, `project.json` targets.

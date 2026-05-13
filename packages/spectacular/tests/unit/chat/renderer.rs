@@ -148,17 +148,18 @@ fn terminal_glyphs_are_not_mojibake() {
         .all(|frame| !frame.contains('\u{00e2}')));
 }
 
-/// Verifies that command output style is distinct from reasoning and footer style.
+/// Verifies that command output style uses the existing dim gray command color.
 #[test]
-fn command_output_style_is_distinct_from_reasoning_and_footer_style() {
-    let command_style = terminal_style::command_output_style().to_string();
-    let dim_style = terminal_style::dim_style().to_string();
-    let assistant_style = terminal_style::assistant_style().to_string();
-
-    assert_ne!(command_style, dim_style);
-    assert_ne!(command_style, assistant_style);
+fn command_output_style_uses_dim_gray_command_color() {
     assert!(paint(terminal_style::command_output_style(), "output")
         .contains("\x1b[38;2;107;114;128m"));
+}
+
+/// Verifies that command invocation style is bold blue.
+#[test]
+fn command_style_is_bold_blue() {
+    assert!(paint(terminal_style::command_style(), "/git commit")
+        .contains("\x1b[1m\x1b[38;2;96;165;250m"));
 }
 
 /// Verifies that tool call view uses tool owned formatted line.

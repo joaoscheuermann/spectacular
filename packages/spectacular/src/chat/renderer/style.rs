@@ -1,6 +1,7 @@
 pub(super) use crate::terminal_style::{
-    assistant_style, diff_added_style, diff_removed_style, error_style, success_style, warning_style,
+    assistant_style, diff_added_style, diff_removed_style, error_style, success_style,
+    warning_style,
 };
 pub(crate) use crate::terminal_style::{
-    command_output_style, dim_style, paint, selection_style, title_style, user_style,
+    command_output_style, command_style, dim_style, paint, selection_style, title_style, user_style,
 };

@@ -37,6 +37,21 @@ pub async fn render_agent_event(
             renderer.tool_result(tool_call_id, name, content, tools);
             renderer.working();
         }
+        AgentEvent::CommandStart(start) => {
+            renderer.clear_working();
+            renderer.command_start(&start.title, &start.command);
+            renderer.working();
+        }
+        AgentEvent::CommandDelta(delta) => {
+            renderer.clear_working();
+            renderer.command_delta(&delta.content);
+            renderer.working();
+        }
+        AgentEvent::CommandFinished(finished) => {
+            renderer.clear_working();
+            renderer.command_finished(finished.status, &finished.summary);
+            renderer.working();
+        }
         AgentEvent::ValidationError { message } | AgentEvent::Error { message } => {
             renderer.clear_working();
             renderer.error(message);
