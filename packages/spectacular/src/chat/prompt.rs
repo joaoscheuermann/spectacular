@@ -3,10 +3,10 @@ use crate::chat::commands::{
 };
 use crate::chat::model::{ChatModel, ChatPromptFooterModel};
 use crate::chat::paste_burst::{CharDecision, FlushResult, PasteBurst};
-use crate::chat::renderer::{dim_style, paint, selection_style, user_style, Renderer};
+use crate::chat::renderer::{dim_style, paint, selection_style, title_style, user_style, Renderer};
 use crate::chat::ChatError;
 use anstyle::RgbColor;
-use crossterm::cursor::{MoveDown, MoveToColumn, MoveUp};
+use crossterm::cursor::{Hide, MoveDown, MoveToColumn, MoveUp, Show};
 use crossterm::event::{
     self, DisableBracketedPaste, EnableBracketedPaste, Event, KeyCode, KeyEvent, KeyEventKind,
     KeyModifiers,
@@ -34,6 +34,7 @@ include!("prompt/layout.rs");
 include!("prompt/completion.rs");
 include!("prompt/completion_fields.rs");
 include!("prompt/navigation.rs");
+include!("prompt/selection.rs");
 
 #[cfg(test)]
 mod tests {
