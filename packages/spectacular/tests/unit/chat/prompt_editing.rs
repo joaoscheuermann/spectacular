@@ -265,6 +265,7 @@
             directory: std::path::PathBuf::from("workspace"),
             model: "test/model".to_owned(),
             reasoning: spectacular_config::ReasoningLevel::Medium,
+            token_usage: None,
         };
         let mut editor = PromptEditor::new(&renderer, &registry, &completions).with_footer(footer);
         editor.state = state_with("hello");

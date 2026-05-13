@@ -46,7 +46,7 @@ fn final_assistant_response(events: &[AgentEvent]) -> String {
 }
 
 #[test]
-/// Verifies a simple provider run stores prompt, delta, usage, and finish events in order.
+/// Verifies a simple provider run stores prompt, context usage, delta, usage, and finish events.
 fn no_tool_run_stores_events_in_order() {
     let mut agent = Agent::new(FakeProvider::text("hello"));
     agent.enqueue_prompt("prompt");
@@ -54,9 +54,39 @@ fn no_tool_run_stores_events_in_order() {
     futures::executor::block_on(agent.run_next()).unwrap();
 
     assert!(matches!(agent.events()[0], AgentEvent::UserPrompt { .. }));
-    assert!(matches!(agent.events()[1], AgentEvent::MessageDelta(_)));
-    assert!(matches!(agent.events()[2], AgentEvent::UsageMetadata(_)));
-    assert!(matches!(agent.events()[3], AgentEvent::Finished { .. }));
+    assert!(matches!(
+        agent.events()[1],
+        AgentEvent::ContextTokenUsage(_)
+    ));
+    assert!(matches!(agent.events()[2], AgentEvent::MessageDelta(_)));
+    assert!(matches!(agent.events()[3], AgentEvent::UsageMetadata(_)));
+    assert!(matches!(agent.events()[4], AgentEvent::Finished { .. }));
+}
+
+#[test]
+/// Verifies context token usage records the configured model context window.
+fn run_records_context_token_usage_with_model_window() {
+    let mut agent = Agent::with_config(
+        FakeProvider::text("hello"),
+        AgentConfig {
+            context_policy: spectacular_agent::ContextPolicy {
+                model_context_window_tokens: Some(240_000),
+                ..spectacular_agent::ContextPolicy::default()
+            },
+            ..AgentConfig::default()
+        },
+    );
+    agent.enqueue_prompt("prompt");
+
+    futures::executor::block_on(agent.run_next()).unwrap();
+
+    assert!(agent.events().iter().any(|event| {
+        matches!(
+            event,
+            AgentEvent::ContextTokenUsage(usage)
+                if usage.input_tokens > 0 && usage.context_window_tokens == Some(240_000)
+        )
+    }));
 }
 
 #[test]

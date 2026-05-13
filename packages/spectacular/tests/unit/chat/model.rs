@@ -72,11 +72,51 @@
         let runtime = test_runtime();
         let directory = PathBuf::from("workspace");
 
-        let footer = ChatPromptFooterModel::from_runtime(&directory, &runtime);
+        let footer = ChatPromptFooterModel::from_runtime_and_usage(&directory, &runtime, None);
 
         assert_eq!(footer.directory, directory);
         assert_eq!(footer.model, "test/model");
         assert_eq!(footer.reasoning, ReasoningLevel::Medium);
+    }
+
+    /// Verifies prompt footer starts at zero usage when the runtime context window is known.
+    #[test]
+    fn chat_prompt_footer_model_uses_runtime_context_window_default_usage() {
+        let mut runtime = test_runtime();
+        runtime.context_window_tokens = Some(240_000);
+        let directory = PathBuf::from("workspace");
+
+        let footer = ChatPromptFooterModel::from_runtime_and_usage(&directory, &runtime, None);
+
+        assert_eq!(
+            footer.token_usage,
+            Some(ContextTokenUsage {
+                input_tokens: 0,
+                context_window_tokens: Some(240_000),
+            })
+        );
+    }
+
+    /// Verifies chat model stores context usage and clears it after session/runtime changes.
+    #[test]
+    fn chat_model_tracks_context_token_usage_until_session_or_runtime_changes() {
+        let session = crate::chat::session::SessionManager::new_in(temp_session_dir("usage"))
+            .expect("session manager should be created");
+        let mut model = ChatModel::new(session, test_runtime());
+        let usage = ContextTokenUsage {
+            input_tokens: 100,
+            context_window_tokens: Some(240_000),
+        };
+
+        model.set_context_token_usage(usage);
+        assert_eq!(model.context_token_usage(), Some(usage));
+
+        model.start_new_session().unwrap();
+        assert_eq!(model.context_token_usage(), None);
+
+        model.set_context_token_usage(usage);
+        model.replace_runtime(test_runtime());
+        assert_eq!(model.context_token_usage(), None);
     }
 
     /// Verifies that provider notice propagates config load error.

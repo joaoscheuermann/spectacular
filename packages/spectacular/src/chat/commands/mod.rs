@@ -195,7 +195,7 @@ impl<'a> ChatCommandContext<'a> {
         let result = loop {
             tokio::select! {
                 _ = interval.tick() => {
-                    self.renderer.working_frame(frame);
+                    self.renderer.working_frame(frame, None);
                     frame = frame.wrapping_add(1);
                 }
                 result = &mut future => {

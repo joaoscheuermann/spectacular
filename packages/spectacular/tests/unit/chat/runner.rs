@@ -2,7 +2,7 @@
     use crate::chat::title::title_generation_agent;
     use spectacular_config::ReasoningLevel;
     use spectacular_llms::{
-        MessageDelta, OpenRouterProvider, ReasoningDelta, OPENROUTER_PROVIDER_ID,
+        MessageDelta, OpenRouterProvider, ReasoningDelta, UsageMetadata, OPENROUTER_PROVIDER_ID,
     };
     use spectacular_tools::{
         EDIT_TOOL_NAME, FIND_TOOL_NAME, GREP_TOOL_NAME, TERMINAL_TOOL_NAME, TREE_TOOL_NAME,
@@ -186,4 +186,100 @@
         });
 
         assert!(!should_append_without_render(&event));
+    }
+
+    /// Verifies approximate turn tokens use the shared chars-over-four heuristic.
+    #[test]
+    fn approximate_turn_tokens_ceil_visible_chars_over_four() {
+        let mut counter = AssistantTurnTokenCounter::default();
+
+        counter.add_visible_delta("hello");
+
+        assert_eq!(counter.current_tokens(), Some(2));
+    }
+
+    /// Verifies reasoning and tool-call payloads contribute to approximate turn tokens.
+    #[test]
+    fn generated_token_events_include_reasoning_and_tool_calls() {
+        let mut counter = AssistantTurnTokenCounter::default();
+
+        record_generated_tokens(
+            &AgentEvent::ReasoningDelta(ReasoningDelta {
+                content: "thinking".to_owned(),
+                metadata: None,
+            }),
+            &mut counter,
+        );
+        record_generated_tokens(
+            &AgentEvent::assistant_tool_call_request("call-1", "read", "{\"path\":\"a\"}"),
+            &mut counter,
+        );
+
+        assert_eq!(counter.current_tokens(), Some(6));
+    }
+
+    /// Verifies provider total token usage replaces approximate spinner tokens.
+    #[test]
+    fn provider_usage_prefers_total_tokens() {
+        let mut counter = AssistantTurnTokenCounter::default();
+        counter.add_visible_delta("hello");
+
+        counter.reconcile_usage(&UsageMetadata {
+            input_tokens: Some(10),
+            output_tokens: Some(99),
+            total_tokens: Some(109),
+        });
+
+        assert_eq!(counter.current_tokens(), Some(109));
+    }
+
+    /// Verifies provider input and output tokens are added when total usage is absent.
+    #[test]
+    fn provider_usage_adds_input_and_output_tokens_without_total() {
+        let mut counter = AssistantTurnTokenCounter::default();
+        counter.add_visible_delta("hello");
+
+        counter.reconcile_usage(&UsageMetadata {
+            input_tokens: Some(10),
+            output_tokens: Some(99),
+            total_tokens: None,
+        });
+
+        assert_eq!(counter.current_tokens(), Some(109));
+    }
+
+    /// Verifies only nonblank assistant deltas count toward spinner turn tokens.
+    #[test]
+    fn visible_assistant_delta_requires_assistant_role_and_nonblank_content() {
+        assert!(is_visible_assistant_delta(
+            spectacular_llms::ProviderMessageRole::Assistant,
+            "answer"
+        ));
+        assert!(!is_visible_assistant_delta(
+            spectacular_llms::ProviderMessageRole::Assistant,
+            " \n\t"
+        ));
+        assert!(!is_visible_assistant_delta(
+            spectacular_llms::ProviderMessageRole::User,
+            "answer"
+        ));
+    }
+
+    /// Verifies non-terminal rendered events repaint working tokens immediately.
+    #[test]
+    fn working_tokens_refresh_for_nonterminal_rendered_events() {
+        let event = AgentEvent::assistant_tool_call_request("call-1", "read", "{}");
+
+        assert!(should_refresh_working_tokens(true, false, &event));
+    }
+
+    /// Verifies terminal states do not repaint working token counts.
+    #[test]
+    fn working_tokens_do_not_refresh_for_terminal_events() {
+        let tool_event = AgentEvent::assistant_tool_call_request("call-1", "read", "{}");
+        let finished_event = AgentEvent::finished(spectacular_llms::ProviderFinished::stopped());
+
+        assert!(!should_refresh_working_tokens(false, false, &tool_event));
+        assert!(!should_refresh_working_tokens(true, true, &tool_event));
+        assert!(!should_refresh_working_tokens(true, false, &finished_event));
     }

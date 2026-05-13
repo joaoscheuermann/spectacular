@@ -5,7 +5,9 @@ mod json_preview;
 mod reasoning;
 mod style;
 mod terminal_output;
+mod token_usage;
 mod tool;
+mod working_line;
 #[cfg(test)]
 mod tests {
     include!(concat!(
@@ -28,7 +30,7 @@ use spectacular_agent::ToolStorage;
 use std::collections::BTreeMap;
 use std::io::{self, Write};
 use std::path::Path;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::Mutex;
 use std::time::Duration;
 use style::{assistant_style, error_style, success_style, warning_style};
 #[cfg(test)]
@@ -37,6 +39,7 @@ pub(crate) use style::{dim_style, paint, selection_style, title_style, user_styl
 pub(crate) use terminal_output::{format_prompt_footer, has_visible_assistant_text};
 use terminal_output::{format_tool_call_view, print_tool_output};
 pub use tool::{ToolCallView, ToolResultView};
+use working_line::WorkingLineState;
 
 use super::RuntimeSelection;
 
@@ -54,13 +57,6 @@ const WORKING_FRAMES: &[&str] = &["⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧
 pub struct Renderer {
     working: Mutex<WorkingLineState>,
     tool_call_arguments: Mutex<BTreeMap<String, Value>>,
-}
-
-#[derive(Default)]
-struct WorkingLineState {
-    active: bool,
-    frame: usize,
-    pause_depth: usize,
 }
 
 impl Renderer {
@@ -96,34 +92,9 @@ impl Renderer {
         print!("{}", paint(user_style(), "> "));
     }
 
-    /// Starts the default working indicator frame for an in-flight model response.
-    pub fn working(&self) {
-        self.working_frame(0);
-    }
-
-    /// Renders or records the current working indicator animation frame.
-    pub fn working_frame(&self, frame: usize) {
-        let should_render = {
-            let mut state = self.working_state();
-            state.active = true;
-            state.frame = frame;
-            state.pause_depth == 0
-        };
-
-        if should_render {
-            Self::write_working_frame(frame);
-        }
-    }
-
-    /// Clears the current working indicator and marks it inactive.
-    pub fn clear_working(&self) {
-        self.reset_working();
-        Self::clear_working_line();
-    }
-
-    /// Streams assistant text with typewriter pacing while pausing the working indicator.
+    /// Streams assistant text with typewriter pacing while the runner owns working-line pauses.
     pub async fn assistant_delta(&self, content: &str) -> Result<(), ChatError> {
-        self.stream_styled_delta(content, assistant_style()).await
+        self.write_styled_delta(content, assistant_style()).await
     }
 
     /// Renders a complete assistant response block when replaying persisted records.
@@ -171,9 +142,9 @@ impl Renderer {
         });
     }
 
-    /// Streams visible model reasoning with typewriter pacing.
+    /// Streams visible model reasoning with typewriter pacing while preserving cursor ownership.
     pub async fn reasoning_delta(&self, content: &str) -> Result<(), ChatError> {
-        self.stream_styled_delta(content, dim_style()).await
+        self.write_styled_delta(content, dim_style()).await
     }
 
     /// Renders a complete reasoning block when replaying persisted records.
@@ -220,6 +191,13 @@ impl Renderer {
     pub fn dim(&self, message: &str) {
         self.with_interrupted_working_line(|| {
             println!("{}", paint(dim_style(), message));
+        });
+    }
+
+    /// Renders streamed-response spacing while preserving any active working indicator.
+    pub fn response_spacer(&self) {
+        self.with_interrupted_working_line(|| {
+            println!("\n");
         });
     }
 
@@ -343,31 +321,22 @@ impl Renderer {
         buffer.clear();
     }
 
-    /// Streams styled text with typewriter pacing while pausing the working indicator.
-    async fn stream_styled_delta(&self, content: &str, style: Style) -> Result<(), ChatError> {
-        let paused = self.pause_working();
-        let result = async {
-            let mut characters = content.chars().peekable();
-            while characters.peek().is_some() {
-                let chunk = characters
-                    .by_ref()
-                    .take(TYPEWRITER_CHARS_PER_TICK)
-                    .collect::<String>();
-                print!("{}", paint(style, chunk));
-                io::stdout().flush().map_err(ChatError::Io)?;
-                if characters.peek().is_some() {
-                    tokio::time::sleep(TYPEWRITER_TICK_INTERVAL).await;
-                }
+    /// Writes styled stream chunks while caller-controlled pauses protect response text.
+    async fn write_styled_delta(&self, content: &str, style: Style) -> Result<(), ChatError> {
+        let mut characters = content.chars().peekable();
+        while characters.peek().is_some() {
+            let chunk = characters
+                .by_ref()
+                .take(TYPEWRITER_CHARS_PER_TICK)
+                .collect::<String>();
+            print!("{}", paint(style, chunk));
+            io::stdout().flush().map_err(ChatError::Io)?;
+            if characters.peek().is_some() {
+                tokio::time::sleep(TYPEWRITER_TICK_INTERVAL).await;
             }
-
-            Ok(())
-        }
-        .await;
-        if paused {
-            self.resume_working();
         }
 
-        result
+        Ok(())
     }
 
     /// Renders a dim notice line while preserving working indicator state.
@@ -376,13 +345,6 @@ impl Renderer {
         self.with_interrupted_working_line(|| {
             println!("{}", paint(dim_style(), content));
         });
-    }
-
-    /// Locks the mutable working-line state, recovering poisoned locks for terminal output.
-    fn working_state(&self) -> MutexGuard<'_, WorkingLineState> {
-        self.working
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     /// Caches parsed tool-call arguments so result renderers can include input context.
@@ -403,88 +365,5 @@ impl Renderer {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .remove(tool_call_id)
-    }
-
-    /// Marks the working indicator inactive and unpaused.
-    fn reset_working(&self) {
-        let mut state = self.working_state();
-        state.active = false;
-        state.pause_depth = 0;
-    }
-
-    /// Returns the current visible working frame when it can be rendered.
-    fn renderable_working_frame(&self) -> Option<usize> {
-        let state = self.working_state();
-        if state.active && state.pause_depth == 0 {
-            return Some(state.frame);
-        }
-
-        None
-    }
-
-    /// Temporarily clears the working line, runs a write, and restores the frame if still active.
-    fn with_interrupted_working_line(&self, write: impl FnOnce()) {
-        let frame = self.renderable_working_frame();
-        if frame.is_some() {
-            Self::clear_working_line();
-        }
-
-        write();
-
-        if let Some(frame) = frame {
-            if self.renderable_working_frame().is_some() {
-                Self::write_working_frame(frame);
-            }
-        }
-    }
-
-    /// Clears the currently visible working line without changing active state.
-    fn interrupt_working_line(&self) {
-        if self.renderable_working_frame().is_some() {
-            Self::clear_working_line();
-        }
-    }
-
-    /// Pauses working indicator rendering while streamed output writes directly to stdout.
-    fn pause_working(&self) -> bool {
-        let (did_pause, should_clear) = {
-            let mut state = self.working_state();
-            let should_clear = state.active && state.pause_depth == 0;
-            let did_pause = state.active;
-            if state.active {
-                state.pause_depth += 1;
-            }
-            (did_pause, should_clear)
-        };
-
-        if should_clear {
-            Self::clear_working_line();
-        }
-
-        did_pause
-    }
-
-    /// Decrements the working pause depth so future frames can render when unpaused.
-    fn resume_working(&self) {
-        let mut state = self.working_state();
-        if state.pause_depth > 0 {
-            state.pause_depth -= 1;
-        }
-    }
-
-    /// Writes one spinner frame in-place to the terminal working line.
-    fn write_working_frame(frame: usize) {
-        let frame = WORKING_FRAMES[frame % WORKING_FRAMES.len()];
-        print!(
-            "\r\x1b[2K{}",
-            paint(dim_style(), format!("{frame} working (Ctrl+C to stop)"))
-        );
-        let _ = io::stdout().flush();
-    }
-
-    /// Clears the terminal line used by the working indicator.
-    fn clear_working_line() {
-        print!("\r\x1b[2K");
-        let _ = io::stdout().flush();
     }
 }

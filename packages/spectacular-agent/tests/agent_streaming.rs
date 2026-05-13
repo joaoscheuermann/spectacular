@@ -39,13 +39,7 @@ async fn cancelling_active_run_keeps_partial_events_and_drops_waiters() {
         queued.await.unwrap(),
         Err(AgentError::CancellationError)
     ));
-    assert_eq!(
-        agent.events(),
-        vec![
-            AgentEvent::user_prompt("active"),
-            AgentEvent::cancelled("active run cancelled")
-        ]
-    );
+    assert_cancelled_run_events(&agent.events(), "active run cancelled");
 }
 
 #[tokio::test]
@@ -71,13 +65,7 @@ async fn hard_aborting_active_run_drops_non_cooperative_provider_work() {
 
     assert!(matches!(result, Err(AgentError::CancellationError)));
     assert!(start.elapsed() < Duration::from_millis(500));
-    assert_eq!(
-        agent.events(),
-        vec![
-            AgentEvent::user_prompt("active"),
-            AgentEvent::cancelled("active run hard-aborted")
-        ]
-    );
+    assert_cancelled_run_events(&agent.events(), "active run hard-aborted");
 }
 
 #[tokio::test]
@@ -131,13 +119,7 @@ async fn dropping_stream_cancels_active_run_and_pending_queue() {
         queued.await.unwrap(),
         Err(AgentError::CancellationError)
     ));
-    assert_eq!(
-        agent.events(),
-        vec![
-            AgentEvent::user_prompt("active"),
-            AgentEvent::cancelled("active run hard-aborted")
-        ]
-    );
+    assert_cancelled_run_events(&agent.events(), "active run hard-aborted");
 }
 
 #[tokio::test]
@@ -163,13 +145,7 @@ async fn hard_aborting_stream_drops_non_cooperative_provider_work() {
     }
 
     assert!(start.elapsed() < Duration::from_millis(500));
-    assert_eq!(
-        agent.events(),
-        vec![
-            AgentEvent::user_prompt("active"),
-            AgentEvent::cancelled("active run hard-aborted")
-        ]
-    );
+    assert_cancelled_run_events(&agent.events(), "active run hard-aborted");
 }
 
 #[tokio::test]
@@ -195,13 +171,7 @@ async fn dropping_queued_stream_cancels_current_active_run() {
         active.await.unwrap(),
         Err(AgentError::CancellationError)
     ));
-    assert_eq!(
-        agent.events(),
-        vec![
-            AgentEvent::user_prompt("active"),
-            AgentEvent::cancelled("active run hard-aborted")
-        ]
-    );
+    assert_cancelled_run_events(&agent.events(), "active run hard-aborted");
 }
 
 #[tokio::test]
@@ -225,6 +195,21 @@ async fn dropping_completed_stream_does_not_reject_next_run() {
     assert!(agent.events().iter().any(|event| {
         matches!(event, AgentEvent::UserPrompt { content } if content == "second")
     }));
+}
+
+/// Asserts cancellation tests keep the expected runtime-only context usage event.
+fn assert_cancelled_run_events(events: &[AgentEvent], expected_reason: &str) {
+    assert!(matches!(
+        events,
+        [
+            AgentEvent::UserPrompt { content },
+            AgentEvent::ContextTokenUsage(usage),
+            AgentEvent::Cancelled { reason },
+        ] if content == "active"
+            && usage.input_tokens > 0
+            && usage.context_window_tokens.is_none()
+            && reason == expected_reason
+    ));
 }
 
 #[derive(Clone, Debug)]

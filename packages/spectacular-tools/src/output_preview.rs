@@ -37,7 +37,10 @@ pub(crate) fn preview_lines_with_total(preview: PreviewLines) -> String {
         .take(DEFAULT_PREVIEW_LINE_LIMIT)
         .collect::<Vec<_>>();
     if preview.total_lines > shown_count {
-        output.push(format!("[truncated {} lines]", preview.total_lines - shown_count));
+        output.push(format!(
+            "[truncated {} lines]",
+            preview.total_lines - shown_count
+        ));
     }
 
     output.join("\n")
