@@ -2,7 +2,7 @@ use super::RuntimeSelection;
 use crate::chat::commands::CompletionEnvironment;
 use crate::chat::session::{ChatRecord, HistoryQuery, HistorySummary, SessionManager};
 use crate::chat::ChatError;
-use spectacular_agent::AgentEvent;
+use spectacular_agent::{AgentEvent, ContextTokenUsage};
 use spectacular_config::{
     ConfigError, ModelCache, ModelConfig, ProviderAuthMode, ProviderConfig, SpectacularConfig,
     TaskAssignments, TaskModelSlot,
@@ -10,6 +10,7 @@ use spectacular_config::{
 use spectacular_llms::LlmDebugLogger;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard};
 
 /// State model for chat sessions, runtime selection, and config-backed commands.
 pub struct ChatModel {
@@ -17,6 +18,7 @@ pub struct ChatModel {
     runtime: RuntimeSelection,
     debug_logger: LlmDebugLogger,
     config_io: ChatConfigIo,
+    context_token_usage: Mutex<Option<ContextTokenUsage>>,
 }
 
 /// Injected config I/O operations used by chat commands that mutate persisted config.
@@ -97,12 +99,14 @@ impl ChatModel {
             runtime,
             debug_logger,
             config_io,
+            context_token_usage: Mutex::new(None),
         }
     }
 
     /// Starts a new persisted chat session using the current runtime selection.
     pub fn start_new_session(&mut self) -> Result<SessionStartedModel, ChatError> {
         self.session.create(self.runtime.clone())?;
+        self.clear_context_token_usage();
         Ok(SessionStartedModel {
             id: self.session.current_id().to_owned(),
         })
@@ -195,6 +199,21 @@ impl ChatModel {
         self.session.append_agent_event(event)
     }
 
+    /// Stores the latest provider-context token usage for prompt footer rendering.
+    pub fn set_context_token_usage(&self, usage: ContextTokenUsage) {
+        *self.context_token_usage_state() = Some(usage);
+    }
+
+    /// Returns the latest provider-context token usage known to the chat model.
+    pub fn context_token_usage(&self) -> Option<ContextTokenUsage> {
+        *self.context_token_usage_state()
+    }
+
+    /// Clears the latest provider-context token usage from prompt footer state.
+    fn clear_context_token_usage(&self) {
+        *self.context_token_usage_state() = None;
+    }
+
     /// Appends runtime metadata defaults to the active session transcript.
     pub fn append_runtime_defaults(&self, source: &str) -> Result<(), ChatError> {
         self.session.append_runtime_defaults(&self.runtime, source)
@@ -280,6 +299,14 @@ impl ChatModel {
     /// Replaces the active runtime after a config-backed command changes it.
     pub(crate) fn replace_runtime(&mut self, runtime: RuntimeSelection) {
         self.runtime = runtime;
+        self.clear_context_token_usage();
+    }
+
+    /// Locks context token usage state, recovering from poisoned locks for UI continuity.
+    fn context_token_usage_state(&self) -> MutexGuard<'_, Option<ContextTokenUsage>> {
+        self.context_token_usage
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
 
@@ -328,15 +355,28 @@ pub struct ChatPromptFooterModel {
     pub directory: PathBuf,
     pub model: String,
     pub reasoning: spectacular_config::ReasoningLevel,
+    pub token_usage: Option<ContextTokenUsage>,
 }
 
 impl ChatPromptFooterModel {
-    /// Builds prompt footer data from the active runtime and injected workspace root.
-    pub fn from_runtime(directory: &Path, runtime: &RuntimeSelection) -> Self {
+    /// Builds prompt footer data with optional latest context token usage.
+    pub fn from_runtime_and_usage(
+        directory: &Path,
+        runtime: &RuntimeSelection,
+        token_usage: Option<ContextTokenUsage>,
+    ) -> Self {
         Self {
             directory: directory.to_path_buf(),
             model: runtime.model.clone(),
             reasoning: runtime.reasoning,
+            token_usage: token_usage.or_else(|| {
+                runtime
+                    .context_window_tokens
+                    .map(|context_window_tokens| ContextTokenUsage {
+                        input_tokens: 0,
+                        context_window_tokens: Some(context_window_tokens as u64),
+                    })
+            }),
         }
     }
 }

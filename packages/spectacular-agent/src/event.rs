@@ -1,3 +1,4 @@
+use crate::usage::ContextTokenUsage;
 use spectacular_llms::{
     FinishReason, MessageDelta, ReasoningDelta, ReasoningMetadata, UsageMetadata,
 };
@@ -12,6 +13,7 @@ pub enum AgentEvent {
     MessageDelta(MessageDelta),
     ReasoningDelta(ReasoningDelta),
     UsageMetadata(UsageMetadata),
+    ContextTokenUsage(ContextTokenUsage),
     ReasoningMetadata(ReasoningMetadata),
     AssistantToolCallRequest {
         tool_call_id: String,
@@ -159,6 +161,11 @@ impl Display for AgentEvent {
                 formatter,
                 "UsageMetadata(input={:?}, output={:?}, total={:?})",
                 usage.input_tokens, usage.output_tokens, usage.total_tokens
+            ),
+            AgentEvent::ContextTokenUsage(usage) => write!(
+                formatter,
+                "ContextTokenUsage(input={}, window={:?})",
+                usage.input_tokens, usage.context_window_tokens
             ),
             AgentEvent::ReasoningMetadata(metadata) => write!(
                 formatter,

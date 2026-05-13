@@ -181,7 +181,9 @@ impl ChatEvent {
                 estimated_tokens: summary.estimated_tokens,
                 created_at,
             }),
-            AgentEvent::ReasoningMetadata(_) | AgentEvent::Internal { .. } => None,
+            AgentEvent::ReasoningMetadata(_)
+            | AgentEvent::ContextTokenUsage(_)
+            | AgentEvent::Internal { .. } => None,
             _ => None,
         }
     }

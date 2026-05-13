@@ -35,6 +35,12 @@ fn provider_context_includes_only_model_relevant_roles() {
         effort: Some("low".to_owned()),
         summary: Some("private summary".to_owned()),
     }));
+    store.append(AgentEvent::ContextTokenUsage(
+        crate::ContextTokenUsage {
+            input_tokens: 10,
+            context_window_tokens: Some(100),
+        },
+    ));
     store.append(AgentEvent::validation_error("invalid json"));
     store.append(AgentEvent::error("provider failed"));
     store.append(AgentEvent::cancelled("cancelled"));

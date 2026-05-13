@@ -15,14 +15,18 @@ use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::time::MissedTickBehavior;
 
 mod event_rendering;
 mod render_state;
+mod token_usage;
 
 pub use event_rendering::render_agent_event;
 use render_state::{AssistantResponseRenderState, ReasoningResponseRenderState};
+#[cfg(test)]
+use token_usage::is_visible_assistant_delta;
+use token_usage::{record_generated_tokens, AssistantTurnTokenCounter};
 
 pub type ChatTurnFuture<'a> = Pin<Box<dyn Future<Output = Result<(), ChatError>> + Send + 'a>>;
 
@@ -130,17 +134,20 @@ impl<'a> ChatRunner<'a> {
         let mut title_spawned = self.model.session_manager().has_title()?;
         let mut spinner_visible = true;
         let mut spinner_frame = 0usize;
+        let mut turn_token_counter = AssistantTurnTokenCounter::for_model(&request.runtime.model);
         let mut is_streaming = false;
         let mut spinner = tokio::time::interval(Duration::from_millis(90));
         let mut skip_retry_user = request.retry_existing_prompt;
+        let started_at = Instant::now();
         spinner.set_missed_tick_behavior(MissedTickBehavior::Delay);
         self.renderer.working();
 
         loop {
             tokio::select! {
-                _ = spinner.tick(), if spinner_visible && !is_streaming => {
+                _ = spinner.tick(), if spinner_visible => {
                     spinner_frame = spinner_frame.wrapping_add(1);
-                    self.renderer.working_frame(spinner_frame);
+                    self.renderer
+                        .working_frame(spinner_frame, turn_token_counter.current_tokens());
                 }
                 _ = tokio::signal::ctrl_c() => {
                     stream.cancel();
@@ -156,15 +163,32 @@ impl<'a> ChatRunner<'a> {
                         self.model.append_agent_event(&event)?;
                         continue;
                     }
+                    if let AgentEvent::ContextTokenUsage(usage) = event {
+                        self.model.set_context_token_usage(usage);
+                        continue;
+                    }
+                    record_generated_tokens(&event, &mut turn_token_counter);
+                    if let AgentEvent::UsageMetadata(_) = &event {
+                        if spinner_visible {
+                            self.renderer.working_frame(
+                                spinner_frame,
+                                turn_token_counter.current_tokens(),
+                            );
+                        }
+                    }
 
                     if let AgentEvent::MessageDelta(delta) = &event {
                         if delta.role == ProviderMessageRole::Assistant {
                             if reasoning_output.close_visible_response() {
-                                println!("\n");
+                                self.renderer.response_spacer();
+                                if is_streaming {
+                                    self.renderer.resume_working_line();
+                                    is_streaming = false;
+                                }
                             }
                             if let Some(render) = assistant_output.delta(&delta.content) {
                                 if render.started && !is_streaming {
-                                    self.renderer.clear_working();
+                                    self.renderer.pause_working_line();
                                     is_streaming = true;
                                 }
                                 self.renderer.assistant_delta(&render.content).await?;
@@ -187,12 +211,22 @@ impl<'a> ChatRunner<'a> {
                     }
 
                     if let AgentEvent::ReasoningDelta(delta) = &event {
+                        if spinner_visible {
+                            self.renderer.working_frame(
+                                spinner_frame,
+                                turn_token_counter.current_tokens(),
+                            );
+                        }
                         if assistant_output.close_visible_response() {
-                            println!("\n");
+                            self.renderer.response_spacer();
+                            if is_streaming {
+                                self.renderer.resume_working_line();
+                                is_streaming = false;
+                            }
                         }
                         if let Some(render) = reasoning_output.delta(&delta.content) {
                             if render.started && !is_streaming {
-                                self.renderer.clear_working();
+                                self.renderer.pause_working_line();
                                 is_streaming = true;
                             }
                             self.renderer.reasoning_delta(&render.content).await?;
@@ -202,19 +236,25 @@ impl<'a> ChatRunner<'a> {
                     }
 
                     if assistant_output.close_visible_response() {
-                        println!("\n");
+                        self.renderer.response_spacer();
                     }
                     if reasoning_output.close_visible_response() {
-                        println!("\n");
+                        self.renderer.response_spacer();
                     }
                     if is_streaming {
+                        self.renderer.resume_working_line();
                         is_streaming = false;
                     }
+                    let refresh_after_render = should_refresh_working_tokens(spinner_visible, is_streaming, &event);
                     render_agent_event(self.renderer, &self.tools, &event).await?;
+                    if refresh_after_render {
+                        self.renderer
+                            .working_frame(spinner_frame, turn_token_counter.current_tokens());
+                    }
                     self.model.append_agent_event(&event)?;
 
                     if is_terminal_agent_event(&event) {
-                        if spinner_visible {
+                        if spinner_visible && !matches!(event, AgentEvent::Finished { .. }) {
                             self.renderer.clear_working();
                             spinner_visible = false;
                         }
@@ -224,14 +264,22 @@ impl<'a> ChatRunner<'a> {
             }
         }
 
+        let should_render_worked = spinner_visible;
         if spinner_visible {
             self.renderer.clear_working();
         }
         if assistant_output.close_visible_response() {
-            println!("\n");
+            self.renderer.response_spacer();
         }
         if reasoning_output.close_visible_response() {
-            println!("\n");
+            self.renderer.response_spacer();
+        }
+        if is_streaming {
+            self.renderer.resume_working_line();
+        }
+        if should_render_worked {
+            self.renderer
+                .worked(started_at.elapsed(), turn_token_counter.current_tokens());
         }
 
         Ok(())
@@ -258,20 +306,17 @@ where
 {
     let reasoning_effort = runtime_reasoning_effort(runtime.reasoning);
     let context_window_tokens = runtime_context_window_tokens(&provider, runtime);
-    Agent::with_config_and_store(
-        provider,
-        AgentConfig {
-            model: Some(runtime.model.clone()),
-            require_usage_metadata: false,
-            include_reasoning: reasoning_effort.is_some(),
-            reasoning_effort,
-            system_prompt: CODING_AGENT_SYSTEM_PROMPT.to_string(),
-            context_policy: context_policy_for_runtime(runtime, context_window_tokens),
-            ..AgentConfig::default()
-        },
-        store,
-    )
-    .with_tools(tools)
+    let config = AgentConfig {
+        model: Some(runtime.model.clone()),
+        require_usage_metadata: false,
+        include_reasoning: reasoning_effort.is_some(),
+        reasoning_effort,
+        system_prompt: CODING_AGENT_SYSTEM_PROMPT.to_string(),
+        context_policy: context_policy_for_runtime(runtime, context_window_tokens),
+        ..AgentConfig::default()
+    };
+
+    Agent::with_config_and_store(provider, config, store).with_tools(tools)
 }
 
 /// Resolves the context window from cached runtime metadata before consulting the provider.
@@ -331,6 +376,15 @@ fn should_append_without_render(event: &AgentEvent) -> bool {
 /// Returns whether enough assistant text exists to launch title generation once.
 fn should_spawn_title_task(title_spawned: bool, title_text: &str) -> bool {
     !title_spawned && !title_text.trim().is_empty()
+}
+
+/// Returns whether the runner should repaint the working line with current turn tokens.
+fn should_refresh_working_tokens(
+    spinner_visible: bool,
+    is_streaming: bool,
+    event: &AgentEvent,
+) -> bool {
+    spinner_visible && !is_streaming && !is_terminal_agent_event(event)
 }
 
 /// Returns whether an event ends the active agent stream for the current prompt.
