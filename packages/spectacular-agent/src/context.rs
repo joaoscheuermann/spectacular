@@ -98,6 +98,9 @@ fn append_transcript_messages(messages: &mut Vec<ProviderMessage>, events: &[Age
             | AgentEvent::UsageMetadata(_)
             | AgentEvent::ContextTokenUsage(_)
             | AgentEvent::ReasoningMetadata(_)
+            | AgentEvent::CommandStart(_)
+            | AgentEvent::CommandDelta(_)
+            | AgentEvent::CommandFinished(_)
             | AgentEvent::ValidationError { .. }
             | AgentEvent::Error { .. }
             | AgentEvent::Cancelled { .. }
