@@ -1,7 +1,9 @@
 pub mod action;
+pub mod components;
 pub mod ids;
 pub mod metadata;
 pub mod reducer;
+pub mod render;
 pub mod scroll;
 pub mod session;
 pub mod spinner;
@@ -15,6 +17,7 @@ pub use metadata::{
     CommandDescriptor, ContextTokenUsage, DisplayMetadata, ReasoningLevel, RuntimeSelection,
 };
 pub use reducer::reduce;
+pub use render::render_state_to_string;
 pub use scroll::TranscriptScrollState;
 pub use session::{PromptState, SelectionPromptState, Session};
 pub use spinner::SpinnerState;
