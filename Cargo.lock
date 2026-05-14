@@ -1654,8 +1654,8 @@ dependencies = [
  "spectacular-config",
  "spectacular-llms",
  "spectacular-plan",
- "spectacular-terminal-ui",
  "spectacular-tools",
+ "spectacular-tui",
  "tokio",
  "unicode-width",
 ]
@@ -1706,13 +1706,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "spectacular-terminal-ui"
-version = "0.1.0"
-dependencies = [
- "anstyle",
-]
-
-[[package]]
 name = "spectacular-tools"
 version = "0.1.0"
 dependencies = [
@@ -1726,8 +1719,15 @@ dependencies = [
  "serde_json",
  "similar",
  "spectacular-agent",
- "spectacular-terminal-ui",
+ "spectacular-tui",
  "tokio",
+]
+
+[[package]]
+name = "spectacular-tui"
+version = "0.1.0"
+dependencies = [
+ "anstyle",
 ]
 
 [[package]]
