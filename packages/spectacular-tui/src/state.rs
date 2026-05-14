@@ -1,6 +1,7 @@
+use crate::ids::SessionId;
 use crate::metadata::{CommandDescriptor, DisplayMetadata, RuntimeSelection};
 use crate::scroll::TranscriptScrollState;
-use crate::session::{SelectionPromptState, Session, SessionId};
+use crate::session::{SelectionPromptState, Session};
 use crate::spinner::SpinnerState;
 use crate::status::Status;
 

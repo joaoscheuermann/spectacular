@@ -1,4 +1,4 @@
-use crate::session::TranscriptItemId;
+use crate::ids::TranscriptItemId;
 
 /// Current high-level runtime status rendered by the status line.
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -1,4 +1,5 @@
 pub mod action;
+pub mod ids;
 pub mod metadata;
 pub mod reducer;
 pub mod scroll;
@@ -6,19 +7,23 @@ pub mod session;
 pub mod spinner;
 pub mod state;
 pub mod status;
+pub mod transcript;
 
 pub use action::ChatTuiAction;
+pub use ids::{SessionId, Timestamp, TranscriptItemId};
 pub use metadata::{
     CommandDescriptor, ContextTokenUsage, DisplayMetadata, ReasoningLevel, RuntimeSelection,
 };
 pub use reducer::reduce;
 pub use scroll::TranscriptScrollState;
-pub use session::{
-    PromptState, SelectionPromptState, Session, SessionId, TranscriptItem, TranscriptItemId,
-};
+pub use session::{PromptState, SelectionPromptState, Session};
 pub use spinner::SpinnerState;
 pub use state::State;
 pub use status::{Activity, Status};
+pub use transcript::{
+    AssistantMessageItem, CommandItem, CommandStatus, ErrorItem, NoticeItem, ReasoningItem,
+    ToolCallItem, ToolStatus, TranscriptItem, TranscriptItemContent, UserPromptItem,
+};
 
 use anstyle::{RgbColor, Style};
 

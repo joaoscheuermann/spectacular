@@ -1,51 +1,5 @@
-/// Stable identifier for a chat session shown in the TUI.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SessionId(String);
-
-impl SessionId {
-    /// Creates a session identifier from caller-owned runtime/session metadata.
-    pub fn new(value: impl Into<String>) -> Self {
-        Self(value.into())
-    }
-
-    /// Returns the raw session identifier for display and persistence adapters.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-/// Stable identifier for one transcript item in the TUI model.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct TranscriptItemId(String);
-
-impl TranscriptItemId {
-    /// Creates a transcript item identifier from a runtime event identifier.
-    pub fn new(value: impl Into<String>) -> Self {
-        Self(value.into())
-    }
-
-    /// Returns the raw transcript item identifier for event correlation.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-/// Placeholder transcript item until semantic transcript variants are introduced.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct TranscriptItem {
-    pub id: TranscriptItemId,
-    pub text: String,
-}
-
-impl TranscriptItem {
-    /// Creates a minimal transcript item for tests and early adapter work.
-    pub fn new(id: TranscriptItemId, text: impl Into<String>) -> Self {
-        Self {
-            id,
-            text: text.into(),
-        }
-    }
-}
+use crate::ids::{SessionId, Timestamp};
+use crate::transcript::TranscriptItem;
 
 /// Editable prompt state owned by the reducer rather than terminal input code.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -100,6 +54,7 @@ impl SelectionPromptState {
 pub struct Session {
     pub id: SessionId,
     pub transcript: Vec<TranscriptItem>,
+    pub next_timestamp: Timestamp,
     pub prompt: PromptState,
     pub usage: Option<crate::metadata::ContextTokenUsage>,
 }
@@ -110,8 +65,16 @@ impl Session {
         Self {
             id,
             transcript: Vec::new(),
+            next_timestamp: Timestamp::default(),
             prompt: PromptState::empty(),
             usage: None,
         }
+    }
+
+    /// Allocates the next transcript timestamp for deterministic reducer ordering.
+    pub fn allocate_timestamp(&mut self) -> Timestamp {
+        let timestamp = self.next_timestamp;
+        self.next_timestamp = self.next_timestamp.next();
+        timestamp
     }
 }

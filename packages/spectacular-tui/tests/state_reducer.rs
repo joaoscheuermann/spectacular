@@ -1,6 +1,7 @@
 use spectacular_tui::{
     reduce, Activity, ChatTuiAction, CommandDescriptor, ContextTokenUsage, DisplayMetadata,
-    PromptState, ReasoningLevel, RuntimeSelection, SessionId, State, Status,
+    PromptState, ReasoningLevel, RuntimeSelection, SessionId, State, Status, TranscriptItemContent,
+    TranscriptItemId,
 };
 
 /// Builds a representative runtime selection for reducer tests.
@@ -66,20 +67,29 @@ fn prompt_changed_updates_only_prompt_state() {
     assert_eq!(state, expected);
 }
 
-/// Verifies submitting a prompt clears only reducer-owned prompt text.
+/// Verifies submitting a prompt appends semantic prompt content and clears prompt state.
 #[test]
-fn submit_prompt_clears_prompt_without_runtime_side_effects() {
+fn submit_prompt_appends_user_prompt_and_clears_prompt() {
     let mut state = state();
     state.session.prompt = PromptState::from_text("run this");
 
     reduce(
         &mut state,
-        ChatTuiAction::SubmitPrompt("run this".to_owned()),
+        ChatTuiAction::SubmitPrompt {
+            id: TranscriptItemId::new("prompt-1"),
+            text: "run this".to_owned(),
+        },
     );
 
     assert_eq!(state.session.prompt, PromptState::empty());
     assert_eq!(state.status, Status::Idle);
-    assert!(state.session.transcript.is_empty());
+    assert_eq!(state.session.transcript.len(), 1);
+    assert_eq!(state.session.transcript[0].id.as_str(), "prompt-1");
+    assert_eq!(state.session.transcript[0].timestamp.value(), 0);
+    assert!(matches!(
+        &state.session.transcript[0].content,
+        TranscriptItemContent::UserPrompt(item) if item.text == "run this"
+    ));
 }
 
 /// Verifies agent start and finish update status deterministically.
@@ -119,6 +129,10 @@ fn agent_failed_and_cancelled_leave_running_state() {
             message: "network".to_owned(),
         }
     );
+    assert!(matches!(
+        &failed.session.transcript[0].content,
+        TranscriptItemContent::Error(item) if item.message == "network" && item.details.is_none()
+    ));
 
     let mut cancelled = state();
     reduce(&mut cancelled, ChatTuiAction::AgentStarted);
@@ -128,12 +142,11 @@ fn agent_failed_and_cancelled_leave_running_state() {
             reason: "user".to_owned(),
         },
     );
-    assert_eq!(
-        cancelled.status,
-        Status::Failed {
-            message: "user".to_owned(),
-        }
-    );
+    assert_eq!(cancelled.status, Status::Idle);
+    assert!(matches!(
+        &cancelled.session.transcript[0].content,
+        TranscriptItemContent::Notice(item) if item.message == "user"
+    ));
 }
 
 /// Verifies cancellable running state transitions to cancellation.
