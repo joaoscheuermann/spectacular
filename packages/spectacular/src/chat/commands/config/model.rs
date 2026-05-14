@@ -2,7 +2,7 @@ use crate::chat::commands::{
     ChatCommand, ChatCommandContext, ChatCommandFuture, ChatCommandResult, ChatCompletionContext,
     CompletionFieldSpec, CompletionSubcommandSpec, CompletionValueValidation,
 };
-use crate::chat::{ChatError, validate_cached_model_reasoning};
+use crate::chat::{validate_cached_model_reasoning, ChatError};
 use crate::config_fields::{named_args, parse_reasoning};
 use spectacular_commands::CommandError;
 use spectacular_config::{ModelCache, ReasoningLevel};

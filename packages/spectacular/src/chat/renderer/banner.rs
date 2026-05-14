@@ -1,4 +1,4 @@
-use super::{OPENING_BANNER_MIN_WIDTH, RuntimeSelection, directory::format_directory, paint};
+use super::{directory::format_directory, paint, RuntimeSelection, OPENING_BANNER_MIN_WIDTH};
 use crate::terminal_style;
 use std::path::Path;
 use unicode_width::UnicodeWidthStr;

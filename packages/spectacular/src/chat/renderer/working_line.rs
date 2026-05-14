@@ -1,4 +1,4 @@
-use super::{Renderer, WORKING_FRAMES, dim_style, paint};
+use super::{dim_style, paint, Renderer, WORKING_FRAMES};
 use std::io::{self, Write};
 use std::sync::MutexGuard;
 use std::time::Duration;

@@ -1,11 +1,11 @@
-use crate::chat::auth::{EmptyOpenAiAuthStore, config_openai_auth_store};
+use crate::chat::auth::{config_openai_auth_store, EmptyOpenAiAuthStore};
 use crate::chat::model::ChatConfigIo;
 use crate::chat::{ChatError, RuntimeSelection};
 use spectacular_config::ProviderAuthMode;
 use spectacular_llms::{
-    Cancellation, LlmDebugLogger, LlmProvider, Model, OPENAI_PROVIDER_ID, OPENROUTER_PROVIDER_ID,
-    OpenAiProvider, OpenRouterProvider, ProviderCall, ProviderCapabilities, ProviderError,
-    ProviderMetadata, ProviderRequest, ValidationMode,
+    Cancellation, LlmDebugLogger, LlmProvider, Model, OpenAiProvider, OpenRouterProvider,
+    ProviderCall, ProviderCapabilities, ProviderError, ProviderMetadata, ProviderRequest,
+    ValidationMode, OPENAI_PROVIDER_ID, OPENROUTER_PROVIDER_ID,
 };
 use std::sync::Arc;
 

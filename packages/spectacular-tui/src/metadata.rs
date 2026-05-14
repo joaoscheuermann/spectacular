@@ -1,5 +1,7 @@
+use serde::{Deserialize, Serialize};
+
 /// Runtime policy input selected by configuration or session commands.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct RuntimeSelection {
     pub provider_type: String,
     pub provider: String,
@@ -28,7 +30,7 @@ impl RuntimeSelection {
 }
 
 /// Reasoning effort displayed in the header/footer metadata.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum ReasoningLevel {
     None,
     Low,
@@ -37,7 +39,7 @@ pub enum ReasoningLevel {
 }
 
 /// UI-safe header/footer metadata derived outside rendering components.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct DisplayMetadata {
     pub provider_label: String,
     pub model_label: String,
@@ -69,7 +71,7 @@ impl DisplayMetadata {
 }
 
 /// Compact token usage displayed by the TUI without querying runtime state.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ContextTokenUsage {
     pub input_tokens: u64,
     pub context_window_tokens: Option<u64>,
@@ -86,7 +88,7 @@ impl ContextTokenUsage {
 }
 
 /// Command metadata used by prompt and command palette UI surfaces.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct CommandDescriptor {
     pub name: String,
     pub summary: String,

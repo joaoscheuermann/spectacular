@@ -1,4 +1,4 @@
-use std::path::{MAIN_SEPARATOR, Path, PathBuf};
+use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 
 /// Formats a working directory using the current user's home directory when available.
 pub(super) fn format_directory(directory: &Path) -> String {

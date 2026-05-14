@@ -9,10 +9,11 @@ use index::SessionIndex;
 use serde_json::Value;
 use spectacular_agent::AgentEvent;
 use spectacular_config::TaskModelSlot;
+use spectacular_tui::Session;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
-use store::{SessionStore, session_started};
+use store::{session_started, SessionStore};
 
 const SCHEMA_VERSION: u64 = 2;
 pub(super) const UNTITLED: &str = "Untitled session";
@@ -120,6 +121,19 @@ impl SessionManager {
     pub fn records(&self) -> Result<Vec<ChatRecord>, ChatError> {
         let active = self.active()?;
         self.store.read(&active.path)
+    }
+
+    /// Saves the durable semantic TUI snapshot for the active session.
+    #[allow(dead_code)]
+    pub fn save_snapshot(&self, session: &Session) -> Result<(), ChatError> {
+        self.store.save_snapshot(session)
+    }
+
+    /// Loads the durable semantic TUI snapshot for the active session.
+    #[allow(dead_code)]
+    pub fn load_snapshot(&self) -> Result<Session, ChatError> {
+        let active = self.active()?;
+        self.store.load_snapshot(&active.id)
     }
 
     pub fn history(&self, query: HistoryQuery) -> Result<HistoryPage, ChatError> {

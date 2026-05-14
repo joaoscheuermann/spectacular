@@ -1,5 +1,5 @@
-use crate::chat::ChatError;
 use crate::chat::model::ChatConfigIo;
+use crate::chat::ChatError;
 use spectacular_llms::ProviderMetadata;
 
 /// Resolves value suggestions for a command field using the current prompt context.

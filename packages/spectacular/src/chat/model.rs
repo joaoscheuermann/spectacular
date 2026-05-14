@@ -1,7 +1,7 @@
 use super::RuntimeSelection;
-use crate::chat::ChatError;
 use crate::chat::commands::CompletionEnvironment;
 use crate::chat::session::{ChatRecord, HistoryQuery, HistorySummary, SessionManager};
+use crate::chat::ChatError;
 use spectacular_agent::{AgentEvent, ContextTokenUsage};
 use spectacular_config::{
     ConfigError, ModelCache, ModelConfig, ProviderAuthMode, ProviderConfig, SpectacularConfig,

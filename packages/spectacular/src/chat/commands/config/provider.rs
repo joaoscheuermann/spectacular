@@ -1,11 +1,11 @@
-use crate::chat::ChatError;
 use crate::chat::commands::{
     ChatCommand, ChatCommandContext, ChatCommandFuture, ChatCommandResult, ChatCompletionContext,
     CompletionFieldSpec, CompletionSubcommandSpec, CompletionValueValidation,
 };
+use crate::chat::ChatError;
 use crate::config_fields::{named_args, provider_type_enabled};
 use spectacular_commands::CommandError;
-use spectacular_llms::{OPENAI_PROVIDER_ID, open_browser, start_openai_browser_auth};
+use spectacular_llms::{open_browser, start_openai_browser_auth, OPENAI_PROVIDER_ID};
 
 /// Returns enabled provider backend ids from the provider registry.
 fn enabled_provider_type_values(ctx: &ChatCompletionContext<'_>) -> Result<Vec<String>, ChatError> {

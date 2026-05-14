@@ -1,4 +1,3 @@
-use crate::chat::ChatError;
 use crate::chat::commands::{
     ChatCommandAdapter, ChatCommandContext, ChatCommandControl, ChatCommandResult,
 };
@@ -6,8 +5,9 @@ use crate::chat::model::{ChatModel, ChatPromptFooterModel, ChatRunRequestModel};
 use crate::chat::prompt::{PromptCompletionCatalog, PromptEditor};
 use crate::chat::renderer::Renderer;
 use crate::chat::runner::{ChatRunnerService, ChatTurnRunner};
+use crate::chat::ChatError;
 use spectacular_agent::ToolStorage;
-use spectacular_commands::{CommandControl, CommandInvocation, ParseOutcome, parse_line};
+use spectacular_commands::{parse_line, CommandControl, CommandInvocation, ParseOutcome};
 use std::io::{self, IsTerminal, Write};
 use std::path::PathBuf;
 

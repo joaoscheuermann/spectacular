@@ -1,7 +1,8 @@
 use crate::ids::{Timestamp, TranscriptItemId};
+use serde::{Deserialize, Serialize};
 
 /// One semantic renderable unit in the conversation transcript.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct TranscriptItem {
     pub id: TranscriptItemId,
     pub timestamp: Timestamp,
@@ -20,7 +21,8 @@ impl TranscriptItem {
 }
 
 /// Semantic transcript content that renderers can project into UI blocks.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "data")]
 pub enum TranscriptItemContent {
     UserPrompt(UserPromptItem),
     AssistantMessage(AssistantMessageItem),
@@ -32,7 +34,7 @@ pub enum TranscriptItemContent {
 }
 
 /// User-authored prompt content submitted into a session.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct UserPromptItem {
     pub text: String,
 }
@@ -45,7 +47,7 @@ impl UserPromptItem {
 }
 
 /// Assistant-authored message content accumulated from lifecycle deltas.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct AssistantMessageItem {
     pub text: String,
 }
@@ -58,7 +60,7 @@ impl AssistantMessageItem {
 }
 
 /// Reasoning content accumulated from lifecycle deltas.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ReasoningItem {
     pub text: String,
     pub collapsed: bool,
@@ -75,7 +77,7 @@ impl ReasoningItem {
 }
 
 /// Tool-call transcript content with display-focused lifecycle status.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ToolCallItem {
     pub tool_call_id: String,
     pub name: String,
@@ -102,7 +104,7 @@ impl ToolCallItem {
 }
 
 /// Command transcript content with accumulated output and exit status.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct CommandItem {
     pub command_id: String,
     pub command: String,
@@ -125,7 +127,7 @@ impl CommandItem {
 }
 
 /// Error content recorded in the semantic transcript.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ErrorItem {
     pub message: String,
     pub details: Option<String>,
@@ -142,7 +144,7 @@ impl ErrorItem {
 }
 
 /// Notice content recorded in the semantic transcript.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct NoticeItem {
     pub message: String,
 }
@@ -157,7 +159,7 @@ impl NoticeItem {
 }
 
 /// Display-focused status for tool call transcript items.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum ToolStatus {
     Running,
     Finished,
@@ -165,7 +167,7 @@ pub enum ToolStatus {
 }
 
 /// Display-focused status for command transcript items.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum CommandStatus {
     Running,
     Finished,

@@ -1,5 +1,7 @@
+use serde::{Deserialize, Serialize};
+
 /// Stable identifier for a chat session shown in the TUI.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct SessionId(String);
 
 impl SessionId {
@@ -15,7 +17,7 @@ impl SessionId {
 }
 
 /// Stable identifier for one transcript item in the TUI model.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct TranscriptItemId(String);
 
 impl TranscriptItemId {
@@ -31,7 +33,7 @@ impl TranscriptItemId {
 }
 
 /// Monotonic reducer-owned timestamp for transcript ordering.
-#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct Timestamp(u64);
 
 impl Timestamp {

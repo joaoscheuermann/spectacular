@@ -16,12 +16,12 @@ mod tests {
     ));
 }
 
-use crate::chat::ChatError;
 use crate::chat::model::HistoryTableModel;
 use crate::chat::runner::render_agent_event;
 use crate::chat::session::ChatRecord;
+use crate::chat::ChatError;
 use anstyle::Style;
-use banner::{OpeningBannerView, format_opening_banner};
+use banner::{format_opening_banner, OpeningBannerView};
 use reasoning::format_reasoning_text;
 pub(crate) use reasoning::has_visible_reasoning_text;
 use serde_json::Value;

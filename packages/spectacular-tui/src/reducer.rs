@@ -284,7 +284,6 @@ fn optional_preview(value: String) -> Option<String> {
     Some(value)
 }
 
-
 /// Clears the active running status if the supplied predicate matches its activity.
 fn clear_matching_activity(state: &mut State, matches_activity: impl FnOnce(&Activity) -> bool) {
     let Status::Running { activity, .. } = &state.status else {

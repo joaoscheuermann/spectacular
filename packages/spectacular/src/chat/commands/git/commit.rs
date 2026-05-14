@@ -3,9 +3,9 @@
 //! Generates a conventional commit message using a standalone AI agent
 //! and commits the currently staged changes.
 
-use crate::chat::ChatError;
 use crate::chat::commands::{ChatCommandContext, ChatCommandFuture, ChatCommandResult};
 use crate::chat::prompt::{SelectionPromptAnswer, SelectionPromptChoice, SelectionPromptRequest};
+use crate::chat::ChatError;
 
 use crate::chat::provider::provider_for_runtime;
 use spectacular_agent::{Agent, AgentConfig, AgentEvent, CommandStatus};

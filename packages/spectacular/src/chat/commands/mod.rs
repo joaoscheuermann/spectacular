@@ -4,7 +4,6 @@ pub mod git;
 pub mod runtime;
 pub mod session;
 
-use crate::chat::ChatError;
 use crate::chat::model::{
     ChatModel, ChatPromptFooterModel, ChatRunRequestModel, HistoryTableModel,
 };
@@ -12,6 +11,7 @@ use crate::chat::prompt::{SelectionPrompt, SelectionPromptAnswer, SelectionPromp
 use crate::chat::renderer::Renderer;
 use crate::chat::runner::ChatTurnRunner;
 use crate::chat::session::ChatRecord;
+use crate::chat::ChatError;
 pub(crate) use completion::{
     ChatCompletionContext, CompletionCommandSpec, CompletionEnvironment, CompletionFieldSpec,
     CompletionSubcommandSpec, CompletionValueValidation,

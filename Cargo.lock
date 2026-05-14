@@ -1728,6 +1728,8 @@ name = "spectacular-tui"
 version = "0.1.0"
 dependencies = [
  "anstyle",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

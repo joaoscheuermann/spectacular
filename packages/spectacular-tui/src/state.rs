@@ -32,4 +32,25 @@ impl State {
             scroll: TranscriptScrollState::follow_tail(),
         }
     }
+
+    /// Reconstructs live TUI state from a durable session snapshot and fresh metadata.
+    pub fn from_session(
+        mut session: Session,
+        commands: Vec<CommandDescriptor>,
+        runtime: RuntimeSelection,
+        mut display: DisplayMetadata,
+    ) -> Self {
+        session.refresh_next_timestamp();
+        display.usage = session.usage;
+        Self {
+            session,
+            commands,
+            runtime,
+            display,
+            status: Status::Idle,
+            spinner: SpinnerState::new(),
+            selection: None,
+            scroll: TranscriptScrollState::follow_tail(),
+        }
+    }
 }
