@@ -1,5 +1,5 @@
-use crate::chat::renderer::{has_visible_assistant_text, Renderer};
 use crate::chat::ChatError;
+use crate::chat::renderer::{Renderer, has_visible_assistant_text};
 use spectacular_agent::{AgentEvent, ToolStorage};
 use spectacular_llms::ProviderMessageRole;
 

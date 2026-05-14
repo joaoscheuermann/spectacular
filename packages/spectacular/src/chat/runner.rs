@@ -26,7 +26,7 @@ pub use event_rendering::render_agent_event;
 use render_state::{AssistantResponseRenderState, ReasoningResponseRenderState};
 #[cfg(test)]
 use token_usage::is_visible_assistant_delta;
-use token_usage::{record_generated_tokens, AssistantTurnTokenCounter};
+use token_usage::{AssistantTurnTokenCounter, record_generated_tokens};
 
 pub type ChatTurnFuture<'a> = Pin<Box<dyn Future<Output = Result<(), ChatError>> + Send + 'a>>;
 

@@ -1,7 +1,7 @@
+use crate::chat::ChatError;
 use crate::chat::session::{
     ChatEvent, ChatRecord, HistoryPage, HistoryQuery, HistorySummary, UNTITLED,
 };
-use crate::chat::ChatError;
 use chrono::{DateTime, Utc};
 use std::fs;
 use std::path::Path;

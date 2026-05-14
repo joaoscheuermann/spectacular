@@ -10,6 +10,8 @@ mod renderer;
 mod runner;
 mod session;
 mod title;
+#[allow(dead_code)]
+mod tui_adapter;
 
 use crate::chat::renderer::Renderer;
 use crate::chat::runner::main_chat_tool_storage;

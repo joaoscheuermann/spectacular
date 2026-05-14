@@ -1,5 +1,5 @@
-use crate::chat::session::{now, ChatEvent, ChatRecord};
 use crate::chat::ChatError;
+use crate::chat::session::{ChatEvent, ChatRecord, now};
 use serde_json::Value;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};

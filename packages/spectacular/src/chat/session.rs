@@ -12,7 +12,7 @@ use spectacular_config::TaskModelSlot;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
-use store::{session_started, SessionStore};
+use store::{SessionStore, session_started};
 
 const SCHEMA_VERSION: u64 = 2;
 pub(super) const UNTITLED: &str = "Untitled session";

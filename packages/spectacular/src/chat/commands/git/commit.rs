@@ -3,9 +3,9 @@
 //! Generates a conventional commit message using a standalone AI agent
 //! and commits the currently staged changes.
 
+use crate::chat::ChatError;
 use crate::chat::commands::{ChatCommandContext, ChatCommandFuture, ChatCommandResult};
 use crate::chat::prompt::{SelectionPromptAnswer, SelectionPromptChoice, SelectionPromptRequest};
-use crate::chat::ChatError;
 
 use crate::chat::provider::provider_for_runtime;
 use spectacular_agent::{Agent, AgentConfig, AgentEvent, CommandStatus};
@@ -352,7 +352,6 @@ fn working_directory() -> Option<String> {
         .ok()
         .map(|path| path.display().to_string())
 }
-
 
 fn bounded_text(value: &str, max_chars: usize) -> String {
     let mut chars = value.chars();

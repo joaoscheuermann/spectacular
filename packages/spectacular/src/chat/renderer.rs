@@ -16,12 +16,12 @@ mod tests {
     ));
 }
 
+use crate::chat::ChatError;
 use crate::chat::model::HistoryTableModel;
 use crate::chat::runner::render_agent_event;
 use crate::chat::session::ChatRecord;
-use crate::chat::ChatError;
 use anstyle::Style;
-use banner::{format_opening_banner, OpeningBannerView};
+use banner::{OpeningBannerView, format_opening_banner};
 use reasoning::format_reasoning_text;
 pub(crate) use reasoning::has_visible_reasoning_text;
 use serde_json::Value;
@@ -33,7 +33,9 @@ use std::path::Path;
 use std::sync::Mutex;
 use std::time::Duration;
 use style::{assistant_style, command_style, error_style, success_style, warning_style};
-pub(crate) use style::{command_output_style, dim_style, paint, selection_style, title_style, user_style};
+pub(crate) use style::{
+    command_output_style, dim_style, paint, selection_style, title_style, user_style,
+};
 pub(crate) use terminal_output::{format_prompt_footer, has_visible_assistant_text};
 use terminal_output::{format_tool_call_view, print_tool_output};
 pub use tool::{ToolCallView, ToolResultView};

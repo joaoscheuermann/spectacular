@@ -1,4 +1,4 @@
-use super::footer::{format_user_prompt_footer, UserPromptFooterView};
+use super::footer::{UserPromptFooterView, format_user_prompt_footer};
 use super::style::{command_output_style, diff_added_style, diff_removed_style, paint};
 use super::tool::ToolCallView;
 use crate::chat::model::ChatPromptFooterModel;

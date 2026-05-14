@@ -1,10 +1,10 @@
+use crate::chat::ChatError;
 use crate::chat::commands::{
     CompletionCommandSpec, CompletionEnvironment, CompletionFieldSpec, CompletionSubcommandSpec,
 };
 use crate::chat::model::{ChatModel, ChatPromptFooterModel};
 use crate::chat::paste_burst::{CharDecision, FlushResult, PasteBurst};
-use crate::chat::renderer::{dim_style, paint, selection_style, title_style, user_style, Renderer};
-use crate::chat::ChatError;
+use crate::chat::renderer::{Renderer, dim_style, paint, selection_style, title_style, user_style};
 use anstyle::RgbColor;
 use crossterm::cursor::{Hide, MoveDown, MoveToColumn, MoveUp, Show};
 use crossterm::event::{
@@ -12,8 +12,8 @@ use crossterm::event::{
     KeyModifiers,
 };
 use crossterm::queue;
-use crossterm::terminal::{self, disable_raw_mode, enable_raw_mode, Clear, ClearType};
-use spectacular_commands::{fuzzy_filter, fuzzy_rank, parse_line, CommandRegistry, ParseOutcome};
+use crossterm::terminal::{self, Clear, ClearType, disable_raw_mode, enable_raw_mode};
+use spectacular_commands::{CommandRegistry, ParseOutcome, fuzzy_filter, fuzzy_rank, parse_line};
 use std::io::{self, Write};
 use std::ops::Range;
 use std::sync::Arc;
