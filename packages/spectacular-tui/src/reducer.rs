@@ -1,5 +1,6 @@
 use crate::action::ChatTuiAction;
 use crate::ids::TranscriptItemId;
+use crate::scroll::TranscriptScrollState;
 use crate::session::Session;
 use crate::state::State;
 use crate::status::{Activity, Status};
@@ -176,18 +177,47 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
         }
         ChatTuiAction::ScrollTranscript(delta) => {
             state.scroll.scroll_by(delta);
+            clamp_scroll_to_transcript(&mut state.scroll, state.session.transcript.len());
         }
-        ChatTuiAction::Resize => {}
+        ChatTuiAction::Resize { height, .. } => {
+            state.scroll.visible_rows = u32::from(height);
+            clamp_scroll_to_transcript(&mut state.scroll, state.session.transcript.len());
+        }
     }
+}
+
+/// Clamps transcript scroll offset to the valid range for the current transcript length.
+fn clamp_scroll_to_transcript(scroll: &mut TranscriptScrollState, transcript_len: usize) {
+    if scroll.visible_rows == 0 {
+        return;
+    }
+
+    let max_offset = (transcript_len as u32).saturating_sub(scroll.visible_rows);
+    scroll.offset = scroll.offset.min(max_offset);
+    scroll.follow_tail = scroll.offset == 0;
 }
 
 /// Appends a semantic transcript item with the next session timestamp.
 fn append_transcript_item(state: &mut State, id: TranscriptItemId, content: TranscriptItemContent) {
+    preserve_review_position_for_append(state);
     let timestamp = state.session.allocate_timestamp();
     state
         .session
         .transcript
         .push(TranscriptItem::new(id, timestamp, content));
+}
+
+/// Keeps the same rendered rows visible when appending while not following the transcript tail.
+fn preserve_review_position_for_append(state: &mut State) {
+    if state.scroll.follow_tail {
+        return;
+    }
+
+    state.scroll.offset = state.scroll.offset.saturating_add(1);
+    clamp_scroll_to_transcript(
+        &mut state.scroll,
+        state.session.transcript.len().saturating_add(1),
+    );
 }
 
 /// Appends text to an assistant message matching the supplied transcript item ID.

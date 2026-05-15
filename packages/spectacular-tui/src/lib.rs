@@ -6,12 +6,14 @@ pub mod ids;
 pub mod metadata;
 pub mod reducer;
 pub mod render;
+pub mod runtime_shell;
 pub mod scroll;
 pub mod session;
 pub mod spinner;
 pub mod state;
 pub mod status;
 pub mod transcript;
+mod transcript_window;
 
 pub use action::ChatTuiAction;
 pub use event_loop::{
@@ -27,6 +29,7 @@ pub use metadata::{
 };
 pub use reducer::reduce;
 pub use render::render_state_to_string;
+pub use runtime_shell::{RuntimeIntent, RuntimeShell};
 pub use scroll::TranscriptScrollState;
 pub use session::{PromptPasteBurstState, PromptState, SelectionPromptState, Session};
 pub use spinner::SpinnerState;

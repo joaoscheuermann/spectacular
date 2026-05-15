@@ -1705,6 +1705,7 @@ dependencies = [
  "chrono",
  "clap",
  "crossterm",
+ "iocraft",
  "serde",
  "serde_json",
  "spectacular-agent",

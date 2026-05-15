@@ -3,6 +3,7 @@
 pub struct TranscriptScrollState {
     pub offset: u32,
     pub follow_tail: bool,
+    pub visible_rows: u32,
 }
 
 impl TranscriptScrollState {
@@ -11,6 +12,7 @@ impl TranscriptScrollState {
         Self {
             offset: 0,
             follow_tail: true,
+            visible_rows: 0,
         }
     }
 

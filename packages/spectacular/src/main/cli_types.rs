@@ -8,7 +8,7 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Command {
     /// Start an Aider-style terminal chat session.
-    Chat,
+    Chat(ChatArgs),
     /// Inspect or update Spectacular configuration.
     Config(ConfigArgs),
     /// Run the first SDD planning step.
@@ -16,6 +16,13 @@ enum Command {
         /// Prompt to plan from.
         prompt: String,
     },
+}
+
+#[derive(Debug, Args)]
+struct ChatArgs {
+    /// Run chat in the experimental IOCraft terminal UI.
+    #[arg(long)]
+    tui: bool,
 }
 
 #[derive(Debug, Args)]

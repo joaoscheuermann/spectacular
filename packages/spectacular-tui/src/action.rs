@@ -83,5 +83,8 @@ pub enum ChatTuiAction {
     UsageUpdated(ContextTokenUsage),
     SpinnerTick,
     ScrollTranscript(i32),
-    Resize,
+    Resize {
+        width: u16,
+        height: u16,
+    },
 }

@@ -152,7 +152,10 @@ fn timer_tick_dispatches_spinner_tick_without_terminal_output() {
     assert_eq!(TUI_SPINNER_TICK_INTERVAL, Duration::from_millis(90));
     assert_eq!(
         single_action(&state, TerminalEvent::Resize(80, 24)),
-        ChatTuiAction::Resize
+        ChatTuiAction::Resize {
+            width: 80,
+            height: 24,
+        }
     );
     assert_eq!(
         spectacular_tui::tui_timer_tick_effects(),

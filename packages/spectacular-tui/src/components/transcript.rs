@@ -1,5 +1,6 @@
 use crate::state::State;
 use crate::transcript::{CommandStatus, ToolStatus, TranscriptItem, TranscriptItemContent};
+use crate::transcript_window::visible_transcript_range;
 use iocraft::prelude::*;
 
 /// Renders semantic transcript items in a read-only scroll region.
@@ -11,7 +12,7 @@ pub fn TranscriptScrollView<'a>(
     element! {
         View(flex_direction: FlexDirection::Column, flex_grow: 1.0, padding_top: 1, padding_bottom: 1) {
             Text(content: "Transcript")
-            ScrollView(auto_scroll: state.scroll.follow_tail, keyboard_scroll: false, scrollbar: false) {
+            ScrollView(auto_scroll: true, keyboard_scroll: false, scrollbar: false) {
                 #(transcript_rows(state))
             }
         }
@@ -29,12 +30,15 @@ fn transcript_rows<'a>(state: &'a State) -> Vec<AnyElement<'a>> {
     if state.session.transcript.is_empty() {
         return vec![element!(Text(content: "No transcript items yet".to_string())).into()];
     }
-    state
-        .session
-        .transcript
-        .iter()
+    visible_transcript_items(state)
         .map(|item| element!(Text(content: transcript_item_text(item))).into())
         .collect()
+}
+
+/// Returns the transcript item range that should be materialized for the viewport.
+fn visible_transcript_items(state: &State) -> impl Iterator<Item = &TranscriptItem> {
+    let range = visible_transcript_range(state.session.transcript.len(), &state.scroll);
+    state.session.transcript[range].iter()
 }
 
 /// Formats one semantic transcript item for the read-only prototype.

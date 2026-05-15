@@ -20,6 +20,23 @@ fn top_level_help_lists_chat_config_and_plan() {
 }
 
 #[test]
+fn chat_without_tui_flag_uses_legacy_renderer_path() {
+    let cli = Cli::try_parse_from(["spectacular", "chat"]).unwrap();
+
+    assert!(matches!(
+        cli.command,
+        Command::Chat(ChatArgs { tui: false })
+    ));
+}
+
+#[test]
+fn chat_tui_flag_opts_into_iocraft_path() {
+    let cli = Cli::try_parse_from(["spectacular", "chat", "--tui"]).unwrap();
+
+    assert!(matches!(cli.command, Command::Chat(ChatArgs { tui: true })));
+}
+
+#[test]
 fn config_help_lists_nested_subcommands() {
     let mut command = Cli::command();
     let config = command

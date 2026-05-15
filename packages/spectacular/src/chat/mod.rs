@@ -12,6 +12,7 @@ mod session;
 mod title;
 #[allow(dead_code)]
 mod tui_adapter;
+mod tui_runtime;
 
 use crate::chat::renderer::Renderer;
 use crate::chat::runner::main_chat_tool_storage;
@@ -33,7 +34,16 @@ use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Runs the test command implementation and returns its command future.
-pub async fn run(debug_logger: LlmDebugLogger) -> Result<(), ChatError> {
+pub async fn run(debug_logger: LlmDebugLogger, tui: bool) -> Result<(), ChatError> {
+    if tui {
+        return run_tui(debug_logger).await;
+    }
+
+    run_legacy(debug_logger).await
+}
+
+/// Runs the legacy terminal renderer chat loop.
+async fn run_legacy(debug_logger: LlmDebugLogger) -> Result<(), ChatError> {
     let ChatBootstrap {
         session,
         renderer,
@@ -60,7 +70,12 @@ pub async fn run(debug_logger: LlmDebugLogger) -> Result<(), ChatError> {
     controller.run_loop().await
 }
 
-struct ChatBootstrap {
+/// Runs the experimental IOCraft TUI chat loop.
+async fn run_tui(debug_logger: LlmDebugLogger) -> Result<(), ChatError> {
+    tui_runtime::run_iocraft_tui(debug_logger).await
+}
+
+pub(crate) struct ChatBootstrap {
     session: SessionManager,
     renderer: Renderer,
     runtime: RuntimeSelection,
@@ -72,7 +87,7 @@ struct ChatBootstrap {
 
 impl ChatBootstrap {
     /// Creates a new value from the supplied inputs.
-    fn new(debug_logger: LlmDebugLogger) -> Result<Self, ChatError> {
+    pub(crate) fn new(debug_logger: LlmDebugLogger) -> Result<Self, ChatError> {
         let config = spectacular_config::read_config_or_default()?;
         let refresh = refresh_model_cache(&config, debug_logger.clone())?;
         let mut warnings = refresh.warnings;

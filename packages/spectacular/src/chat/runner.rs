@@ -295,7 +295,7 @@ pub fn main_chat_tool_storage(
 }
 
 /// Creates the main coding agent configured with runtime model, reasoning, and tools.
-fn main_chat_agent<P>(
+pub(crate) fn main_chat_agent<P>(
     provider: P,
     runtime: &RuntimeSelection,
     store: Store,

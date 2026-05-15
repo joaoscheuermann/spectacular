@@ -21,7 +21,9 @@ pub enum EventEffect {
 pub fn tui_event_effects(state: &State, event: TerminalEvent) -> Vec<EventEffect> {
     match event {
         TerminalEvent::Key(key) => key_effects(state, key),
-        TerminalEvent::Resize(_, _) => vec![EventEffect::Action(ChatTuiAction::Resize)],
+        TerminalEvent::Resize(width, height) => {
+            vec![EventEffect::Action(ChatTuiAction::Resize { width, height })]
+        }
         TerminalEvent::FullscreenMouse(mouse) => mouse_scroll_effect(mouse.kind)
             .into_iter()
             .map(ChatTuiAction::ScrollTranscript)
@@ -59,6 +61,12 @@ fn key_effects(state: &State, key: KeyEvent) -> Vec<EventEffect> {
 
     let selecting = key.modifiers.contains(KeyModifiers::SHIFT);
     match key.code {
+        KeyCode::PageUp => vec![EventEffect::Action(ChatTuiAction::ScrollTranscript(
+            page_scroll_delta(state),
+        ))],
+        KeyCode::PageDown => vec![EventEffect::Action(ChatTuiAction::ScrollTranscript(
+            -page_scroll_delta(state),
+        ))],
         KeyCode::Enter => submit_prompt_effects(state),
         KeyCode::Char(character) if !character.is_control() => {
             prompt_change_effect(state, |prompt| {
@@ -111,6 +119,13 @@ where
     }
 
     vec![EventEffect::Action(ChatTuiAction::PromptChanged(prompt))]
+}
+
+/// Returns a page-sized scroll delta from current known viewport height.
+fn page_scroll_delta(state: &State) -> i32 {
+    i32::try_from(state.scroll.visible_rows)
+        .unwrap_or(i32::MAX)
+        .max(1)
 }
 
 /// Maps mouse wheel events to transcript scroll deltas.
