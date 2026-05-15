@@ -3,16 +3,29 @@ use spectacular_tui::{
     reduce, render_state_to_string, tui_event_effects, CancellationItem, ChatTuiAction,
     CommandDescriptor, CommandStatus, ContextTokenUsage, DisplayMetadata, EventEffect,
     OpeningBannerItem, PromptState, ReasoningLevel, RuntimeSelection, SessionId, State,
-    SuccessItem, ToolStatus, TranscriptItem, TranscriptItemContent, TranscriptItemId,
-    WarningItem, WorkedSummaryItem,
+    SuccessItem, ToolStatus, TranscriptItem, TranscriptItemContent, TranscriptItemId, WarningItem,
+    WorkedSummaryItem,
 };
 
 fn runtime() -> RuntimeSelection {
-    RuntimeSelection::new("openai-compatible", "openrouter", "gpt-5.1", ReasoningLevel::High, None)
+    RuntimeSelection::new(
+        "openai-compatible",
+        "openrouter",
+        "gpt-5.1",
+        ReasoningLevel::High,
+        None,
+    )
 }
 
 fn display(usage: Option<ContextTokenUsage>) -> DisplayMetadata {
-    DisplayMetadata::new("OpenRouter", "GPT 5.1", "high", "/workspace/spectacular", "session-123", usage)
+    DisplayMetadata::new(
+        "OpenRouter",
+        "GPT 5.1",
+        "high",
+        "/workspace/spectacular",
+        "session-123",
+        usage,
+    )
 }
 
 fn state() -> State {
@@ -40,7 +53,11 @@ fn key(code: KeyCode, modifiers: KeyModifiers) -> TerminalEvent {
 #[test]
 fn opening_banner_empty_transcript_prompt_and_footer_match_original_shape() {
     let usage = ContextTokenUsage::new(42_000, Some(200_000));
-    let mut state = State::new(SessionId::new("session-123"), runtime(), display(Some(usage)));
+    let mut state = State::new(
+        SessionId::new("session-123"),
+        runtime(),
+        display(Some(usage)),
+    );
     state.session.usage = Some(usage);
     state.session.transcript.push(item(
         1,
@@ -75,15 +92,46 @@ fn opening_banner_empty_transcript_prompt_and_footer_match_original_shape() {
 fn transcript_semantic_items_render_without_prototype_labels() {
     let mut state = state();
     state.session.transcript = vec![
-        item(1, TranscriptItemContent::UserPrompt(spectacular_tui::UserPromptItem::new("hello"))),
-        item(2, TranscriptItemContent::AssistantMessage(spectacular_tui::AssistantMessageItem::new("hi there"))),
-        item(3, TranscriptItemContent::Reasoning(spectacular_tui::ReasoningItem::new("thinking", false))),
-        item(4, TranscriptItemContent::Warning(WarningItem::new("careful"))),
+        item(
+            1,
+            TranscriptItemContent::UserPrompt(spectacular_tui::UserPromptItem::new("hello")),
+        ),
+        item(
+            2,
+            TranscriptItemContent::AssistantMessage(spectacular_tui::AssistantMessageItem::new(
+                "hi there",
+            )),
+        ),
+        item(
+            3,
+            TranscriptItemContent::Reasoning(spectacular_tui::ReasoningItem::new(
+                "thinking", false,
+            )),
+        ),
+        item(
+            4,
+            TranscriptItemContent::Warning(WarningItem::new("careful")),
+        ),
         item(5, TranscriptItemContent::Success(SuccessItem::new("done"))),
-        item(6, TranscriptItemContent::Cancellation(CancellationItem::new("user stopped run"))),
-        item(7, TranscriptItemContent::Error(spectacular_tui::ErrorItem::new("boom", Some("details".to_string())))),
-        item(8, TranscriptItemContent::Notice(spectacular_tui::NoticeItem::new("plain notice"))),
-        item(9, TranscriptItemContent::WorkedSummary(WorkedSummaryItem::new("3s", Some(77)))),
+        item(
+            6,
+            TranscriptItemContent::Cancellation(CancellationItem::new("user stopped run")),
+        ),
+        item(
+            7,
+            TranscriptItemContent::Error(spectacular_tui::ErrorItem::new(
+                "boom",
+                Some("details".to_string()),
+            )),
+        ),
+        item(
+            8,
+            TranscriptItemContent::Notice(spectacular_tui::NoticeItem::new("plain notice")),
+        ),
+        item(
+            9,
+            TranscriptItemContent::WorkedSummary(WorkedSummaryItem::new("3s", Some(77))),
+        ),
         item(
             10,
             TranscriptItemContent::ToolCall(spectacular_tui::ToolCallItem {
@@ -143,7 +191,7 @@ fn prompt_multiline_and_slash_suggestions_match_original_shape() {
     let output = render(&state);
 
     assert!(output.contains("> /c"));
-    assert!(output.contains("/config           Manage configuration"));
+    assert!(output.contains("  /config            Manage configuration"));
     assert!(!output.contains("/session"));
 
     state.session.prompt = PromptState::from_text("first\nsecond");
@@ -163,7 +211,13 @@ fn working_spinner_and_completed_summary_match_original_text() {
     assert!(output.contains("⠙ Working (CTRL + C to stop)"));
     assert!(!output.contains("Status: running"));
 
-    reduce(&mut state, ChatTuiAction::WorkedSummaryReported { duration: "3s".to_string(), turn_tokens: Some(77) });
+    reduce(
+        &mut state,
+        ChatTuiAction::WorkedSummaryReported {
+            duration: "3s".to_string(),
+            turn_tokens: Some(77),
+        },
+    );
     reduce(&mut state, ChatTuiAction::AgentFinished);
     let output = render(&state);
 
@@ -177,9 +231,20 @@ fn idle_ctrl_c_clears_non_empty_prompt_before_requesting_exit() {
 
     let effects = tui_event_effects(&state, key(KeyCode::Char('c'), KeyModifiers::CONTROL));
 
-    assert_eq!(effects, vec![EventEffect::Action(ChatTuiAction::PromptChanged(PromptState::empty()))]);
+    assert_eq!(
+        effects,
+        vec![EventEffect::Action(ChatTuiAction::PromptChanged(
+            PromptState::empty()
+        ))]
+    );
 
-    reduce(&mut state, match effects.into_iter().next().unwrap() { EventEffect::Action(action) => action, EventEffect::RequestExit => panic!("expected prompt clear") });
+    reduce(
+        &mut state,
+        match effects.into_iter().next().unwrap() {
+            EventEffect::Action(action) => action,
+            EventEffect::RequestExit => panic!("expected prompt clear"),
+        },
+    );
     let effects = tui_event_effects(&state, key(KeyCode::Char('c'), KeyModifiers::CONTROL));
 
     assert_eq!(effects, vec![EventEffect::RequestExit]);

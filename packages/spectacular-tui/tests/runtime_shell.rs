@@ -1,6 +1,7 @@
 use iocraft::prelude::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers, TerminalEvent};
 use spectacular_tui::{
-    reduce, ChatTuiAction, DisplayMetadata, ReasoningLevel, RuntimeSelection, SessionId, State,
+    reduce, ChatTuiAction, DisplayMetadata, ReasoningLevel, RuntimeSelection,
+    SelectionPromptAnswer, SelectionPromptChoice, SelectionPromptState, SessionId, State,
     TranscriptItemContent, TranscriptItemId,
 };
 
@@ -91,4 +92,50 @@ async fn shell_cancel_run_emits_cancel_intent() {
         Some(spectacular_tui::RuntimeIntent::CancelRun)
     );
     assert_eq!(shell.state().status, spectacular_tui::Status::Cancelling);
+}
+
+/// Verifies selection prompt answers are emitted to the runtime controller.
+#[tokio::test]
+async fn shell_selection_prompt_submit_emits_runtime_intent() {
+    let mut state = state();
+    state.selection = Some(
+        SelectionPromptState::new("Pick one", "", vec!["alpha".to_owned()]).with_inputs(true, true),
+    );
+
+    let (mut shell, mut intents) = spectacular_tui::RuntimeShell::new(state);
+    shell.apply_terminal_event(key(KeyCode::Char('x'), KeyModifiers::empty()));
+    shell.apply_terminal_event(key(KeyCode::Tab, KeyModifiers::empty()));
+    shell.apply_terminal_event(key(KeyCode::Char('!'), KeyModifiers::empty()));
+    shell.apply_terminal_event(key(KeyCode::Enter, KeyModifiers::empty()));
+
+    assert_eq!(
+        intents.recv().await,
+        Some(spectacular_tui::RuntimeIntent::SelectionPromptSubmitted(
+            SelectionPromptAnswer {
+                choice: SelectionPromptChoice::Custom("x".to_owned()),
+                comment: Some("!".to_owned()),
+            }
+        ))
+    );
+    assert!(shell.state().selection.is_none());
+}
+
+/// Verifies selection prompt cancellation is emitted to the runtime controller.
+#[tokio::test]
+async fn shell_selection_prompt_cancel_emits_runtime_intent() {
+    let mut state = state();
+    state.selection = Some(SelectionPromptState::new(
+        "Pick one",
+        "",
+        vec!["alpha".to_owned()],
+    ));
+
+    let (mut shell, mut intents) = spectacular_tui::RuntimeShell::new(state);
+    shell.apply_terminal_event(key(KeyCode::Esc, KeyModifiers::empty()));
+
+    assert_eq!(
+        intents.recv().await,
+        Some(spectacular_tui::RuntimeIntent::SelectionPromptCancelled)
+    );
+    assert!(shell.state().selection.is_none());
 }

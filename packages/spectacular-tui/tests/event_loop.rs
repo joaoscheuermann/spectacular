@@ -200,7 +200,7 @@ fn slash_command_prompt_ui_uses_state_commands_for_suggestions() {
     let output = spectacular_tui::render_state_to_string(&state, Some(100));
 
     assert!(output.contains("> /con"));
-    assert!(output.contains("/config           Manage configuration"));
+    assert!(output.contains("  /config            Manage configuration"));
     assert!(!output.contains("/session           Manage sessions"));
     assert!(!output.contains("Completions:"));
     assert!(!output.contains("Guidance:"));
@@ -209,5 +209,6 @@ fn slash_command_prompt_ui_uses_state_commands_for_suggestions() {
     let output = spectacular_tui::render_state_to_string(&state, Some(100));
 
     assert!(output.contains("> /config"));
+    assert!(output.contains("/config list"));
     assert!(!output.contains("Usage:"));
 }

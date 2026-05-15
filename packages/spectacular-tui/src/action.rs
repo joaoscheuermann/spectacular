@@ -1,6 +1,6 @@
 use crate::ids::{SessionId, TranscriptItemId};
 use crate::metadata::{CommandDescriptor, ContextTokenUsage, DisplayMetadata, RuntimeSelection};
-use crate::session::PromptState;
+use crate::session::{PromptState, SelectionPromptState};
 
 /// Events that can deterministically update TUI state through the reducer.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -11,6 +11,9 @@ pub enum ChatTuiAction {
         text: String,
     },
     CancelRun,
+    SelectionPromptChanged(Option<SelectionPromptState>),
+    SelectionPromptSubmitted(SelectionPromptAnswer),
+    SelectionPromptCancelled,
     CommandsLoaded(Vec<CommandDescriptor>),
     SessionChanged {
         id: SessionId,
@@ -91,4 +94,18 @@ pub enum ChatTuiAction {
         width: u16,
         height: u16,
     },
+}
+
+/// Answer returned from an interactive selection prompt.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SelectionPromptAnswer {
+    pub choice: SelectionPromptChoice,
+    pub comment: Option<String>,
+}
+
+/// Selected predefined option or custom free-text selection value.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum SelectionPromptChoice {
+    Option { index: usize, label: String },
+    Custom(String),
 }

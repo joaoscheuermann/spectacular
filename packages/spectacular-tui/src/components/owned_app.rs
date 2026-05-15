@@ -1,4 +1,5 @@
-use crate::format::app_lines;
+use crate::format::app_render_lines;
+use crate::render_model::{iocraft_content, RenderLine};
 use crate::state::State;
 use iocraft::prelude::*;
 
@@ -19,10 +20,16 @@ pub struct AppStateProps {
     pub state: Option<State>,
 }
 
-/// Converts the state projection into owned IOCraft text row elements.
+/// Converts the state projection into owned IOCraft styled row elements.
 fn visible_lines(state: &State) -> Vec<AnyElement<'static>> {
-    app_lines(state)
+    app_render_lines(state)
         .into_iter()
-        .map(|line: String| element!(Text(content: line)).into())
+        .map(render_line)
         .collect()
+}
+
+/// Converts one semantic line into an owned IOCraft mixed-text element.
+fn render_line(line: RenderLine) -> AnyElement<'static> {
+    let contents = iocraft_content(&line);
+    element!(MixedText(wrap: TextWrap::NoWrap, contents)).into()
 }

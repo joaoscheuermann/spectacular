@@ -11,8 +11,9 @@ use iocraft::prelude::*;
 use spectacular_agent::{AgentEvent, Store, ToolStorage};
 use spectacular_llms::LlmDebugLogger;
 use spectacular_tui::{
-    ChatTuiAction, DisplayMetadata, RuntimeIntent, RuntimeShell, SessionId, State,
-    TranscriptItemContent, TranscriptItemId,
+    ChatTuiAction, DisplayMetadata, RuntimeIntent, RuntimeShell, SelectionPromptAnswer,
+    SelectionPromptChoice, SelectionPromptState, SessionId, State, TranscriptItemContent,
+    TranscriptItemId,
 };
 use std::future::Future;
 use std::path::PathBuf;
@@ -45,6 +46,7 @@ pub(crate) struct TuiRuntimeController<R = AgentTuiTurnRunner> {
     model: ChatModel,
     tools: ToolStorage,
     runner: R,
+    pending_selection: Option<PendingTuiSelectionPrompt>,
 }
 
 /// Bootstrap data needed to initialize the TUI runtime path without terminal output.
@@ -95,6 +97,7 @@ where
             model,
             tools,
             runner,
+            pending_selection: None,
         })
     }
 
@@ -132,6 +135,14 @@ where
                 self.shell.apply_action(ChatTuiAction::CancelRun);
                 Ok(false)
             }
+            RuntimeIntent::SelectionPromptSubmitted(answer) => {
+                self.handle_selection_prompt_submitted(answer);
+                Ok(false)
+            }
+            RuntimeIntent::SelectionPromptCancelled => {
+                self.handle_selection_prompt_cancelled();
+                Ok(false)
+            }
             RuntimeIntent::RequestExit => Ok(true),
         }
     }
@@ -161,6 +172,10 @@ where
         state_sender: Option<&mpsc::UnboundedSender<State>>,
         cancellation_receiver: &mut mpsc::UnboundedReceiver<()>,
     ) -> Result<(), ChatError> {
+        if self.try_open_tui_selection_prompt(&text) {
+            return Ok(());
+        }
+
         if !self.model.runtime().is_ready() {
             self.shell.apply_action(ChatTuiAction::ErrorReported {
                 message: "configuration is incomplete; run setup commands first".to_owned(),
@@ -199,6 +214,74 @@ where
             .session_manager()
             .save_snapshot(&self.shell.state().session)
     }
+
+    /// Opens a controller-owned TUI selection prompt for slash commands that require one.
+    fn try_open_tui_selection_prompt(&mut self, text: &str) -> bool {
+        if text.trim() != "/git commit" {
+            return false;
+        }
+
+        self.pending_selection = Some(PendingTuiSelectionPrompt::GitCommitMessage);
+        self.shell
+            .apply_action(ChatTuiAction::SelectionPromptChanged(Some(
+                git_commit_selection_prompt_state(),
+            )));
+        true
+    }
+
+    /// Applies a submitted TUI selection answer to the pending command flow.
+    fn handle_selection_prompt_submitted(&mut self, answer: SelectionPromptAnswer) {
+        let pending = self.pending_selection.take();
+        self.shell
+            .apply_action(ChatTuiAction::SelectionPromptSubmitted(answer.clone()));
+        if !matches!(pending, Some(PendingTuiSelectionPrompt::GitCommitMessage)) {
+            return;
+        }
+
+        if is_git_commit_cancel_selection(&answer) {
+            self.shell.apply_action(ChatTuiAction::NoticeReported {
+                message: "commit cancelled".to_owned(),
+            });
+        }
+    }
+
+    /// Applies a TUI selection cancellation using the original prompt exit result.
+    fn handle_selection_prompt_cancelled(&mut self) {
+        self.pending_selection = None;
+        self.shell
+            .apply_action(ChatTuiAction::SelectionPromptCancelled);
+        self.shell.apply_action(ChatTuiAction::ErrorReported {
+            message: ChatError::Exit.to_string(),
+            details: None,
+        });
+    }
+}
+
+/// Pending command-side prompt currently waiting for a TUI answer.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PendingTuiSelectionPrompt {
+    GitCommitMessage,
+}
+
+/// Builds the TUI state that mirrors the original `/git commit` selection prompt.
+fn git_commit_selection_prompt_state() -> SelectionPromptState {
+    SelectionPromptState::new(
+        "Use generated commit message?",
+        "Message: \"\"",
+        vec![
+            "Use generated message".to_owned(),
+            "Cancel commit".to_owned(),
+        ],
+    )
+    .with_inputs(true, false)
+}
+
+/// Returns whether the selection answer chooses the original cancel option.
+fn is_git_commit_cancel_selection(answer: &SelectionPromptAnswer) -> bool {
+    matches!(
+        &answer.choice,
+        SelectionPromptChoice::Option { index: 1, .. }
+    )
 }
 
 /// Runs the production IOCraft render loop with the real Spectacular runtime controller.

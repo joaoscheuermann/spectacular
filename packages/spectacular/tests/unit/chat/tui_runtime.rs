@@ -3,7 +3,10 @@ use crate::chat::runner::main_chat_tool_storage;
 use spectacular_agent::{AgentEvent, ToolStorage};
 use spectacular_config::{ProviderAuthMode, ReasoningLevel};
 use spectacular_llms::{FinishReason, MessageDelta, ProviderMessageRole};
-use spectacular_tui::{RuntimeIntent, State, TranscriptItemContent, TranscriptItemId};
+use spectacular_tui::{
+    RuntimeIntent, SelectionPromptChoice as TuiSelectionPromptChoice, State, TranscriptItemContent,
+    TranscriptItemId,
+};
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::{mpsc, oneshot};
@@ -168,6 +171,104 @@ async fn cancel_intent_cancels_active_runner() {
     assert_eq!(controller.state().status, spectacular_tui::Status::Cancelling);
 }
 
+/// Verifies slash-command execution can request a TUI-owned selection prompt.
+#[tokio::test]
+async fn tui_command_can_request_selection_prompt() {
+    let bootstrap = TestTuiBootstrap::new("selection-request-session");
+    let mut controller = TuiRuntimeController::new_with_runner(
+        bootstrap,
+        RecordingTuiTurnRunner::default(),
+    )
+    .unwrap();
+
+    controller
+        .handle_intent(RuntimeIntent::SubmitPrompt {
+            id: TranscriptItemId::new("prompt-1"),
+            text: "/git commit".to_owned(),
+        })
+        .await
+        .unwrap();
+
+    let selection = controller.state().selection.as_ref().unwrap();
+    assert_eq!(selection.title, "Use generated commit message?");
+    assert_eq!(
+        selection.options,
+        vec!["Use generated message", "Cancel commit"]
+    );
+    assert!(selection.allow_custom);
+    assert!(!selection.allow_comment);
+}
+
+/// Verifies TUI selection answers resume the command path waiting on that prompt.
+#[tokio::test]
+async fn tui_selection_answer_returns_to_waiting_runtime_flow() {
+    let bootstrap = TestTuiBootstrap::new("selection-answer-session");
+    let mut controller = TuiRuntimeController::new_with_runner(
+        bootstrap,
+        RecordingTuiTurnRunner::default(),
+    )
+    .unwrap();
+
+    controller
+        .handle_intent(RuntimeIntent::SubmitPrompt {
+            id: TranscriptItemId::new("prompt-1"),
+            text: "/git commit".to_owned(),
+        })
+        .await
+        .unwrap();
+    controller
+        .handle_intent(RuntimeIntent::SelectionPromptSubmitted(
+            spectacular_tui::SelectionPromptAnswer {
+                choice: TuiSelectionPromptChoice::Option {
+                    index: 1,
+                    label: "Cancel commit".to_owned(),
+                },
+                comment: None,
+            },
+        ))
+        .await
+        .unwrap();
+
+    assert!(controller.state().selection.is_none());
+    assert!(controller.state().session.transcript.iter().any(|item| {
+        matches!(
+            &item.content,
+            TranscriptItemContent::Notice(notice) if notice.message == "commit cancelled"
+        )
+    }));
+}
+
+/// Verifies TUI selection cancellation maps to the original selection prompt exit result.
+#[tokio::test]
+async fn tui_selection_cancel_maps_to_original_exit_result() {
+    let bootstrap = TestTuiBootstrap::new("selection-cancel-session");
+    let mut controller = TuiRuntimeController::new_with_runner(
+        bootstrap,
+        RecordingTuiTurnRunner::default(),
+    )
+    .unwrap();
+
+    controller
+        .handle_intent(RuntimeIntent::SubmitPrompt {
+            id: TranscriptItemId::new("prompt-1"),
+            text: "/git commit".to_owned(),
+        })
+        .await
+        .unwrap();
+    controller
+        .handle_intent(RuntimeIntent::SelectionPromptCancelled)
+        .await
+        .unwrap();
+
+    assert!(controller.state().selection.is_none());
+    assert!(controller.state().session.transcript.iter().any(|item| {
+        matches!(
+            &item.content,
+            TranscriptItemContent::Error(error) if error.message == "chat exited"
+        )
+    }));
+}
+
 /// Verifies cancellation reaches an active prompt even while the controller awaits the turn.
 #[tokio::test]
 async fn cancel_signal_reaches_active_prompt_run() {
@@ -196,7 +297,8 @@ async fn cancel_signal_reaches_active_prompt_run() {
             && state.session.transcript.iter().any(|item| {
                 matches!(
                     &item.content,
-                    TranscriptItemContent::Notice(notice) if notice.message == "test cancellation"
+                    TranscriptItemContent::Cancellation(cancellation)
+                        if cancellation.reason == "test cancellation"
                 )
             })
     })

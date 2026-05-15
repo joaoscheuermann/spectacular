@@ -5,10 +5,13 @@ pub mod fake_streaming;
 pub mod format;
 pub mod ids;
 pub mod metadata;
+pub mod prompt_state;
 pub mod reducer;
 pub mod render;
+pub mod render_model;
 pub mod runtime_shell;
 pub mod scroll;
+pub mod selection_prompt;
 pub mod session;
 pub mod spinner;
 pub mod state;
@@ -16,7 +19,7 @@ pub mod status;
 pub mod transcript;
 mod transcript_window;
 
-pub use action::ChatTuiAction;
+pub use action::{ChatTuiAction, SelectionPromptAnswer, SelectionPromptChoice};
 pub use event_loop::{
     tui_event_effects, tui_timer_tick_effects, EventEffect, TUI_SPINNER_TICK_INTERVAL,
 };
@@ -24,14 +27,24 @@ pub use fake_streaming::{
     fake_cancellation_plan, fake_failure_plan, fake_streaming_plan, fake_streaming_runtime_finding,
     FakeStreamingPlan, FakeStreamingTickOutcome, FakeStreamingTimeline,
 };
+pub use format::{
+    app_lines, app_render_lines, footer_render_line, footer_text, format_directory_with_home,
+    prompt_lines, prompt_render_lines, transcript_item_lines, transcript_item_render_lines,
+    transcript_lines, transcript_render_lines, usage_text,
+};
 pub use ids::{SessionId, Timestamp, TranscriptItemId};
 pub use metadata::{
     CommandDescriptor, ContextTokenUsage, DisplayMetadata, ReasoningLevel, RuntimeSelection,
 };
 pub use reducer::reduce;
 pub use render::render_state_to_string;
+pub use render_model::{
+    context_usage_style, iocraft_content, semantic_ansi_style, semantic_iocraft_style, RenderLine,
+    RenderSpan, RenderStyle,
+};
 pub use runtime_shell::{RuntimeIntent, RuntimeShell};
 pub use scroll::TranscriptScrollState;
+pub use selection_prompt::SelectionInputMode;
 pub use session::{PromptPasteBurstState, PromptState, SelectionPromptState, Session};
 pub use spinner::SpinnerState;
 pub use state::State;

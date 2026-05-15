@@ -1,4 +1,4 @@
-use crate::action::ChatTuiAction;
+use crate::action::{ChatTuiAction, SelectionPromptAnswer};
 use crate::event_loop::{tui_event_effects, EventEffect};
 use crate::ids::TranscriptItemId;
 use crate::reducer::reduce;
@@ -12,6 +12,8 @@ const RUNTIME_INTENT_BUFFER: usize = 16;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RuntimeIntent {
     SubmitPrompt { id: TranscriptItemId, text: String },
+    SelectionPromptSubmitted(SelectionPromptAnswer),
+    SelectionPromptCancelled,
     CancelRun,
     RequestExit,
 }
@@ -82,6 +84,10 @@ fn intent_for_action(action: &ChatTuiAction) -> Option<RuntimeIntent> {
             id: id.clone(),
             text: text.clone(),
         }),
+        ChatTuiAction::SelectionPromptSubmitted(answer) => {
+            Some(RuntimeIntent::SelectionPromptSubmitted(answer.clone()))
+        }
+        ChatTuiAction::SelectionPromptCancelled => Some(RuntimeIntent::SelectionPromptCancelled),
         ChatTuiAction::CancelRun => Some(RuntimeIntent::CancelRun),
         _ => None,
     }

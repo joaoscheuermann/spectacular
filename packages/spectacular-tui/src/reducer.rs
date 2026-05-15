@@ -6,8 +6,8 @@ use crate::state::State;
 use crate::status::{Activity, Status};
 use crate::transcript::{
     AssistantMessageItem, CancellationItem, CommandItem, CommandStatus, ErrorItem, NoticeItem,
-    ReasoningItem, ToolCallItem, ToolStatus, TranscriptItem, TranscriptItemContent,
-    UserPromptItem, WorkedSummaryItem,
+    ReasoningItem, ToolCallItem, ToolStatus, TranscriptItem, TranscriptItemContent, UserPromptItem,
+    WorkedSummaryItem,
 };
 
 /// Applies one TUI action to state without performing IO or runtime side effects.
@@ -22,12 +22,18 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
                 id,
                 TranscriptItemContent::UserPrompt(UserPromptItem::new(text)),
             );
-            state.session.prompt.clear();
+            state.session.prompt = crate::session::PromptState::empty();
         }
         ChatTuiAction::CancelRun => {
             if state.status.is_cancellable() {
                 state.status = Status::Cancelling;
             }
+        }
+        ChatTuiAction::SelectionPromptChanged(selection) => {
+            state.selection = selection;
+        }
+        ChatTuiAction::SelectionPromptSubmitted(_) | ChatTuiAction::SelectionPromptCancelled => {
+            state.selection = None;
         }
         ChatTuiAction::CommandsLoaded(commands) => {
             state.commands = commands;
