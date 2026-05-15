@@ -1,5 +1,5 @@
 use crate::action::{ChatTuiAction, SelectionPromptAnswer};
-use crate::event_loop::{tui_event_effects, EventEffect};
+use crate::event_loop::{tui_assistant_reveal_tick_effects, tui_event_effects, EventEffect};
 use crate::ids::TranscriptItemId;
 use crate::reducer::reduce;
 use crate::state::State;
@@ -45,6 +45,13 @@ impl RuntimeShell {
     /// Applies a controller-originated action to the TUI reducer.
     pub fn apply_action(&mut self, action: ChatTuiAction) {
         reduce(&mut self.state, action);
+    }
+
+    /// Applies any currently due assistant reveal tick effects.
+    pub fn apply_assistant_reveal_tick(&mut self) {
+        for effect in tui_assistant_reveal_tick_effects(&self.state) {
+            self.apply_event_effect(effect);
+        }
     }
 
     /// Converts one terminal event into reducer state and runtime intents.

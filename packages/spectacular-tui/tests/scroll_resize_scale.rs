@@ -145,6 +145,12 @@ fn returning_to_bottom_reenables_follow_tail() {
             text: "streamed tail content".to_string(),
         },
     );
+    reduce(
+        &mut state,
+        ChatTuiAction::AssistantRevealTick {
+            id: TranscriptItemId::new("assistant-active"),
+        },
+    );
     let output = render_state_to_string(&state, Some(120));
 
     assert_eq!(state.scroll.offset, 0);

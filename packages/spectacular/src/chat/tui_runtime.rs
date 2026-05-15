@@ -13,7 +13,7 @@ use spectacular_llms::LlmDebugLogger;
 use spectacular_tui::{
     ChatTuiAction, DisplayMetadata, RuntimeIntent, RuntimeShell, SelectionPromptAnswer,
     SelectionPromptChoice, SelectionPromptState, SessionId, State, TranscriptItemContent,
-    TranscriptItemId,
+    TranscriptItemId, ASSISTANT_REVEAL_TICK_INTERVAL,
 };
 use std::future::Future;
 use std::path::PathBuf;
@@ -385,6 +385,7 @@ fn TuiRuntimeRoot(mut hooks: Hooks, props: &TuiRuntimeRootProps) -> impl Into<An
     let local_state = hooks.use_state(|| initial_state);
     let exit_requested = hooks.use_state(|| false);
     synchronize_runtime_state(&mut hooks, local_state, state_receiver);
+    reveal_assistant_streams(&mut hooks, local_state);
     emit_terminal_intents(
         &mut hooks,
         local_state,
@@ -437,6 +438,21 @@ fn apply_state_updates(
         };
         local_state.set(state);
     }
+}
+
+/// Advances assistant typewriter reveal state at the documented cadence.
+fn reveal_assistant_streams(hooks: &mut Hooks, mut local_state: iocraft::prelude::State<State>) {
+    hooks.use_future(async move {
+        loop {
+            tokio::time::sleep(ASSISTANT_REVEAL_TICK_INTERVAL).await;
+            let state = local_state.read().clone();
+            let (mut shell, _intents) = RuntimeShell::new(state.clone());
+            shell.apply_assistant_reveal_tick();
+            if shell.state() != &state {
+                local_state.set(shell.state().clone());
+            }
+        }
+    });
 }
 
 /// Registers terminal input handling that emits runtime intents without performing side effects.

@@ -26,6 +26,9 @@ pub enum ChatTuiAction {
         id: TranscriptItemId,
         text: String,
     },
+    AssistantRevealTick {
+        id: TranscriptItemId,
+    },
     MessageFinished {
         id: TranscriptItemId,
     },
@@ -54,6 +57,10 @@ pub enum ChatTuiAction {
         name: String,
         output: String,
     },
+    ToolCallFailed {
+        tool_call_id: String,
+        error: String,
+    },
     CommandStarted {
         id: TranscriptItemId,
         command_id: String,
@@ -81,6 +88,12 @@ pub enum ChatTuiAction {
     ErrorReported {
         message: String,
         details: Option<String>,
+    },
+    WarningReported {
+        message: String,
+    },
+    SuccessReported {
+        message: String,
     },
     NoticeReported {
         message: String,

@@ -63,12 +63,11 @@ async fn controller_publishes_state_while_prompt_run_is_streaming() {
         .unwrap();
 
     let streamed_state = next_state_matching(&mut state_receiver, |state| {
-        state.session.transcript.iter().any(|item| {
-            matches!(
-                &item.content,
-                TranscriptItemContent::AssistantMessage(message) if message.text == "streamed before completion"
-            )
-        })
+        state
+            .assistant_stream
+            .streams
+            .iter()
+            .any(|stream| stream.received == "streamed before completion")
     })
     .await;
 
@@ -101,10 +100,9 @@ async fn submit_prompt_intent_runs_real_controller_path() {
         .unwrap();
 
     assert_eq!(controller.runner().requests, vec!["hello runtime".to_owned()]);
-    assert!(matches!(
-        &controller.state().session.transcript[1].content,
-        TranscriptItemContent::AssistantMessage(message) if message.text == "hello from runtime"
-    ));
+    assert!(controller.state().assistant_stream.streams.iter().any(|stream| {
+        stream.received == "hello from runtime"
+    }));
 }
 
 /// Verifies completed TUI runs persist the durable semantic session snapshot.
@@ -131,10 +129,13 @@ async fn completed_tui_run_saves_session_snapshot() {
 
     let snapshot = controller.model.session_manager().load_snapshot().unwrap();
     assert_eq!(snapshot.id, controller.state().session.id);
+    assert!(controller.state().assistant_stream.streams.iter().any(|stream| {
+        stream.received == "snapshot response"
+    }));
     assert!(snapshot.transcript.iter().any(|item| {
         matches!(
             &item.content,
-            TranscriptItemContent::AssistantMessage(message) if message.text == "snapshot response"
+            TranscriptItemContent::AssistantMessage(message) if message.text.is_empty()
         )
     }));
 }

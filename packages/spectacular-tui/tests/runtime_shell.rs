@@ -68,6 +68,7 @@ async fn shell_reduces_controller_actions_into_transcript() {
         id: TranscriptItemId::new("message-1"),
         text: "hi".to_owned(),
     });
+    shell.apply_assistant_reveal_tick();
     shell.apply_action(ChatTuiAction::AgentFinished);
 
     let state = shell.state();

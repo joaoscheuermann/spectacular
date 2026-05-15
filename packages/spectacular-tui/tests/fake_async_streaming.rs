@@ -13,7 +13,7 @@ async fn fake_stream_appends_assistant_deltas_to_one_item() {
 
     assert_eq!(
         harness.assistant_text("assistant-1"),
-        Some("Hello from the fake async stream.")
+        Some("Hello from the fake async stream.".to_owned())
     );
     assert_eq!(harness.assistant_item_count(), 1);
 }

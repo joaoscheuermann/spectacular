@@ -6,8 +6,8 @@ use crate::state::State;
 use crate::status::{Activity, Status};
 use crate::transcript::{
     AssistantMessageItem, CancellationItem, CommandItem, CommandStatus, ErrorItem, NoticeItem,
-    ReasoningItem, ToolCallItem, ToolStatus, TranscriptItem, TranscriptItemContent, UserPromptItem,
-    WorkedSummaryItem,
+    ReasoningItem, SuccessItem, ToolCallItem, ToolStatus, TranscriptItem, TranscriptItemContent,
+    UserPromptItem, WarningItem, WorkedSummaryItem,
 };
 
 /// Applies one TUI action to state without performing IO or runtime side effects.
@@ -49,6 +49,7 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
             };
         }
         ChatTuiAction::MessageStarted { id } => {
+            state.assistant_stream.start(id.clone());
             append_transcript_item(
                 state,
                 id.clone(),
@@ -62,7 +63,11 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
         ChatTuiAction::MessageDelta { id, text } => {
             append_assistant_delta(state, &id, &text);
         }
+        ChatTuiAction::AssistantRevealTick { id } => {
+            reveal_assistant_delta(state, &id);
+        }
         ChatTuiAction::MessageFinished { id } => {
+            state.assistant_stream.finish(&id);
             clear_matching_activity(
                 state,
                 |activity| matches!(activity, Activity::StreamingAssistant { id: active_id } if active_id == &id),
@@ -124,6 +129,17 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
                 |activity| matches!(activity, Activity::RunningTool { id, .. } if Some(id) == active_item_id.as_ref()),
             );
         }
+        ChatTuiAction::ToolCallFailed {
+            tool_call_id,
+            error,
+        } => {
+            let active_item_id = matching_tool_activity_item_id(state, &tool_call_id);
+            fail_tool_call(state, &tool_call_id, error);
+            clear_matching_activity(
+                state,
+                |activity| matches!(activity, Activity::RunningTool { id, .. } if Some(id) == active_item_id.as_ref()),
+            );
+        }
         ChatTuiAction::CommandStarted {
             id,
             command_id,
@@ -172,6 +188,12 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
         ChatTuiAction::ErrorReported { message, details } => {
             append_error(state, message, details);
         }
+        ChatTuiAction::WarningReported { message } => {
+            append_warning(state, message);
+        }
+        ChatTuiAction::SuccessReported { message } => {
+            append_success(state, message);
+        }
         ChatTuiAction::NoticeReported { message } => {
             append_notice(state, message);
         }
@@ -202,6 +224,9 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
 /// Clamps transcript scroll offset to the valid range for the current transcript length.
 fn clamp_scroll_to_transcript(scroll: &mut TranscriptScrollState, transcript_len: usize) {
     if scroll.visible_rows == 0 {
+        return;
+    }
+    if !scroll.follow_tail && transcript_len as u32 <= scroll.visible_rows {
         return;
     }
 
@@ -235,11 +260,38 @@ fn preserve_review_position_for_append(state: &mut State) {
 
 /// Appends text to an assistant message matching the supplied transcript item ID.
 fn append_assistant_delta(state: &mut State, id: &TranscriptItemId, text: &str) {
+    if state.assistant_stream.contains(id) {
+        state.assistant_stream.append_delta(id, text);
+        return;
+    }
+
+    append_assistant_delta_directly(state, id, text);
+}
+
+/// Reveals queued assistant text into the semantic transcript item.
+fn reveal_assistant_delta(state: &mut State, id: &TranscriptItemId) {
+    let Some(visible_text) = state.assistant_stream.reveal_tick(id) else {
+        return;
+    };
+    set_assistant_text(state, id, visible_text);
+}
+
+/// Appends assistant text directly for legacy snapshots without reveal state.
+fn append_assistant_delta_directly(state: &mut State, id: &TranscriptItemId, text: &str) {
     let Some(TranscriptItemContent::AssistantMessage(item)) = find_content_by_id(state, id) else {
         return;
     };
 
     item.text.push_str(text);
+}
+
+/// Replaces assistant visible text for reveal-paced streams.
+fn set_assistant_text(state: &mut State, id: &TranscriptItemId, text: String) {
+    let Some(TranscriptItemContent::AssistantMessage(item)) = find_content_by_id(state, id) else {
+        return;
+    };
+
+    item.text = text;
 }
 
 /// Appends text to reasoning content matching the supplied transcript item ID.
@@ -271,6 +323,17 @@ fn finish_tool_call(state: &mut State, tool_call_id: &str, _name: String, output
     tool_call.output_preview = Some(output);
 }
 
+/// Marks a tool call failed and appends the error to its output preview.
+fn fail_tool_call(state: &mut State, tool_call_id: &str, error: String) {
+    let Some(tool_call) = find_tool_call(state, tool_call_id) else {
+        return;
+    };
+
+    tool_call.status = ToolStatus::Failed;
+    let output = tool_call.output_preview.get_or_insert_with(String::new);
+    output.push_str(&error);
+}
+
 /// Appends command output to the matching command transcript item.
 fn append_command_output(state: &mut State, command_id: &str, text: &str) {
     let Some(command) = find_command(state, command_id) else {
@@ -300,6 +363,26 @@ fn append_error(state: &mut State, message: String, details: Option<String>) {
         state,
         id,
         TranscriptItemContent::Error(ErrorItem::new(message, details)),
+    );
+}
+
+/// Appends a semantic warning transcript item using a reducer-owned ID.
+fn append_warning(state: &mut State, message: String) {
+    let id = generated_transcript_id(state, "warning");
+    append_transcript_item(
+        state,
+        id,
+        TranscriptItemContent::Warning(WarningItem::new(message)),
+    );
+}
+
+/// Appends a semantic success transcript item using a reducer-owned ID.
+fn append_success(state: &mut State, message: String) {
+    let id = generated_transcript_id(state, "success");
+    append_transcript_item(
+        state,
+        id,
+        TranscriptItemContent::Success(SuccessItem::new(message)),
     );
 }
 

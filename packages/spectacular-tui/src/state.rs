@@ -4,6 +4,7 @@ use crate::scroll::TranscriptScrollState;
 use crate::session::{SelectionPromptState, Session};
 use crate::spinner::SpinnerState;
 use crate::status::Status;
+use crate::streaming::AssistantStreamState;
 
 /// Complete framework-independent state for the full terminal UI.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -14,6 +15,7 @@ pub struct State {
     pub display: DisplayMetadata,
     pub status: Status,
     pub spinner: SpinnerState,
+    pub assistant_stream: AssistantStreamState,
     pub selection: Option<SelectionPromptState>,
     pub scroll: TranscriptScrollState,
 }
@@ -28,6 +30,7 @@ impl State {
             display,
             status: Status::Idle,
             spinner: SpinnerState::new(),
+            assistant_stream: AssistantStreamState::default(),
             selection: None,
             scroll: TranscriptScrollState::follow_tail(),
         }
@@ -49,6 +52,7 @@ impl State {
             display,
             status: Status::Idle,
             spinner: SpinnerState::new(),
+            assistant_stream: AssistantStreamState::default(),
             selection: None,
             scroll: TranscriptScrollState::follow_tail(),
         }

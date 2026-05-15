@@ -33,9 +33,20 @@ pub fn tui_event_effects(state: &State, event: TerminalEvent) -> Vec<EventEffect
     }
 }
 
-/// Returns the effects emitted by the fixed-cadence timer source.
+/// Returns the effects emitted by the fixed-cadence spinner timer source.
 pub fn tui_timer_tick_effects() -> Vec<EventEffect> {
     vec![EventEffect::Action(ChatTuiAction::SpinnerTick)]
+}
+
+/// Returns the effects emitted by the assistant reveal timer source.
+pub fn tui_assistant_reveal_tick_effects(state: &State) -> Vec<EventEffect> {
+    let Some(id) = state.assistant_stream.active_reveal_id() else {
+        return Vec::new();
+    };
+
+    vec![EventEffect::Action(ChatTuiAction::AssistantRevealTick {
+        id,
+    })]
 }
 
 /// Converts one key event into a reducer action or shell-level exit request.
