@@ -44,6 +44,9 @@ fn visible_transcript_items(state: &State) -> impl Iterator<Item = &TranscriptIt
 /// Formats one semantic transcript item for the read-only prototype.
 fn transcript_item_text(item: &TranscriptItem) -> String {
     match &item.content {
+        TranscriptItemContent::OpeningBanner(banner) => {
+            format!("Spectacular (v{})", banner.version)
+        }
         TranscriptItemContent::UserPrompt(prompt) => format!("You: {}", prompt.text),
         TranscriptItemContent::AssistantMessage(message) => {
             format!("Assistant: {}", message.text)
@@ -52,7 +55,15 @@ fn transcript_item_text(item: &TranscriptItem) -> String {
         TranscriptItemContent::ToolCall(tool) => tool_text(tool),
         TranscriptItemContent::Command(command) => command_text(command),
         TranscriptItemContent::Error(error) => error_text(&error.message, error.details.as_deref()),
+        TranscriptItemContent::Warning(warning) => format!("Warning: {}", warning.message),
+        TranscriptItemContent::Success(success) => format!("Success: {}", success.message),
         TranscriptItemContent::Notice(notice) => format!("Notice: {}", notice.message),
+        TranscriptItemContent::Cancellation(cancellation) => {
+            format!("Cancellation: {}", cancellation.reason)
+        }
+        TranscriptItemContent::WorkedSummary(summary) => {
+            format!("Worked for {}", summary.duration)
+        }
     }
 }
 

@@ -65,6 +65,10 @@ pub enum ChatTuiAction {
         exit_code: Option<i32>,
     },
     AgentFinished,
+    WorkedSummaryReported {
+        duration: String,
+        turn_tokens: Option<u64>,
+    },
     AgentFailed {
         message: String,
     },

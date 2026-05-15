@@ -24,13 +24,47 @@ impl TranscriptItem {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", content = "data")]
 pub enum TranscriptItemContent {
+    OpeningBanner(OpeningBannerItem),
     UserPrompt(UserPromptItem),
     AssistantMessage(AssistantMessageItem),
     Reasoning(ReasoningItem),
     ToolCall(ToolCallItem),
     Command(CommandItem),
     Error(ErrorItem),
+    Warning(WarningItem),
+    Success(SuccessItem),
     Notice(NoticeItem),
+    Cancellation(CancellationItem),
+    WorkedSummary(WorkedSummaryItem),
+}
+
+/// Opening session banner content with display-ready metadata.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct OpeningBannerItem {
+    pub version: String,
+    pub model: String,
+    pub reasoning: String,
+    pub directory: String,
+    pub session_id: String,
+}
+
+impl OpeningBannerItem {
+    /// Creates an opening banner payload from display-ready session metadata.
+    pub fn new(
+        version: impl Into<String>,
+        model: impl Into<String>,
+        reasoning: impl Into<String>,
+        directory: impl Into<String>,
+        session_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            version: version.into(),
+            model: model.into(),
+            reasoning: reasoning.into(),
+            directory: directory.into(),
+            session_id: session_id.into(),
+        }
+    }
 }
 
 /// User-authored prompt content submitted into a session.
@@ -143,6 +177,36 @@ impl ErrorItem {
     }
 }
 
+/// Warning content recorded in the semantic transcript.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct WarningItem {
+    pub message: String,
+}
+
+impl WarningItem {
+    /// Creates a warning transcript item payload.
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
+/// Success content recorded in the semantic transcript.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct SuccessItem {
+    pub message: String,
+}
+
+impl SuccessItem {
+    /// Creates a success transcript item payload.
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
 /// Notice content recorded in the semantic transcript.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct NoticeItem {
@@ -154,6 +218,38 @@ impl NoticeItem {
     pub fn new(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
+        }
+    }
+}
+
+/// Cancellation content recorded in the semantic transcript.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct CancellationItem {
+    pub reason: String,
+}
+
+impl CancellationItem {
+    /// Creates a cancellation transcript item payload.
+    pub fn new(reason: impl Into<String>) -> Self {
+        Self {
+            reason: reason.into(),
+        }
+    }
+}
+
+/// Completed agent-work summary content recorded in the semantic transcript.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct WorkedSummaryItem {
+    pub duration: String,
+    pub turn_tokens: Option<u64>,
+}
+
+impl WorkedSummaryItem {
+    /// Creates a completed work summary payload from display-ready duration and token count.
+    pub fn new(duration: impl Into<String>, turn_tokens: Option<u64>) -> Self {
+        Self {
+            duration: duration.into(),
+            turn_tokens,
         }
     }
 }

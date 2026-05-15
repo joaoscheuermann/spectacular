@@ -90,6 +90,11 @@ fn ctrl_c_effects(state: &State) -> Vec<EventEffect> {
     if state.status.is_cancellable() {
         return vec![EventEffect::Action(ChatTuiAction::CancelRun)];
     }
+    if !state.session.prompt.text.is_empty() {
+        return vec![EventEffect::Action(ChatTuiAction::PromptChanged(
+            PromptState::empty(),
+        ))];
+    }
 
     vec![EventEffect::RequestExit]
 }

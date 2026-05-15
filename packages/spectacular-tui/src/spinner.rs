@@ -1,4 +1,4 @@
-const DEFAULT_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const DEFAULT_FRAMES: &[&str] = &["⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 /// Deterministic spinner state rendered from model data instead of terminal output.
 #[derive(Clone, Debug, Eq, PartialEq)]

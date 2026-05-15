@@ -1,7 +1,7 @@
 use spectacular_tui::{
     render_state_to_string, Activity, CommandStatus, ContextTokenUsage, DisplayMetadata,
-    ReasoningLevel, RuntimeSelection, SessionId, State, Status, ToolStatus, TranscriptItem,
-    TranscriptItemContent, TranscriptItemId,
+    OpeningBannerItem, ReasoningLevel, RuntimeSelection, SessionId, State, Status, ToolStatus,
+    TranscriptItem, TranscriptItemContent, TranscriptItemId,
 };
 
 /// Builds a representative runtime selection for IOCraft layout tests.
@@ -46,22 +46,24 @@ fn render(state: &State) -> String {
     render_state_to_string(state, Some(100))
 }
 
-/// Verifies the empty read-only layout renders all major regions.
+/// Verifies the empty read-only layout renders prompt/footer without prototype regions.
 #[test]
-fn empty_state_renders_full_layout_regions() {
+fn empty_state_renders_terminal_flow_prompt_and_footer() {
     let output = render(&state());
 
-    assert!(output.contains("Spectacular"));
-    assert!(output.contains("Transcript"));
-    assert!(output.contains("No transcript items yet"));
-    assert!(output.contains("Status: idle"));
-    assert!(output.contains("Prompt"));
-    assert!(output.contains("Completions: reserved"));
-    assert!(output.contains("Guidance: reserved"));
-    assert!(output.contains("cwd: /workspace/spectacular"));
+    assert!(output.contains(">"));
+    assert!(output.contains("/workspace/spectacular"));
+    assert!(output.contains("GPT 5.1 (high)"));
+    assert!(!output.contains("Transcript"));
+    assert!(!output.contains("No transcript items yet"));
+    assert!(!output.contains("Status: idle"));
+    assert!(!output.contains("Prompt:"));
+    assert!(!output.contains("Completions:"));
+    assert!(!output.contains("Guidance:"));
+    assert!(!output.contains("cwd:"));
 }
 
-/// Verifies every semantic transcript item kind renders without ANSI pre-rendered strings.
+/// Verifies every semantic transcript item kind renders without prototype labels.
 #[test]
 fn populated_transcript_renders_all_semantic_item_kinds() {
     let mut state = state();
@@ -119,33 +121,50 @@ fn populated_transcript_renders_all_semantic_item_kinds() {
 
     let output = render(&state);
 
-    assert!(output.contains("You: hello"));
-    assert!(output.contains("Assistant: hi there"));
-    assert!(output.contains("Reasoning: thinking"));
-    assert!(output.contains("Tool: grep [finished]"));
-    assert!(output.contains("args: pattern"));
-    assert!(output.contains("output: match"));
-    assert!(output.contains("Command: cargo test [failed]"));
+    assert!(output.contains("hello"));
+    assert!(output.contains("hi there"));
+    assert!(output.contains("thinking"));
+    assert!(output.contains("grep pattern"));
+    assert!(output.contains("match"));
+    assert!(output.contains("$ cargo test"));
+    assert!(output.contains("failure output"));
     assert!(output.contains("exit: 101"));
-    assert!(output.contains("Error: boom"));
+    assert!(output.contains("error: boom"));
     assert!(output.contains("details"));
-    assert!(output.contains("Notice: Welcome to Spectacular"));
+    assert!(output.contains("Welcome to Spectacular"));
+    assert!(!output.contains("You:"));
+    assert!(!output.contains("Assistant:"));
+    assert!(!output.contains("Reasoning:"));
+    assert!(!output.contains("Tool:"));
+    assert!(!output.contains("Command:"));
+    assert!(!output.contains("Notice:"));
 }
 
-/// Verifies header metadata is read from state rather than external services.
+/// Verifies opening banner metadata is read from semantic state rather than external services.
 #[test]
-fn header_renders_state_metadata() {
-    let output = render(&state());
+fn opening_banner_renders_state_metadata() {
+    let mut state = state();
+    state.session.transcript.push(item(
+        1,
+        TranscriptItemContent::OpeningBanner(OpeningBannerItem::new(
+            "0.1.0",
+            "GPT 5.1",
+            "high",
+            "/workspace/spectacular",
+            "session-123",
+        )),
+    ));
+    let output = render(&state);
 
-    assert!(output.contains("model: GPT 5.1"));
-    assert!(output.contains("reasoning: high"));
+    assert!(output.contains("Spectacular (v0.1.0)"));
+    assert!(output.contains("model:     GPT 5.1 high"));
     assert!(output.contains("directory: /workspace/spectacular"));
-    assert!(output.contains("session: session-123"));
+    assert!(output.contains("session:   session-123"));
 }
 
-/// Verifies running status includes activity and current spinner frame.
+/// Verifies running status renders the original working line shape.
 #[test]
-fn running_status_renders_activity_and_spinner() {
+fn running_status_renders_working_line_spinner() {
     let mut state = state();
     state.status = Status::Running {
         activity: Activity::RunningTool {
@@ -157,14 +176,15 @@ fn running_status_renders_activity_and_spinner() {
 
     let output = render(&state);
 
-    assert!(output.contains("Status: running"));
-    assert!(output.contains("activity: running tool grep"));
+    assert!(output.contains("Working (CTRL + C to stop)"));
     assert!(output.contains(state.spinner.current_frame()));
+    assert!(!output.contains("Status: running"));
+    assert!(!output.contains("activity: running tool grep"));
 }
 
-/// Verifies context usage renders in both status and footer regions when available.
+/// Verifies context usage renders in the compact footer region when available.
 #[test]
-fn usage_renders_in_status_and_footer() {
+fn usage_renders_in_footer() {
     let usage = ContextTokenUsage::new(42_000, Some(200_000));
     let mut state = State::new(
         SessionId::new("session-123"),
@@ -175,26 +195,28 @@ fn usage_renders_in_status_and_footer() {
 
     let output = render(&state);
 
-    assert!(output.contains("tokens: 42000/200000"));
-    assert!(output.contains("context: 42000/200000"));
+    assert!(output.contains("42k/200k tks"));
+    assert!(!output.contains("tokens:"));
+    assert!(!output.contains("context:"));
 }
 
-/// Verifies non-command prompt text keeps reserved completion and guidance regions.
+/// Verifies non-command prompt text renders with the original prompt marker only.
 #[test]
-fn prompt_placeholder_renders_current_text_and_reserved_regions() {
+fn prompt_renders_current_text_without_reserved_regions() {
     let mut state = state();
     state.session.prompt = spectacular_tui::PromptState::from_text("model gpt-5.1");
 
     let output = render(&state);
 
-    assert!(output.contains("Prompt: model gpt-5.1"));
-    assert!(output.contains("Completions: reserved"));
-    assert!(output.contains("Guidance: reserved"));
+    assert!(output.contains("> model gpt-5.1"));
+    assert!(!output.contains("Prompt:"));
+    assert!(!output.contains("Completions:"));
+    assert!(!output.contains("Guidance:"));
 }
 
 /// Verifies welcome/banner text is rendered as semantic state instead of terminal printing.
 #[test]
-fn opening_banner_renders_from_semantic_transcript_state() {
+fn notice_renders_from_semantic_transcript_state() {
     let mut state = state();
     state.session.transcript.push(item(
         1,
@@ -203,7 +225,8 @@ fn opening_banner_renders_from_semantic_transcript_state() {
 
     let output = render(&state);
 
-    assert!(output.contains("Notice: Welcome to Spectacular"));
+    assert!(output.contains("Welcome to Spectacular"));
+    assert!(!output.contains("Notice:"));
 }
 
 /// Verifies rendering is a pure state projection with no runtime side effects.
@@ -214,6 +237,6 @@ fn rendering_does_not_mutate_state_or_require_side_effects() {
 
     let output = render(&state);
 
-    assert!(output.contains("Spectacular"));
+    assert!(output.contains(">"));
     assert_eq!(state, original);
 }

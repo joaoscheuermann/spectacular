@@ -150,5 +150,6 @@ async fn fake_streaming_requires_no_direct_terminal_printing() {
     harness.run_until_finished().await;
 
     assert_eq!(harness.direct_terminal_writes(), 0);
-    assert!(harness.rendered_output().contains("Assistant: Hello from"));
+    assert!(harness.rendered_output().contains("Hello from"));
+    assert!(!harness.rendered_output().contains("Assistant:"));
 }

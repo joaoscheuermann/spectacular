@@ -2,6 +2,7 @@ pub mod action;
 pub mod components;
 pub mod event_loop;
 pub mod fake_streaming;
+pub mod format;
 pub mod ids;
 pub mod metadata;
 pub mod reducer;
@@ -36,8 +37,9 @@ pub use spinner::SpinnerState;
 pub use state::State;
 pub use status::{Activity, Status};
 pub use transcript::{
-    AssistantMessageItem, CommandItem, CommandStatus, ErrorItem, NoticeItem, ReasoningItem,
-    ToolCallItem, ToolStatus, TranscriptItem, TranscriptItemContent, UserPromptItem,
+    AssistantMessageItem, CancellationItem, CommandItem, CommandStatus, ErrorItem, NoticeItem,
+    OpeningBannerItem, ReasoningItem, SuccessItem, ToolCallItem, ToolStatus, TranscriptItem,
+    TranscriptItemContent, UserPromptItem, WarningItem, WorkedSummaryItem,
 };
 
 use anstyle::{RgbColor, Style};

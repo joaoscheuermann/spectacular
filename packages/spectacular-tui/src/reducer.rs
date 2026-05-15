@@ -5,8 +5,9 @@ use crate::session::Session;
 use crate::state::State;
 use crate::status::{Activity, Status};
 use crate::transcript::{
-    AssistantMessageItem, CommandItem, CommandStatus, ErrorItem, NoticeItem, ReasoningItem,
-    ToolCallItem, ToolStatus, TranscriptItem, TranscriptItemContent, UserPromptItem,
+    AssistantMessageItem, CancellationItem, CommandItem, CommandStatus, ErrorItem, NoticeItem,
+    ReasoningItem, ToolCallItem, ToolStatus, TranscriptItem, TranscriptItemContent,
+    UserPromptItem, WorkedSummaryItem,
 };
 
 /// Applies one TUI action to state without performing IO or runtime side effects.
@@ -148,12 +149,18 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
         ChatTuiAction::AgentFinished => {
             state.status = Status::Idle;
         }
+        ChatTuiAction::WorkedSummaryReported {
+            duration,
+            turn_tokens,
+        } => {
+            append_worked_summary(state, duration, turn_tokens);
+        }
         ChatTuiAction::AgentFailed { message } => {
             append_error(state, message.clone(), None);
             state.status = Status::Failed { message };
         }
         ChatTuiAction::AgentCancelled { reason } => {
-            append_notice(state, reason);
+            append_cancellation(state, reason);
             state.status = Status::Idle;
         }
         ChatTuiAction::ErrorReported { message, details } => {
@@ -297,6 +304,26 @@ fn append_notice(state: &mut State, message: String) {
         state,
         id,
         TranscriptItemContent::Notice(NoticeItem::new(message)),
+    );
+}
+
+/// Appends a semantic cancellation transcript item using a reducer-owned ID.
+fn append_cancellation(state: &mut State, reason: String) {
+    let id = generated_transcript_id(state, "cancellation");
+    append_transcript_item(
+        state,
+        id,
+        TranscriptItemContent::Cancellation(CancellationItem::new(reason)),
+    );
+}
+
+/// Appends a worked-summary transcript item using a reducer-owned ID.
+fn append_worked_summary(state: &mut State, duration: String, turn_tokens: Option<u64>) {
+    let id = generated_transcript_id(state, "worked-summary");
+    append_transcript_item(
+        state,
+        id,
+        TranscriptItemContent::WorkedSummary(WorkedSummaryItem::new(duration, turn_tokens)),
     );
 }
 

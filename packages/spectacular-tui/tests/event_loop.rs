@@ -187,9 +187,9 @@ fn transcript_scroll_input_updates_scroll_state_and_tail_following() {
     assert!(state.scroll.follow_tail);
 }
 
-/// Verifies slash-command suggestions and guidance are derived only from command state and prompt text.
+/// Verifies slash-command suggestions render in the original terminal-flow shape.
 #[test]
-fn slash_command_prompt_ui_uses_state_commands_for_suggestions_and_guidance() {
+fn slash_command_prompt_ui_uses_state_commands_for_suggestions() {
     let mut state = state();
     state.commands = vec![
         CommandDescriptor::with_usage("config", "Manage configuration", "/config list"),
@@ -199,13 +199,15 @@ fn slash_command_prompt_ui_uses_state_commands_for_suggestions_and_guidance() {
 
     let output = spectacular_tui::render_state_to_string(&state, Some(100));
 
-    assert!(output.contains("Completions: /config - Manage configuration"));
-    assert!(output.contains("Guidance: type a slash command or press Enter to submit"));
-    assert!(!output.contains("/session - Manage sessions"));
+    assert!(output.contains("> /con"));
+    assert!(output.contains("/config           Manage configuration"));
+    assert!(!output.contains("/session           Manage sessions"));
+    assert!(!output.contains("Completions:"));
+    assert!(!output.contains("Guidance:"));
 
     state.session.prompt = PromptState::from_text("/config ");
     let output = spectacular_tui::render_state_to_string(&state, Some(100));
 
-    assert!(output.contains("Guidance: /config - Manage configuration"));
-    assert!(output.contains("Usage: /config list"));
+    assert!(output.contains("> /config"));
+    assert!(!output.contains("Usage:"));
 }

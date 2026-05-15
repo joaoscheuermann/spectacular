@@ -47,7 +47,7 @@ fn state_new_initializes_foundation_defaults() {
     assert_eq!(state.runtime, runtime);
     assert_eq!(state.display, display);
     assert_eq!(state.status, Status::Idle);
-    assert_eq!(state.spinner.current_frame(), "⠋");
+    assert_eq!(state.spinner.current_frame(), "⠙");
     assert_eq!(state.scroll.offset, 0);
     assert!(state.scroll.follow_tail);
 }
@@ -145,7 +145,7 @@ fn agent_failed_and_cancelled_leave_running_state() {
     assert_eq!(cancelled.status, Status::Idle);
     assert!(matches!(
         &cancelled.session.transcript[0].content,
-        TranscriptItemContent::Notice(item) if item.message == "user"
+        TranscriptItemContent::Cancellation(item) if item.reason == "user"
     ));
 }
 

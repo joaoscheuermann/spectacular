@@ -264,7 +264,7 @@ fn error_cancellation_and_notice_append_semantic_items() {
     ));
     assert!(matches!(
         &state.session.transcript[1].content,
-        TranscriptItemContent::Notice(item) if item.message == "cancelled"
+        TranscriptItemContent::Cancellation(item) if item.reason == "cancelled"
     ));
     assert!(matches!(
         &state.session.transcript[2].content,
