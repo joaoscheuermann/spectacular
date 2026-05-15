@@ -1,4 +1,5 @@
 use crate::ids::{Timestamp, TranscriptItemId};
+use crate::render_model::RenderStyle;
 use serde::{Deserialize, Serialize};
 
 /// One semantic renderable unit in the conversation transcript.
@@ -118,6 +119,8 @@ pub struct ToolCallItem {
     pub arguments_preview: Option<String>,
     pub status: ToolStatus,
     pub output_preview: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display: Option<ToolDisplay>,
 }
 
 impl ToolCallItem {
@@ -133,6 +136,7 @@ impl ToolCallItem {
             arguments_preview,
             status: ToolStatus::Running,
             output_preview: None,
+            display: None,
         }
     }
 }
@@ -145,6 +149,8 @@ pub struct CommandItem {
     pub status: CommandStatus,
     pub output: String,
     pub exit_code: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display: Option<CommandDisplay>,
 }
 
 impl CommandItem {
@@ -156,6 +162,7 @@ impl CommandItem {
             status: CommandStatus::Running,
             output: String::new(),
             exit_code: None,
+            display: None,
         }
     }
 }
@@ -254,12 +261,115 @@ impl WorkedSummaryItem {
     }
 }
 
+/// One display-ready line with semantic style supplied by the runtime adapter.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct DisplayLine {
+    pub text: String,
+    pub style: DisplayLineStyle,
+}
+
+impl DisplayLine {
+    /// Creates a display-ready line from visible text and semantic style.
+    pub fn new(text: impl Into<String>, style: DisplayLineStyle) -> Self {
+        Self {
+            text: text.into(),
+            style,
+        }
+    }
+}
+
+/// Serializable semantic style names for adapter-provided display payloads.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum DisplayLineStyle {
+    Text,
+    Dim,
+    Tool,
+    Command,
+    CommandOutput,
+    Success,
+    Warning,
+    Error,
+    DiffAdded,
+    DiffRemoved,
+}
+
+impl From<DisplayLineStyle> for RenderStyle {
+    /// Maps persisted display styles into active render-model styles.
+    fn from(style: DisplayLineStyle) -> Self {
+        match style {
+            DisplayLineStyle::Text => RenderStyle::Text,
+            DisplayLineStyle::Dim => RenderStyle::Dim,
+            DisplayLineStyle::Tool => RenderStyle::Tool,
+            DisplayLineStyle::Command => RenderStyle::Command,
+            DisplayLineStyle::CommandOutput => RenderStyle::CommandOutput,
+            DisplayLineStyle::Success => RenderStyle::Success,
+            DisplayLineStyle::Warning => RenderStyle::Warning,
+            DisplayLineStyle::Error => RenderStyle::Error,
+            DisplayLineStyle::DiffAdded => RenderStyle::DiffAdded,
+            DisplayLineStyle::DiffRemoved => RenderStyle::DiffRemoved,
+        }
+    }
+}
+
+impl From<RenderStyle> for DisplayLineStyle {
+    /// Maps active render-model styles into serializable display styles for tests and snapshots.
+    fn from(style: RenderStyle) -> Self {
+        match style {
+            RenderStyle::Dim | RenderStyle::Reasoning => DisplayLineStyle::Dim,
+            RenderStyle::Tool | RenderStyle::Task => DisplayLineStyle::Tool,
+            RenderStyle::Command => DisplayLineStyle::Command,
+            RenderStyle::CommandOutput => DisplayLineStyle::CommandOutput,
+            RenderStyle::Success => DisplayLineStyle::Success,
+            RenderStyle::Warning => DisplayLineStyle::Warning,
+            RenderStyle::Error | RenderStyle::Secret => DisplayLineStyle::Error,
+            RenderStyle::DiffAdded => DisplayLineStyle::DiffAdded,
+            RenderStyle::DiffRemoved => DisplayLineStyle::DiffRemoved,
+            _ => DisplayLineStyle::Text,
+        }
+    }
+}
+
+/// Display-ready tool payload persisted with a tool transcript item.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+pub struct ToolDisplay {
+    pub call_line: Option<DisplayLine>,
+    #[serde(default)]
+    pub argument_lines: Vec<DisplayLine>,
+    #[serde(default)]
+    pub output_lines: Vec<DisplayLine>,
+}
+
+/// Display-ready command payload persisted with a command transcript item.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+pub struct CommandDisplay {
+    pub command_line: Option<DisplayLine>,
+    #[serde(default)]
+    pub output_lines: Vec<DisplayLine>,
+    pub summary_line: Option<DisplayLine>,
+}
+
 /// Display-focused status for tool call transcript items.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum ToolStatus {
     Running,
     Finished,
     Failed,
+}
+
+/// Adapter-owned completion state for a display-ready tool result.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum ToolDisplayStatus {
+    Succeeded,
+    Failed,
+    Cancelled,
+}
+
+/// Adapter-owned completion state for a display-ready command result.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum CommandDisplayStatus {
+    Succeeded,
+    Failed,
+    Cancelled,
 }
 
 /// Display-focused status for command transcript items.

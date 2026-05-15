@@ -1,5 +1,5 @@
 use super::*;
-use spectacular_agent::{AgentEvent, CommandStatus};
+use spectacular_agent::AgentEvent;
 use spectacular_commands::{Command, CommandControl, CommandRegistry};
 use spectacular_config::ProviderAuthMode;
 use spectacular_llms::{FinishReason, MessageDelta, ReasoningDelta, UsageMetadata};
@@ -11,6 +11,8 @@ use spectacular_tui::{
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
+
+mod tui_adapter_display;
 
 /// Verifies that an agent start event maps to the TUI running boundary.
 #[test]
@@ -98,154 +100,6 @@ fn reasoning_lifecycle_events_reuse_the_same_transcript_id() {
     );
 }
 
-/// Verifies tool lifecycle events map to semantic actions only.
-#[test]
-fn tool_events_map_to_tool_lifecycle_actions() {
-    let mut adapter = TuiEventAdapter::new();
-
-    assert_eq!(
-        adapter.adapt_agent_event(&AgentEvent::assistant_tool_call_request(
-            "call-1",
-            "read",
-            r#"{"path":"README.md"}"#,
-        )),
-        vec![ChatTuiAction::ToolCallStarted {
-            id: TranscriptItemId::new("tool-call-1"),
-            tool_call_id: "call-1".to_owned(),
-            name: "read".to_owned(),
-            arguments: r#"{"path":"README.md"}"#.to_owned(),
-        }]
-    );
-    assert_eq!(
-        adapter.adapt_agent_event(&AgentEvent::tool_result("call-1", "read", "contents")),
-        vec![ChatTuiAction::ToolCallFinished {
-            tool_call_id: "call-1".to_owned(),
-            name: "read".to_owned(),
-            output: "contents".to_owned(),
-        }]
-    );
-    assert_eq!(
-        adapter.adapt_agent_event(&AgentEvent::tool_result("call-2", "grep", "matches")),
-        vec![
-            ChatTuiAction::ToolCallStarted {
-                id: TranscriptItemId::new("tool-call-2"),
-                tool_call_id: "call-2".to_owned(),
-                name: "grep".to_owned(),
-                arguments: String::new(),
-            },
-            ChatTuiAction::ToolCallFinished {
-                tool_call_id: "call-2".to_owned(),
-                name: "grep".to_owned(),
-                output: "matches".to_owned(),
-            },
-        ]
-    );
-}
-
-/// Verifies command lifecycle events map to command actions.
-#[test]
-fn command_lifecycle_events_map_to_command_actions() {
-    let mut adapter = TuiEventAdapter::new();
-
-    assert_eq!(
-        adapter.adapt_agent_event(&AgentEvent::command_start(
-            "cmd-1",
-            "slash_command",
-            "git",
-            "Git status",
-            "/git status",
-            None,
-        )),
-        vec![ChatTuiAction::CommandStarted {
-            id: TranscriptItemId::new("command-cmd-1"),
-            command_id: "cmd-1".to_owned(),
-            command: "/git status".to_owned(),
-        }]
-    );
-    assert_eq!(
-        adapter.adapt_agent_event(&AgentEvent::command_delta("cmd-1", "stdout", "ok", 1)),
-        vec![ChatTuiAction::CommandOutput {
-            command_id: "cmd-1".to_owned(),
-            text: "ok".to_owned(),
-        }]
-    );
-    assert_eq!(
-        adapter.adapt_agent_event(&AgentEvent::command_finished(
-            "cmd-1",
-            CommandStatus::Success,
-            "done",
-        )),
-        vec![ChatTuiAction::CommandFinished {
-            command_id: "cmd-1".to_owned(),
-            exit_code: Some(0),
-        }]
-    );
-}
-
-/// Verifies provider usage and context usage events map to TUI usage state updates.
-#[test]
-fn usage_events_map_to_usage_updated() {
-    let mut adapter = TuiEventAdapter::new();
-
-    assert_eq!(
-        adapter.adapt_agent_event(&AgentEvent::ContextTokenUsage(
-            spectacular_agent::ContextTokenUsage {
-                input_tokens: 42,
-                context_window_tokens: Some(100),
-            },
-        )),
-        vec![ChatTuiAction::UsageUpdated(TuiContextTokenUsage::new(
-            42,
-            Some(100),
-        ))]
-    );
-    assert_eq!(
-        adapter.adapt_agent_event(&AgentEvent::UsageMetadata(UsageMetadata {
-            input_tokens: Some(7),
-            output_tokens: Some(11),
-            total_tokens: Some(18),
-        })),
-        vec![ChatTuiAction::UsageUpdated(TuiContextTokenUsage::new(
-            18, None,
-        ))]
-    );
-}
-
-/// Verifies runtime terminal failures produce deterministic status and transcript actions.
-#[test]
-fn runtime_error_and_cancelled_events_map_to_terminal_actions() {
-    let mut adapter = TuiEventAdapter::new();
-
-    assert_eq!(
-        adapter.adapt_agent_event(&AgentEvent::error("boom")),
-        vec![ChatTuiAction::AgentFailed {
-            message: "boom".to_owned(),
-        }]
-    );
-    assert_eq!(
-        adapter.adapt_agent_event(&AgentEvent::cancelled("user stopped run")),
-        vec![ChatTuiAction::AgentCancelled {
-            reason: "user stopped run".to_owned(),
-        }]
-    );
-    assert_eq!(
-        adapter.adapt_agent_event(&AgentEvent::Finished {
-            finish_reason: FinishReason::Length,
-        }),
-        vec![ChatTuiAction::AgentFailed {
-            message: "provider response reached the length limit".to_owned(),
-        }]
-    );
-    assert_eq!(
-        adapter.adapt_agent_event(&AgentEvent::Finished {
-            finish_reason: FinishReason::ToolCalls,
-        }),
-        vec![ChatTuiAction::AgentFailed {
-            message: "provider requested tool calls without completing the run".to_owned(),
-        }]
-    );
-}
-
 /// Verifies command registry metadata maps into prompt command descriptors.
 #[test]
 fn command_registry_loading_maps_to_commands_loaded() {
@@ -324,6 +178,70 @@ fn user_prompt_submission_maps_to_submit_prompt() {
             id: TranscriptItemId::new("prompt-1"),
             text: "hello".to_owned(),
         }
+    );
+}
+
+/// Verifies provider usage and context usage events map to TUI usage state updates.
+#[test]
+fn usage_events_map_to_usage_updated() {
+    let mut adapter = TuiEventAdapter::new();
+
+    assert_eq!(
+        adapter.adapt_agent_event(&AgentEvent::ContextTokenUsage(
+            spectacular_agent::ContextTokenUsage {
+                input_tokens: 42,
+                context_window_tokens: Some(100),
+            },
+        )),
+        vec![ChatTuiAction::UsageUpdated(TuiContextTokenUsage::new(
+            42,
+            Some(100),
+        ))]
+    );
+    assert_eq!(
+        adapter.adapt_agent_event(&AgentEvent::UsageMetadata(UsageMetadata {
+            input_tokens: Some(7),
+            output_tokens: Some(11),
+            total_tokens: Some(18),
+        })),
+        vec![ChatTuiAction::UsageUpdated(TuiContextTokenUsage::new(
+            18, None,
+        ))]
+    );
+}
+
+/// Verifies runtime terminal failures produce deterministic status and transcript actions.
+#[test]
+fn runtime_error_and_cancelled_events_map_to_terminal_actions() {
+    let mut adapter = TuiEventAdapter::new();
+
+    assert_eq!(
+        adapter.adapt_agent_event(&AgentEvent::error("boom")),
+        vec![ChatTuiAction::AgentFailed {
+            message: "boom".to_owned(),
+        }]
+    );
+    assert_eq!(
+        adapter.adapt_agent_event(&AgentEvent::cancelled("user stopped run")),
+        vec![ChatTuiAction::AgentCancelled {
+            reason: "user stopped run".to_owned(),
+        }]
+    );
+    assert_eq!(
+        adapter.adapt_agent_event(&AgentEvent::Finished {
+            finish_reason: FinishReason::Length,
+        }),
+        vec![ChatTuiAction::AgentFailed {
+            message: "provider response reached the length limit".to_owned(),
+        }]
+    );
+    assert_eq!(
+        adapter.adapt_agent_event(&AgentEvent::Finished {
+            finish_reason: FinishReason::ToolCalls,
+        }),
+        vec![ChatTuiAction::AgentFailed {
+            message: "provider requested tool calls without completing the run".to_owned(),
+        }]
     );
 }
 

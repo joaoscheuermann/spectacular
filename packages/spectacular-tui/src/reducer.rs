@@ -1,5 +1,13 @@
 use crate::action::ChatTuiAction;
 use crate::ids::TranscriptItemId;
+use crate::reducer_display::{
+    append_display_command, append_display_command_output, append_display_tool_call,
+    finish_display_command, finish_display_tool_call,
+};
+use crate::reducer_lookup::{
+    clear_matching_activity, find_command, find_content_by_id, find_tool_call,
+    matching_tool_activity_item_id,
+};
 use crate::scroll::TranscriptScrollState;
 use crate::session::Session;
 use crate::state::State;
@@ -140,6 +148,38 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
                 |activity| matches!(activity, Activity::RunningTool { id, .. } if Some(id) == active_item_id.as_ref()),
             );
         }
+        ChatTuiAction::ToolDisplayStarted {
+            id,
+            tool_call_id,
+            name,
+            call_line,
+            argument_lines,
+        } => {
+            append_display_tool_call(
+                state,
+                id.clone(),
+                tool_call_id,
+                name.clone(),
+                call_line,
+                argument_lines,
+            );
+            state.status = Status::Running {
+                activity: Activity::RunningTool { id, name },
+                cancellable: true,
+            };
+        }
+        ChatTuiAction::ToolDisplayFinished {
+            tool_call_id,
+            status,
+            output_lines,
+        } => {
+            let active_item_id = matching_tool_activity_item_id(state, &tool_call_id);
+            finish_display_tool_call(state, &tool_call_id, status, output_lines);
+            clear_matching_activity(
+                state,
+                |activity| matches!(activity, Activity::RunningTool { id, .. } if Some(id) == active_item_id.as_ref()),
+            );
+        }
         ChatTuiAction::CommandStarted {
             id,
             command_id,
@@ -163,6 +203,32 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
             exit_code,
         } => {
             finish_command(state, &command_id, exit_code);
+            clear_matching_activity(
+                state,
+                |activity| matches!(activity, Activity::RunningCommand { command_id: active_id, .. } if active_id == &command_id),
+            );
+        }
+        ChatTuiAction::CommandDisplayStarted {
+            id,
+            command_id,
+            command_line,
+        } => {
+            append_display_command(state, id.clone(), command_id.clone(), command_line);
+            state.status = Status::Running {
+                activity: Activity::RunningCommand { id, command_id },
+                cancellable: true,
+            };
+        }
+        ChatTuiAction::CommandDisplayOutput { command_id, chunk } => {
+            append_display_command_output(state, &command_id, chunk.line);
+        }
+        ChatTuiAction::CommandDisplayFinished {
+            command_id,
+            status,
+            exit_code,
+            summary_line,
+        } => {
+            finish_display_command(state, &command_id, status, exit_code, summary_line);
             clear_matching_activity(
                 state,
                 |activity| matches!(activity, Activity::RunningCommand { command_id: active_id, .. } if active_id == &command_id),
@@ -236,7 +302,11 @@ fn clamp_scroll_to_transcript(scroll: &mut TranscriptScrollState, transcript_len
 }
 
 /// Appends a semantic transcript item with the next session timestamp.
-fn append_transcript_item(state: &mut State, id: TranscriptItemId, content: TranscriptItemContent) {
+pub(crate) fn append_transcript_item(
+    state: &mut State,
+    id: TranscriptItemId,
+    content: TranscriptItemContent,
+) {
     preserve_review_position_for_append(state);
     let timestamp = state.session.allocate_timestamp();
     state
@@ -428,89 +498,4 @@ fn optional_preview(value: String) -> Option<String> {
     }
 
     Some(value)
-}
-
-/// Clears the active running status if the supplied predicate matches its activity.
-fn clear_matching_activity(state: &mut State, matches_activity: impl FnOnce(&Activity) -> bool) {
-    let Status::Running { activity, .. } = &state.status else {
-        return;
-    };
-
-    if !matches_activity(activity) {
-        return;
-    }
-
-    state.status = Status::Idle;
-}
-
-/// Finds mutable semantic content by transcript item ID.
-fn find_content_by_id<'a>(
-    state: &'a mut State,
-    id: &TranscriptItemId,
-) -> Option<&'a mut TranscriptItemContent> {
-    state
-        .session
-        .transcript
-        .iter_mut()
-        .find(|item| item.id == *id)
-        .map(|item| &mut item.content)
-}
-
-/// Finds a mutable tool-call transcript item by tool lifecycle ID.
-fn find_tool_call<'a>(state: &'a mut State, tool_call_id: &str) -> Option<&'a mut ToolCallItem> {
-    state
-        .session
-        .transcript
-        .iter_mut()
-        .find_map(|item| match &mut item.content {
-            TranscriptItemContent::ToolCall(tool_call)
-                if tool_call.tool_call_id == tool_call_id =>
-            {
-                Some(tool_call)
-            }
-            _ => None,
-        })
-}
-
-/// Finds a mutable command transcript item by command lifecycle ID.
-fn find_command<'a>(state: &'a mut State, command_id: &str) -> Option<&'a mut CommandItem> {
-    state
-        .session
-        .transcript
-        .iter_mut()
-        .find_map(|item| match &mut item.content {
-            TranscriptItemContent::Command(command) if command.command_id == command_id => {
-                Some(command)
-            }
-            _ => None,
-        })
-}
-
-/// Returns the active running tool item ID when it matches the supplied lifecycle ID.
-fn matching_tool_activity_item_id(state: &State, tool_call_id: &str) -> Option<TranscriptItemId> {
-    let Status::Running {
-        activity: Activity::RunningTool { id, .. },
-        ..
-    } = &state.status
-    else {
-        return None;
-    };
-
-    if !transcript_item_has_tool_call(state, id, tool_call_id) {
-        return None;
-    }
-
-    Some(id.clone())
-}
-
-/// Returns whether a transcript item ID points at the supplied tool lifecycle ID.
-fn transcript_item_has_tool_call(state: &State, id: &TranscriptItemId, tool_call_id: &str) -> bool {
-    state.session.transcript.iter().any(|item| {
-        item.id == *id
-            && matches!(
-                &item.content,
-                TranscriptItemContent::ToolCall(tool_call)
-                    if tool_call.tool_call_id == tool_call_id
-            )
-    })
 }

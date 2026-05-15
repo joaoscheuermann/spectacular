@@ -1,6 +1,7 @@
 use crate::ids::{SessionId, TranscriptItemId};
 use crate::metadata::{CommandDescriptor, ContextTokenUsage, DisplayMetadata, RuntimeSelection};
 use crate::session::{PromptState, SelectionPromptState};
+use crate::transcript::{CommandDisplayStatus, DisplayLine, ToolDisplayStatus};
 
 /// Events that can deterministically update TUI state through the reducer.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -61,6 +62,18 @@ pub enum ChatTuiAction {
         tool_call_id: String,
         error: String,
     },
+    ToolDisplayStarted {
+        id: TranscriptItemId,
+        tool_call_id: String,
+        name: String,
+        call_line: DisplayLine,
+        argument_lines: Vec<DisplayLine>,
+    },
+    ToolDisplayFinished {
+        tool_call_id: String,
+        status: ToolDisplayStatus,
+        output_lines: Vec<DisplayLine>,
+    },
     CommandStarted {
         id: TranscriptItemId,
         command_id: String,
@@ -73,6 +86,21 @@ pub enum ChatTuiAction {
     CommandFinished {
         command_id: String,
         exit_code: Option<i32>,
+    },
+    CommandDisplayStarted {
+        id: TranscriptItemId,
+        command_id: String,
+        command_line: DisplayLine,
+    },
+    CommandDisplayOutput {
+        command_id: String,
+        chunk: CommandDisplayChunk,
+    },
+    CommandDisplayFinished {
+        command_id: String,
+        status: CommandDisplayStatus,
+        exit_code: Option<i32>,
+        summary_line: Option<DisplayLine>,
     },
     AgentFinished,
     WorkedSummaryReported {
@@ -107,6 +135,21 @@ pub enum ChatTuiAction {
         width: u16,
         height: u16,
     },
+}
+
+/// A streaming display-ready command output chunk.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CommandDisplayChunk {
+    pub line: DisplayLine,
+}
+
+impl CommandDisplayChunk {
+    /// Creates one display-ready command output chunk from visible text and style.
+    pub fn new(text: impl Into<String>, style: crate::transcript::DisplayLineStyle) -> Self {
+        Self {
+            line: DisplayLine::new(text, style),
+        }
+    }
 }
 
 /// Answer returned from an interactive selection prompt.

@@ -561,14 +561,16 @@ impl AgentTuiTurnRunner {
         while let Some(event) = self.next_event(cancellation).await {
             if let AgentEvent::ContextTokenUsage(usage) = event {
                 model.set_context_token_usage(usage);
-                for action in adapter.adapt_agent_event(&AgentEvent::ContextTokenUsage(usage)) {
+                for action in adapter
+                    .adapt_agent_event_with_tools(&AgentEvent::ContextTokenUsage(usage), tools)
+                {
                     dispatch(action);
                 }
                 continue;
             }
             let is_terminal_cancellation = matches!(event, AgentEvent::Cancelled { .. });
             model.append_agent_event(&event)?;
-            for action in adapter.adapt_agent_event(&event) {
+            for action in adapter.adapt_agent_event_with_tools(&event, tools) {
                 dispatch(action);
             }
             if is_terminal_cancellation {

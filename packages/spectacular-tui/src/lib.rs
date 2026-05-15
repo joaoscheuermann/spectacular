@@ -3,10 +3,13 @@ pub mod components;
 pub mod event_loop;
 pub mod fake_streaming;
 pub mod format;
+mod format_directory;
 pub mod ids;
 pub mod metadata;
 pub mod prompt_state;
 pub mod reducer;
+mod reducer_display;
+mod reducer_lookup;
 pub mod render;
 pub mod render_model;
 pub mod runtime_shell;
@@ -20,7 +23,9 @@ pub mod streaming;
 pub mod transcript;
 mod transcript_window;
 
-pub use action::{ChatTuiAction, SelectionPromptAnswer, SelectionPromptChoice};
+pub use action::{
+    ChatTuiAction, CommandDisplayChunk, SelectionPromptAnswer, SelectionPromptChoice,
+};
 pub use event_loop::{
     tui_assistant_reveal_tick_effects, tui_event_effects, tui_timer_tick_effects, EventEffect,
     TUI_SPINNER_TICK_INTERVAL,
@@ -56,9 +61,10 @@ pub use streaming::{
     ASSISTANT_REVEAL_TICK_INTERVAL,
 };
 pub use transcript::{
-    AssistantMessageItem, CancellationItem, CommandItem, CommandStatus, ErrorItem, NoticeItem,
-    OpeningBannerItem, ReasoningItem, SuccessItem, ToolCallItem, ToolStatus, TranscriptItem,
-    TranscriptItemContent, UserPromptItem, WarningItem, WorkedSummaryItem,
+    AssistantMessageItem, CancellationItem, CommandDisplay, CommandDisplayStatus, CommandItem,
+    CommandStatus, DisplayLine, DisplayLineStyle, ErrorItem, NoticeItem, OpeningBannerItem,
+    ReasoningItem, SuccessItem, ToolCallItem, ToolDisplay, ToolDisplayStatus, ToolStatus,
+    TranscriptItem, TranscriptItemContent, UserPromptItem, WarningItem, WorkedSummaryItem,
 };
 
 use anstyle::{RgbColor, Style};

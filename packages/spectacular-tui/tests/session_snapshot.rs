@@ -59,6 +59,7 @@ fn session_snapshot() -> Session {
                     arguments_preview: Some("State".to_owned()),
                     status: ToolStatus::Finished,
                     output_preview: Some("match".to_owned()),
+                    display: None,
                 }),
             ),
             transcript_item(
@@ -70,6 +71,7 @@ fn session_snapshot() -> Session {
                     status: CommandStatus::Failed,
                     output: "failed\n".to_owned(),
                     exit_code: Some(101),
+                    display: None,
                 }),
             ),
             transcript_item(
@@ -171,6 +173,7 @@ fn state_reconstruction_does_not_replay_terminal_output() {
             status: CommandStatus::Finished,
             output: "\u{1b}[31mred\u{1b}[0m".to_owned(),
             exit_code: Some(0),
+            display: None,
         }),
     ));
     session.next_timestamp = Timestamp::new(9);

@@ -1,11 +1,12 @@
+pub use crate::format_directory::{format_directory, format_directory_with_home};
 use crate::metadata::{CommandDescriptor, ContextTokenUsage};
 use crate::render_model::{context_usage_style, RenderLine, RenderSpan, RenderStyle};
 use crate::state::State;
 use crate::status::Status;
 use crate::transcript::{
-    CommandItem, CommandStatus, ToolCallItem, TranscriptItem, TranscriptItemContent,
+    CommandItem, CommandStatus, DisplayLine, ToolCallItem, TranscriptItem, TranscriptItemContent,
 };
-use std::path::{Path, PathBuf, MAIN_SEPARATOR};
+use std::path::Path;
 use unicode_width::UnicodeWidthStr;
 
 const OPENING_BANNER_MIN_WIDTH: usize = 52;
@@ -241,6 +242,16 @@ fn slash_usage_render_lines(state: &State) -> Vec<RenderLine> {
 
 /// Formats a tool-call transcript item as original-shaped semantic rows.
 fn tool_render_lines(tool: &ToolCallItem) -> Vec<RenderLine> {
+    if let Some(display) = &tool.display {
+        let mut lines = Vec::new();
+        if let Some(call_line) = &display.call_line {
+            lines.push(display_line_render_line(call_line));
+        }
+        lines.extend(display.argument_lines.iter().map(display_line_render_line));
+        lines.extend(display.output_lines.iter().map(display_line_render_line));
+        return lines;
+    }
+
     let mut call = tool.name.clone();
     if let Some(arguments) = &tool.arguments_preview {
         if !arguments.trim().is_empty() {
@@ -259,6 +270,18 @@ fn tool_render_lines(tool: &ToolCallItem) -> Vec<RenderLine> {
 
 /// Formats a command transcript item as original-shaped semantic rows.
 fn command_render_lines(command: &CommandItem) -> Vec<RenderLine> {
+    if let Some(display) = &command.display {
+        let mut lines = Vec::new();
+        if let Some(command_line) = &display.command_line {
+            lines.push(display_line_render_line(command_line));
+        }
+        lines.extend(display.output_lines.iter().map(display_line_render_line));
+        if let Some(summary_line) = &display.summary_line {
+            lines.push(display_line_render_line(summary_line));
+        }
+        return lines;
+    }
+
     let mut lines = vec![RenderLine::styled(
         format!("$ {}", command.command),
         RenderStyle::Command,
@@ -277,6 +300,11 @@ fn command_render_lines(command: &CommandItem) -> Vec<RenderLine> {
         ));
     }
     lines
+}
+
+/// Converts one adapter display line into one semantic render row.
+fn display_line_render_line(line: &DisplayLine) -> RenderLine {
+    RenderLine::styled(&line.text, RenderStyle::from(line.style))
 }
 
 /// Formats an error transcript item as original-shaped semantic rows.
@@ -427,48 +455,6 @@ fn compact_token_count(tokens: u64) -> String {
     }
 
     format!("{}k", tokens / 1_000)
-}
-
-/// Formats a working directory using the current user's home directory when available.
-pub fn format_directory(directory: &Path) -> String {
-    format_directory_with_home(directory, home_dir().as_deref())
-}
-
-/// Formats a directory with an injected home path for deterministic tests.
-pub fn format_directory_with_home(directory: &Path, home: Option<&Path>) -> String {
-    let Some(home) = home else {
-        return directory.display().to_string();
-    };
-    if directory == home {
-        return "~".to_owned();
-    }
-    let Ok(relative) = directory.strip_prefix(home) else {
-        return directory.display().to_string();
-    };
-    if relative.as_os_str().is_empty() {
-        return "~".to_owned();
-    }
-
-    format!("~{}{}", MAIN_SEPARATOR, relative.display())
-}
-
-/// Resolves the current user's home directory from conventional environment variables.
-fn home_dir() -> Option<PathBuf> {
-    std::env::var_os("USERPROFILE")
-        .map(PathBuf::from)
-        .filter(|path| !path.as_os_str().is_empty())
-        .or_else(|| {
-            let drive = std::env::var_os("HOMEDRIVE")?;
-            let path = std::env::var_os("HOMEPATH")?;
-            let mut home = drive;
-            home.push(path);
-            Some(PathBuf::from(home)).filter(|path| !path.as_os_str().is_empty())
-        })
-        .or_else(|| {
-            std::env::var_os("HOME")
-                .map(PathBuf::from)
-                .filter(|path| !path.as_os_str().is_empty())
-        })
 }
 
 /// Splits non-empty text into visible rows without trimming row content.

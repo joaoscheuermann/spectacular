@@ -36,9 +36,11 @@ use style::{assistant_style, command_style, error_style, success_style, warning_
 pub(crate) use style::{
     command_output_style, dim_style, paint, selection_style, title_style, user_style,
 };
-pub(crate) use terminal_output::{format_prompt_footer, has_visible_assistant_text};
+pub(crate) use terminal_output::{
+    format_prompt_footer, has_visible_assistant_text, styled_tool_output_lines, ToolOutputLineStyle,
+};
 use terminal_output::{format_tool_call_view, print_tool_output};
-pub use tool::{ToolCallView, ToolResultView};
+pub use tool::{ToolCallView, ToolResultView, ToolStatus};
 use working_line::WorkingLineState;
 
 use super::RuntimeSelection;

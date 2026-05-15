@@ -10,26 +10,60 @@ pub(super) fn format_tool_call_view(view: &ToolCallView) -> String {
 
 /// Prints tool output with special text styling for diff additions and deletions.
 pub(super) fn print_tool_output(output: &str) {
+    for line in styled_tool_output_lines(output) {
+        println!("{}", paint(line.style.terminal_style(), line.text));
+    }
+}
+
+/// Formats tool output into lines with original renderer diff semantics.
+pub(crate) fn styled_tool_output_lines(output: &str) -> Vec<StyledToolOutputLine> {
     let is_diff_output = output
         .lines()
         .next()
         .is_some_and(|line| line.starts_with("Edited "));
-    for line in output.lines() {
-        println!("{}", format_tool_output_line(line, is_diff_output));
-    }
+    output
+        .lines()
+        .map(|line| StyledToolOutputLine {
+            text: line.to_owned(),
+            style: tool_output_line_style(line, is_diff_output),
+        })
+        .collect()
 }
 
 /// Applies command-output or diff-row styling to one tool output line.
-fn format_tool_output_line(line: &str, is_diff_output: bool) -> String {
-    let style = if is_diff_output && is_added_diff_line(line) {
-        diff_added_style()
-    } else if is_diff_output && is_removed_diff_line(line) {
-        diff_removed_style()
-    } else {
-        command_output_style()
-    };
+fn tool_output_line_style(line: &str, is_diff_output: bool) -> ToolOutputLineStyle {
+    if is_diff_output && is_added_diff_line(line) {
+        return ToolOutputLineStyle::DiffAdded;
+    }
+    if is_diff_output && is_removed_diff_line(line) {
+        return ToolOutputLineStyle::DiffRemoved;
+    }
 
-    paint(style, line)
+    ToolOutputLineStyle::CommandOutput
+}
+
+/// One display-ready tool output line with original renderer style classification.
+pub(crate) struct StyledToolOutputLine {
+    pub text: String,
+    pub style: ToolOutputLineStyle,
+}
+
+/// Style classification for pure tool output formatting.
+pub(crate) enum ToolOutputLineStyle {
+    CommandOutput,
+    DiffAdded,
+    DiffRemoved,
+}
+
+impl ToolOutputLineStyle {
+    /// Maps a pure tool output style back to terminal styling for the legacy renderer.
+    fn terminal_style(&self) -> anstyle::Style {
+        match self {
+            Self::CommandOutput => command_output_style(),
+            Self::DiffAdded => diff_added_style(),
+            Self::DiffRemoved => diff_removed_style(),
+        }
+    }
 }
 
 /// Reports whether a rendered diff line represents an insertion.

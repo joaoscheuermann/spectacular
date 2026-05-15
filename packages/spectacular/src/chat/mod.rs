@@ -12,6 +12,7 @@ mod session;
 mod title;
 #[allow(dead_code)]
 mod tui_adapter;
+mod tui_adapter_display;
 mod tui_runtime;
 
 use crate::chat::renderer::Renderer;

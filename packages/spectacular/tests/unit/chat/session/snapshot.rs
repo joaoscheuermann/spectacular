@@ -40,6 +40,7 @@
                         arguments_preview: Some("pattern".to_owned()),
                         status: ToolStatus::Failed,
                         output_preview: Some("no matches".to_owned()),
+                        display: None,
                     }),
                 ),
                 item(
@@ -51,6 +52,7 @@
                         status: CommandStatus::Finished,
                         output: "ok\n".to_owned(),
                         exit_code: Some(0),
+                        display: None,
                     }),
                 ),
                 item(

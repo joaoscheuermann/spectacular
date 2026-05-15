@@ -262,6 +262,7 @@ fn semantic_event_rows_use_original_casing_and_prefixes() {
                 arguments_preview: Some("pattern".to_string()),
                 status: ToolStatus::Finished,
                 output_preview: Some("match".to_string()),
+                display: None,
             }),
         ),
         item(
@@ -272,6 +273,7 @@ fn semantic_event_rows_use_original_casing_and_prefixes() {
                 status: CommandStatus::Failed,
                 output: "failure output".to_string(),
                 exit_code: Some(101),
+                display: None,
             }),
         ),
     ];

@@ -92,6 +92,7 @@ fn populated_transcript_renders_all_semantic_item_kinds() {
                 arguments_preview: Some("pattern".to_string()),
                 status: ToolStatus::Finished,
                 output_preview: Some("match".to_string()),
+                display: None,
             }),
         ),
         item(
@@ -102,6 +103,7 @@ fn populated_transcript_renders_all_semantic_item_kinds() {
                 status: CommandStatus::Failed,
                 output: "failure output".to_string(),
                 exit_code: Some(101),
+                display: None,
             }),
         ),
         item(

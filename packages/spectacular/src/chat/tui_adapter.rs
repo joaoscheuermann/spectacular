@@ -1,5 +1,8 @@
+use crate::chat::tui_adapter_display::{
+    command_finished_action, command_output_action, command_started_action, ToolDisplayAdapter,
+};
 use crate::chat::RuntimeSelection;
-use spectacular_agent::{AgentEvent, CommandStatus};
+use spectacular_agent::{AgentEvent, ToolStorage};
 use spectacular_commands::CommandRegistry;
 use spectacular_llms::{FinishReason, ProviderMessageRole, UsageMetadata};
 use spectacular_tui::{
@@ -7,7 +10,6 @@ use spectacular_tui::{
     DisplayMetadata as TuiDisplayMetadata, ReasoningLevel as TuiReasoningLevel,
     RuntimeSelection as TuiRuntimeSelection, SessionId, TranscriptItemId,
 };
-use std::collections::BTreeMap;
 use std::path::Path;
 
 /// Converts runtime and agent events into pure TUI reducer actions.
@@ -17,9 +19,8 @@ pub(crate) struct TuiEventAdapter {
     active_reasoning: Option<TranscriptItemId>,
     next_message_id: u64,
     next_reasoning_id: u64,
-    next_tool_id: u64,
     next_user_prompt_id: u64,
-    tool_transcript_ids: BTreeMap<String, TranscriptItemId>,
+    tool_display: ToolDisplayAdapter,
 }
 
 impl TuiEventAdapter {
@@ -28,14 +29,23 @@ impl TuiEventAdapter {
         Self {
             next_message_id: 1,
             next_reasoning_id: 1,
-            next_tool_id: 1,
             next_user_prompt_id: 1,
+            tool_display: ToolDisplayAdapter::new(),
             ..Self::default()
         }
     }
 
     /// Converts one agent event into zero or more TUI actions without rendering terminal output.
     pub(crate) fn adapt_agent_event(&mut self, event: &AgentEvent) -> Vec<ChatTuiAction> {
+        self.adapt_agent_event_with_tools(event, &ToolStorage::default())
+    }
+
+    /// Converts one agent event into TUI actions using registered tool display formatters.
+    pub(crate) fn adapt_agent_event_with_tools(
+        &mut self,
+        event: &AgentEvent,
+        tools: &ToolStorage,
+    ) -> Vec<ChatTuiAction> {
         match event {
             AgentEvent::UserPrompt { content } => vec![self.user_prompt_action(content)],
             AgentEvent::MessageDelta(delta) if delta.role == ProviderMessageRole::Assistant => {
@@ -46,25 +56,27 @@ impl TuiEventAdapter {
                 tool_call_id,
                 name,
                 arguments,
-            } => self.tool_call_started_actions(tool_call_id, name, arguments),
+            } => self
+                .tool_display
+                .started_actions(tool_call_id, name, arguments, tools),
             AgentEvent::ToolResult {
                 tool_call_id,
                 name,
                 content,
-            } => self.tool_result_actions(tool_call_id, name, content),
-            AgentEvent::CommandStart(start) => vec![ChatTuiAction::CommandStarted {
-                id: TranscriptItemId::new(format!("command-{}", start.command_id)),
-                command_id: start.command_id.clone(),
-                command: start.command.clone(),
-            }],
-            AgentEvent::CommandDelta(delta) => vec![ChatTuiAction::CommandOutput {
-                command_id: delta.command_id.clone(),
-                text: delta.content.clone(),
-            }],
-            AgentEvent::CommandFinished(finished) => vec![ChatTuiAction::CommandFinished {
-                command_id: finished.command_id.clone(),
-                exit_code: command_exit_code(finished.status),
-            }],
+            } => self
+                .tool_display
+                .result_actions(tool_call_id, name, content, tools),
+            AgentEvent::CommandStart(start) => {
+                vec![command_started_action(&start.command_id, &start.command)]
+            }
+            AgentEvent::CommandDelta(delta) => {
+                vec![command_output_action(&delta.command_id, &delta.content)]
+            }
+            AgentEvent::CommandFinished(finished) => vec![command_finished_action(
+                &finished.command_id,
+                finished.status,
+                &finished.summary,
+            )],
             AgentEvent::UsageMetadata(usage) => {
                 usage_action_from_metadata(usage).into_iter().collect()
             }
@@ -139,49 +151,6 @@ impl TuiEventAdapter {
         self.next_reasoning_id = self.next_reasoning_id.saturating_add(1);
         self.active_reasoning = Some(id.clone());
         (id, true)
-    }
-
-    /// Builds semantic tool-call lifecycle actions with adapter-owned transcript identity.
-    fn tool_call_started_actions(
-        &mut self,
-        tool_call_id: &str,
-        name: &str,
-        arguments: &str,
-    ) -> Vec<ChatTuiAction> {
-        let id = TranscriptItemId::new(format!("tool-call-{}", self.next_tool_id));
-        self.next_tool_id = self.next_tool_id.saturating_add(1);
-        self.tool_transcript_ids
-            .insert(tool_call_id.to_owned(), id.clone());
-        vec![ChatTuiAction::ToolCallStarted {
-            id,
-            tool_call_id: tool_call_id.to_owned(),
-            name: name.to_owned(),
-            arguments: arguments.to_owned(),
-        }]
-    }
-
-    /// Builds semantic tool-call completion actions for known and implicit tool starts.
-    fn tool_result_actions(
-        &mut self,
-        tool_call_id: &str,
-        name: &str,
-        content: &str,
-    ) -> Vec<ChatTuiAction> {
-        if self.tool_transcript_ids.remove(tool_call_id).is_some() {
-            return vec![ChatTuiAction::ToolCallFinished {
-                tool_call_id: tool_call_id.to_owned(),
-                name: name.to_owned(),
-                output: content.to_owned(),
-            }];
-        }
-
-        let mut actions = self.tool_call_started_actions(tool_call_id, name, "");
-        actions.push(ChatTuiAction::ToolCallFinished {
-            tool_call_id: tool_call_id.to_owned(),
-            name: name.to_owned(),
-            output: content.to_owned(),
-        });
-        actions
     }
 
     /// Builds a semantic user prompt action with adapter-owned transcript identity.
@@ -333,17 +302,6 @@ fn tui_reasoning_level(reasoning: spectacular_config::ReasoningLevel) -> TuiReas
         spectacular_config::ReasoningLevel::High | spectacular_config::ReasoningLevel::Xhigh => {
             TuiReasoningLevel::High
         }
-    }
-}
-
-/// Converts command lifecycle status into the reducer's exit-code based command completion.
-fn command_exit_code(status: CommandStatus) -> Option<i32> {
-    match status {
-        CommandStatus::Success => Some(0),
-        CommandStatus::Failed
-        | CommandStatus::Cancelled
-        | CommandStatus::TimedOut
-        | CommandStatus::Error => Some(1),
     }
 }
 

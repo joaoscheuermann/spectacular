@@ -140,6 +140,7 @@ fn transcript_semantic_items_render_without_prototype_labels() {
                 arguments_preview: Some("pattern".to_string()),
                 status: ToolStatus::Finished,
                 output_preview: Some("Edited file\n1 - old\n2 + new".to_string()),
+                display: None,
             }),
         ),
         item(
@@ -150,6 +151,7 @@ fn transcript_semantic_items_render_without_prototype_labels() {
                 status: CommandStatus::Failed,
                 output: "failure output".to_string(),
                 exit_code: Some(101),
+                display: None,
             }),
         ),
     ];
