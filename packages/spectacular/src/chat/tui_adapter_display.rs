@@ -1,8 +1,9 @@
+use crate::chat::command_event::CommandStatus;
 use crate::chat::renderer::{
     styled_tool_output_lines, ToolCallView, ToolOutputLineStyle, ToolResultView, ToolStatus,
 };
 use serde_json::Value;
-use spectacular_agent::{CommandStatus, ToolStorage};
+use spectacular_agent::ToolStorage;
 use spectacular_tui::{
     ChatTuiAction, CommandDisplayChunk, CommandDisplayStatus, DisplayLine, DisplayLineStyle,
     ToolDisplayStatus, TranscriptItemId,

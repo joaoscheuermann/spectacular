@@ -1,3 +1,4 @@
+use crate::chat::command_event::CommandEvent;
 use crate::chat::tui_adapter_display::{
     command_finished_action, command_output_action, command_started_action, ToolDisplayAdapter,
 };
@@ -82,17 +83,6 @@ impl TuiEventAdapter {
             } => self
                 .tool_display
                 .result_actions(tool_call_id, name, output, tools),
-            AgentEvent::CommandStart(start) => {
-                vec![command_started_action(&start.command_id, &start.command)]
-            }
-            AgentEvent::CommandDelta(delta) => {
-                vec![command_output_action(&delta.command_id, &delta.content)]
-            }
-            AgentEvent::CommandFinished(finished) => vec![command_finished_action(
-                &finished.command_id,
-                finished.status,
-                &finished.summary,
-            )],
             AgentEvent::UsageMetadata(usage) => {
                 usage_action_from_metadata(usage).into_iter().collect()
             }
@@ -112,6 +102,23 @@ impl TuiEventAdapter {
             | AgentEvent::ContextSummaryCreated(_)
             | AgentEvent::Internal { .. } => Vec::new(),
             _ => Vec::new(),
+        }
+    }
+
+    /// Converts one app-owned command lifecycle event into TUI actions.
+    pub(crate) fn adapt_command_event(&mut self, event: &CommandEvent) -> Vec<ChatTuiAction> {
+        match event {
+            CommandEvent::Start(start) => {
+                vec![command_started_action(&start.command_id, &start.command)]
+            }
+            CommandEvent::Delta(delta) => {
+                vec![command_output_action(&delta.command_id, &delta.content)]
+            }
+            CommandEvent::Finished(finished) => vec![command_finished_action(
+                &finished.command_id,
+                finished.status,
+                &finished.summary,
+            )],
         }
     }
 

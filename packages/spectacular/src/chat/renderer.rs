@@ -16,6 +16,7 @@ mod tests {
     ));
 }
 
+use crate::chat::command_event::{CommandEvent, CommandStatus};
 use crate::chat::model::HistoryTableModel;
 use crate::chat::runner::render_agent_event;
 use crate::chat::session::ChatRecord;
@@ -26,7 +27,7 @@ use reasoning::format_reasoning_text;
 pub(crate) use reasoning::has_visible_reasoning_text;
 use serde_json::Value;
 use spectacular_agent::ToolStorage;
-use spectacular_agent::{AgentEvent, CommandStatus};
+use spectacular_agent::AgentEvent;
 use std::collections::BTreeMap;
 use std::io::{self, Write};
 use std::path::Path;
@@ -276,6 +277,13 @@ impl Renderer {
                 continue;
             };
 
+            if let Some(command_event) = event.to_command_event() {
+                self.flush_assistant(&mut assistant_buffer);
+                self.flush_reasoning(&mut reasoning_buffer);
+                self.render_command_event(&command_event);
+                continue;
+            }
+
             let Some(event) = event.to_agent_event() else {
                 continue;
             };
@@ -300,6 +308,27 @@ impl Renderer {
         self.flush_assistant(&mut assistant_buffer);
         self.flush_reasoning(&mut reasoning_buffer);
         Ok(())
+    }
+
+    /// Renders a replayed app-owned command lifecycle event.
+    fn render_command_event(&self, event: &CommandEvent) {
+        match event {
+            CommandEvent::Start(start) => {
+                self.clear_working();
+                self.command_start(&start.title, &start.command);
+                self.working();
+            }
+            CommandEvent::Delta(delta) => {
+                self.clear_working();
+                self.command_delta(&delta.content);
+                self.working();
+            }
+            CommandEvent::Finished(finished) => {
+                self.clear_working();
+                self.command_finished(finished.status, &finished.summary);
+                self.working();
+            }
+        }
     }
 
     /// Renders the session history table and any remaining-session count.

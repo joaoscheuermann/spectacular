@@ -3,12 +3,15 @@
 //! Generates a conventional commit message using a standalone AI agent
 //! and commits the currently staged changes.
 
+use crate::chat::command_event::{
+    CommandDelta, CommandEvent, CommandFinished, CommandStart, CommandStatus,
+};
 use crate::chat::commands::{ChatCommandContext, ChatCommandFuture, ChatCommandResult};
 use crate::chat::prompt::{SelectionPromptAnswer, SelectionPromptChoice, SelectionPromptRequest};
 use crate::chat::ChatError;
 
 use crate::chat::provider::provider_for_runtime;
-use spectacular_agent::{Agent, AgentConfig, AgentEvent, CommandStatus};
+use spectacular_agent::{Agent, AgentConfig, AgentEvent};
 use spectacular_commands::CommandError;
 
 use std::sync::Arc;
@@ -254,14 +257,14 @@ impl<'a, 'context> CommitLifecycle<'a, 'context> {
     fn start(&self) -> Result<(), String> {
         let command = bounded_text("/git commit", MAX_COMMAND_TEXT_CHARS);
         self.context
-            .append_agent_event(&AgentEvent::command_start(
-                self.command_id.clone(),
-                "slash_command",
-                "/git commit",
-                "Git commit",
-                command.clone(),
-                working_directory(),
-            ))
+            .append_command_event(&CommandEvent::Start(CommandStart {
+                command_id: self.command_id.clone(),
+                source: "slash_command".to_owned(),
+                name: "/git commit".to_owned(),
+                title: "Git commit".to_owned(),
+                command: command.clone(),
+                working_directory: working_directory(),
+            }))
             .map_err(|error| error.to_string())?;
         self.context.renderer.command_start("Git commit", &command);
         Ok(())
@@ -312,12 +315,12 @@ impl<'a, 'context> CommitLifecycle<'a, 'context> {
         let bytes = content.len();
         self.sequence += 1;
         self.context
-            .append_agent_event(&AgentEvent::command_delta(
-                self.command_id.clone(),
-                "status",
-                content.clone(),
-                self.sequence,
-            ))
+            .append_command_event(&CommandEvent::Delta(CommandDelta {
+                command_id: self.command_id.clone(),
+                channel: "status".to_owned(),
+                content: content.clone(),
+                sequence: self.sequence,
+            }))
             .map_err(|error| error.to_string())?;
         self.context.renderer.command_delta(&content);
         self.persisted_delta_bytes += bytes;
@@ -328,11 +331,11 @@ impl<'a, 'context> CommitLifecycle<'a, 'context> {
     fn finish(&self, status: CommandStatus, summary: impl AsRef<str>) -> Result<(), String> {
         let summary = bounded_text(summary.as_ref(), MAX_COMMAND_SUMMARY_CHARS);
         self.context
-            .append_agent_event(&AgentEvent::command_finished(
-                self.command_id.clone(),
+            .append_command_event(&CommandEvent::Finished(CommandFinished {
+                command_id: self.command_id.clone(),
                 status,
-                summary.clone(),
-            ))
+                summary: summary.clone(),
+            }))
             .map_err(|error| error.to_string())?;
         self.context.renderer.command_finished(status, &summary);
         Ok(())

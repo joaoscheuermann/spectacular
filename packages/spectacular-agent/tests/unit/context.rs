@@ -18,25 +18,6 @@ fn provider_context_includes_only_model_relevant_roles() {
     store.append(AgentEvent::message_delta("message-1", "assistant response"));
     store.append(AgentEvent::tool_call_start("call-1", "read", "{}"));
     store.append(AgentEvent::tool_call_finish("call-1", "read", r#"{"ok":true}"#));
-    store.append(AgentEvent::command_start(
-        "cmd-1",
-        "slash_command",
-        "/git commit",
-        "Git commit",
-        "/git commit",
-        Some("/repo".to_owned()),
-    ));
-    store.append(AgentEvent::command_delta(
-        "cmd-1",
-        "status",
-        "staged diff loaded",
-        1,
-    ));
-    store.append(AgentEvent::command_finished(
-        "cmd-1",
-        crate::CommandStatus::Success,
-        "changes committed successfully",
-    ));
     store.append(AgentEvent::reasoning_delta("reasoning-1", "private thought"));
     store.append(AgentEvent::UsageMetadata(UsageMetadata {
         input_tokens: Some(1),
@@ -260,62 +241,6 @@ fn explicit_auto_compaction_threshold_requests_summary_of_old_turns() {
     assert!(!summary_request.transcript.contains("current prompt"));
 }
 
-#[test]
-/// Verifies command lifecycle records do not enter context-summary source text.
-fn summary_requests_ignore_command_lifecycle_text() {
-    let mut store = Store::default();
-    store.append(AgentEvent::user_prompt("old prompt"));
-    store.append(AgentEvent::command_start(
-        "cmd-1",
-        "slash_command",
-        "/git commit",
-        "Git commit",
-        "/git commit secret-lifecycle",
-        None,
-    ));
-    store.append(AgentEvent::command_delta(
-        "cmd-1",
-        "status",
-        "generated commit message: secret-lifecycle",
-        1,
-    ));
-    store.append(AgentEvent::command_finished(
-        "cmd-1",
-        crate::CommandStatus::Success,
-        "changes committed successfully secret-lifecycle",
-    ));
-    store.append(AgentEvent::message_delta(
-        "message-1",
-        "old answer with enough text to exceed a tiny threshold",
-    ));
-    store.append(AgentEvent::Finished {
-        finish_reason: FinishReason::Stop,
-    });
-    store.append(AgentEvent::user_prompt("current prompt"));
-    let policy = ContextPolicy {
-        auto_compact_at_tokens: Some(1),
-        latest_turns_to_protect: 1,
-        ..ContextPolicy::default()
-    };
-
-    let assembled = ContextAssembler::new(ApproximateTokenCounter, policy)
-        .assemble(ContextAssemblyInput {
-            system_prompt: "system".to_owned(),
-            store: &store,
-            provider_limits: ProviderContextLimits::default(),
-            continuation_prompt: None,
-        })
-        .unwrap();
-
-    let ContextAssembly::NeedsSummary(summary_request) = assembled else {
-        panic!("explicit threshold should request summary compaction");
-    };
-    assert!(summary_request.transcript.contains("old prompt"));
-    assert!(summary_request.transcript.contains("old answer"));
-    assert!(!summary_request.transcript.contains("secret-lifecycle"));
-    assert!(!summary_request.transcript.contains("changes committed successfully"));
-    assert!(!summary_request.transcript.contains("current prompt"));
-}
 
 #[test]
 /// Verifies model-window budgets derive hard thresholds that request summaries.

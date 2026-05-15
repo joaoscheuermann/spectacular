@@ -5,12 +5,13 @@
 //! visible `content`. Older `tool_call.content` records are normalized on read
 //! so old JSONL sessions can still replay into structured agent events.
 
+use crate::chat::command_event::{
+    CommandDelta, CommandEvent, CommandFinished, CommandStart, CommandStatus,
+};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use spectacular_agent::{
-    AgentEvent, CommandDelta, CommandFinished, CommandStart, CommandStatus, ContextSummary,
-};
+use spectacular_agent::{AgentEvent, ContextSummary};
 use spectacular_llms::{FinishReason, ProviderMessageRole};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -212,28 +213,6 @@ impl ChatEvent {
                 content: output.clone(),
                 created_at,
             }),
-            AgentEvent::CommandStart(start) => Some(Self::CommandStart {
-                command_id: start.command_id.clone(),
-                source: start.source.clone(),
-                name: start.name.clone(),
-                title: start.title.clone(),
-                command: start.command.clone(),
-                working_directory: start.working_directory.clone(),
-                created_at,
-            }),
-            AgentEvent::CommandDelta(delta) => Some(Self::CommandDelta {
-                command_id: delta.command_id.clone(),
-                channel: delta.channel.clone(),
-                content: delta.content.clone(),
-                sequence: delta.sequence,
-                created_at,
-            }),
-            AgentEvent::CommandFinished(finished) => Some(Self::CommandFinished {
-                command_id: finished.command_id.clone(),
-                status: command_status_to_str(finished.status).to_owned(),
-                summary: finished.summary.clone(),
-                created_at,
-            }),
             AgentEvent::UsageMetadata(usage) => Some(Self::UsageMetadata {
                 input_tokens: usage.input_tokens,
                 output_tokens: usage.output_tokens,
@@ -272,6 +251,79 @@ impl ChatEvent {
         }
     }
 
+    /// Converts an app-owned command lifecycle event into a persisted chat event.
+    pub fn from_command_event(event: &CommandEvent, created_at: String) -> Self {
+        match event {
+            CommandEvent::Start(start) => Self::CommandStart {
+                command_id: start.command_id.clone(),
+                source: start.source.clone(),
+                name: start.name.clone(),
+                title: start.title.clone(),
+                command: start.command.clone(),
+                working_directory: start.working_directory.clone(),
+                created_at,
+            },
+            CommandEvent::Delta(delta) => Self::CommandDelta {
+                command_id: delta.command_id.clone(),
+                channel: delta.channel.clone(),
+                content: delta.content.clone(),
+                sequence: delta.sequence,
+                created_at,
+            },
+            CommandEvent::Finished(finished) => Self::CommandFinished {
+                command_id: finished.command_id.clone(),
+                status: finished.status.as_str().to_owned(),
+                summary: finished.summary.clone(),
+                created_at,
+            },
+        }
+    }
+
+    /// Converts a persisted chat event back into an app-owned command lifecycle event.
+    pub fn to_command_event(&self) -> Option<CommandEvent> {
+        match self {
+            Self::CommandStart {
+                command_id,
+                source,
+                name,
+                title,
+                command,
+                working_directory,
+                ..
+            } => Some(CommandEvent::Start(CommandStart {
+                command_id: command_id.clone(),
+                source: source.clone(),
+                name: name.clone(),
+                title: title.clone(),
+                command: command.clone(),
+                working_directory: working_directory.clone(),
+            })),
+            Self::CommandDelta {
+                command_id,
+                channel,
+                content,
+                sequence,
+                ..
+            } => Some(CommandEvent::Delta(CommandDelta {
+                command_id: command_id.clone(),
+                channel: channel.clone(),
+                content: content.clone(),
+                sequence: *sequence,
+            })),
+            Self::CommandFinished {
+                command_id,
+                status,
+                summary,
+                ..
+            } => Some(CommandEvent::Finished(CommandFinished {
+                command_id: command_id.clone(),
+                status: CommandStatus::from_str(status),
+                summary: summary.clone(),
+            })),
+            _ => None,
+        }
+    }
+
     /// Converts a persisted chat event back into an agent event when replayable.
     pub fn to_agent_event(&self) -> Option<AgentEvent> {
         match self {
@@ -306,44 +358,9 @@ impl ChatEvent {
                 name.clone(),
                 content.clone(),
             )),
-            Self::CommandStart {
-                command_id,
-                source,
-                name,
-                title,
-                command,
-                working_directory,
-                ..
-            } => Some(AgentEvent::CommandStart(CommandStart {
-                command_id: command_id.clone(),
-                source: source.clone(),
-                name: name.clone(),
-                title: title.clone(),
-                command: command.clone(),
-                working_directory: working_directory.clone(),
-            })),
-            Self::CommandDelta {
-                command_id,
-                channel,
-                content,
-                sequence,
-                ..
-            } => Some(AgentEvent::CommandDelta(CommandDelta {
-                command_id: command_id.clone(),
-                channel: channel.clone(),
-                content: content.clone(),
-                sequence: *sequence,
-            })),
-            Self::CommandFinished {
-                command_id,
-                status,
-                summary,
-                ..
-            } => Some(AgentEvent::CommandFinished(CommandFinished {
-                command_id: command_id.clone(),
-                status: command_status_from_str(status),
-                summary: summary.clone(),
-            })),
+            Self::CommandStart { .. }
+            | Self::CommandDelta { .. }
+            | Self::CommandFinished { .. } => None,
             Self::ValidationError { message, .. } => Some(AgentEvent::validation_error(message)),
             Self::Error { message, .. } => Some(AgentEvent::error(message)),
             Self::Cancelled { reason, .. } => Some(AgentEvent::cancelled(reason)),
@@ -454,26 +471,6 @@ fn finish_reason_from_str(reason: &str) -> FinishReason {
         "content_filter" => FinishReason::ContentFilter,
         "error" => FinishReason::Error,
         _ => FinishReason::Stop,
-    }
-}
-
-fn command_status_to_str(status: CommandStatus) -> &'static str {
-    match status {
-        CommandStatus::Success => "success",
-        CommandStatus::Failed => "failed",
-        CommandStatus::Cancelled => "cancelled",
-        CommandStatus::TimedOut => "timed_out",
-        CommandStatus::Error => "error",
-    }
-}
-
-fn command_status_from_str(status: &str) -> CommandStatus {
-    match status {
-        "success" => CommandStatus::Success,
-        "cancelled" => CommandStatus::Cancelled,
-        "timed_out" => CommandStatus::TimedOut,
-        "error" => CommandStatus::Error,
-        _ => CommandStatus::Failed,
     }
 }
 

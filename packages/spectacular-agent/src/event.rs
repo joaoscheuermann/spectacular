@@ -67,9 +67,6 @@ pub enum AgentEvent {
         name: String,
         output: String,
     },
-    CommandStart(CommandStart),
-    CommandDelta(CommandDelta),
-    CommandFinished(CommandFinished),
     ValidationError {
         message: String,
     },
@@ -98,39 +95,6 @@ pub struct ContextSummary {
     pub estimated_tokens: usize,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CommandStart {
-    pub command_id: String,
-    pub source: String,
-    pub name: String,
-    pub title: String,
-    pub command: String,
-    pub working_directory: Option<String>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CommandDelta {
-    pub command_id: String,
-    pub channel: String,
-    pub content: String,
-    pub sequence: u64,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CommandFinished {
-    pub command_id: String,
-    pub status: CommandStatus,
-    pub summary: String,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CommandStatus {
-    Success,
-    Failed,
-    Cancelled,
-    TimedOut,
-    Error,
-}
 
 impl AgentEvent {
     /// Creates a stored user prompt event.
@@ -218,52 +182,6 @@ impl AgentEvent {
         }
     }
 
-    /// Creates a user-visible command lifecycle start event.
-    pub fn command_start(
-        command_id: impl Into<String>,
-        source: impl Into<String>,
-        name: impl Into<String>,
-        title: impl Into<String>,
-        command: impl Into<String>,
-        working_directory: Option<String>,
-    ) -> Self {
-        Self::CommandStart(CommandStart {
-            command_id: command_id.into(),
-            source: source.into(),
-            name: name.into(),
-            title: title.into(),
-            command: command.into(),
-            working_directory,
-        })
-    }
-
-    /// Creates a bounded user-visible command lifecycle progress event.
-    pub fn command_delta(
-        command_id: impl Into<String>,
-        channel: impl Into<String>,
-        content: impl Into<String>,
-        sequence: u64,
-    ) -> Self {
-        Self::CommandDelta(CommandDelta {
-            command_id: command_id.into(),
-            channel: channel.into(),
-            content: content.into(),
-            sequence,
-        })
-    }
-
-    /// Creates a user-visible command lifecycle completion event.
-    pub fn command_finished(
-        command_id: impl Into<String>,
-        status: CommandStatus,
-        summary: impl Into<String>,
-    ) -> Self {
-        Self::CommandFinished(CommandFinished {
-            command_id: command_id.into(),
-            status,
-            summary: summary.into(),
-        })
-    }
 
     /// Creates a structured-output validation error event.
     pub fn validation_error(message: impl Into<String>) -> Self {
@@ -372,21 +290,6 @@ impl Display for AgentEvent {
             } => write!(
                 formatter,
                 "ToolCallFinish(id={tool_call_id}, name={name}, output={output})"
-            ),
-            AgentEvent::CommandStart(start) => write!(
-                formatter,
-                "CommandStart(id={}, source={}, name={}, title={})",
-                start.command_id, start.source, start.name, start.title
-            ),
-            AgentEvent::CommandDelta(delta) => write!(
-                formatter,
-                "CommandDelta(id={}, channel={}, sequence={}, content={})",
-                delta.command_id, delta.channel, delta.sequence, delta.content
-            ),
-            AgentEvent::CommandFinished(finished) => write!(
-                formatter,
-                "CommandFinished(id={}, status={:?}, summary={})",
-                finished.command_id, finished.status, finished.summary
             ),
             AgentEvent::ValidationError { message } => {
                 write!(formatter, "ValidationError({message})")

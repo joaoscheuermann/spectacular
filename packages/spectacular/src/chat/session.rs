@@ -2,6 +2,7 @@ mod event;
 mod index;
 mod store;
 
+use crate::chat::command_event::CommandEvent;
 use crate::chat::{ChatError, RuntimeSelection};
 use chrono::{DateTime, Local, Utc};
 pub use event::ChatEvent;
@@ -93,6 +94,11 @@ impl SessionManager {
         };
 
         self.append_event(&event)
+    }
+
+    /// Appends an app-owned command lifecycle event to the active session transcript.
+    pub fn append_command_event(&self, event: &CommandEvent) -> Result<(), ChatError> {
+        self.append_event(&ChatEvent::from_command_event(event, now()))
     }
 
     pub fn append_title(

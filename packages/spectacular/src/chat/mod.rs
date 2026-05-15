@@ -1,4 +1,5 @@
 mod auth;
+mod command_event;
 mod commands;
 mod config_mutation;
 mod controller;
