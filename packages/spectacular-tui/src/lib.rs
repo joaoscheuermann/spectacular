@@ -1,6 +1,7 @@
 pub mod action;
 pub mod components;
 pub mod event_loop;
+pub mod fake_streaming;
 pub mod ids;
 pub mod metadata;
 pub mod reducer;
@@ -15,6 +16,10 @@ pub mod transcript;
 pub use action::ChatTuiAction;
 pub use event_loop::{
     tui_event_effects, tui_timer_tick_effects, EventEffect, TUI_SPINNER_TICK_INTERVAL,
+};
+pub use fake_streaming::{
+    fake_cancellation_plan, fake_failure_plan, fake_streaming_plan, fake_streaming_runtime_finding,
+    FakeStreamingPlan, FakeStreamingTickOutcome, FakeStreamingTimeline,
 };
 pub use ids::{SessionId, Timestamp, TranscriptItemId};
 pub use metadata::{

@@ -260,7 +260,9 @@ pub(crate) fn commands_loaded_action<C>(registry: &CommandRegistry<C>) -> ChatTu
     ChatTuiAction::CommandsLoaded(
         registry
             .command_metadata()
-            .map(|metadata| CommandDescriptor::new(metadata.name, metadata.summary))
+            .map(|metadata| {
+                CommandDescriptor::with_usage(metadata.name, metadata.summary, metadata.usage)
+            })
             .collect(),
     )
 }

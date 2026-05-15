@@ -70,7 +70,11 @@ fn guidance_text(state: &State) -> String {
         return "Guidance: type a slash command or press Enter to submit".to_string();
     };
 
-    format!("Guidance: /{} - {}", command.name, command.summary)
+    let mut guidance = format!("Guidance: /{} - {}", command.name, command.summary);
+    if !command.usage.trim().is_empty() {
+        guidance.push_str(&format!(" | Usage: {}", command.usage));
+    }
+    guidance
 }
 
 /// Returns the active slash-command query before arguments begin.

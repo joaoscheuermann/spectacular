@@ -92,14 +92,26 @@ impl ContextTokenUsage {
 pub struct CommandDescriptor {
     pub name: String,
     pub summary: String,
+    #[serde(default)]
+    pub usage: String,
 }
 
 impl CommandDescriptor {
     /// Creates a command descriptor from command registry metadata.
     pub fn new(name: impl Into<String>, summary: impl Into<String>) -> Self {
+        Self::with_usage(name, summary, "")
+    }
+
+    /// Creates a command descriptor with usage guidance from command registry metadata.
+    pub fn with_usage(
+        name: impl Into<String>,
+        summary: impl Into<String>,
+        usage: impl Into<String>,
+    ) -> Self {
         Self {
             name: name.into(),
             summary: summary.into(),
+            usage: usage.into(),
         }
     }
 }

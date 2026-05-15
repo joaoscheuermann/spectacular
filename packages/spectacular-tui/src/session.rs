@@ -15,6 +15,8 @@ pub struct PromptState {
     pub text: String,
     pub cursor: usize,
     #[serde(default)]
+    pub preferred_column: Option<usize>,
+    #[serde(default)]
     pub selection_anchor: Option<usize>,
     #[serde(default)]
     pub selected_completion: usize,
@@ -34,6 +36,7 @@ impl PromptState {
         Self {
             cursor: text.len(),
             text,
+            preferred_column: None,
             selection_anchor: None,
             selected_completion: 0,
             paste_burst: PromptPasteBurstState::default(),
@@ -44,6 +47,7 @@ impl PromptState {
     pub fn clear(&mut self) {
         self.text.clear();
         self.cursor = 0;
+        self.preferred_column = None;
         self.selection_anchor = None;
         self.selected_completion = 0;
         self.paste_burst.buffer.clear();
@@ -56,9 +60,15 @@ impl PromptState {
         }
 
         self.delete_selection();
+        self.cursor = clamp_boundary(&self.text, self.cursor);
         self.text.insert_str(self.cursor, value);
         self.cursor += value.len();
-        self.selected_completion = 0;
+        self.after_edit();
+    }
+
+    /// Inserts one line break at the cursor after replacing any active selection.
+    pub fn insert_newline(&mut self) {
+        self.insert_text("\n");
     }
 
     /// Inserts pasted text with CRLF/CR normalization tracked in prompt paste metadata.
@@ -88,6 +98,16 @@ impl PromptState {
     /// Moves the cursor to the prompt end and optionally extends selection state.
     pub fn move_to_end(&mut self, selecting: bool) {
         self.move_to(self.text.len(), selecting);
+    }
+
+    /// Moves the cursor to the same character column on the previous prompt line.
+    pub fn move_up(&mut self, selecting: bool) {
+        self.move_vertical(-1, selecting);
+    }
+
+    /// Moves the cursor to the same character column on the next prompt line.
+    pub fn move_down(&mut self, selecting: bool) {
+        self.move_vertical(1, selecting);
     }
 
     /// Returns the active selection range in byte offsets when text is selected.
@@ -126,6 +146,7 @@ impl PromptState {
 
         self.text.replace_range(previous..self.cursor, "");
         self.cursor = previous;
+        self.after_edit();
     }
 
     /// Deletes one character after the cursor or the active selected range.
@@ -140,23 +161,112 @@ impl PromptState {
         }
 
         self.text.replace_range(self.cursor..next, "");
+        self.after_edit();
     }
 
     /// Moves the cursor to a byte offset while preserving character-boundary safety.
     fn move_to(&mut self, cursor: usize, selecting: bool) {
-        if selecting && self.selection_anchor.is_none() {
-            self.selection_anchor = Some(self.cursor);
-        }
-        if !selecting {
-            self.selection_anchor = None;
-        }
+        self.preferred_column = None;
+        self.move_to_preserving_preferred_column(cursor, selecting);
+    }
+
+    /// Moves the cursor vertically while keeping the original character column when possible.
+    fn move_vertical(&mut self, delta: i32, selecting: bool) {
+        let cursor = clamp_boundary(&self.text, self.cursor);
+        let current_start = line_start(&self.text, cursor);
+        let current_end = line_end(&self.text, cursor);
+        let column = self
+            .preferred_column
+            .unwrap_or_else(|| character_column(&self.text, current_start, cursor));
+        let target = if delta < 0 {
+            previous_line_target(&self.text, current_start, column)
+        } else {
+            next_line_target(&self.text, current_end, column)
+        };
+
+        self.preferred_column = Some(column);
+        self.move_to_preserving_preferred_column(target, selecting);
+    }
+
+    /// Moves the cursor without clearing vertical movement column tracking.
+    fn move_to_preserving_preferred_column(&mut self, cursor: usize, selecting: bool) {
+        let previous_cursor = self.cursor;
         self.cursor = clamp_boundary(&self.text, cursor);
+        if selecting {
+            self.selection_anchor.get_or_insert(previous_cursor);
+            if self.selection_anchor == Some(self.cursor) {
+                self.selection_anchor = None;
+            }
+            return;
+        }
+
+        self.selection_anchor = None;
+    }
+
+    /// Resets transient editing metadata after prompt content changes.
+    fn after_edit(&mut self) {
+        self.preferred_column = None;
+        self.selection_anchor = None;
+        self.selected_completion = 0;
     }
 }
 
 /// Normalizes terminal paste content to LF-only line breaks.
 fn normalize_paste(value: &str) -> String {
     value.replace("\r\n", "\n").replace('\r', "\n")
+}
+
+/// Returns the byte offset for the beginning of the line containing the cursor.
+fn line_start(value: &str, cursor: usize) -> usize {
+    value[..clamp_boundary(value, cursor)]
+        .rfind('\n')
+        .map(|index| index + 1)
+        .unwrap_or(0)
+}
+
+/// Returns the byte offset for the end of the line containing the cursor.
+fn line_end(value: &str, cursor: usize) -> usize {
+    let cursor = clamp_boundary(value, cursor);
+    value[cursor..]
+        .find('\n')
+        .map(|index| cursor + index)
+        .unwrap_or(value.len())
+}
+
+/// Returns the character column between the line start and cursor byte offsets.
+fn character_column(value: &str, line_start: usize, cursor: usize) -> usize {
+    value[line_start..cursor].chars().count()
+}
+
+/// Returns the cursor byte offset for the previous line at the requested character column.
+fn previous_line_target(value: &str, current_start: usize, column: usize) -> usize {
+    if current_start == 0 {
+        return 0;
+    }
+
+    let previous_end = current_start.saturating_sub(1);
+    let previous_start = line_start(value, previous_end);
+    offset_for_column(value, previous_start, previous_end, column)
+}
+
+/// Returns the cursor byte offset for the next line at the requested character column.
+fn next_line_target(value: &str, current_end: usize, column: usize) -> usize {
+    if current_end >= value.len() {
+        return value.len();
+    }
+
+    let next_start = current_end + 1;
+    let next_end = line_end(value, next_start);
+    offset_for_column(value, next_start, next_end, column)
+}
+
+/// Returns the byte offset at a character column within a line range.
+fn offset_for_column(value: &str, start: usize, end: usize, column: usize) -> usize {
+    value[start..end]
+        .char_indices()
+        .nth(column)
+        .map(|(index, _)| start + index)
+        .unwrap_or(end)
 }
 
 /// Returns the nearest valid character boundary at or before an offset.

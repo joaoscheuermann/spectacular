@@ -46,6 +46,10 @@ fn key_effects(state: &State, key: KeyEvent) -> Vec<EventEffect> {
         return ctrl_c_effects(state);
     }
 
+    if is_newline_key(&key) {
+        return prompt_change_effect(state, PromptState::insert_newline);
+    }
+
     if key
         .modifiers
         .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
@@ -53,17 +57,22 @@ fn key_effects(state: &State, key: KeyEvent) -> Vec<EventEffect> {
         return Vec::new();
     }
 
+    let selecting = key.modifiers.contains(KeyModifiers::SHIFT);
     match key.code {
         KeyCode::Enter => submit_prompt_effects(state),
-        KeyCode::Char(character) => prompt_change_effect(state, |prompt| {
-            prompt.insert_text(&character.to_string());
-        }),
+        KeyCode::Char(character) if !character.is_control() => {
+            prompt_change_effect(state, |prompt| {
+                prompt.insert_text(&character.to_string());
+            })
+        }
         KeyCode::Backspace => prompt_change_effect(state, PromptState::backspace),
         KeyCode::Delete => prompt_change_effect(state, PromptState::delete_forward),
-        KeyCode::Left => prompt_change_effect(state, |prompt| prompt.move_left(false)),
-        KeyCode::Right => prompt_change_effect(state, |prompt| prompt.move_right(false)),
-        KeyCode::Home => prompt_change_effect(state, |prompt| prompt.move_to_start(false)),
-        KeyCode::End => prompt_change_effect(state, |prompt| prompt.move_to_end(false)),
+        KeyCode::Left => prompt_change_effect(state, |prompt| prompt.move_left(selecting)),
+        KeyCode::Right => prompt_change_effect(state, |prompt| prompt.move_right(selecting)),
+        KeyCode::Up => prompt_change_effect(state, |prompt| prompt.move_up(selecting)),
+        KeyCode::Down => prompt_change_effect(state, |prompt| prompt.move_down(selecting)),
+        KeyCode::Home => prompt_change_effect(state, |prompt| prompt.move_to_start(selecting)),
+        KeyCode::End => prompt_change_effect(state, |prompt| prompt.move_to_end(selecting)),
         _ => Vec::new(),
     }
 }
@@ -121,7 +130,17 @@ fn next_local_prompt_id(state: &State) -> TranscriptItemId {
     ))
 }
 
+/// Returns true when a key event should insert a multiline prompt line break.
+fn is_newline_key(key: &KeyEvent) -> bool {
+    key.code == KeyCode::Enter
+        && (key.modifiers.contains(KeyModifiers::ALT)
+            || key.modifiers.contains(KeyModifiers::CONTROL)
+            || key.modifiers.contains(KeyModifiers::SHIFT))
+        || is_ctrl_char(key, 'j')
+}
+
 /// Returns true when a key event is a specific Ctrl+character chord.
 fn is_ctrl_char(key: &KeyEvent, expected: char) -> bool {
-    key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char(expected)
+    key.modifiers.contains(KeyModifiers::CONTROL)
+        && matches!(key.code, KeyCode::Char(character) if character.eq_ignore_ascii_case(&expected))
 }

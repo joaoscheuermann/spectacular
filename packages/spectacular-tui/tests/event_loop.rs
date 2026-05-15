@@ -73,11 +73,31 @@ fn prompt_editing_supports_multiline_cursor_selection_and_paste_state() {
     assert_eq!(prompt.selection_range(), Some(0..6));
     prompt.insert_text("say ");
     prompt.insert_paste("a\r\nb");
+    prompt.move_up(false);
 
     assert_eq!(prompt.text, "say a\nb");
-    assert_eq!(prompt.cursor, "say a\nb".len());
+    assert_eq!(prompt.cursor, 1);
     assert_eq!(prompt.selection_range(), None);
     assert_eq!(prompt.paste_burst.buffer, "a\nb");
+
+    prompt.move_down(false);
+    assert_eq!(prompt.cursor, prompt.text.len());
+}
+
+/// Verifies modified Enter and Shift navigation are represented as prompt edits instead of submission.
+#[test]
+fn multiline_enter_and_shift_navigation_update_prompt_state() {
+    let mut state = state();
+    state.session.prompt = PromptState::from_text("one");
+
+    let action = single_action(&state, key(KeyCode::Enter, KeyModifiers::SHIFT));
+    reduce(&mut state, action);
+    assert_eq!(state.session.prompt.text, "one\n");
+    assert_eq!(state.session.transcript.len(), 0);
+
+    let action = single_action(&state, key(KeyCode::Home, KeyModifiers::SHIFT));
+    reduce(&mut state, action);
+    assert_eq!(state.session.prompt.selection_range(), Some(0..4));
 }
 
 /// Verifies Enter submits the current prompt through the reducer and clears prompt state.
@@ -169,7 +189,7 @@ fn transcript_scroll_input_updates_scroll_state_and_tail_following() {
 fn slash_command_prompt_ui_uses_state_commands_for_suggestions_and_guidance() {
     let mut state = state();
     state.commands = vec![
-        CommandDescriptor::new("config", "Manage configuration"),
+        CommandDescriptor::with_usage("config", "Manage configuration", "/config list"),
         CommandDescriptor::new("session", "Manage sessions"),
     ];
     state.session.prompt = PromptState::from_text("/con");
@@ -184,4 +204,5 @@ fn slash_command_prompt_ui_uses_state_commands_for_suggestions_and_guidance() {
     let output = spectacular_tui::render_state_to_string(&state, Some(100));
 
     assert!(output.contains("Guidance: /config - Manage configuration"));
+    assert!(output.contains("Usage: /config list"));
 }

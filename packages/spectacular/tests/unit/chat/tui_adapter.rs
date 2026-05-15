@@ -260,7 +260,11 @@ fn command_registry_loading_maps_to_commands_loaded() {
 
     assert_eq!(
         commands_loaded_action(&registry),
-        ChatTuiAction::CommandsLoaded(vec![CommandDescriptor::new("test", "Run test command")])
+        ChatTuiAction::CommandsLoaded(vec![CommandDescriptor::with_usage(
+            "test",
+            "Run test command",
+            "/test"
+        )])
     );
 }
 
