@@ -10,7 +10,7 @@ use spectacular_agent::{
     Agent, AgentConfig, AgentEvent, ContextPolicy, Store, ToolRegistrationError, ToolStorage,
 };
 use spectacular_config::ReasoningLevel;
-use spectacular_llms::{LlmProvider, ProviderMessageRole};
+use spectacular_llms::LlmProvider;
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -177,40 +177,38 @@ impl<'a> ChatRunner<'a> {
                         }
                     }
 
-                    if let AgentEvent::MessageDelta(delta) = &event {
-                        if delta.role == ProviderMessageRole::Assistant {
-                            if reasoning_output.close_visible_response() {
-                                self.renderer.response_spacer();
-                                if is_streaming {
-                                    self.renderer.resume_working_line();
-                                    is_streaming = false;
-                                }
+                    if let AgentEvent::MessageDelta { content, .. } = &event {
+                        if reasoning_output.close_visible_response() {
+                            self.renderer.response_spacer();
+                            if is_streaming {
+                                self.renderer.resume_working_line();
+                                is_streaming = false;
                             }
-                            if let Some(render) = assistant_output.delta(&delta.content) {
-                                if render.started && !is_streaming {
-                                    self.renderer.pause_working_line();
-                                    is_streaming = true;
-                                }
-                                self.renderer.assistant_delta(&render.content).await?;
-                            }
-                            self.model.append_agent_event(&event)?;
-                            title_text.push_str(&delta.content);
-                            if should_spawn_title_task(title_spawned, &title_text) {
-                                spawn_title_task(
-                                    self.model.session_manager().clone(),
-                                    request.prompt.clone(),
-                                    title_text.clone(),
-                                    &request.runtime,
-                                    self.renderer,
-                                    self.model.debug_logger().clone(),
-                                )?;
-                                title_spawned = true;
-                            }
-                            continue;
                         }
+                        if let Some(render) = assistant_output.delta(content) {
+                            if render.started && !is_streaming {
+                                self.renderer.pause_working_line();
+                                is_streaming = true;
+                            }
+                            self.renderer.assistant_delta(&render.content).await?;
+                        }
+                        self.model.append_agent_event(&event)?;
+                        title_text.push_str(content);
+                        if should_spawn_title_task(title_spawned, &title_text) {
+                            spawn_title_task(
+                                self.model.session_manager().clone(),
+                                request.prompt.clone(),
+                                title_text.clone(),
+                                &request.runtime,
+                                self.renderer,
+                                self.model.debug_logger().clone(),
+                            )?;
+                            title_spawned = true;
+                        }
+                        continue;
                     }
 
-                    if let AgentEvent::ReasoningDelta(delta) = &event {
+                    if let AgentEvent::ReasoningDelta { content, .. } = &event {
                         if spinner_visible {
                             self.renderer.working_frame(
                                 spinner_frame,
@@ -224,7 +222,7 @@ impl<'a> ChatRunner<'a> {
                                 is_streaming = false;
                             }
                         }
-                        if let Some(render) = reasoning_output.delta(&delta.content) {
+                        if let Some(render) = reasoning_output.delta(content) {
                             if render.started && !is_streaming {
                                 self.renderer.pause_working_line();
                                 is_streaming = true;

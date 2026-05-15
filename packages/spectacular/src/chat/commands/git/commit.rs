@@ -10,7 +10,7 @@ use crate::chat::ChatError;
 use crate::chat::provider::provider_for_runtime;
 use spectacular_agent::{Agent, AgentConfig, AgentEvent, CommandStatus};
 use spectacular_commands::CommandError;
-use spectacular_llms::ProviderMessageRole;
+
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -412,11 +412,7 @@ async fn generate_commit_message(
 
     while let Some(event) = stream.next().await {
         match event {
-            AgentEvent::MessageDelta(delta) => {
-                if delta.role == ProviderMessageRole::Assistant {
-                    message.push_str(&delta.content);
-                }
-            }
+            AgentEvent::MessageDelta { content, .. } => message.push_str(&content),
             AgentEvent::Finished { .. } => break,
             AgentEvent::Error { message: err } => {
                 return Err(CommitMessageGenerationError::Failed(format!(

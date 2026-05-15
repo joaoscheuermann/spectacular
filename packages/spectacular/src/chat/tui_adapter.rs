@@ -4,7 +4,7 @@ use crate::chat::tui_adapter_display::{
 use crate::chat::RuntimeSelection;
 use spectacular_agent::{AgentEvent, ToolStorage};
 use spectacular_commands::CommandRegistry;
-use spectacular_llms::{FinishReason, ProviderMessageRole, UsageMetadata};
+use spectacular_llms::{FinishReason, UsageMetadata};
 use spectacular_tui::{
     ChatTuiAction, CommandDescriptor, ContextTokenUsage as TuiContextTokenUsage,
     DisplayMetadata as TuiDisplayMetadata, ReasoningLevel as TuiReasoningLevel,
@@ -15,10 +15,6 @@ use std::path::Path;
 /// Converts runtime and agent events into pure TUI reducer actions.
 #[derive(Default)]
 pub(crate) struct TuiEventAdapter {
-    active_message: Option<TranscriptItemId>,
-    active_reasoning: Option<TranscriptItemId>,
-    next_message_id: u64,
-    next_reasoning_id: u64,
     next_user_prompt_id: u64,
     tool_display: ToolDisplayAdapter,
 }
@@ -27,11 +23,8 @@ impl TuiEventAdapter {
     /// Creates an adapter with empty lifecycle state for one runtime event stream.
     pub(crate) fn new() -> Self {
         Self {
-            next_message_id: 1,
-            next_reasoning_id: 1,
             next_user_prompt_id: 1,
             tool_display: ToolDisplayAdapter::new(),
-            ..Self::default()
         }
     }
 
@@ -48,24 +41,47 @@ impl TuiEventAdapter {
     ) -> Vec<ChatTuiAction> {
         match event {
             AgentEvent::UserPrompt { content } => vec![self.user_prompt_action(content)],
-            AgentEvent::MessageDelta(delta) if delta.role == ProviderMessageRole::Assistant => {
-                self.message_delta_actions(&delta.content)
-            }
-            AgentEvent::ReasoningDelta(delta) => self.reasoning_delta_actions(&delta.content),
-            AgentEvent::AssistantToolCallRequest {
+            AgentEvent::MessageStart { id } => vec![ChatTuiAction::MessageStarted {
+                id: transcript_item_id(id.as_str()),
+            }],
+            AgentEvent::MessageDelta { id, content } => vec![ChatTuiAction::MessageDelta {
+                id: transcript_item_id(id.as_str()),
+                text: content.clone(),
+            }],
+            AgentEvent::MessageFinish { id } => vec![ChatTuiAction::MessageFinished {
+                id: transcript_item_id(id.as_str()),
+            }],
+            AgentEvent::ReasoningStart { id } => vec![ChatTuiAction::ReasoningStarted {
+                id: transcript_item_id(id.as_str()),
+            }],
+            AgentEvent::ReasoningDelta { id, content } => vec![ChatTuiAction::ReasoningDelta {
+                id: transcript_item_id(id.as_str()),
+                text: content.clone(),
+            }],
+            AgentEvent::ReasoningFinish { id } => vec![ChatTuiAction::ReasoningFinished {
+                id: transcript_item_id(id.as_str()),
+            }],
+            AgentEvent::ToolCallStart {
                 tool_call_id,
                 name,
                 arguments,
             } => self
                 .tool_display
                 .started_actions(tool_call_id, name, arguments, tools),
-            AgentEvent::ToolResult {
+            AgentEvent::ToolCallDelta {
+                tool_call_id,
+                content,
+            } => vec![ChatTuiAction::ToolCallDelta {
+                tool_call_id: tool_call_id.clone(),
+                text: content.clone(),
+            }],
+            AgentEvent::ToolCallFinish {
                 tool_call_id,
                 name,
-                content,
+                output,
             } => self
                 .tool_display
-                .result_actions(tool_call_id, name, content, tools),
+                .result_actions(tool_call_id, name, output, tools),
             AgentEvent::CommandStart(start) => {
                 vec![command_started_action(&start.command_id, &start.command)]
             }
@@ -83,74 +99,20 @@ impl TuiEventAdapter {
             AgentEvent::ContextTokenUsage(usage) => vec![ChatTuiAction::UsageUpdated(
                 TuiContextTokenUsage::new(usage.input_tokens, usage.context_window_tokens),
             )],
-            AgentEvent::ValidationError { message } | AgentEvent::Error { message } => self
-                .finish_streaming_lifecycles(ChatTuiAction::AgentFailed {
+            AgentEvent::ValidationError { message } | AgentEvent::Error { message } => {
+                vec![ChatTuiAction::AgentFailed {
                     message: message.clone(),
-                }),
-            AgentEvent::Cancelled { reason } => {
-                self.finish_streaming_lifecycles(ChatTuiAction::AgentCancelled {
-                    reason: reason.clone(),
-                })
+                }]
             }
+            AgentEvent::Cancelled { reason } => vec![ChatTuiAction::AgentCancelled {
+                reason: reason.clone(),
+            }],
             AgentEvent::Finished { finish_reason } => self.finished_actions(*finish_reason),
-            AgentEvent::MessageDelta(_)
-            | AgentEvent::ReasoningMetadata(_)
+            AgentEvent::ReasoningMetadata(_)
             | AgentEvent::ContextSummaryCreated(_)
             | AgentEvent::Internal { .. } => Vec::new(),
             _ => Vec::new(),
         }
-    }
-
-    /// Builds lifecycle actions for an implicit assistant delta stream.
-    fn message_delta_actions(&mut self, content: &str) -> Vec<ChatTuiAction> {
-        let (id, started) = self.active_message_id();
-        let delta = ChatTuiAction::MessageDelta {
-            id: id.clone(),
-            text: content.to_owned(),
-        };
-        if !started {
-            return vec![delta];
-        }
-
-        vec![ChatTuiAction::MessageStarted { id }, delta]
-    }
-
-    /// Builds lifecycle actions for an implicit reasoning delta stream.
-    fn reasoning_delta_actions(&mut self, content: &str) -> Vec<ChatTuiAction> {
-        let (id, started) = self.active_reasoning_id();
-        let delta = ChatTuiAction::ReasoningDelta {
-            id: id.clone(),
-            text: content.to_owned(),
-        };
-        if !started {
-            return vec![delta];
-        }
-
-        vec![ChatTuiAction::ReasoningStarted { id }, delta]
-    }
-
-    /// Returns the active assistant message ID and whether it was just created.
-    fn active_message_id(&mut self) -> (TranscriptItemId, bool) {
-        if let Some(id) = &self.active_message {
-            return (id.clone(), false);
-        }
-
-        let id = TranscriptItemId::new(format!("message-{}", self.next_message_id));
-        self.next_message_id = self.next_message_id.saturating_add(1);
-        self.active_message = Some(id.clone());
-        (id, true)
-    }
-
-    /// Returns the active reasoning item ID and whether it was just created.
-    fn active_reasoning_id(&mut self) -> (TranscriptItemId, bool) {
-        if let Some(id) = &self.active_reasoning {
-            return (id.clone(), false);
-        }
-
-        let id = TranscriptItemId::new(format!("reasoning-{}", self.next_reasoning_id));
-        self.next_reasoning_id = self.next_reasoning_id.saturating_add(1);
-        self.active_reasoning = Some(id.clone());
-        (id, true)
     }
 
     /// Builds a semantic user prompt action with adapter-owned transcript identity.
@@ -163,17 +125,7 @@ impl TuiEventAdapter {
         }
     }
 
-    /// Finishes any active implicit streams before appending a terminal run action.
-    fn finish_streaming_lifecycles(
-        &mut self,
-        terminal_action: ChatTuiAction,
-    ) -> Vec<ChatTuiAction> {
-        let mut actions = self.finish_active_streams();
-        actions.push(terminal_action);
-        actions
-    }
-
-    /// Converts a run finish into lifecycle completion plus a deterministic terminal action.
+    /// Converts a run finish into a deterministic terminal action.
     fn finished_actions(&mut self, finish_reason: FinishReason) -> Vec<ChatTuiAction> {
         let terminal_action = match finish_reason {
             FinishReason::Cancelled => ChatTuiAction::AgentCancelled {
@@ -191,21 +143,13 @@ impl TuiEventAdapter {
             FinishReason::Stop => ChatTuiAction::AgentFinished,
         };
 
-        self.finish_streaming_lifecycles(terminal_action)
+        vec![terminal_action]
     }
+}
 
-    /// Drains active implicit assistant and reasoning lifecycle finish actions.
-    fn finish_active_streams(&mut self) -> Vec<ChatTuiAction> {
-        let mut actions = Vec::new();
-        if let Some(id) = self.active_message.take() {
-            actions.push(ChatTuiAction::MessageFinished { id });
-        }
-        if let Some(id) = self.active_reasoning.take() {
-            actions.push(ChatTuiAction::ReasoningFinished { id });
-        }
-
-        actions
-    }
+/// Converts an agent transcript item identifier into the TUI identifier type.
+pub(crate) fn transcript_item_id(id: &str) -> TranscriptItemId {
+    TranscriptItemId::new(id)
 }
 
 /// Builds the TUI action for a controller-owned agent run start.

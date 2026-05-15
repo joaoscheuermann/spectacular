@@ -15,7 +15,8 @@ pub use context::{
 };
 pub use error::AgentError;
 pub use event::{
-    AgentEvent, CommandDelta, CommandFinished, CommandStart, CommandStatus, ContextSummary,
+    AgentEvent, AgentTranscriptItemId, CommandDelta, CommandFinished, CommandStart, CommandStatus,
+    ContextSummary,
 };
 pub use queue::{RunId, RunQueue, RunRequest};
 pub use schema::{OutputSchema, SchemaError};

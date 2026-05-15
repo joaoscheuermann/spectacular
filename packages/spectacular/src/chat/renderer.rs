@@ -280,15 +280,15 @@ impl Renderer {
                 continue;
             };
 
-            if let AgentEvent::MessageDelta(delta) = &event {
+            if let AgentEvent::MessageDelta { content, .. } = &event {
                 self.flush_reasoning(&mut reasoning_buffer);
-                assistant_buffer.push_str(&delta.content);
+                assistant_buffer.push_str(content);
                 continue;
             }
 
-            if let AgentEvent::ReasoningDelta(delta) = &event {
+            if let AgentEvent::ReasoningDelta { content, .. } = &event {
                 self.flush_assistant(&mut assistant_buffer);
-                reasoning_buffer.push_str(&delta.content);
+                reasoning_buffer.push_str(content);
                 continue;
             }
 

@@ -34,8 +34,8 @@ impl Error for ContextLimitFailure {}
 
 /// Builds provider chat messages from recorded agent events.
 ///
-/// Streaming assistant deltas are coalesced back into turn-sized assistant
-/// messages so the next provider request sees normal transcript shape.
+/// Explicit assistant lifecycle deltas are coalesced back into turn-sized
+/// assistant messages so the next provider request sees normal transcript shape.
 pub fn provider_messages_from_store(
     system_prompt: impl Into<String>,
     store: &Store,
@@ -66,12 +66,15 @@ fn append_transcript_messages(messages: &mut Vec<ProviderMessage>, events: &[Age
 
     for event in events {
         match event {
-            AgentEvent::MessageDelta(delta) => pending_assistant.push_str(&delta.content),
+            AgentEvent::MessageDelta { content, .. } => pending_assistant.push_str(content),
+            AgentEvent::MessageFinish { .. } => {
+                flush_pending_assistant(messages, &mut pending_assistant);
+            }
             AgentEvent::UserPrompt { content } => {
                 flush_pending_assistant(messages, &mut pending_assistant);
                 messages.push(ProviderMessage::user(content.clone()));
             }
-            AgentEvent::AssistantToolCallRequest {
+            AgentEvent::ToolCallStart {
                 tool_call_id,
                 name,
                 arguments,
@@ -83,21 +86,25 @@ fn append_transcript_messages(messages: &mut Vec<ProviderMessage>, events: &[Age
                     arguments.clone(),
                 )));
             }
-            AgentEvent::ToolResult {
+            AgentEvent::ToolCallFinish {
                 tool_call_id,
-                content,
+                output,
                 ..
             } => {
                 flush_pending_assistant(messages, &mut pending_assistant);
                 messages.push(ProviderMessage::tool_result(
                     tool_call_id.clone(),
-                    content.clone(),
+                    output.clone(),
                 ));
             }
-            AgentEvent::ReasoningDelta(_)
+            AgentEvent::MessageStart { .. }
+            | AgentEvent::ReasoningStart { .. }
+            | AgentEvent::ReasoningDelta { .. }
+            | AgentEvent::ReasoningFinish { .. }
             | AgentEvent::UsageMetadata(_)
             | AgentEvent::ContextTokenUsage(_)
             | AgentEvent::ReasoningMetadata(_)
+            | AgentEvent::ToolCallDelta { .. }
             | AgentEvent::CommandStart(_)
             | AgentEvent::CommandDelta(_)
             | AgentEvent::CommandFinished(_)

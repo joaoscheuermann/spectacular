@@ -15,11 +15,13 @@
             }),
             known(ChatEvent::AssistantDelta {
                 role: "assistant".to_owned(),
+                id: "message-1".to_owned(),
                 content: "one".to_owned(),
                 created_at: "2026-04-29T14:02:00Z".to_owned(),
             }),
             known(ChatEvent::AssistantDelta {
                 role: "assistant".to_owned(),
+                id: "message-1".to_owned(),
                 content: " two".to_owned(),
                 created_at: "2026-04-29T14:03:00Z".to_owned(),
             }),

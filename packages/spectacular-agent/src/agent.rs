@@ -450,7 +450,7 @@ where
             recorder.return_if_cancelled().await?;
 
             recorder
-                .record(AgentEvent::assistant_tool_call_request(
+                .record(AgentEvent::tool_call_start(
                     tool_call.id.clone(),
                     tool_call.name.clone(),
                     tool_call.arguments.clone(),
@@ -460,7 +460,7 @@ where
             recorder.return_if_cancelled().await?;
 
             recorder
-                .record(AgentEvent::tool_result(
+                .record(AgentEvent::tool_call_finish(
                     tool_call.id.clone(),
                     tool_call.name.clone(),
                     result,

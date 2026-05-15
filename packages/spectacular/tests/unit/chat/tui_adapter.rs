@@ -2,11 +2,12 @@ use super::*;
 use spectacular_agent::AgentEvent;
 use spectacular_commands::{Command, CommandControl, CommandRegistry};
 use spectacular_config::ProviderAuthMode;
-use spectacular_llms::{FinishReason, MessageDelta, ReasoningDelta, UsageMetadata};
+use spectacular_llms::{FinishReason, UsageMetadata};
 use spectacular_tui::{
     ChatTuiAction, CommandDescriptor, ContextTokenUsage as TuiContextTokenUsage,
-    DisplayMetadata as TuiDisplayMetadata, ReasoningLevel as TuiReasoningLevel,
-    RuntimeSelection as TuiRuntimeSelection, SessionId, TranscriptItemId,
+    DisplayLine, DisplayLineStyle, DisplayMetadata as TuiDisplayMetadata,
+    ReasoningLevel as TuiReasoningLevel, RuntimeSelection as TuiRuntimeSelection, SessionId,
+    ToolDisplayStatus, TranscriptItemId,
 };
 use std::future::Future;
 use std::path::Path;
@@ -20,82 +21,117 @@ fn agent_start_event_maps_to_agent_started() {
     assert_eq!(agent_started_action(), ChatTuiAction::AgentStarted);
 }
 
-/// Verifies assistant lifecycle IDs are created once and reused for deltas and finish.
+/// Verifies assistant lifecycle IDs from agent events are passed directly to TUI actions.
 #[test]
-fn assistant_lifecycle_events_reuse_the_same_transcript_id() {
+fn assistant_lifecycle_events_use_agent_provided_transcript_id() {
     let mut adapter = TuiEventAdapter::new();
 
     assert_eq!(
-        adapter.adapt_agent_event(&AgentEvent::MessageDelta(MessageDelta::assistant("hello "))),
-        vec![
-            ChatTuiAction::MessageStarted {
-                id: TranscriptItemId::new("message-1"),
-            },
-            ChatTuiAction::MessageDelta {
-                id: TranscriptItemId::new("message-1"),
-                text: "hello ".to_owned(),
-            },
-        ]
-    );
-    assert_eq!(
-        adapter.adapt_agent_event(&AgentEvent::MessageDelta(MessageDelta::assistant("world"))),
-        vec![ChatTuiAction::MessageDelta {
-            id: TranscriptItemId::new("message-1"),
-            text: "world".to_owned(),
+        adapter.adapt_agent_event(&AgentEvent::message_start("agent-message-7")),
+        vec![ChatTuiAction::MessageStarted {
+            id: TranscriptItemId::new("agent-message-7"),
         }]
     );
     assert_eq!(
-        adapter.adapt_agent_event(&AgentEvent::Finished {
-            finish_reason: FinishReason::Stop,
-        }),
-        vec![
-            ChatTuiAction::MessageFinished {
-                id: TranscriptItemId::new("message-1"),
-            },
-            ChatTuiAction::AgentFinished,
-        ]
+        adapter.adapt_agent_event(&AgentEvent::message_delta("agent-message-7", "hello")),
+        vec![ChatTuiAction::MessageDelta {
+            id: TranscriptItemId::new("agent-message-7"),
+            text: "hello".to_owned(),
+        }]
+    );
+    assert_eq!(
+        adapter.adapt_agent_event(&AgentEvent::message_finish("agent-message-7")),
+        vec![ChatTuiAction::MessageFinished {
+            id: TranscriptItemId::new("agent-message-7"),
+        }]
     );
 }
 
-/// Verifies reasoning lifecycle IDs are created once and reused for deltas and finish.
+/// Verifies reasoning lifecycle IDs from agent events are passed directly to TUI actions.
 #[test]
-fn reasoning_lifecycle_events_reuse_the_same_transcript_id() {
+fn reasoning_lifecycle_events_use_agent_provided_transcript_id() {
     let mut adapter = TuiEventAdapter::new();
 
     assert_eq!(
-        adapter.adapt_agent_event(&AgentEvent::ReasoningDelta(ReasoningDelta {
-            content: "thinking ".to_owned(),
-            metadata: None,
-        })),
-        vec![
-            ChatTuiAction::ReasoningStarted {
-                id: TranscriptItemId::new("reasoning-1"),
-            },
-            ChatTuiAction::ReasoningDelta {
-                id: TranscriptItemId::new("reasoning-1"),
-                text: "thinking ".to_owned(),
-            },
-        ]
-    );
-    assert_eq!(
-        adapter.adapt_agent_event(&AgentEvent::ReasoningDelta(ReasoningDelta {
-            content: "hard".to_owned(),
-            metadata: None,
-        })),
-        vec![ChatTuiAction::ReasoningDelta {
-            id: TranscriptItemId::new("reasoning-1"),
-            text: "hard".to_owned(),
+        adapter.adapt_agent_event(&AgentEvent::reasoning_start("agent-reasoning-3")),
+        vec![ChatTuiAction::ReasoningStarted {
+            id: TranscriptItemId::new("agent-reasoning-3"),
         }]
     );
+    assert_eq!(
+        adapter.adapt_agent_event(&AgentEvent::reasoning_delta("agent-reasoning-3", "thinking")),
+        vec![ChatTuiAction::ReasoningDelta {
+            id: TranscriptItemId::new("agent-reasoning-3"),
+            text: "thinking".to_owned(),
+        }]
+    );
+    assert_eq!(
+        adapter.adapt_agent_event(&AgentEvent::reasoning_finish("agent-reasoning-3")),
+        vec![ChatTuiAction::ReasoningFinished {
+            id: TranscriptItemId::new("agent-reasoning-3"),
+        }]
+    );
+}
+
+/// Verifies terminal events no longer synthesize assistant or reasoning finish actions.
+#[test]
+fn terminal_events_do_not_synthesize_lifecycle_finishes() {
+    let mut adapter = TuiEventAdapter::new();
+
+    let _ = adapter.adapt_agent_event(&AgentEvent::message_start("agent-message-7"));
+    let _ = adapter.adapt_agent_event(&AgentEvent::reasoning_start("agent-reasoning-3"));
+
     assert_eq!(
         adapter.adapt_agent_event(&AgentEvent::Finished {
             finish_reason: FinishReason::Stop,
         }),
+        vec![ChatTuiAction::AgentFinished]
+    );
+}
+
+/// Verifies explicit tool lifecycle events map directly into TUI tool actions.
+#[test]
+fn tool_lifecycle_events_map_directly_to_tui_actions() {
+    let mut adapter = TuiEventAdapter::new();
+
+    assert_eq!(
+        adapter.adapt_agent_event(&AgentEvent::tool_call_start("call-1", "read", "{}")),
         vec![
-            ChatTuiAction::ReasoningFinished {
-                id: TranscriptItemId::new("reasoning-1"),
+            ChatTuiAction::ToolCallStarted {
+                id: TranscriptItemId::new("call-1"),
+                tool_call_id: "call-1".to_owned(),
+                name: "read".to_owned(),
+                arguments: "{}".to_owned(),
             },
-            ChatTuiAction::AgentFinished,
+            ChatTuiAction::ToolDisplayStarted {
+                id: TranscriptItemId::new("call-1"),
+                tool_call_id: "call-1".to_owned(),
+                name: "read".to_owned(),
+                call_line: DisplayLine::new("read", DisplayLineStyle::Tool),
+                argument_lines: Vec::new(),
+            },
+        ]
+    );
+    assert_eq!(
+        adapter.adapt_agent_event(&AgentEvent::tool_call_delta("call-1", "chunk")),
+        vec![ChatTuiAction::ToolCallDelta {
+            tool_call_id: "call-1".to_owned(),
+            text: "chunk".to_owned(),
+        }]
+    );
+    assert_eq!(
+        adapter.adapt_agent_event(&AgentEvent::tool_call_finish("call-1", "read", "output")),
+        vec![
+            ChatTuiAction::ToolCallFinished {
+                tool_call_id: "call-1".to_owned(),
+                name: "read".to_owned(),
+                output: "output".to_owned(),
+            },
+            ChatTuiAction::ToolDisplayFinished {
+                tool_call_id: "call-1".to_owned(),
+                status: ToolDisplayStatus::Succeeded,
+                output_lines: vec![DisplayLine::new("output", DisplayLineStyle::CommandOutput)],
+            },
         ]
     );
 }

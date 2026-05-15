@@ -59,7 +59,7 @@ fn retryable_provider_error_before_stream_is_retried() {
     assert_eq!(calls.load(Ordering::SeqCst), 3);
     assert!(agent.events().iter().any(|event| matches!(
         event,
-        AgentEvent::MessageDelta(MessageDelta { content, .. }) if content == "recovered"
+        AgentEvent::MessageDelta { content, .. } if content == "recovered"
     )));
     assert!(!agent
         .events()
@@ -118,7 +118,7 @@ fn retryable_stream_error_after_events_is_not_retried() {
     ));
     assert!(agent.events().iter().any(|event| matches!(
         event,
-        AgentEvent::MessageDelta(MessageDelta { content, .. }) if content == "partial"
+        AgentEvent::MessageDelta { content, .. } if content == "partial"
     )));
 }
 
@@ -133,7 +133,7 @@ fn stream_provider_errors_keep_partial_events_then_store_error() {
     assert!(matches!(error, AgentError::ProviderParsingError { .. }));
     assert!(agent.events().iter().any(|event| matches!(
         event,
-        AgentEvent::MessageDelta(MessageDelta { content, .. }) if content == "partial"
+        AgentEvent::MessageDelta { content, .. } if content == "partial"
     )));
     assert!(matches!(
         agent.events().last(),

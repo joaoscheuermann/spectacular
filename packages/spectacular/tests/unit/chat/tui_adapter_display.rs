@@ -64,7 +64,7 @@ fn line(text: impl Into<String>, style: DisplayLineStyle) -> DisplayLine {
 fn assert_tool_result_failed(content: &str) {
     let mut adapter = TuiEventAdapter::new();
     adapter.adapt_agent_event_with_tools(
-        &AgentEvent::assistant_tool_call_request("call-1", "missing_tool", "{}"),
+        &AgentEvent::tool_call_start("call-1", "missing_tool", "{}"),
         &ToolStorage::default(),
     );
 
@@ -76,14 +76,21 @@ fn assert_tool_result_failed(content: &str) {
     );
     assert_eq!(
         adapter.adapt_agent_event_with_tools(
-            &AgentEvent::tool_result("call-1", "missing_tool", content),
+            &AgentEvent::tool_call_finish("call-1", "missing_tool", content),
             &ToolStorage::default(),
         ),
-        vec![ChatTuiAction::ToolDisplayFinished {
-            tool_call_id: "call-1".to_owned(),
-            status: ToolDisplayStatus::Failed,
-            output_lines: vec![line(result.output, DisplayLineStyle::Error)],
-        }]
+        vec![
+            ChatTuiAction::ToolCallFinished {
+                tool_call_id: "call-1".to_owned(),
+                name: "missing_tool".to_owned(),
+                output: content.to_owned(),
+            },
+            ChatTuiAction::ToolDisplayFinished {
+                tool_call_id: "call-1".to_owned(),
+                status: ToolDisplayStatus::Failed,
+                output_lines: vec![line(result.output, DisplayLineStyle::Error)],
+            },
+        ]
     );
 }
 
@@ -91,7 +98,7 @@ fn assert_tool_result_failed(content: &str) {
 fn assert_tool_result_succeeded(content: &str) {
     let mut adapter = TuiEventAdapter::new();
     adapter.adapt_agent_event_with_tools(
-        &AgentEvent::assistant_tool_call_request("call-1", "missing_tool", "{}"),
+        &AgentEvent::tool_call_start("call-1", "missing_tool", "{}"),
         &ToolStorage::default(),
     );
 
@@ -103,14 +110,21 @@ fn assert_tool_result_succeeded(content: &str) {
     );
     assert_eq!(
         adapter.adapt_agent_event_with_tools(
-            &AgentEvent::tool_result("call-1", "missing_tool", content),
+            &AgentEvent::tool_call_finish("call-1", "missing_tool", content),
             &ToolStorage::default(),
         ),
-        vec![ChatTuiAction::ToolDisplayFinished {
-            tool_call_id: "call-1".to_owned(),
-            status: ToolDisplayStatus::Succeeded,
-            output_lines: vec![line(result.output, DisplayLineStyle::CommandOutput)],
-        }]
+        vec![
+            ChatTuiAction::ToolCallFinished {
+                tool_call_id: "call-1".to_owned(),
+                name: "missing_tool".to_owned(),
+                output: content.to_owned(),
+            },
+            ChatTuiAction::ToolDisplayFinished {
+                tool_call_id: "call-1".to_owned(),
+                status: ToolDisplayStatus::Succeeded,
+                output_lines: vec![line(result.output, DisplayLineStyle::CommandOutput)],
+            },
+        ]
     );
 }
 
@@ -120,20 +134,26 @@ fn adapter_tool_call_uses_registered_formatter() {
     let mut adapter = TuiEventAdapter::new();
     let tools = display_tools();
     let arguments = r#"{"path":"README.md"}"#;
-    let expected = ToolCallView::from_parts("display_tool", arguments, &tools);
-
     assert_eq!(
         adapter.adapt_agent_event_with_tools(
-            &AgentEvent::assistant_tool_call_request("call-1", "display_tool", arguments),
+            &AgentEvent::tool_call_start("call-1", "display_tool", arguments),
             &tools,
         ),
-        vec![ChatTuiAction::ToolDisplayStarted {
-            id: TranscriptItemId::new("tool-call-1"),
-            tool_call_id: "call-1".to_owned(),
-            name: "display_tool".to_owned(),
-            call_line: line(expected.line, DisplayLineStyle::Tool),
-            argument_lines: Vec::new(),
-        }]
+        vec![
+            ChatTuiAction::ToolCallStarted {
+                id: TranscriptItemId::new("call-1"),
+                tool_call_id: "call-1".to_owned(),
+                name: "display_tool".to_owned(),
+                arguments: arguments.to_owned(),
+            },
+            ChatTuiAction::ToolDisplayStarted {
+                id: TranscriptItemId::new("call-1"),
+                tool_call_id: "call-1".to_owned(),
+                name: "display_tool".to_owned(),
+                call_line: line("display_tool registered input: README.md", DisplayLineStyle::Tool),
+                argument_lines: Vec::new(),
+            },
+        ]
     );
 }
 
@@ -147,35 +167,51 @@ fn adapter_tool_call_updates_keep_same_tool_call_id() {
 
     assert_eq!(
         adapter.adapt_agent_event_with_tools(
-            &AgentEvent::assistant_tool_call_request("call-1", "display_tool", first),
+            &AgentEvent::tool_call_start("call-1", "display_tool", first),
             &tools,
         ),
-        vec![ChatTuiAction::ToolDisplayStarted {
-            id: TranscriptItemId::new("tool-call-1"),
-            tool_call_id: "call-1".to_owned(),
-            name: "display_tool".to_owned(),
-            call_line: line(
-                ToolCallView::from_parts("display_tool", first, &tools).line,
-                DisplayLineStyle::Tool,
-            ),
-            argument_lines: Vec::new(),
-        }]
+        vec![
+            ChatTuiAction::ToolCallStarted {
+                id: TranscriptItemId::new("call-1"),
+                tool_call_id: "call-1".to_owned(),
+                name: "display_tool".to_owned(),
+                arguments: first.to_owned(),
+            },
+            ChatTuiAction::ToolDisplayStarted {
+                id: TranscriptItemId::new("call-1"),
+                tool_call_id: "call-1".to_owned(),
+                name: "display_tool".to_owned(),
+                call_line: line(
+                    ToolCallView::from_parts("display_tool", first, &tools).line,
+                    DisplayLineStyle::Tool,
+                ),
+                argument_lines: Vec::new(),
+            },
+        ]
     );
     assert_eq!(
         adapter.adapt_agent_event_with_tools(
-            &AgentEvent::assistant_tool_call_request("call-1", "display_tool", updated),
+            &AgentEvent::tool_call_start("call-1", "display_tool", updated),
             &tools,
         ),
-        vec![ChatTuiAction::ToolDisplayStarted {
-            id: TranscriptItemId::new("tool-call-1"),
-            tool_call_id: "call-1".to_owned(),
-            name: "display_tool".to_owned(),
-            call_line: line(
-                ToolCallView::from_parts("display_tool", updated, &tools).line,
-                DisplayLineStyle::Tool,
-            ),
-            argument_lines: Vec::new(),
-        }]
+        vec![
+            ChatTuiAction::ToolCallStarted {
+                id: TranscriptItemId::new("call-1"),
+                tool_call_id: "call-1".to_owned(),
+                name: "display_tool".to_owned(),
+                arguments: updated.to_owned(),
+            },
+            ChatTuiAction::ToolDisplayStarted {
+                id: TranscriptItemId::new("call-1"),
+                tool_call_id: "call-1".to_owned(),
+                name: "display_tool".to_owned(),
+                call_line: line(
+                    ToolCallView::from_parts("display_tool", updated, &tools).line,
+                    DisplayLineStyle::Tool,
+                ),
+                argument_lines: Vec::new(),
+            },
+        ]
     );
 }
 
@@ -186,20 +222,28 @@ fn adapter_unknown_tool_uses_original_fallback_preview() {
 
     assert_eq!(
         adapter.adapt_agent_event_with_tools(
-            &AgentEvent::assistant_tool_call_request(
+            &AgentEvent::tool_call_start(
                 "call-1",
                 "missing_tool",
                 r#"{"path":"README.md"}"#,
             ),
             &ToolStorage::default(),
         ),
-        vec![ChatTuiAction::ToolDisplayStarted {
-            id: TranscriptItemId::new("tool-call-1"),
-            tool_call_id: "call-1".to_owned(),
-            name: "missing_tool".to_owned(),
-            call_line: line("missing_tool path: README.md", DisplayLineStyle::Tool),
-            argument_lines: Vec::new(),
-        }]
+        vec![
+            ChatTuiAction::ToolCallStarted {
+                id: TranscriptItemId::new("call-1"),
+                tool_call_id: "call-1".to_owned(),
+                name: "missing_tool".to_owned(),
+                arguments: r#"{"path":"README.md"}"#.to_owned(),
+            },
+            ChatTuiAction::ToolDisplayStarted {
+                id: TranscriptItemId::new("call-1"),
+                tool_call_id: "call-1".to_owned(),
+                name: "missing_tool".to_owned(),
+                call_line: line("missing_tool path: README.md", DisplayLineStyle::Tool),
+                argument_lines: Vec::new(),
+            },
+        ]
     );
 }
 
@@ -210,22 +254,30 @@ fn adapter_tool_preview_truncates_at_original_limit() {
     let value = "a".repeat(181);
     let arguments = format!(r#"{{"value":"{value}"}}"#);
     let actions = adapter.adapt_agent_event_with_tools(
-        &AgentEvent::assistant_tool_call_request("call-1", "missing_tool", &arguments),
+        &AgentEvent::tool_call_start("call-1", "missing_tool", &arguments),
         &ToolStorage::default(),
     );
 
     assert_eq!(
         actions,
-        vec![ChatTuiAction::ToolDisplayStarted {
-            id: TranscriptItemId::new("tool-call-1"),
-            tool_call_id: "call-1".to_owned(),
-            name: "missing_tool".to_owned(),
-            call_line: line(
-                format!("missing_tool value: {}...", "a".repeat(173)),
-                DisplayLineStyle::Tool,
-            ),
-            argument_lines: Vec::new(),
-        }]
+        vec![
+            ChatTuiAction::ToolCallStarted {
+                id: TranscriptItemId::new("call-1"),
+                tool_call_id: "call-1".to_owned(),
+                name: "missing_tool".to_owned(),
+                arguments,
+            },
+            ChatTuiAction::ToolDisplayStarted {
+                id: TranscriptItemId::new("call-1"),
+                tool_call_id: "call-1".to_owned(),
+                name: "missing_tool".to_owned(),
+                call_line: line(
+                    format!("missing_tool value: {}...", "a".repeat(173)),
+                    DisplayLineStyle::Tool,
+                ),
+                argument_lines: Vec::new(),
+            },
+        ]
     );
 }
 
@@ -268,7 +320,7 @@ fn adapter_tool_result_uses_registered_formatter_output() {
     let arguments = r#"{"path":"README.md"}"#;
     let content = r#"{"success":true}"#;
     adapter.adapt_agent_event_with_tools(
-        &AgentEvent::assistant_tool_call_request("call-1", "display_tool", arguments),
+        &AgentEvent::tool_call_start("call-1", "display_tool", arguments),
         &tools,
     );
 
@@ -281,14 +333,21 @@ fn adapter_tool_result_uses_registered_formatter_output() {
     );
     assert_eq!(
         adapter.adapt_agent_event_with_tools(
-            &AgentEvent::tool_result("call-1", "display_tool", content),
+            &AgentEvent::tool_call_finish("call-1", "display_tool", content),
             &tools,
         ),
-        vec![ChatTuiAction::ToolDisplayFinished {
-            tool_call_id: "call-1".to_owned(),
-            status: ToolDisplayStatus::Succeeded,
-            output_lines: vec![line(result.output, DisplayLineStyle::CommandOutput)],
-        }]
+        vec![
+            ChatTuiAction::ToolCallFinished {
+                tool_call_id: "call-1".to_owned(),
+                name: "display_tool".to_owned(),
+                output: content.to_owned(),
+            },
+            ChatTuiAction::ToolDisplayFinished {
+                tool_call_id: "call-1".to_owned(),
+                status: ToolDisplayStatus::Succeeded,
+                output_lines: vec![line(result.output, DisplayLineStyle::CommandOutput)],
+            },
+        ]
     );
 }
 
@@ -300,7 +359,7 @@ fn adapter_tool_result_uses_registered_formatter_with_input_context() {
     let arguments = r#"{"path":"src/lib.rs","edits":[{"oldText":"old","newText":"new"}]}"#;
     let content = r#"{"success":true,"diff":"1 -old\n1 +new"}"#;
     adapter.adapt_agent_event_with_tools(
-        &AgentEvent::assistant_tool_call_request("call-1", "edit", arguments),
+        &AgentEvent::tool_call_start("call-1", "edit", arguments),
         &tools,
     );
 
@@ -310,18 +369,25 @@ fn adapter_tool_result_uses_registered_formatter_with_input_context() {
     assert_eq!(result.output, "Edited src/lib.rs\n1 -old\n1 +new");
     assert_eq!(
         adapter.adapt_agent_event_with_tools(
-            &AgentEvent::tool_result("call-1", "edit", content),
+            &AgentEvent::tool_call_finish("call-1", "edit", content),
             &tools
         ),
-        vec![ChatTuiAction::ToolDisplayFinished {
-            tool_call_id: "call-1".to_owned(),
-            status: ToolDisplayStatus::Succeeded,
-            output_lines: vec![
-                line("Edited src/lib.rs", DisplayLineStyle::CommandOutput),
-                line("1 -old", DisplayLineStyle::DiffRemoved),
-                line("1 +new", DisplayLineStyle::DiffAdded),
-            ],
-        }]
+        vec![
+            ChatTuiAction::ToolCallFinished {
+                tool_call_id: "call-1".to_owned(),
+                name: "edit".to_owned(),
+                output: content.to_owned(),
+            },
+            ChatTuiAction::ToolDisplayFinished {
+                tool_call_id: "call-1".to_owned(),
+                status: ToolDisplayStatus::Succeeded,
+                output_lines: vec![
+                    line("Edited src/lib.rs", DisplayLineStyle::CommandOutput),
+                    line("1 -old", DisplayLineStyle::DiffRemoved),
+                    line("1 +new", DisplayLineStyle::DiffAdded),
+                ],
+            },
+        ]
     );
 }
 
@@ -330,28 +396,35 @@ fn adapter_tool_result_uses_registered_formatter_with_input_context() {
 fn adapter_tool_output_diff_lines_are_annotated() {
     let mut adapter = TuiEventAdapter::new();
     adapter.adapt_agent_event_with_tools(
-        &AgentEvent::assistant_tool_call_request("call-1", "missing_tool", "{}"),
+        &AgentEvent::tool_call_start("call-1", "missing_tool", "{}"),
         &ToolStorage::default(),
     );
 
     assert_eq!(
         adapter.adapt_agent_event_with_tools(
-            &AgentEvent::tool_result(
+            &AgentEvent::tool_call_finish(
                 "call-1",
                 "missing_tool",
                 "Edited src/lib.rs\n1 -old\n1 +new"
             ),
             &ToolStorage::default(),
         ),
-        vec![ChatTuiAction::ToolDisplayFinished {
-            tool_call_id: "call-1".to_owned(),
-            status: ToolDisplayStatus::Succeeded,
-            output_lines: vec![
-                line("Edited src/lib.rs", DisplayLineStyle::CommandOutput),
-                line("1 -old", DisplayLineStyle::DiffRemoved),
-                line("1 +new", DisplayLineStyle::DiffAdded),
-            ],
-        }]
+        vec![
+            ChatTuiAction::ToolCallFinished {
+                tool_call_id: "call-1".to_owned(),
+                name: "missing_tool".to_owned(),
+                output: "Edited src/lib.rs\n1 -old\n1 +new".to_owned(),
+            },
+            ChatTuiAction::ToolDisplayFinished {
+                tool_call_id: "call-1".to_owned(),
+                status: ToolDisplayStatus::Succeeded,
+                output_lines: vec![
+                    line("Edited src/lib.rs", DisplayLineStyle::CommandOutput),
+                    line("1 -old", DisplayLineStyle::DiffRemoved),
+                    line("1 +new", DisplayLineStyle::DiffAdded),
+                ],
+            },
+        ]
     );
 }
 
@@ -444,15 +517,12 @@ fn tui_path_does_not_write_tool_output_directly() {
     let mut adapter = TuiEventAdapter::new();
 
     let actions = adapter.adapt_agent_event_with_tools(
-        &AgentEvent::tool_result("call-1", "missing_tool", "contents"),
+        &AgentEvent::tool_call_finish("call-1", "missing_tool", "contents"),
         &ToolStorage::default(),
     );
 
     assert!(matches!(
         actions.as_slice(),
-        [
-            ChatTuiAction::ToolDisplayStarted { .. },
-            ChatTuiAction::ToolDisplayFinished { .. }
-        ]
+        [ChatTuiAction::ToolCallFinished { .. }, ChatTuiAction::ToolDisplayFinished { .. }]
     ));
 }

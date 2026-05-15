@@ -12,21 +12,16 @@ use std::collections::BTreeMap;
 /// Stores tool-specific display state needed while adapting runtime events.
 #[derive(Default)]
 pub(crate) struct ToolDisplayAdapter {
-    next_tool_id: u64,
-    tool_transcript_ids: BTreeMap<String, TranscriptItemId>,
     tool_arguments: BTreeMap<String, Value>,
 }
 
 impl ToolDisplayAdapter {
     /// Creates tool display state for a fresh TUI adapter stream.
     pub(crate) fn new() -> Self {
-        Self {
-            next_tool_id: 1,
-            ..Self::default()
-        }
+        Self::default()
     }
 
-    /// Builds display-ready tool-call lifecycle actions with adapter-owned transcript identity.
+    /// Builds semantic and display-ready tool-call lifecycle actions.
     pub(crate) fn started_actions(
         &mut self,
         tool_call_id: &str,
@@ -34,35 +29,29 @@ impl ToolDisplayAdapter {
         arguments: &str,
         tools: &ToolStorage,
     ) -> Vec<ChatTuiAction> {
-        let id = self.tool_transcript_id(tool_call_id);
         self.remember_tool_arguments(tool_call_id, arguments);
 
-        vec![ChatTuiAction::ToolDisplayStarted {
-            id,
-            tool_call_id: tool_call_id.to_owned(),
-            name: name.to_owned(),
-            call_line: DisplayLine::new(
-                strip_ansi_codes(&ToolCallView::from_parts(name, arguments, tools).line),
-                DisplayLineStyle::Tool,
-            ),
-            argument_lines: Vec::new(),
-        }]
+        vec![
+            ChatTuiAction::ToolCallStarted {
+                id: crate::chat::tui_adapter::transcript_item_id(tool_call_id),
+                tool_call_id: tool_call_id.to_owned(),
+                name: name.to_owned(),
+                arguments: arguments.to_owned(),
+            },
+            ChatTuiAction::ToolDisplayStarted {
+                id: crate::chat::tui_adapter::transcript_item_id(tool_call_id),
+                tool_call_id: tool_call_id.to_owned(),
+                name: name.to_owned(),
+                call_line: DisplayLine::new(
+                    strip_ansi_codes(&ToolCallView::from_parts(name, arguments, tools).line),
+                    DisplayLineStyle::Tool,
+                ),
+                argument_lines: Vec::new(),
+            },
+        ]
     }
 
-    /// Returns the stable transcript id for a provider tool-call id, allocating it once.
-    fn tool_transcript_id(&mut self, tool_call_id: &str) -> TranscriptItemId {
-        if let Some(id) = self.tool_transcript_ids.get(tool_call_id) {
-            return id.clone();
-        }
-
-        let id = TranscriptItemId::new(format!("tool-call-{}", self.next_tool_id));
-        self.next_tool_id = self.next_tool_id.saturating_add(1);
-        self.tool_transcript_ids
-            .insert(tool_call_id.to_owned(), id.clone());
-        id
-    }
-
-    /// Builds display-ready tool completion actions for known and implicit tool starts.
+    /// Builds semantic and display-ready tool completion actions.
     pub(crate) fn result_actions(
         &mut self,
         tool_call_id: &str,
@@ -70,15 +59,14 @@ impl ToolDisplayAdapter {
         content: &str,
         tools: &ToolStorage,
     ) -> Vec<ChatTuiAction> {
-        let known_tool = self.tool_transcript_ids.remove(tool_call_id).is_some();
         let arguments = self.tool_arguments.remove(tool_call_id);
         let result =
             ToolResultView::from_parts_with_arguments(name, content, tools, arguments.as_ref());
-        let mut actions = Vec::new();
-        if !known_tool {
-            actions.extend(self.started_actions(tool_call_id, name, "", tools));
-            self.tool_transcript_ids.remove(tool_call_id);
-        }
+        let mut actions = vec![ChatTuiAction::ToolCallFinished {
+            tool_call_id: tool_call_id.to_owned(),
+            name: name.to_owned(),
+            output: content.to_owned(),
+        }];
 
         actions.push(ChatTuiAction::ToolDisplayFinished {
             tool_call_id: tool_call_id.to_owned(),

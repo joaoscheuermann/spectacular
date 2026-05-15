@@ -6,8 +6,7 @@ use crate::error::AgentError;
 use crate::event::AgentEvent;
 use crate::schema::OutputSchema;
 use spectacular_llms::{
-    FinishReason, LlmProvider, ProviderFinished, ProviderMessageRole, ProviderStreamEvent,
-    ProviderToolCall,
+    FinishReason, LlmProvider, ProviderFinished, ProviderStreamEvent, ProviderToolCall,
 };
 
 const PROVIDER_CANCELLED_MESSAGE: &str = "provider cancelled the response";
@@ -28,6 +27,7 @@ where
 {
     agent: &'a Agent<P, C>,
     run_event_start: usize,
+    lifecycle: AgentLifecycleState,
 }
 
 impl<'a, P, C> AgentProviderEventHandler<'a, P, C>
@@ -40,21 +40,26 @@ where
         Self {
             agent,
             run_event_start,
+            lifecycle: AgentLifecycleState::default(),
         }
     }
 
     /// Records one visible provider event and returns any terminal run outcome.
     async fn record_provider_event(
-        &self,
+        &mut self,
         recorder: &mut RunRecorder<'_, P, C>,
         provider_event: ProviderStreamEvent,
     ) -> Result<ProviderEventOutcome, AgentError> {
         match provider_event {
             ProviderStreamEvent::MessageDelta(delta) => {
-                recorder.record(AgentEvent::MessageDelta(delta)).await?;
+                self.lifecycle
+                    .record_message_delta(recorder, delta.content)
+                    .await?;
             }
             ProviderStreamEvent::ReasoningDelta(delta) => {
-                recorder.record(AgentEvent::ReasoningDelta(delta)).await?;
+                self.lifecycle
+                    .record_reasoning_delta(recorder, delta.content)
+                    .await?;
             }
             ProviderStreamEvent::Finished(finished) => {
                 return self.record_finished_event(recorder, finished).await;
@@ -66,10 +71,12 @@ where
 
     /// Converts a provider finish payload into stored metadata, validation, or next actions.
     async fn record_finished_event(
-        &self,
+        &mut self,
         recorder: &mut RunRecorder<'_, P, C>,
         finished: ProviderFinished,
     ) -> Result<ProviderEventOutcome, AgentError> {
+        self.lifecycle.finish_active_streams(recorder).await?;
+
         if let Some(usage) = finished.usage {
             recorder.record(AgentEvent::UsageMetadata(usage)).await?;
         }
@@ -217,11 +224,125 @@ where
     }
 
     /// Treats a stream that closes without finish as a completed visible run.
-    fn stream_finished_without_event(
+    async fn stream_finished_without_event(
         &mut self,
+        recorder: &mut RunRecorder<'_, P, C>,
         _saw_provider_event: bool,
     ) -> Result<Self::Output, AgentError> {
+        self.lifecycle.finish_active_streams(recorder).await?;
         Ok(ProviderEventOutcome::CompleteRun)
+    }
+}
+
+/// Tracks active provider-to-agent transcript lifecycle boundaries for one completion.
+#[derive(Default)]
+struct AgentLifecycleState {
+    next_message_sequence: u64,
+    active_message: Option<String>,
+    next_reasoning_sequence: u64,
+    active_reasoning: Option<String>,
+}
+
+impl AgentLifecycleState {
+    /// Records assistant text and emits a start boundary before the first delta.
+    async fn record_message_delta<P, C>(
+        &mut self,
+        recorder: &mut RunRecorder<'_, P, C>,
+        content: String,
+    ) -> Result<(), AgentError>
+    where
+        P: LlmProvider,
+        C: TokenCounter + Clone,
+    {
+        let id = self.active_message_id(recorder).await?;
+        recorder
+            .record(AgentEvent::message_delta(id, content))
+            .await
+    }
+
+    /// Records reasoning text and emits a start boundary before the first delta.
+    async fn record_reasoning_delta<P, C>(
+        &mut self,
+        recorder: &mut RunRecorder<'_, P, C>,
+        content: String,
+    ) -> Result<(), AgentError>
+    where
+        P: LlmProvider,
+        C: TokenCounter + Clone,
+    {
+        let id = self.active_reasoning_id(recorder).await?;
+        recorder
+            .record(AgentEvent::reasoning_delta(id, content))
+            .await
+    }
+
+    /// Finishes any active message or reasoning streams before terminal provider outcomes.
+    async fn finish_active_streams<P, C>(
+        &mut self,
+        recorder: &mut RunRecorder<'_, P, C>,
+    ) -> Result<(), AgentError>
+    where
+        P: LlmProvider,
+        C: TokenCounter + Clone,
+    {
+        if let Some(id) = self.active_message.take() {
+            recorder.record(AgentEvent::message_finish(id)).await?;
+        }
+        if let Some(id) = self.active_reasoning.take() {
+            recorder.record(AgentEvent::reasoning_finish(id)).await?;
+        }
+
+        Ok(())
+    }
+
+    /// Returns the active assistant ID, allocating and recording a start event when needed.
+    async fn active_message_id<P, C>(
+        &mut self,
+        recorder: &mut RunRecorder<'_, P, C>,
+    ) -> Result<String, AgentError>
+    where
+        P: LlmProvider,
+        C: TokenCounter + Clone,
+    {
+        if let Some(id) = self.active_message.as_ref() {
+            return Ok(id.clone());
+        }
+
+        self.next_message_sequence = self.next_message_sequence.saturating_add(1);
+        let id = format!(
+            "message-{}",
+            recorder.event_count() + self.next_message_sequence as usize
+        );
+        recorder
+            .record(AgentEvent::message_start(id.clone()))
+            .await?;
+        self.active_message = Some(id.clone());
+        Ok(id)
+    }
+
+    /// Returns the active reasoning ID, allocating and recording a start event when needed.
+    async fn active_reasoning_id<P, C>(
+        &mut self,
+        recorder: &mut RunRecorder<'_, P, C>,
+    ) -> Result<String, AgentError>
+    where
+        P: LlmProvider,
+        C: TokenCounter + Clone,
+    {
+        if let Some(id) = self.active_reasoning.as_ref() {
+            return Ok(id.clone());
+        }
+
+        self.next_reasoning_sequence = self.next_reasoning_sequence.saturating_add(1);
+        let id = format!(
+            "reasoning-{}",
+            recorder.event_count() + self.next_reasoning_sequence as usize
+        );
+        recorder
+            .record(AgentEvent::reasoning_start(id.clone()))
+            .await?;
+        self.active_reasoning = Some(id.clone());
+        Ok(id)
     }
 }
 
@@ -230,9 +351,7 @@ fn final_assistant_response(events: &[AgentEvent]) -> String {
     events
         .iter()
         .filter_map(|event| match event {
-            AgentEvent::MessageDelta(delta) if delta.role == ProviderMessageRole::Assistant => {
-                Some(delta.content.as_str())
-            }
+            AgentEvent::MessageDelta { content, .. } => Some(content.as_str()),
             _ => None,
         })
         .collect::<String>()

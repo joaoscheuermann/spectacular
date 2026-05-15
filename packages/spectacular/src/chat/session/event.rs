@@ -11,7 +11,7 @@ use serde_json::Value;
 use spectacular_agent::{
     AgentEvent, CommandDelta, CommandFinished, CommandStart, CommandStatus, ContextSummary,
 };
-use spectacular_llms::{FinishReason, MessageDelta, ProviderMessageRole, ReasoningDelta};
+use spectacular_llms::{FinishReason, ProviderMessageRole};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "type")]
@@ -52,15 +52,30 @@ pub enum ChatEvent {
     },
     #[serde(rename = "user_prompt")]
     UserPrompt { content: String, created_at: String },
+    #[serde(rename = "message_start")]
+    MessageStart { id: String, created_at: String },
     #[serde(rename = "assistant_delta")]
     AssistantDelta {
         #[serde(default = "assistant_role")]
         role: String,
+        #[serde(default = "session_replay_message_id")]
+        id: String,
         content: String,
         created_at: String,
     },
+    #[serde(rename = "message_finish")]
+    MessageFinish { id: String, created_at: String },
+    #[serde(rename = "reasoning_start")]
+    ReasoningStart { id: String, created_at: String },
     #[serde(rename = "reasoning_delta")]
-    ReasoningDelta { content: String, created_at: String },
+    ReasoningDelta {
+        #[serde(default = "session_replay_reasoning_id")]
+        id: String,
+        content: String,
+        created_at: String,
+    },
+    #[serde(rename = "reasoning_finish")]
+    ReasoningFinish { id: String, created_at: String },
     #[serde(rename = "tool_call")]
     ToolCall {
         #[serde(default)]
@@ -150,16 +165,34 @@ impl ChatEvent {
                 content: content.clone(),
                 created_at,
             }),
-            AgentEvent::MessageDelta(delta) => Some(Self::AssistantDelta {
-                role: role(delta.role).to_owned(),
-                content: delta.content.clone(),
+            AgentEvent::MessageStart { id } => Some(Self::MessageStart {
+                id: id.as_str().to_owned(),
                 created_at,
             }),
-            AgentEvent::ReasoningDelta(delta) => Some(Self::ReasoningDelta {
-                content: delta.content.clone(),
+            AgentEvent::MessageDelta { id, content } => Some(Self::AssistantDelta {
+                role: role(ProviderMessageRole::Assistant).to_owned(),
+                id: id.as_str().to_owned(),
+                content: content.clone(),
                 created_at,
             }),
-            AgentEvent::AssistantToolCallRequest {
+            AgentEvent::MessageFinish { id } => Some(Self::MessageFinish {
+                id: id.as_str().to_owned(),
+                created_at,
+            }),
+            AgentEvent::ReasoningStart { id } => Some(Self::ReasoningStart {
+                id: id.as_str().to_owned(),
+                created_at,
+            }),
+            AgentEvent::ReasoningDelta { id, content } => Some(Self::ReasoningDelta {
+                id: id.as_str().to_owned(),
+                content: content.clone(),
+                created_at,
+            }),
+            AgentEvent::ReasoningFinish { id } => Some(Self::ReasoningFinish {
+                id: id.as_str().to_owned(),
+                created_at,
+            }),
+            AgentEvent::ToolCallStart {
                 tool_call_id,
                 name,
                 arguments,
@@ -169,14 +202,14 @@ impl ChatEvent {
                 arguments: arguments.clone(),
                 created_at,
             }),
-            AgentEvent::ToolResult {
+            AgentEvent::ToolCallFinish {
                 tool_call_id,
                 name,
-                content,
+                output,
             } => Some(Self::ToolResult {
                 tool_call_id: tool_call_id.clone(),
                 name: name.clone(),
-                content: content.clone(),
+                content: output.clone(),
                 created_at,
             }),
             AgentEvent::CommandStart(start) => Some(Self::CommandStart {
@@ -243,24 +276,22 @@ impl ChatEvent {
     pub fn to_agent_event(&self) -> Option<AgentEvent> {
         match self {
             Self::UserPrompt { content, .. } => Some(AgentEvent::user_prompt(content)),
-            Self::AssistantDelta { role, content, .. } => {
-                Some(AgentEvent::MessageDelta(MessageDelta {
-                    role: provider_role(role),
-                    content: content.clone(),
-                }))
+            Self::MessageStart { id, .. } => Some(AgentEvent::message_start(id.clone())),
+            Self::AssistantDelta { id, content, .. } => {
+                Some(AgentEvent::message_delta(id.clone(), content.clone()))
             }
-            Self::ReasoningDelta { content, .. } => {
-                Some(AgentEvent::ReasoningDelta(ReasoningDelta {
-                    content: content.clone(),
-                    metadata: None,
-                }))
+            Self::MessageFinish { id, .. } => Some(AgentEvent::message_finish(id.clone())),
+            Self::ReasoningStart { id, .. } => Some(AgentEvent::reasoning_start(id.clone())),
+            Self::ReasoningDelta { id, content, .. } => {
+                Some(AgentEvent::reasoning_delta(id.clone(), content.clone()))
             }
+            Self::ReasoningFinish { id, .. } => Some(AgentEvent::reasoning_finish(id.clone())),
             Self::ToolCall {
                 tool_call_id,
                 name,
                 arguments,
                 ..
-            } => Some(AgentEvent::assistant_tool_call_request(
+            } => Some(AgentEvent::tool_call_start(
                 tool_call_id.clone(),
                 name.clone(),
                 arguments.clone(),
@@ -270,7 +301,7 @@ impl ChatEvent {
                 name,
                 content,
                 ..
-            } => Some(AgentEvent::tool_result(
+            } => Some(AgentEvent::tool_call_finish(
                 tool_call_id.clone(),
                 name.clone(),
                 content.clone(),
@@ -358,8 +389,12 @@ impl ChatEvent {
             | Self::ModelChanged { created_at, .. }
             | Self::SessionTitleUpdated { created_at, .. }
             | Self::UserPrompt { created_at, .. }
+            | Self::MessageStart { created_at, .. }
             | Self::AssistantDelta { created_at, .. }
+            | Self::MessageFinish { created_at, .. }
+            | Self::ReasoningStart { created_at, .. }
             | Self::ReasoningDelta { created_at, .. }
+            | Self::ReasoningFinish { created_at, .. }
             | Self::ToolCall { created_at, .. }
             | Self::ToolResult { created_at, .. }
             | Self::CommandStart { created_at, .. }
@@ -395,16 +430,6 @@ fn role(role: ProviderMessageRole) -> &'static str {
         ProviderMessageRole::User => "user",
         ProviderMessageRole::Assistant => "assistant",
         ProviderMessageRole::Tool => "tool",
-    }
-}
-
-/// Converts a serialized chat role into a provider message role.
-fn provider_role(role: &str) -> ProviderMessageRole {
-    match role {
-        "system" => ProviderMessageRole::System,
-        "user" => ProviderMessageRole::User,
-        "tool" => ProviderMessageRole::Tool,
-        _ => ProviderMessageRole::Assistant,
     }
 }
 
@@ -460,6 +485,16 @@ fn untitled() -> String {
 /// Returns the default assistant role used for legacy assistant deltas.
 fn assistant_role() -> String {
     "assistant".to_owned()
+}
+
+/// Returns the replay ID used for legacy assistant delta records.
+fn session_replay_message_id() -> String {
+    "session-replay-message".to_owned()
+}
+
+/// Returns the replay ID used for legacy reasoning delta records.
+fn session_replay_reasoning_id() -> String {
+    "session-replay-reasoning".to_owned()
 }
 
 /// Normalizes legacy tool-call JSON into the structured session schema.

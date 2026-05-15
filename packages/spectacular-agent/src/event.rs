@@ -1,8 +1,28 @@
 use crate::usage::ContextTokenUsage;
-use spectacular_llms::{
-    FinishReason, MessageDelta, ReasoningDelta, ReasoningMetadata, UsageMetadata,
-};
+use spectacular_llms::{FinishReason, ReasoningMetadata, UsageMetadata};
 use std::fmt::{self, Display};
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AgentTranscriptItemId(String);
+
+impl AgentTranscriptItemId {
+    /// Creates an agent-owned transcript item ID without coupling to TUI types.
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    /// Returns the raw identifier string for downstream adapters and storage.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Display for AgentTranscriptItemId {
+    /// Formats the transcript item ID as its raw stable string value.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
@@ -10,20 +30,42 @@ pub enum AgentEvent {
     UserPrompt {
         content: String,
     },
-    MessageDelta(MessageDelta),
-    ReasoningDelta(ReasoningDelta),
+    MessageStart {
+        id: AgentTranscriptItemId,
+    },
+    MessageDelta {
+        id: AgentTranscriptItemId,
+        content: String,
+    },
+    MessageFinish {
+        id: AgentTranscriptItemId,
+    },
+    ReasoningStart {
+        id: AgentTranscriptItemId,
+    },
+    ReasoningDelta {
+        id: AgentTranscriptItemId,
+        content: String,
+    },
+    ReasoningFinish {
+        id: AgentTranscriptItemId,
+    },
     UsageMetadata(UsageMetadata),
     ContextTokenUsage(ContextTokenUsage),
     ReasoningMetadata(ReasoningMetadata),
-    AssistantToolCallRequest {
+    ToolCallStart {
         tool_call_id: String,
         name: String,
         arguments: String,
     },
-    ToolResult {
+    ToolCallDelta {
+        tool_call_id: String,
+        content: String,
+    },
+    ToolCallFinish {
         tool_call_id: String,
         name: String,
-        content: String,
+        output: String,
     },
     CommandStart(CommandStart),
     CommandDelta(CommandDelta),
@@ -98,29 +140,81 @@ impl AgentEvent {
         }
     }
 
-    /// Creates a stored assistant tool-call request event.
-    pub fn assistant_tool_call_request(
+    /// Creates an explicit assistant message lifecycle start event.
+    pub fn message_start(id: impl Into<String>) -> Self {
+        Self::MessageStart {
+            id: AgentTranscriptItemId::new(id),
+        }
+    }
+
+    /// Creates an explicit assistant message lifecycle delta event.
+    pub fn message_delta(id: impl Into<String>, content: impl Into<String>) -> Self {
+        Self::MessageDelta {
+            id: AgentTranscriptItemId::new(id),
+            content: content.into(),
+        }
+    }
+
+    /// Creates an explicit assistant message lifecycle finish event.
+    pub fn message_finish(id: impl Into<String>) -> Self {
+        Self::MessageFinish {
+            id: AgentTranscriptItemId::new(id),
+        }
+    }
+
+    /// Creates an explicit reasoning lifecycle start event.
+    pub fn reasoning_start(id: impl Into<String>) -> Self {
+        Self::ReasoningStart {
+            id: AgentTranscriptItemId::new(id),
+        }
+    }
+
+    /// Creates an explicit reasoning lifecycle delta event.
+    pub fn reasoning_delta(id: impl Into<String>, content: impl Into<String>) -> Self {
+        Self::ReasoningDelta {
+            id: AgentTranscriptItemId::new(id),
+            content: content.into(),
+        }
+    }
+
+    /// Creates an explicit reasoning lifecycle finish event.
+    pub fn reasoning_finish(id: impl Into<String>) -> Self {
+        Self::ReasoningFinish {
+            id: AgentTranscriptItemId::new(id),
+        }
+    }
+
+    /// Creates a stored tool-call lifecycle start event.
+    pub fn tool_call_start(
         tool_call_id: impl Into<String>,
         name: impl Into<String>,
         arguments: impl Into<String>,
     ) -> Self {
-        Self::AssistantToolCallRequest {
+        Self::ToolCallStart {
             tool_call_id: tool_call_id.into(),
             name: name.into(),
             arguments: arguments.into(),
         }
     }
 
-    /// Creates a stored tool result event tied to a provider tool-call id.
-    pub fn tool_result(
+    /// Creates a stored tool-call lifecycle progress event.
+    pub fn tool_call_delta(tool_call_id: impl Into<String>, content: impl Into<String>) -> Self {
+        Self::ToolCallDelta {
+            tool_call_id: tool_call_id.into(),
+            content: content.into(),
+        }
+    }
+
+    /// Creates a stored tool-call lifecycle finish event tied to a provider tool-call id.
+    pub fn tool_call_finish(
         tool_call_id: impl Into<String>,
         name: impl Into<String>,
-        content: impl Into<String>,
+        output: impl Into<String>,
     ) -> Self {
-        Self::ToolResult {
+        Self::ToolCallFinish {
             tool_call_id: tool_call_id.into(),
             name: name.into(),
-            content: content.into(),
+            output: output.into(),
         }
     }
 
@@ -231,16 +325,16 @@ impl Display for AgentEvent {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AgentEvent::UserPrompt { content } => write!(formatter, "UserPrompt({content})"),
-            AgentEvent::MessageDelta(delta) => {
-                write!(
-                    formatter,
-                    "MessageDelta({:?}, {})",
-                    delta.role, delta.content
-                )
+            AgentEvent::MessageStart { id } => write!(formatter, "MessageStart(id={id})"),
+            AgentEvent::MessageDelta { id, content } => {
+                write!(formatter, "MessageDelta(id={id}, content={content})")
             }
-            AgentEvent::ReasoningDelta(delta) => {
-                write!(formatter, "ReasoningDelta({})", delta.content)
+            AgentEvent::MessageFinish { id } => write!(formatter, "MessageFinish(id={id})"),
+            AgentEvent::ReasoningStart { id } => write!(formatter, "ReasoningStart(id={id})"),
+            AgentEvent::ReasoningDelta { id, content } => {
+                write!(formatter, "ReasoningDelta(id={id}, content={content})")
             }
+            AgentEvent::ReasoningFinish { id } => write!(formatter, "ReasoningFinish(id={id})"),
             AgentEvent::UsageMetadata(usage) => write!(
                 formatter,
                 "UsageMetadata(input={:?}, output={:?}, total={:?})",
@@ -256,23 +350,28 @@ impl Display for AgentEvent {
                 "ReasoningMetadata(effort={:?}, summary={:?})",
                 metadata.effort, metadata.summary
             ),
-            AgentEvent::AssistantToolCallRequest {
+            AgentEvent::ToolCallStart {
                 tool_call_id,
                 name,
                 arguments,
-            } => {
-                write!(
-                    formatter,
-                    "AssistantToolCallRequest(id={tool_call_id}, name={name}, arguments={arguments})"
-                )
-            }
-            AgentEvent::ToolResult {
+            } => write!(
+                formatter,
+                "ToolCallStart(id={tool_call_id}, name={name}, arguments={arguments})"
+            ),
+            AgentEvent::ToolCallDelta {
                 tool_call_id,
-                name,
                 content,
             } => write!(
                 formatter,
-                "ToolResult(id={tool_call_id}, name={name}, content={content})"
+                "ToolCallDelta(id={tool_call_id}, content={content})"
+            ),
+            AgentEvent::ToolCallFinish {
+                tool_call_id,
+                name,
+                output,
+            } => write!(
+                formatter,
+                "ToolCallFinish(id={tool_call_id}, name={name}, output={output})"
             ),
             AgentEvent::CommandStart(start) => write!(
                 formatter,

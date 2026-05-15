@@ -2,7 +2,7 @@ use super::*;
 use crate::chat::runner::main_chat_tool_storage;
 use spectacular_agent::{AgentEvent, ToolStorage};
 use spectacular_config::{ProviderAuthMode, ReasoningLevel};
-use spectacular_llms::{FinishReason, MessageDelta, ProviderMessageRole};
+use spectacular_llms::FinishReason;
 use spectacular_tui::{
     RuntimeIntent, SelectionPromptChoice as TuiSelectionPromptChoice, State, TranscriptItemContent,
     TranscriptItemId,
@@ -81,13 +81,14 @@ async fn controller_publishes_state_while_prompt_run_is_streaming() {
 #[tokio::test]
 async fn submit_prompt_intent_runs_real_controller_path() {
     let mut runner = RecordingTuiTurnRunner::default();
-    runner.events.push(AgentEvent::MessageDelta(MessageDelta {
-        role: ProviderMessageRole::Assistant,
-        content: "hello from runtime".to_owned(),
-    }));
-    runner.events.push(AgentEvent::Finished {
-        finish_reason: FinishReason::Stop,
-    });
+    runner.events.extend([
+        AgentEvent::message_start("message-1"),
+        AgentEvent::message_delta("message-1", "hello from runtime"),
+        AgentEvent::message_finish("message-1"),
+        AgentEvent::Finished {
+            finish_reason: FinishReason::Stop,
+        },
+    ]);
     let bootstrap = TestTuiBootstrap::new("session-1");
     let mut controller = TuiRuntimeController::new_with_runner(bootstrap, runner).unwrap();
 
@@ -109,13 +110,14 @@ async fn submit_prompt_intent_runs_real_controller_path() {
 #[tokio::test]
 async fn completed_tui_run_saves_session_snapshot() {
     let mut runner = RecordingTuiTurnRunner::default();
-    runner.events.push(AgentEvent::MessageDelta(MessageDelta {
-        role: ProviderMessageRole::Assistant,
-        content: "snapshot response".to_owned(),
-    }));
-    runner.events.push(AgentEvent::Finished {
-        finish_reason: FinishReason::Stop,
-    });
+    runner.events.extend([
+        AgentEvent::message_start("message-1"),
+        AgentEvent::message_delta("message-1", "snapshot response"),
+        AgentEvent::message_finish("message-1"),
+        AgentEvent::Finished {
+            finish_reason: FinishReason::Stop,
+        },
+    ]);
     let bootstrap = TestTuiBootstrap::new("snapshot-session");
     let mut controller = TuiRuntimeController::new_with_runner(bootstrap, runner).unwrap();
 
@@ -368,15 +370,17 @@ impl TuiTurnRunner for PausingTuiTurnRunner {
     ) -> TuiTurnFuture<'a> {
         let release = self.release.take();
         Box::pin(async move {
-            let event = AgentEvent::MessageDelta(MessageDelta {
-                role: ProviderMessageRole::Assistant,
-                content: "streamed before completion".to_owned(),
-            });
+            let events = [
+                AgentEvent::message_start("message-1"),
+                AgentEvent::message_delta("message-1", "streamed before completion"),
+            ];
             model.append_agent_event(&AgentEvent::user_prompt(request.prompt))?;
-            model.append_agent_event(&event)?;
             let mut adapter = TuiEventAdapter::new();
-            for action in adapter.adapt_agent_event(&event) {
-                dispatch(action);
+            for event in events {
+                model.append_agent_event(&event)?;
+                for action in adapter.adapt_agent_event(&event) {
+                    dispatch(action);
+                }
             }
             if let Some(release) = release {
                 let _ = release.await;

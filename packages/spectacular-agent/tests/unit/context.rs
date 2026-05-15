@@ -6,8 +6,8 @@ use crate::{
     AgentEvent, ContextPolicy, ContextSummary, Store,
 };
 use spectacular_llms::{
-    FinishReason, MessageDelta, ProviderContextLimits, ProviderMessage, ProviderMessageRole,
-    ReasoningDelta, ReasoningMetadata, UsageMetadata,
+    FinishReason, ProviderContextLimits, ProviderMessage, ProviderMessageRole, ReasoningMetadata,
+    UsageMetadata,
 };
 
 #[test]
@@ -15,13 +15,9 @@ use spectacular_llms::{
 fn provider_context_includes_only_model_relevant_roles() {
     let mut store = Store::default();
     store.append(AgentEvent::user_prompt("user prompt"));
-    store.append(AgentEvent::MessageDelta(MessageDelta::assistant(
-        "assistant response",
-    )));
-    store.append(AgentEvent::assistant_tool_call_request(
-        "call-1", "read", "{}",
-    ));
-    store.append(AgentEvent::tool_result("call-1", "read", r#"{"ok":true}"#));
+    store.append(AgentEvent::message_delta("message-1", "assistant response"));
+    store.append(AgentEvent::tool_call_start("call-1", "read", "{}"));
+    store.append(AgentEvent::tool_call_finish("call-1", "read", r#"{"ok":true}"#));
     store.append(AgentEvent::command_start(
         "cmd-1",
         "slash_command",
@@ -41,10 +37,7 @@ fn provider_context_includes_only_model_relevant_roles() {
         crate::CommandStatus::Success,
         "changes committed successfully",
     ));
-    store.append(AgentEvent::ReasoningDelta(ReasoningDelta {
-        content: "private thought".to_owned(),
-        metadata: Some(ReasoningMetadata::default()),
-    }));
+    store.append(AgentEvent::reasoning_delta("reasoning-1", "private thought"));
     store.append(AgentEvent::UsageMetadata(UsageMetadata {
         input_tokens: Some(1),
         output_tokens: Some(2),
@@ -94,21 +87,14 @@ fn provider_context_includes_only_model_relevant_roles() {
 fn provider_context_coalesces_streamed_assistant_deltas() {
     let mut store = Store::default();
     store.append(AgentEvent::user_prompt("first prompt"));
-    store.append(AgentEvent::MessageDelta(MessageDelta::assistant("first")));
-    store.append(AgentEvent::ReasoningDelta(ReasoningDelta {
-        content: "hidden reasoning".to_owned(),
-        metadata: None,
-    }));
-    store.append(AgentEvent::MessageDelta(MessageDelta::assistant(
-        " response",
-    )));
+    store.append(AgentEvent::message_delta("message-1", "first"));
+    store.append(AgentEvent::reasoning_delta("reasoning-1", "hidden reasoning"));
+    store.append(AgentEvent::message_delta("message-1", " response"));
     store.append(AgentEvent::Finished {
         finish_reason: FinishReason::Stop,
     });
     store.append(AgentEvent::user_prompt("second prompt"));
-    store.append(AgentEvent::MessageDelta(MessageDelta::assistant(
-        "second response",
-    )));
+    store.append(AgentEvent::message_delta("message-2", "second response"));
 
     let messages = provider_messages_from_store("system prompt", &store);
 
@@ -190,10 +176,8 @@ fn context_limits_reject_too_many_chars() {
 fn assembler_default_policy_preserves_provider_messages() {
     let mut store = Store::default();
     store.append(AgentEvent::user_prompt("user prompt"));
-    store.append(AgentEvent::MessageDelta(MessageDelta::assistant("first")));
-    store.append(AgentEvent::MessageDelta(MessageDelta::assistant(
-        " response",
-    )));
+    store.append(AgentEvent::message_delta("message-1", "first"));
+    store.append(AgentEvent::message_delta("message-1", " response"));
     store.append(AgentEvent::Finished {
         finish_reason: FinishReason::Stop,
     });
@@ -244,9 +228,10 @@ fn assembler_appends_continuation_prompt_without_mutating_store() {
 fn explicit_auto_compaction_threshold_requests_summary_of_old_turns() {
     let mut store = Store::default();
     store.append(AgentEvent::user_prompt("old prompt"));
-    store.append(AgentEvent::MessageDelta(MessageDelta::assistant(
+    store.append(AgentEvent::message_delta(
+        "message-1",
         "old answer with enough text to exceed a tiny threshold",
-    )));
+    ));
     store.append(AgentEvent::Finished {
         finish_reason: FinishReason::Stop,
     });
@@ -299,9 +284,10 @@ fn summary_requests_ignore_command_lifecycle_text() {
         crate::CommandStatus::Success,
         "changes committed successfully secret-lifecycle",
     ));
-    store.append(AgentEvent::MessageDelta(MessageDelta::assistant(
+    store.append(AgentEvent::message_delta(
+        "message-1",
         "old answer with enough text to exceed a tiny threshold",
-    )));
+    ));
     store.append(AgentEvent::Finished {
         finish_reason: FinishReason::Stop,
     });
@@ -336,9 +322,10 @@ fn summary_requests_ignore_command_lifecycle_text() {
 fn derived_hard_threshold_requests_summary_when_model_window_is_configured() {
     let mut store = Store::default();
     store.append(AgentEvent::user_prompt("old prompt"));
-    store.append(AgentEvent::MessageDelta(MessageDelta::assistant(
+    store.append(AgentEvent::message_delta(
+        "message-1",
         "old answer with enough text to exceed a tiny derived threshold",
-    )));
+    ));
     store.append(AgentEvent::Finished {
         finish_reason: FinishReason::Stop,
     });
@@ -369,16 +356,17 @@ fn derived_hard_threshold_requests_summary_when_model_window_is_configured() {
 fn summary_request_uses_budgeted_compactable_prefix() {
     let mut store = Store::default();
     store.append(AgentEvent::user_prompt("one"));
-    store.append(AgentEvent::MessageDelta(MessageDelta::assistant("two")));
+    store.append(AgentEvent::message_delta("message-1", "two"));
     store.append(AgentEvent::Finished {
         finish_reason: FinishReason::Stop,
     });
     store.append(AgentEvent::user_prompt(
         "second old prompt with much more text",
     ));
-    store.append(AgentEvent::MessageDelta(MessageDelta::assistant(
+    store.append(AgentEvent::message_delta(
+        "message-2",
         "second old response with enough text to exceed the summary source limit",
-    )));
+    ));
     store.append(AgentEvent::Finished {
         finish_reason: FinishReason::Stop,
     });
@@ -416,22 +404,22 @@ fn summary_request_uses_budgeted_compactable_prefix() {
 fn same_turn_tool_history_requests_summary_when_protected_turn_exceeds_threshold() {
     let mut store = Store::default();
     store.append(AgentEvent::user_prompt("current prompt"));
-    store.append(AgentEvent::assistant_tool_call_request(
+    store.append(AgentEvent::tool_call_start(
         "call-1",
         "read",
         r#"{"path":"one.txt"}"#,
     ));
-    store.append(AgentEvent::tool_result(
+    store.append(AgentEvent::tool_call_finish(
         "call-1",
         "read",
         "old tool output with enough content to cross a tiny threshold",
     ));
-    store.append(AgentEvent::assistant_tool_call_request(
+    store.append(AgentEvent::tool_call_start(
         "call-2",
         "read",
         r#"{"path":"two.txt"}"#,
     ));
-    store.append(AgentEvent::tool_result(
+    store.append(AgentEvent::tool_call_finish(
         "call-2",
         "read",
         "latest tool output should remain raw when possible",
@@ -468,17 +456,17 @@ fn same_turn_tool_history_requests_summary_when_protected_turn_exceeds_threshold
 fn same_turn_summary_stops_before_unmatched_tool_call() {
     let mut store = Store::default();
     store.append(AgentEvent::user_prompt("current prompt"));
-    store.append(AgentEvent::assistant_tool_call_request(
+    store.append(AgentEvent::tool_call_start(
         "call-1",
         "read",
         r#"{"path":"one.txt"}"#,
     ));
-    store.append(AgentEvent::tool_result(
+    store.append(AgentEvent::tool_call_finish(
         "call-1",
         "read",
         "old tool output with enough content to cross a tiny threshold",
     ));
-    store.append(AgentEvent::assistant_tool_call_request(
+    store.append(AgentEvent::tool_call_start(
         "call-2",
         "read",
         r#"{"path":"two.txt"}"#,
@@ -539,7 +527,7 @@ fn soft_threshold_only_records_diagnostics() {
 fn stored_summary_replaces_old_raw_turns_in_provider_context() {
     let store = Store::from(vec![
         AgentEvent::user_prompt("old prompt"),
-        AgentEvent::MessageDelta(MessageDelta::assistant("old answer")),
+        AgentEvent::message_delta("message-1", "old answer"),
         AgentEvent::ContextSummaryCreated(ContextSummary {
             id: "summary-1".to_owned(),
             replaces: None,

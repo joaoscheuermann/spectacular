@@ -43,6 +43,7 @@ fn minimal_known_events_default_optional_fields() {
         event,
         ChatEvent::AssistantDelta {
             role: "assistant".to_owned(),
+            id: "session-replay-message".to_owned(),
             content: "hello".to_owned(),
             created_at: "2026-04-29T14:01:00Z".to_owned()
         }
@@ -53,10 +54,7 @@ fn minimal_known_events_default_optional_fields() {
 #[test]
 fn agent_event_maps_to_existing_wire_shape() {
     let event = ChatEvent::from_agent_event(
-        &AgentEvent::MessageDelta(MessageDelta {
-            role: ProviderMessageRole::Assistant,
-            content: "hello".to_owned(),
-        }),
+        &AgentEvent::message_delta("message-1", "hello"),
         "2026-04-29T14:01:00Z".to_owned(),
     )
     .unwrap();
@@ -67,6 +65,7 @@ fn agent_event_maps_to_existing_wire_shape() {
         json!({
             "type": "assistant_delta",
             "role": "assistant",
+            "id": "message-1",
             "content": "hello",
             "created_at": "2026-04-29T14:01:00Z"
         })
@@ -77,10 +76,7 @@ fn agent_event_maps_to_existing_wire_shape() {
 #[test]
 fn reasoning_delta_round_trips_through_jsonl_agent_event() {
     let event = ChatEvent::from_agent_event(
-        &AgentEvent::ReasoningDelta(ReasoningDelta {
-            content: "thinking".to_owned(),
-            metadata: None,
-        }),
+        &AgentEvent::reasoning_delta("reasoning-1", "thinking"),
         "2026-04-29T14:01:00Z".to_owned(),
     )
     .unwrap();
@@ -90,6 +86,7 @@ fn reasoning_delta_round_trips_through_jsonl_agent_event() {
         value,
         json!({
             "type": "reasoning_delta",
+            "id": "reasoning-1",
             "content": "thinking",
             "created_at": "2026-04-29T14:01:00Z"
         })
@@ -99,10 +96,7 @@ fn reasoning_delta_round_trips_through_jsonl_agent_event() {
             .unwrap()
             .to_agent_event()
             .unwrap(),
-        AgentEvent::ReasoningDelta(ReasoningDelta {
-            content: "thinking".to_owned(),
-            metadata: None,
-        })
+        AgentEvent::reasoning_delta("reasoning-1", "thinking")
     );
 }
 
@@ -129,8 +123,8 @@ fn content_filter_finish_reason_round_trips() {
 #[test]
 fn structured_tool_events_round_trip_through_jsonl_to_agent_events() {
     let events = vec![
-        AgentEvent::assistant_tool_call_request("call-1", "write", r#"{"path":"foo.txt"}"#),
-        AgentEvent::tool_result("call-1", "write", r#"{"success":true}"#),
+        AgentEvent::tool_call_start("call-1", "write", r#"{"path":"foo.txt"}"#),
+        AgentEvent::tool_call_finish("call-1", "write", r#"{"success":true}"#),
     ];
     let lines = events
         .iter()
@@ -282,7 +276,7 @@ fn command_lifecycle_events_are_excluded_from_provider_messages() {
         ),
         AgentEvent::command_delta("cmd-1", "status", "generated commit message: fix: bug", 1),
         AgentEvent::command_finished("cmd-1", CommandStatus::Success, "changes committed successfully"),
-        AgentEvent::MessageDelta(MessageDelta::assistant("done")),
+        AgentEvent::message_delta("message-1", "done"),
     ]);
 
     let messages = provider_messages_from_store("system", &store);
@@ -311,7 +305,7 @@ fn legacy_tool_call_content_replays_as_structured_agent_event() {
 
     assert_eq!(
         event.to_agent_event(),
-        Some(AgentEvent::assistant_tool_call_request(
+        Some(AgentEvent::tool_call_start(
             "call-1",
             "write",
             r#"{"path":"foo.txt"}"#
