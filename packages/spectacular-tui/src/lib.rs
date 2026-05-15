@@ -1,5 +1,6 @@
 pub mod action;
 pub mod components;
+pub mod event_loop;
 pub mod ids;
 pub mod metadata;
 pub mod reducer;
@@ -12,6 +13,9 @@ pub mod status;
 pub mod transcript;
 
 pub use action::ChatTuiAction;
+pub use event_loop::{
+    tui_event_effects, tui_timer_tick_effects, EventEffect, TUI_SPINNER_TICK_INTERVAL,
+};
 pub use ids::{SessionId, Timestamp, TranscriptItemId};
 pub use metadata::{
     CommandDescriptor, ContextTokenUsage, DisplayMetadata, ReasoningLevel, RuntimeSelection,
@@ -19,7 +23,7 @@ pub use metadata::{
 pub use reducer::reduce;
 pub use render::render_state_to_string;
 pub use scroll::TranscriptScrollState;
-pub use session::{PromptState, SelectionPromptState, Session};
+pub use session::{PromptPasteBurstState, PromptState, SelectionPromptState, Session};
 pub use spinner::SpinnerState;
 pub use state::State;
 pub use status::{Activity, Status};

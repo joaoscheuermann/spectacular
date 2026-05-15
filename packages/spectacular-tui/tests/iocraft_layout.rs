@@ -179,15 +179,15 @@ fn usage_renders_in_status_and_footer() {
     assert!(output.contains("context: 42000/200000"));
 }
 
-/// Verifies read-only prompt placeholder includes text and future reserved regions.
+/// Verifies non-command prompt text keeps reserved completion and guidance regions.
 #[test]
 fn prompt_placeholder_renders_current_text_and_reserved_regions() {
     let mut state = state();
-    state.session.prompt = spectacular_tui::PromptState::from_text("/model gpt-5.1");
+    state.session.prompt = spectacular_tui::PromptState::from_text("model gpt-5.1");
 
     let output = render(&state);
 
-    assert!(output.contains("Prompt: /model gpt-5.1"));
+    assert!(output.contains("Prompt: model gpt-5.1"));
     assert!(output.contains("Completions: reserved"));
     assert!(output.contains("Guidance: reserved"));
 }
