@@ -9,7 +9,7 @@ pub async fn render_agent_event(
     event: &AgentEvent,
 ) -> Result<(), ChatError> {
     match event {
-        AgentEvent::UserPrompt { content } => renderer.user_prompt(content),
+        AgentEvent::UserPrompt { content, .. } => renderer.user_prompt(content),
         AgentEvent::MessageDelta { content, .. } => {
             if !has_visible_assistant_text(content) {
                 return Ok(());

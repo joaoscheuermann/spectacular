@@ -92,6 +92,58 @@ fn submit_prompt_appends_user_prompt_and_clears_prompt() {
     ));
 }
 
+/// Verifies duplicate prompt actions with the same ID update instead of appending.
+#[test]
+fn submit_prompt_is_idempotent_by_transcript_id() {
+    let mut state = state();
+
+    reduce(
+        &mut state,
+        ChatTuiAction::SubmitPrompt {
+            id: TranscriptItemId::new("prompt-1"),
+            text: "first text".to_owned(),
+        },
+    );
+    reduce(
+        &mut state,
+        ChatTuiAction::SubmitPrompt {
+            id: TranscriptItemId::new("prompt-1"),
+            text: "updated text".to_owned(),
+        },
+    );
+
+    assert_eq!(state.session.transcript.len(), 1);
+    assert!(matches!(
+        &state.session.transcript[0].content,
+        TranscriptItemContent::UserPrompt(item) if item.text == "updated text"
+    ));
+}
+
+/// Verifies identical prompt text with different IDs remains distinct turns.
+#[test]
+fn submit_prompt_keeps_same_text_with_different_ids_distinct() {
+    let mut state = state();
+
+    reduce(
+        &mut state,
+        ChatTuiAction::SubmitPrompt {
+            id: TranscriptItemId::new("prompt-1"),
+            text: "repeat".to_owned(),
+        },
+    );
+    reduce(
+        &mut state,
+        ChatTuiAction::SubmitPrompt {
+            id: TranscriptItemId::new("prompt-2"),
+            text: "repeat".to_owned(),
+        },
+    );
+
+    assert_eq!(state.session.transcript.len(), 2);
+    assert_eq!(state.session.transcript[0].id.as_str(), "prompt-1");
+    assert_eq!(state.session.transcript[1].id.as_str(), "prompt-2");
+}
+
 /// Verifies agent start and finish update status deterministically.
 #[test]
 fn agent_started_and_finished_update_status() {

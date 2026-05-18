@@ -391,6 +391,7 @@ impl ChatPromptFooterModel {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ChatRunRequestModel {
     pub prompt: String,
+    pub prompt_event_id: Option<String>,
     pub render_user_prompt: bool,
     pub retry_existing_prompt: bool,
     pub runtime: RuntimeSelection,

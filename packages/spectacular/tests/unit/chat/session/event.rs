@@ -15,6 +15,7 @@ fn recognized_jsonl_event_deserializes() {
     assert_eq!(
         event,
         ChatEvent::UserPrompt {
+            id: None,
             content: "hello".to_owned(),
             created_at: "2026-04-29T14:01:00Z".to_owned()
         }
@@ -47,6 +48,46 @@ fn minimal_known_events_default_optional_fields() {
             content: "hello".to_owned(),
             created_at: "2026-04-29T14:01:00Z".to_owned()
         }
+    );
+}
+
+/// Verifies that user prompt IDs round trip while legacy prompt events remain valid.
+#[test]
+fn user_prompt_id_round_trips_and_legacy_prompt_defaults_to_none() {
+    let event = ChatEvent::from_agent_event(
+        &AgentEvent::user_prompt_with_id("local-prompt-1", "hello"),
+        "2026-04-29T14:01:00Z".to_owned(),
+    )
+    .unwrap();
+    let value = serde_json::to_value(event).unwrap();
+
+    assert_eq!(
+        value,
+        json!({
+            "type": "user_prompt",
+            "id": "local-prompt-1",
+            "content": "hello",
+            "created_at": "2026-04-29T14:01:00Z"
+        })
+    );
+    assert_eq!(
+        ChatEvent::from_value(value)
+            .unwrap()
+            .to_agent_event()
+            .unwrap(),
+        AgentEvent::user_prompt_with_id("local-prompt-1", "hello")
+    );
+
+    assert_eq!(
+        ChatEvent::from_value(json!({
+            "type": "user_prompt",
+            "content": "legacy",
+            "created_at": "2026-04-29T14:02:00Z"
+        }))
+        .unwrap()
+        .to_agent_event()
+        .unwrap(),
+        AgentEvent::user_prompt("legacy")
     );
 }
 

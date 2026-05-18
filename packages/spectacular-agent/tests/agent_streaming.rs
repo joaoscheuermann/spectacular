@@ -215,7 +215,25 @@ async fn dropping_completed_stream_does_not_reject_next_run() {
 
     agent.run("second").await.unwrap();
     assert!(agent.events().iter().any(|event| {
-        matches!(event, AgentEvent::UserPrompt { content } if content == "second")
+        matches!(event, AgentEvent::UserPrompt { content, .. } if content == "second")
+    }));
+}
+
+#[tokio::test]
+/// Verifies streaming runs preserve caller-owned prompt occurrence IDs.
+async fn run_stream_with_prompt_event_id_records_user_prompt_id() {
+    let agent = Arc::new(Agent::new(FakeProvider::text("hello")));
+    let mut stream = Arc::clone(&agent)
+        .run_stream_with_prompt_event_id("same text", Some("local-prompt-1"));
+
+    while stream.next().await.is_some() {}
+
+    assert!(agent.events().iter().any(|event| {
+        matches!(
+            event,
+            AgentEvent::UserPrompt { id: Some(id), content }
+                if id.as_str() == "local-prompt-1" && content == "same text"
+        )
     }));
 }
 
@@ -238,7 +256,7 @@ fn assert_cancelled_run_events(events: &[AgentEvent], expected_reason: &str) {
     assert!(matches!(
         events,
         [
-            AgentEvent::UserPrompt { content },
+            AgentEvent::UserPrompt { content, .. },
             AgentEvent::ContextTokenUsage(usage),
             AgentEvent::Cancelled { reason },
         ] if content == "active"

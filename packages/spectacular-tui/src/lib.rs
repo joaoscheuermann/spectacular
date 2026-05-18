@@ -37,7 +37,7 @@ pub use fake_streaming::{
 pub use format::{
     app_lines, app_render_lines, footer_render_line, footer_text, format_directory_with_home,
     prompt_lines, prompt_render_lines, transcript_item_lines, transcript_item_render_lines,
-    transcript_lines, transcript_render_lines, usage_text,
+    transcript_lines, transcript_render_lines, usage_text, working_render_line,
 };
 pub use ids::{SessionId, Timestamp, TranscriptItemId};
 pub use metadata::{

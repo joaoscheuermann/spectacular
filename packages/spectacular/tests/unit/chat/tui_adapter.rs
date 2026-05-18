@@ -217,6 +217,23 @@ fn user_prompt_submission_maps_to_submit_prompt() {
     );
 }
 
+/// Verifies user prompt agent events only render when the runtime supplied a prompt ID.
+#[test]
+fn user_prompt_agent_events_require_prompt_id() {
+    let mut adapter = TuiEventAdapter::new();
+
+    assert_eq!(
+        adapter.adapt_agent_event(&AgentEvent::user_prompt_with_id("local-prompt-1", "hello")),
+        vec![ChatTuiAction::SubmitPrompt {
+            id: TranscriptItemId::new("local-prompt-1"),
+            text: "hello".to_owned(),
+        }]
+    );
+    assert!(adapter
+        .adapt_agent_event(&AgentEvent::user_prompt("no id"))
+        .is_empty());
+}
+
 /// Verifies provider usage and context usage events map to TUI usage state updates.
 #[test]
 fn usage_events_map_to_usage_updated() {

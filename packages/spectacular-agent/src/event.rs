@@ -28,6 +28,7 @@ impl Display for AgentTranscriptItemId {
 #[non_exhaustive]
 pub enum AgentEvent {
     UserPrompt {
+        id: Option<AgentTranscriptItemId>,
         content: String,
     },
     MessageStart {
@@ -97,9 +98,18 @@ pub struct ContextSummary {
 
 
 impl AgentEvent {
-    /// Creates a stored user prompt event.
+    /// Creates a stored user prompt event without an externally correlated transcript ID.
     pub fn user_prompt(content: impl Into<String>) -> Self {
         Self::UserPrompt {
+            id: None,
+            content: content.into(),
+        }
+    }
+
+    /// Creates a stored user prompt event with a caller-owned transcript ID.
+    pub fn user_prompt_with_id(id: impl Into<String>, content: impl Into<String>) -> Self {
+        Self::UserPrompt {
+            id: Some(AgentTranscriptItemId::new(id)),
             content: content.into(),
         }
     }
@@ -242,7 +252,10 @@ impl Display for AgentEvent {
     /// Formats an agent event for compact logs and debug output.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AgentEvent::UserPrompt { content } => write!(formatter, "UserPrompt({content})"),
+            AgentEvent::UserPrompt { id: Some(id), content } => {
+                write!(formatter, "UserPrompt(id={id}, content={content})")
+            }
+            AgentEvent::UserPrompt { id: None, content } => write!(formatter, "UserPrompt({content})"),
             AgentEvent::MessageStart { id } => write!(formatter, "MessageStart(id={id})"),
             AgentEvent::MessageDelta { id, content } => {
                 write!(formatter, "MessageDelta(id={id}, content={content})")

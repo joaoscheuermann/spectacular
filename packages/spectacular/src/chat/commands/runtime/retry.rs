@@ -31,6 +31,7 @@ fn execute<'a>(mut context: ChatCommandContext<'a>, args: Vec<String>) -> ChatCo
         }
         let request = ChatRunRequestModel {
             prompt,
+            prompt_event_id: None,
             render_user_prompt: false,
             retry_existing_prompt: true,
             runtime: context.model.runtime().clone(),

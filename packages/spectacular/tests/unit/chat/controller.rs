@@ -16,9 +16,7 @@ async fn retry_command_runs_prompt_during_dispatch() {
     let recorded = Arc::new(Mutex::new(None));
     let model = test_model();
     model
-        .append_agent_event(&AgentEvent::UserPrompt {
-            content: "again".to_owned(),
-        })
+        .append_agent_event(&AgentEvent::user_prompt("again"))
         .unwrap();
     let mut controller = ChatController::with_runner(
         model,
@@ -51,9 +49,7 @@ async fn retry_command_runs_prompt_during_dispatch() {
 async fn retry_runner_error_continues_repl() {
     let model = test_model();
     model
-        .append_agent_event(&AgentEvent::UserPrompt {
-            content: "again".to_owned(),
-        })
+        .append_agent_event(&AgentEvent::user_prompt("again"))
         .unwrap();
     let mut controller = ChatController::with_runner(
         model,

@@ -130,9 +130,18 @@ where
 
     /// Enqueues and executes one prompt, returning the completed run id or stored error.
     pub async fn run(&self, prompt: impl Into<String>) -> Result<RunId, AgentError> {
+        self.run_with_prompt_event_id(prompt, None::<String>).await
+    }
+
+    /// Enqueues and executes one prompt with a caller-owned prompt event ID.
+    pub async fn run_with_prompt_event_id(
+        &self,
+        prompt: impl Into<String>,
+        prompt_event_id: Option<impl Into<String>>,
+    ) -> Result<RunId, AgentError> {
         let run = self
             .queue
-            .enqueue_and_wait(prompt)
+            .enqueue_and_wait_with_event_id(prompt, prompt_event_id)
             .await
             .map_err(|_| AgentError::CancellationError)?;
         let control = self.start_run_control();
@@ -207,6 +216,15 @@ where
 {
     /// Starts a background run and returns a stream of stored events.
     pub fn run_stream(self: Arc<Self>, prompt: impl Into<String>) -> AgentRunStream {
+        self.run_stream_with_prompt_event_id(prompt, None::<String>)
+    }
+
+    /// Starts a background run with a caller-owned prompt event ID and returns a stream of stored events.
+    pub fn run_stream_with_prompt_event_id(
+        self: Arc<Self>,
+        prompt: impl Into<String>,
+        prompt_event_id: Option<impl Into<String>>,
+    ) -> AgentRunStream {
         let control = Arc::new(RunControl::new());
         let (sender, receiver) = mpsc::channel(128);
         let completed = Arc::new(AtomicBool::new(false));
@@ -218,11 +236,16 @@ where
             Arc::clone(&self.active_run_control),
         );
         let prompt = prompt.into();
+        let prompt_event_id = prompt_event_id.map(Into::into);
         let agent = Arc::clone(&self);
 
         tokio::spawn(async move {
             let mut acquired_active_run = false;
-            let result = match agent.queue.enqueue_and_wait(prompt).await {
+            let result = match agent
+                .queue
+                .enqueue_and_wait_with_event_id(prompt, prompt_event_id)
+                .await
+            {
                 Ok(run) => {
                     acquired_active_run = true;
                     agent.activate_run_control(Arc::clone(&control));
@@ -285,7 +308,9 @@ where
         let mut recorder = RunRecorder::new(self, control, sender);
         let prompt = run.prompt().to_owned();
         let run_event_start = self.store.lock().unwrap().checkpoint() + 1;
-        recorder.record(AgentEvent::user_prompt(prompt)).await?;
+        recorder
+            .record(user_prompt_event(run.prompt_event_id(), prompt))
+            .await?;
 
         let capabilities = self.provider.capabilities();
         let tool_manifests = self.tools.read().unwrap().manifests();
@@ -478,6 +503,15 @@ where
             provider_retry_delay: self.config.provider_retry_delay,
         }
     }
+}
+
+/// Builds a user prompt event while preserving a caller-owned prompt occurrence ID.
+fn user_prompt_event(prompt_event_id: Option<&str>, prompt: String) -> AgentEvent {
+    let Some(prompt_event_id) = prompt_event_id else {
+        return AgentEvent::user_prompt(prompt);
+    };
+
+    AgentEvent::user_prompt_with_id(prompt_event_id, prompt)
 }
 
 /// Maps context assembly failures into the stable agent-level context error.

@@ -19,6 +19,11 @@ pub(crate) fn clear_matching_activity(
     state.status = Status::Idle;
 }
 
+/// Returns whether the transcript already contains an item with the supplied ID.
+pub(crate) fn transcript_contains_id(state: &State, id: &TranscriptItemId) -> bool {
+    state.session.transcript.iter().any(|item| item.id == *id)
+}
+
 /// Finds mutable semantic content by transcript item ID.
 pub(crate) fn find_content_by_id<'a>(
     state: &'a mut State,

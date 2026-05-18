@@ -45,6 +45,7 @@ pub trait ChatTurnRunner {
 /// Runtime request for one chat turn after controller-level context has been resolved.
 pub struct ChatRunRequest {
     pub prompt: String,
+    pub prompt_event_id: Option<String>,
     pub render_user_prompt: bool,
     pub retry_existing_prompt: bool,
     pub runtime: RuntimeSelection,
@@ -86,6 +87,7 @@ impl ChatRunnerService {
         ChatRunner::new(model, renderer, tools.clone())
             .run(ChatRunRequest {
                 prompt: request.prompt,
+                prompt_event_id: request.prompt_event_id,
                 render_user_prompt: request.render_user_prompt,
                 retry_existing_prompt: request.retry_existing_prompt,
                 runtime: request.runtime,
@@ -127,7 +129,8 @@ impl<'a> ChatRunner<'a> {
             store,
             self.tools.clone(),
         ));
-        let mut stream = agent.run_stream(request.prompt.clone());
+        let mut stream = Arc::clone(&agent)
+            .run_stream_with_prompt_event_id(request.prompt.clone(), request.prompt_event_id.clone());
         let mut title_text = String::new();
         let mut assistant_output = AssistantResponseRenderState::default();
         let mut reasoning_output = ReasoningResponseRenderState::default();

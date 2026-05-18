@@ -184,6 +184,7 @@ where
             return Ok(());
         }
 
+        let prompt_event_id = id.as_str().to_owned();
         self.shell.apply_action(ChatTuiAction::SubmitPrompt {
             id,
             text: text.clone(),
@@ -193,6 +194,7 @@ where
         publish_state(&self.shell, state_sender);
         let request = ChatRunRequestModel {
             prompt: text,
+            prompt_event_id: Some(prompt_event_id),
             render_user_prompt: false,
             retry_existing_prompt: false,
             runtime: self.model.runtime().clone(),
@@ -556,7 +558,10 @@ impl AgentTuiTurnRunner {
             store_for_request(model, &request)?,
             tools.clone(),
         );
-        self.active = Some(Arc::new(agent).run_stream(request.prompt));
+        self.active = Some(Arc::new(agent).run_stream_with_prompt_event_id(
+            request.prompt,
+            request.prompt_event_id,
+        ));
         let mut adapter = TuiEventAdapter::new();
         while let Some(event) = self.next_event(cancellation).await {
             if let AgentEvent::ContextTokenUsage(usage) = event {

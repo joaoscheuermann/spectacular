@@ -70,7 +70,7 @@ fn append_transcript_messages(messages: &mut Vec<ProviderMessage>, events: &[Age
             AgentEvent::MessageFinish { .. } => {
                 flush_pending_assistant(messages, &mut pending_assistant);
             }
-            AgentEvent::UserPrompt { content } => {
+            AgentEvent::UserPrompt { content, .. } => {
                 flush_pending_assistant(messages, &mut pending_assistant);
                 messages.push(ProviderMessage::user(content.clone()));
             }

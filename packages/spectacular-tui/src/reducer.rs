@@ -6,7 +6,7 @@ use crate::reducer_display::{
 };
 use crate::reducer_lookup::{
     clear_matching_activity, find_command, find_content_by_id, find_tool_call,
-    matching_tool_activity_item_id,
+    matching_tool_activity_item_id, transcript_contains_id,
 };
 use crate::scroll::TranscriptScrollState;
 use crate::session::Session;
@@ -25,11 +25,7 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
             state.session.prompt = prompt;
         }
         ChatTuiAction::SubmitPrompt { id, text } => {
-            append_transcript_item(
-                state,
-                id,
-                TranscriptItemContent::UserPrompt(UserPromptItem::new(text)),
-            );
+            upsert_user_prompt(state, id, text);
             state.session.prompt = crate::session::PromptState::empty();
         }
         ChatTuiAction::CancelRun => {
@@ -299,6 +295,24 @@ fn clamp_scroll_to_transcript(scroll: &mut TranscriptScrollState, transcript_len
     let max_offset = (transcript_len as u32).saturating_sub(scroll.visible_rows);
     scroll.offset = scroll.offset.min(max_offset);
     scroll.follow_tail = scroll.offset == 0;
+}
+
+/// Inserts a user prompt unless the transcript already contains the prompt occurrence ID.
+fn upsert_user_prompt(state: &mut State, id: TranscriptItemId, text: String) {
+    if let Some(TranscriptItemContent::UserPrompt(item)) = find_content_by_id(state, &id) {
+        item.text = text;
+        return;
+    }
+
+    if transcript_contains_id(state, &id) {
+        return;
+    }
+
+    append_transcript_item(
+        state,
+        id,
+        TranscriptItemContent::UserPrompt(UserPromptItem::new(text)),
+    );
 }
 
 /// Appends a semantic transcript item with the next session timestamp.

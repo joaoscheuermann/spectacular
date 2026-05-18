@@ -18,6 +18,24 @@ async fn manual_queue_starts_enqueued_runs_in_fifo_order() {
 }
 
 #[tokio::test]
+async fn queue_preserves_prompt_event_ids_for_manual_and_waited_runs() {
+    let queue = RunQueue::default();
+    queue.enqueue_prompt_with_event_id("manual", Some("prompt-1"));
+
+    let manual = queue.start_next().await.unwrap();
+    assert_eq!(manual.prompt(), "manual");
+    assert_eq!(manual.prompt_event_id(), Some("prompt-1"));
+    queue.finish_active().await;
+
+    let waited = queue
+        .enqueue_and_wait_with_event_id("waited", Some("prompt-2"))
+        .await
+        .unwrap();
+    assert_eq!(waited.prompt(), "waited");
+    assert_eq!(waited.prompt_event_id(), Some("prompt-2"));
+}
+
+#[tokio::test]
 async fn concurrent_waiters_resume_in_fifo_order() {
     let queue = Arc::new(RunQueue::default());
     let first = queue.enqueue_and_wait("first").await.unwrap();

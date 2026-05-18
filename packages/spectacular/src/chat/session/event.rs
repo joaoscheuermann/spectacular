@@ -11,7 +11,7 @@ use crate::chat::command_event::{
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use spectacular_agent::{AgentEvent, ContextSummary};
+use spectacular_agent::{AgentEvent, AgentTranscriptItemId, ContextSummary};
 use spectacular_llms::{FinishReason, ProviderMessageRole};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -52,7 +52,12 @@ pub enum ChatEvent {
         created_at: String,
     },
     #[serde(rename = "user_prompt")]
-    UserPrompt { content: String, created_at: String },
+    UserPrompt {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
+        content: String,
+        created_at: String,
+    },
     #[serde(rename = "message_start")]
     MessageStart { id: String, created_at: String },
     #[serde(rename = "assistant_delta")]
@@ -162,7 +167,8 @@ impl ChatEvent {
     /// Converts an agent event into a persisted chat event when it is session-visible.
     pub fn from_agent_event(event: &AgentEvent, created_at: String) -> Option<Self> {
         match event {
-            AgentEvent::UserPrompt { content } => Some(Self::UserPrompt {
+            AgentEvent::UserPrompt { id, content } => Some(Self::UserPrompt {
+                id: id.as_ref().map(|id| id.as_str().to_owned()),
                 content: content.clone(),
                 created_at,
             }),
@@ -327,7 +333,10 @@ impl ChatEvent {
     /// Converts a persisted chat event back into an agent event when replayable.
     pub fn to_agent_event(&self) -> Option<AgentEvent> {
         match self {
-            Self::UserPrompt { content, .. } => Some(AgentEvent::user_prompt(content)),
+            Self::UserPrompt { id, content, .. } => Some(AgentEvent::UserPrompt {
+                id: id.as_ref().map(AgentTranscriptItemId::new),
+                content: content.clone(),
+            }),
             Self::MessageStart { id, .. } => Some(AgentEvent::message_start(id.clone())),
             Self::AssistantDelta { id, content, .. } => {
                 Some(AgentEvent::message_delta(id.clone(), content.clone()))

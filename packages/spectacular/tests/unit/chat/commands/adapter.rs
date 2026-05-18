@@ -168,9 +168,7 @@ fn context_append_agent_event_persists_chat_record() {
         let context = ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
 
         context
-            .append_agent_event(&AgentEvent::UserPrompt {
-                content: "persist me".to_owned(),
-            })
+            .append_agent_event(&AgentEvent::user_prompt("persist me"))
             .unwrap();
     }
 

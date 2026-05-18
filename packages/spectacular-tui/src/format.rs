@@ -427,7 +427,7 @@ fn slash_suggestion_render_line(
 }
 
 /// Formats the current working status line as a semantic row when active.
-fn working_render_line(state: &State) -> Option<RenderLine> {
+pub fn working_render_line(state: &State) -> Option<RenderLine> {
     match &state.status {
         Status::Running { .. } | Status::Cancelling => Some(RenderLine::styled(
             format!(

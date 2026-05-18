@@ -101,6 +101,7 @@ where
 
         let request = ChatRunRequestModel {
             prompt,
+            prompt_event_id: None,
             render_user_prompt: true,
             retry_existing_prompt: false,
             runtime: self.model.runtime().clone(),

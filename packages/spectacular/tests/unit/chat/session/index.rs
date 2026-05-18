@@ -10,6 +10,7 @@
                 created_at: "2026-04-29T14:00:00Z".to_owned(),
             }),
             known(ChatEvent::UserPrompt {
+                id: None,
                 content: "hello".to_owned(),
                 created_at: "2026-04-29T14:01:00Z".to_owned(),
             }),
@@ -55,6 +56,7 @@
                 created_at: "2026-04-29T14:01:00Z".to_owned(),
             }),
             known(ChatEvent::UserPrompt {
+                id: None,
                 content: "hello".to_owned(),
                 created_at: "2026-04-29T14:02:00Z".to_owned(),
             }),

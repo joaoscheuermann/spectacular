@@ -17,9 +17,7 @@
         let recorded = Arc::new(Mutex::new(None));
         let mut model = test_model();
         model
-            .append_agent_event(&AgentEvent::UserPrompt {
-                content: "try again".to_owned(),
-            })
+            .append_agent_event(&AgentEvent::user_prompt("try again"))
             .unwrap();
         let renderer = Renderer::default();
         let tools = ToolStorage::default();

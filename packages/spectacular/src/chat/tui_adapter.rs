@@ -16,7 +16,6 @@ use std::path::Path;
 /// Converts runtime and agent events into pure TUI reducer actions.
 #[derive(Default)]
 pub(crate) struct TuiEventAdapter {
-    next_user_prompt_id: u64,
     tool_display: ToolDisplayAdapter,
 }
 
@@ -24,7 +23,6 @@ impl TuiEventAdapter {
     /// Creates an adapter with empty lifecycle state for one runtime event stream.
     pub(crate) fn new() -> Self {
         Self {
-            next_user_prompt_id: 1,
             tool_display: ToolDisplayAdapter::new(),
         }
     }
@@ -41,7 +39,10 @@ impl TuiEventAdapter {
         tools: &ToolStorage,
     ) -> Vec<ChatTuiAction> {
         match event {
-            AgentEvent::UserPrompt { content } => vec![self.user_prompt_action(content)],
+            AgentEvent::UserPrompt { id: Some(id), content } => {
+                vec![self.user_prompt_action(id.as_str(), content)]
+            }
+            AgentEvent::UserPrompt { id: None, .. } => Vec::new(),
             AgentEvent::MessageStart { id } => vec![ChatTuiAction::MessageStarted {
                 id: transcript_item_id(id.as_str()),
             }],
@@ -122,12 +123,10 @@ impl TuiEventAdapter {
         }
     }
 
-    /// Builds a semantic user prompt action with adapter-owned transcript identity.
-    fn user_prompt_action(&mut self, content: &str) -> ChatTuiAction {
-        let id = TranscriptItemId::new(format!("user-prompt-{}", self.next_user_prompt_id));
-        self.next_user_prompt_id = self.next_user_prompt_id.saturating_add(1);
+    /// Builds a semantic user prompt action with agent-provided transcript identity.
+    fn user_prompt_action(&self, id: &str, content: &str) -> ChatTuiAction {
         ChatTuiAction::SubmitPrompt {
-            id,
+            id: transcript_item_id(id),
             text: content.to_owned(),
         }
     }

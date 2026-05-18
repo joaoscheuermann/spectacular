@@ -101,6 +101,10 @@ async fn submit_prompt_intent_runs_real_controller_path() {
         .unwrap();
 
     assert_eq!(controller.runner().requests, vec!["hello runtime".to_owned()]);
+    assert_eq!(
+        controller.runner().prompt_event_ids,
+        vec![Some("prompt-1".to_owned())]
+    );
     assert!(controller.state().assistant_stream.streams.iter().any(|stream| {
         stream.received == "hello from runtime"
     }));
@@ -316,6 +320,7 @@ async fn cancel_signal_reaches_active_prompt_run() {
 struct RecordingTuiTurnRunner {
     events: Vec<AgentEvent>,
     requests: Vec<String>,
+    prompt_event_ids: Vec<Option<String>>,
     cancel_count: usize,
     running: bool,
 }
@@ -331,6 +336,7 @@ impl TuiTurnRunner for RecordingTuiTurnRunner {
         _cancellation: &'a mut mpsc::UnboundedReceiver<()>,
     ) -> TuiTurnFuture<'a> {
         Box::pin(async move {
+            self.prompt_event_ids.push(request.prompt_event_id.clone());
             self.requests.push(request.prompt);
             let mut adapter = TuiEventAdapter::new();
             for event in self.events.clone() {
@@ -374,7 +380,12 @@ impl TuiTurnRunner for PausingTuiTurnRunner {
                 AgentEvent::message_start("message-1"),
                 AgentEvent::message_delta("message-1", "streamed before completion"),
             ];
-            model.append_agent_event(&AgentEvent::user_prompt(request.prompt))?;
+            if let Some(prompt_event_id) = request.prompt_event_id {
+                model.append_agent_event(&AgentEvent::user_prompt_with_id(
+                    prompt_event_id,
+                    request.prompt,
+                ))?;
+            }
             let mut adapter = TuiEventAdapter::new();
             for event in events {
                 model.append_agent_event(&event)?;
