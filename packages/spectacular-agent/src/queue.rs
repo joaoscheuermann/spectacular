@@ -89,7 +89,8 @@ impl RunQueue {
     }
 
     pub async fn enqueue_and_wait(&self, prompt: impl Into<String>) -> Result<RunRequest, ()> {
-        self.enqueue_and_wait_with_event_id(prompt, None::<String>).await
+        self.enqueue_and_wait_with_event_id(prompt, None::<String>)
+            .await
     }
 
     pub async fn enqueue_and_wait_with_event_id(

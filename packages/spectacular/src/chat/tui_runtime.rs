@@ -11,8 +11,8 @@ use iocraft::prelude::*;
 use spectacular_agent::{AgentEvent, Store, ToolStorage};
 use spectacular_llms::LlmDebugLogger;
 use spectacular_tui::{
-    ChatTuiAction, DisplayMetadata, RuntimeIntent, RuntimeShell, SelectionPromptAnswer,
-    SelectionPromptChoice, SelectionPromptState, SessionId, State, TranscriptItemContent,
+    ChatTuiAction, DisplayMetadata, OpeningBannerItem, RuntimeIntent, RuntimeShell,
+    SelectionPromptAnswer, SelectionPromptChoice, SelectionPromptState, SessionId, State,
     TranscriptItemId,
 };
 use std::future::Future;
@@ -87,9 +87,13 @@ where
             warnings,
         } = bootstrap;
         let mut model = ChatModel::new_with_debug_logger(session, runtime, debug_logger);
-        let _started = model.start_new_session()?;
-        let state = initial_state(&model, &workspace_root, warnings);
+        let started = model.start_new_session()?;
+        let state = initial_state(&model, &workspace_root);
         let (mut shell, _intents) = RuntimeShell::new(state);
+        shell.apply_action(session_created_action(&started.id, &model, &workspace_root));
+        for warning in warnings {
+            shell.apply_action(ChatTuiAction::NoticeReported { message: warning });
+        }
         let command_registry = commands::registry()?;
         shell.apply_action(commands_loaded_action(command_registry.metadata()));
         Ok(Self {
@@ -441,7 +445,6 @@ fn apply_state_updates(
     }
 }
 
-
 /// Registers terminal input handling that emits runtime intents without performing side effects.
 fn emit_terminal_intents(
     hooks: &mut Hooks,
@@ -543,10 +546,10 @@ impl AgentTuiTurnRunner {
             store_for_request(model, &request)?,
             tools.clone(),
         );
-        self.active = Some(Arc::new(agent).run_stream_with_prompt_event_id(
-            request.prompt,
-            request.prompt_event_id,
-        ));
+        self.active = Some(
+            Arc::new(agent)
+                .run_stream_with_prompt_event_id(request.prompt, request.prompt_event_id),
+        );
         let mut adapter = TuiEventAdapter::new();
         while let Some(event) = self.next_event(cancellation).await {
             if let AgentEvent::ContextTokenUsage(usage) = event {
@@ -591,7 +594,7 @@ impl AgentTuiTurnRunner {
 }
 
 /// Builds initial TUI state from chat model metadata without direct terminal writes.
-fn initial_state(model: &ChatModel, workspace_root: &PathBuf, warnings: Vec<String>) -> State {
+fn initial_state(model: &ChatModel, workspace_root: &PathBuf) -> State {
     let runtime = spectacular_tui::RuntimeSelection::new(
         model.runtime().provider_type.clone(),
         model.runtime().provider.clone(),
@@ -610,20 +613,21 @@ fn initial_state(model: &ChatModel, workspace_root: &PathBuf, warnings: Vec<Stri
         model.current_session_id(),
         None,
     );
-    let mut state = State::new(SessionId::new(model.current_session_id()), runtime, display);
-    for warning in warnings {
-        let id = TranscriptItemId::new(format!("warning-{}", state.session.transcript.len() + 1));
-        let timestamp = state.session.allocate_timestamp();
-        state
-            .session
-            .transcript
-            .push(spectacular_tui::TranscriptItem::new(
-                id,
-                timestamp,
-                TranscriptItemContent::Notice(spectacular_tui::NoticeItem::new(warning)),
-            ));
+    State::new(SessionId::new(model.current_session_id()), runtime, display)
+}
+
+/// Builds the semantic opening banner action for a newly created TUI session.
+fn session_created_action(id: &str, model: &ChatModel, workspace_root: &PathBuf) -> ChatTuiAction {
+    ChatTuiAction::SessionCreated {
+        id: SessionId::new(id),
+        banner: OpeningBannerItem::new(
+            env!("CARGO_PKG_VERSION"),
+            model.runtime().model.clone(),
+            model.runtime().reasoning.to_string(),
+            workspace_root.to_string_lossy(),
+            id,
+        ),
     }
-    state
 }
 
 /// Converts configured reasoning into the TUI display enum.

@@ -98,7 +98,7 @@ pub fn usage_text(usage: ContextTokenUsage) -> String {
 /// Formats one transcript item into one or more terminal-flow lines.
 pub fn transcript_item_render_lines(item: &TranscriptItem) -> Vec<RenderLine> {
     match &item.content {
-        TranscriptItemContent::OpeningBanner(banner) => format_opening_banner(banner),
+        TranscriptItemContent::OpeningBanner(banner) => opening_banner_render_lines(banner),
         TranscriptItemContent::UserPrompt(prompt) => {
             prompt_text_render_lines(&prompt.text, RenderStyle::User)
         }
@@ -154,19 +154,13 @@ fn visible_transcript_items(state: &State) -> impl Iterator<Item = &TranscriptIt
 }
 
 /// Formats the opening banner as original-width Unicode box drawing rows.
-fn format_opening_banner(banner: &crate::transcript::OpeningBannerItem) -> Vec<RenderLine> {
-    let title = format!("Spectacular (v{})", banner.version);
-    let spacer = String::new();
-    let model = format!("model:     {} {}", banner.model, banner.reasoning);
-    let directory = format!(
-        "directory: {}",
-        format_directory(Path::new(&banner.directory))
-    );
-    let session = format!("session:   {}", banner.session_id);
-    let rows = [&title, &spacer, &model, &directory, &session];
+pub(crate) fn opening_banner_render_lines(
+    banner: &crate::transcript::OpeningBannerItem,
+) -> Vec<RenderLine> {
+    let rows = opening_banner_rows(banner);
     let content_width = rows
         .iter()
-        .map(|line| UnicodeWidthStr::width(line.as_str()))
+        .map(|row| UnicodeWidthStr::width(row.text.as_str()))
         .max()
         .unwrap_or(0)
         .max(OPENING_BANNER_MIN_WIDTH);
@@ -176,12 +170,10 @@ fn format_opening_banner(banner: &crate::transcript::OpeningBannerItem) -> Vec<R
         format!("╭{horizontal}╮"),
         RenderStyle::Title,
     )];
-    lines.extend(rows.iter().map(|line| {
-        RenderLine::styled(
-            format!("│ {} │", pad_banner_line(line, content_width)),
-            RenderStyle::Title,
-        )
-    }));
+    lines.extend(
+        rows.iter()
+            .map(|row| opening_banner_content_line(row, content_width)),
+    );
     lines.push(RenderLine::styled(
         format!("╰{horizontal}╯"),
         RenderStyle::Title,
@@ -189,10 +181,57 @@ fn format_opening_banner(banner: &crate::transcript::OpeningBannerItem) -> Vec<R
     lines
 }
 
-/// Pads a banner row to the computed display width, accounting for Unicode width.
-fn pad_banner_line(line: &str, width: usize) -> String {
-    let padding = width.saturating_sub(UnicodeWidthStr::width(line));
-    format!("{line}{}", " ".repeat(padding))
+/// Builds display-ready opening banner rows with semantic content styles.
+fn opening_banner_rows(banner: &crate::transcript::OpeningBannerItem) -> Vec<OpeningBannerRow> {
+    vec![
+        OpeningBannerRow::new(
+            format!("Spectacular (v{})", banner.version),
+            RenderStyle::Title,
+        ),
+        OpeningBannerRow::new(String::new(), RenderStyle::Text),
+        OpeningBannerRow::new(
+            format!("model:     {} {}", banner.model, banner.reasoning),
+            RenderStyle::Text,
+        ),
+        OpeningBannerRow::new(
+            format!(
+                "directory: {}",
+                format_directory(Path::new(&banner.directory))
+            ),
+            RenderStyle::Text,
+        ),
+        OpeningBannerRow::new(
+            format!("session:   {}", banner.session_id),
+            RenderStyle::Text,
+        ),
+    ]
+}
+
+/// Formats one opening banner content row with green borders and styled inner text.
+fn opening_banner_content_line(row: &OpeningBannerRow, width: usize) -> RenderLine {
+    let padding = width.saturating_sub(UnicodeWidthStr::width(row.text.as_str()));
+    RenderLine::from_spans(vec![
+        RenderSpan::new("│ ", RenderStyle::Title),
+        RenderSpan::new(&row.text, row.style),
+        RenderSpan::new(" ".repeat(padding), row.style),
+        RenderSpan::new(" │", RenderStyle::Title),
+    ])
+}
+
+/// One display row inside the opening banner with its semantic content style.
+struct OpeningBannerRow {
+    text: String,
+    style: RenderStyle,
+}
+
+impl OpeningBannerRow {
+    /// Creates an opening-banner row from display text and semantic content style.
+    fn new(text: impl Into<String>, style: RenderStyle) -> Self {
+        Self {
+            text: text.into(),
+            style,
+        }
+    }
 }
 
 /// Formats the active or submitted prompt as original marker rows.

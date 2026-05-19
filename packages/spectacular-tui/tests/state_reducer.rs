@@ -258,6 +258,47 @@ fn commands_loaded_replaces_command_metadata() {
     assert_eq!(state.commands, commands);
 }
 
+/// Verifies session creation resets session state and appends semantic opening banner content.
+#[test]
+fn session_created_starts_new_session_with_opening_banner() {
+    let mut state = state();
+    state.scroll.offset = 5;
+    state.scroll.follow_tail = false;
+
+    reduce(
+        &mut state,
+        ChatTuiAction::SessionCreated {
+            id: SessionId::new("session-2"),
+            banner: spectacular_tui::OpeningBannerItem::new(
+                "1.2.3",
+                "model",
+                "low",
+                "/workspace",
+                "session-2",
+            ),
+        },
+    );
+
+    assert_eq!(state.session.id.as_str(), "session-2");
+    assert_eq!(state.scroll.offset, 0);
+    assert!(state.scroll.follow_tail);
+    assert_eq!(state.session.transcript.len(), 1);
+    assert_eq!(
+        state.session.transcript[0].id.as_str(),
+        "opening-banner-session-2"
+    );
+    assert_eq!(state.session.transcript[0].timestamp.value(), 0);
+    assert!(matches!(
+        &state.session.transcript[0].content,
+        TranscriptItemContent::OpeningBanner(banner)
+            if banner.version == "1.2.3"
+                && banner.model == "model"
+                && banner.reasoning == "low"
+                && banner.directory == "/workspace"
+                && banner.session_id == "session-2"
+    ));
+}
+
 /// Verifies usage updates both session usage and display metadata usage.
 #[test]
 fn usage_updated_updates_session_and_display_usage() {

@@ -25,6 +25,14 @@ fn initial_state_uses_runtime_metadata_and_warnings() {
     assert_eq!(state.display.current_directory, "/workspace");
     assert!(matches!(
         &state.session.transcript[0].content,
+        TranscriptItemContent::OpeningBanner(banner)
+            if banner.model == "model"
+                && banner.reasoning == "low"
+                && banner.directory == "/workspace"
+                && banner.session_id == state.session.id.as_str()
+    ));
+    assert!(matches!(
+        &state.session.transcript[1].content,
         TranscriptItemContent::Notice(notice) if notice.message == "configuration warning"
     ));
     assert!(state

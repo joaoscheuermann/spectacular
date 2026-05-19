@@ -129,8 +129,10 @@ impl<'a> ChatRunner<'a> {
             store,
             self.tools.clone(),
         ));
-        let mut stream = Arc::clone(&agent)
-            .run_stream_with_prompt_event_id(request.prompt.clone(), request.prompt_event_id.clone());
+        let mut stream = Arc::clone(&agent).run_stream_with_prompt_event_id(
+            request.prompt.clone(),
+            request.prompt_event_id.clone(),
+        );
         let mut title_text = String::new();
         let mut assistant_output = AssistantResponseRenderState::default();
         let mut reasoning_output = ReasoningResponseRenderState::default();

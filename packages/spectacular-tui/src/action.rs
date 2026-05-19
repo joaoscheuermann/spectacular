@@ -1,7 +1,7 @@
 use crate::ids::{SessionId, TranscriptItemId};
 use crate::metadata::{CommandDescriptor, ContextTokenUsage, DisplayMetadata, RuntimeSelection};
 use crate::session::{PromptState, SelectionPromptState};
-use crate::transcript::{CommandDisplayStatus, DisplayLine, ToolDisplayStatus};
+use crate::transcript::{CommandDisplayStatus, DisplayLine, OpeningBannerItem, ToolDisplayStatus};
 
 /// Events that can deterministically update TUI state through the reducer.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -18,6 +18,10 @@ pub enum ChatTuiAction {
     CommandsLoaded(Vec<CommandDescriptor>),
     SessionChanged {
         id: SessionId,
+    },
+    SessionCreated {
+        id: SessionId,
+        banner: OpeningBannerItem,
     },
     AgentStarted,
     MessageStarted {

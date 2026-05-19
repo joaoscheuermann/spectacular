@@ -68,7 +68,7 @@ fn active_app_renders_terminal_flow_without_prototype_chrome() {
 }
 
 #[test]
-fn opening_banner_matches_original_shape_and_width() {
+fn opening_banner_matches_original_shape_width_and_styles() {
     let mut state = state();
     state.session.transcript.push(item(
         1,
@@ -81,7 +81,8 @@ fn opening_banner_matches_original_shape_and_width() {
         )),
     ));
 
-    let text = visible_text(&app_render_lines(&state));
+    let lines = app_render_lines(&state);
+    let text = visible_text(&lines);
     let banner = &text[..7];
 
     assert_eq!(
@@ -112,6 +113,12 @@ fn opening_banner_matches_original_shape_and_width() {
         banner[6],
         "╰──────────────────────────────────────────────────────╯"
     );
+    assert_eq!(lines[0].spans[0].style, RenderStyle::Title);
+    assert_eq!(lines[1].spans[1].style, RenderStyle::Title);
+    assert_eq!(lines[3].spans[1].style, RenderStyle::Text);
+    assert_eq!(lines[4].spans[1].style, RenderStyle::Text);
+    assert_eq!(lines[5].spans[1].style, RenderStyle::Text);
+    assert_eq!(lines[6].spans[0].style, RenderStyle::Title);
 }
 
 #[test]

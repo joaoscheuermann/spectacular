@@ -39,7 +39,10 @@ impl TuiEventAdapter {
         tools: &ToolStorage,
     ) -> Vec<ChatTuiAction> {
         match event {
-            AgentEvent::UserPrompt { id: Some(id), content } => {
+            AgentEvent::UserPrompt {
+                id: Some(id),
+                content,
+            } => {
                 vec![self.user_prompt_action(id.as_str(), content)]
             }
             AgentEvent::UserPrompt { id: None, .. } => Vec::new(),

@@ -223,8 +223,8 @@ async fn dropping_completed_stream_does_not_reject_next_run() {
 /// Verifies streaming runs preserve caller-owned prompt occurrence IDs.
 async fn run_stream_with_prompt_event_id_records_user_prompt_id() {
     let agent = Arc::new(Agent::new(FakeProvider::text("hello")));
-    let mut stream = Arc::clone(&agent)
-        .run_stream_with_prompt_event_id("same text", Some("local-prompt-1"));
+    let mut stream =
+        Arc::clone(&agent).run_stream_with_prompt_event_id("same text", Some("local-prompt-1"));
 
     while stream.next().await.is_some() {}
 

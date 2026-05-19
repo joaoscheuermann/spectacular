@@ -14,8 +14,8 @@ use crate::state::State;
 use crate::status::{Activity, Status};
 use crate::transcript::{
     AssistantMessageItem, CancellationItem, CommandItem, CommandStatus, ErrorItem, NoticeItem,
-    ReasoningItem, SuccessItem, ToolCallItem, ToolStatus, TranscriptItem, TranscriptItemContent,
-    UserPromptItem, WarningItem, WorkedSummaryItem,
+    OpeningBannerItem, ReasoningItem, SuccessItem, ToolCallItem, ToolStatus, TranscriptItem,
+    TranscriptItemContent, UserPromptItem, WarningItem, WorkedSummaryItem,
 };
 
 /// Applies one TUI action to state without performing IO or runtime side effects.
@@ -44,6 +44,11 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
         }
         ChatTuiAction::SessionChanged { id } => {
             state.session = Session::new(id);
+            state.scroll = Default::default();
+        }
+        ChatTuiAction::SessionCreated { id, banner } => {
+            state.session = Session::new(id);
+            append_opening_banner(state, banner);
             state.scroll = Default::default();
         }
         ChatTuiAction::AgentStarted => {
@@ -307,6 +312,15 @@ fn upsert_user_prompt(state: &mut State, id: TranscriptItemId, text: String) {
         state,
         id,
         TranscriptItemContent::UserPrompt(UserPromptItem::new(text)),
+    );
+}
+
+/// Appends the session opening banner as the first transcript item.
+fn append_opening_banner(state: &mut State, banner: OpeningBannerItem) {
+    append_transcript_item(
+        state,
+        TranscriptItemId::new(format!("opening-banner-{}", state.session.id.as_str())),
+        TranscriptItemContent::OpeningBanner(banner),
     );
 }
 
