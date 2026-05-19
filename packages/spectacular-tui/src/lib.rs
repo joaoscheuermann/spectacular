@@ -19,7 +19,6 @@ pub mod session;
 pub mod spinner;
 pub mod state;
 pub mod status;
-pub mod streaming;
 pub mod transcript;
 mod transcript_window;
 
@@ -27,8 +26,7 @@ pub use action::{
     ChatTuiAction, CommandDisplayChunk, SelectionPromptAnswer, SelectionPromptChoice,
 };
 pub use event_loop::{
-    tui_assistant_reveal_tick_effects, tui_event_effects, tui_timer_tick_effects, EventEffect,
-    TUI_SPINNER_TICK_INTERVAL,
+    tui_event_effects, tui_timer_tick_effects, EventEffect, TUI_SPINNER_TICK_INTERVAL,
 };
 pub use fake_streaming::{
     fake_cancellation_plan, fake_failure_plan, fake_streaming_plan, fake_streaming_runtime_finding,
@@ -56,10 +54,6 @@ pub use session::{PromptPasteBurstState, PromptState, SelectionPromptState, Sess
 pub use spinner::SpinnerState;
 pub use state::State;
 pub use status::{Activity, Status};
-pub use streaming::{
-    AssistantRevealState, AssistantStreamState, ASSISTANT_REVEAL_CHARS_PER_TICK,
-    ASSISTANT_REVEAL_TICK_INTERVAL,
-};
 pub use transcript::{
     AssistantMessageItem, CancellationItem, CommandDisplay, CommandDisplayStatus, CommandItem,
     CommandStatus, DisplayLine, DisplayLineStyle, ErrorItem, NoticeItem, OpeningBannerItem,

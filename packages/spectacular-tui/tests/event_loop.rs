@@ -3,10 +3,9 @@ use iocraft::prelude::{
     TerminalEvent,
 };
 use spectacular_tui::{
-    reduce, tui_assistant_reveal_tick_effects, tui_event_effects, ChatTuiAction, CommandDescriptor,
-    DisplayMetadata, EventEffect, PromptState, ReasoningLevel, RuntimeSelection, SessionId, State,
-    Status, TranscriptItemContent, TranscriptItemId, ASSISTANT_REVEAL_TICK_INTERVAL,
-    TUI_SPINNER_TICK_INTERVAL,
+    reduce, tui_event_effects, ChatTuiAction, CommandDescriptor, DisplayMetadata, EventEffect,
+    PromptState, ReasoningLevel, RuntimeSelection, SessionId, State, Status, TranscriptItemContent,
+    TranscriptItemId, TUI_SPINNER_TICK_INTERVAL,
 };
 use std::time::Duration;
 
@@ -164,13 +163,10 @@ fn timer_tick_dispatches_spinner_tick_without_terminal_output() {
     );
 }
 
-/// Verifies assistant reveal ticks are scheduled separately at the typewriter cadence.
+/// Verifies assistant deltas are reducer-visible without a separate reveal timer.
 #[test]
-fn assistant_reveal_timer_dispatches_only_when_text_is_queued() {
+fn assistant_delta_is_visible_without_reveal_timer_effects() {
     let mut state = state();
-
-    assert_eq!(ASSISTANT_REVEAL_TICK_INTERVAL, Duration::from_millis(50));
-    assert!(tui_assistant_reveal_tick_effects(&state).is_empty());
 
     reduce(
         &mut state,
@@ -182,16 +178,16 @@ fn assistant_reveal_timer_dispatches_only_when_text_is_queued() {
         &mut state,
         ChatTuiAction::MessageDelta {
             id: TranscriptItemId::new("message-1"),
-            text: "queued".to_owned(),
+            text: "visible".to_owned(),
         },
     );
 
-    assert_eq!(
-        tui_assistant_reveal_tick_effects(&state),
-        vec![EventEffect::Action(ChatTuiAction::AssistantRevealTick {
-            id: TranscriptItemId::new("message-1"),
-        })]
-    );
+    assert!(state.session.transcript.iter().any(|item| {
+        matches!(
+            &item.content,
+            TranscriptItemContent::AssistantMessage(message) if message.text == "visible"
+        )
+    }));
 }
 
 /// Verifies scroll input maps into transcript scrolling actions and reducer tail-following behavior.

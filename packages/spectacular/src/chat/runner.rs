@@ -193,7 +193,7 @@ impl<'a> ChatRunner<'a> {
                                 self.renderer.pause_working_line();
                                 is_streaming = true;
                             }
-                            self.renderer.assistant_delta(&render.content).await?;
+                            self.renderer.assistant_delta(&render.content)?;
                         }
                         self.model.append_agent_event(&event)?;
                         title_text.push_str(content);
@@ -230,7 +230,7 @@ impl<'a> ChatRunner<'a> {
                                 self.renderer.pause_working_line();
                                 is_streaming = true;
                             }
-                            self.renderer.reasoning_delta(&render.content).await?;
+                            self.renderer.reasoning_delta(&render.content)?;
                         }
                         self.model.append_agent_event(&event)?;
                         continue;

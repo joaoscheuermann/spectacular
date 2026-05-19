@@ -1,28 +1,19 @@
-use crate::components::status_line::usage_text;
+use crate::components::transcript_content::render_line_element;
+use crate::format::footer_render_line;
 use crate::state::State;
 use iocraft::prelude::*;
 
 /// Renders footer metadata from display/session state without external lookups.
 #[component]
-pub fn Footer<'a>(props: &FooterProps<'a>) -> impl Into<AnyElement<'a>> {
-    let state = props.state.expect("Footer requires state");
-    let usage = usage_text(state.session.usage.or(state.display.usage));
-    element! {
-        View(border_style: BorderStyle::Single, border_edges: Edges::Top, padding_top: 1) {
-            Text(content: format!(
-                "cwd: {} | provider/model: {}/{} | reasoning: {} | context: {}",
-                state.display.current_directory,
-                state.display.provider_label,
-                state.display.model_label,
-                state.display.reasoning_label,
-                usage,
-            ))
-        }
-    }
+pub fn Footer(props: &FooterProps) -> impl Into<AnyElement<'static>> {
+    let state = props.state.clone().expect("Footer requires state");
+    let line = footer_render_line(&state);
+
+    element!(View(width: 100pct) { #(vec![render_line_element(line)].into_iter()) })
 }
 
 /// Props for the footer component.
 #[derive(Default, Props)]
-pub struct FooterProps<'a> {
-    pub state: Option<&'a State>,
+pub struct FooterProps {
+    pub state: Option<State>,
 }

@@ -63,11 +63,13 @@ async fn controller_publishes_state_while_prompt_run_is_streaming() {
         .unwrap();
 
     let streamed_state = next_state_matching(&mut state_receiver, |state| {
-        state
-            .assistant_stream
-            .streams
-            .iter()
-            .any(|stream| stream.received == "streamed before completion")
+        state.session.transcript.iter().any(|item| {
+            matches!(
+                &item.content,
+                TranscriptItemContent::AssistantMessage(message)
+                    if message.text == "streamed before completion"
+            )
+        })
     })
     .await;
 
@@ -105,8 +107,11 @@ async fn submit_prompt_intent_runs_real_controller_path() {
         controller.runner().prompt_event_ids,
         vec![Some("prompt-1".to_owned())]
     );
-    assert!(controller.state().assistant_stream.streams.iter().any(|stream| {
-        stream.received == "hello from runtime"
+    assert!(controller.state().session.transcript.iter().any(|item| {
+        matches!(
+            &item.content,
+            TranscriptItemContent::AssistantMessage(message) if message.text == "hello from runtime"
+        )
     }));
 }
 
@@ -135,13 +140,16 @@ async fn completed_tui_run_saves_session_snapshot() {
 
     let snapshot = controller.model.session_manager().load_snapshot().unwrap();
     assert_eq!(snapshot.id, controller.state().session.id);
-    assert!(controller.state().assistant_stream.streams.iter().any(|stream| {
-        stream.received == "snapshot response"
+    assert!(controller.state().session.transcript.iter().any(|item| {
+        matches!(
+            &item.content,
+            TranscriptItemContent::AssistantMessage(message) if message.text == "snapshot response"
+        )
     }));
     assert!(snapshot.transcript.iter().any(|item| {
         matches!(
             &item.content,
-            TranscriptItemContent::AssistantMessage(message) if message.text.is_empty()
+            TranscriptItemContent::AssistantMessage(message) if message.text == "snapshot response"
         )
     }));
 }

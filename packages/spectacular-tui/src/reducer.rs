@@ -53,7 +53,6 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
             };
         }
         ChatTuiAction::MessageStarted { id } => {
-            state.assistant_stream.start(id.clone());
             append_transcript_item(
                 state,
                 id.clone(),
@@ -65,13 +64,9 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
             };
         }
         ChatTuiAction::MessageDelta { id, text } => {
-            append_assistant_delta(state, &id, &text);
-        }
-        ChatTuiAction::AssistantRevealTick { id } => {
-            reveal_assistant_delta(state, &id);
+            append_assistant_delta_directly(state, &id, &text);
         }
         ChatTuiAction::MessageFinished { id } => {
-            state.assistant_stream.finish(&id);
             clear_matching_activity(
                 state,
                 |activity| matches!(activity, Activity::StreamingAssistant { id: active_id } if active_id == &id),
@@ -342,40 +337,13 @@ fn preserve_review_position_for_append(state: &mut State) {
     );
 }
 
-/// Appends text to an assistant message matching the supplied transcript item ID.
-fn append_assistant_delta(state: &mut State, id: &TranscriptItemId, text: &str) {
-    if state.assistant_stream.contains(id) {
-        state.assistant_stream.append_delta(id, text);
-        return;
-    }
-
-    append_assistant_delta_directly(state, id, text);
-}
-
-/// Reveals queued assistant text into the semantic transcript item.
-fn reveal_assistant_delta(state: &mut State, id: &TranscriptItemId) {
-    let Some(visible_text) = state.assistant_stream.reveal_tick(id) else {
-        return;
-    };
-    set_assistant_text(state, id, visible_text);
-}
-
-/// Appends assistant text directly for legacy snapshots without reveal state.
+/// Appends assistant text directly to the semantic transcript item.
 fn append_assistant_delta_directly(state: &mut State, id: &TranscriptItemId, text: &str) {
     let Some(TranscriptItemContent::AssistantMessage(item)) = find_content_by_id(state, id) else {
         return;
     };
 
     item.text.push_str(text);
-}
-
-/// Replaces assistant visible text for reveal-paced streams.
-fn set_assistant_text(state: &mut State, id: &TranscriptItemId, text: String) {
-    let Some(TranscriptItemContent::AssistantMessage(item)) = find_content_by_id(state, id) else {
-        return;
-    };
-
-    item.text = text;
 }
 
 /// Appends text to reasoning content matching the supplied transcript item ID.

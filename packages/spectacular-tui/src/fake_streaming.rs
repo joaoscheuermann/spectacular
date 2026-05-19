@@ -7,7 +7,6 @@ use crate::render::render_state_to_string;
 use crate::session::PromptState;
 use crate::state::State;
 use crate::status::Status;
-use crate::streaming::ASSISTANT_REVEAL_TICK_INTERVAL;
 use crate::transcript::{
     CommandItem, CommandStatus, ToolCallItem, ToolStatus, TranscriptItemContent,
 };
@@ -30,7 +29,6 @@ struct ScheduledAction {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FakeStreamingTickOutcome {
     AgentAction,
-    AssistantRevealTick,
     SpinnerTick,
     Finished,
 }
@@ -43,9 +41,7 @@ pub struct FakeStreamingTimeline {
     next_action: usize,
     elapsed: Duration,
     next_spinner_tick: Duration,
-    next_assistant_reveal_tick: Duration,
     spinner_ticks: usize,
-    assistant_reveal_ticks: usize,
     direct_terminal_writes: usize,
 }
 
@@ -74,9 +70,7 @@ impl FakeStreamingTimeline {
             next_action: 0,
             elapsed: Duration::ZERO,
             next_spinner_tick: TUI_SPINNER_TICK_INTERVAL,
-            next_assistant_reveal_tick: ASSISTANT_REVEAL_TICK_INTERVAL,
             spinner_ticks: 0,
-            assistant_reveal_ticks: 0,
             direct_terminal_writes: 0,
         }
     }
@@ -87,16 +81,12 @@ impl FakeStreamingTimeline {
             return self.step_remaining_spinner();
         };
 
-        if self.assistant_reveal_is_active() && self.next_assistant_reveal_tick <= next_action.at {
-            return self.apply_assistant_reveal_tick();
-        }
         if self.spinner_is_active() && self.next_spinner_tick <= next_action.at {
             return self.apply_spinner_tick();
         }
 
         self.elapsed = next_action.at;
         reduce(&mut self.state, next_action.action.clone());
-        self.advance_missed_assistant_reveal_ticks();
         self.next_action += 1;
         FakeStreamingTickOutcome::AgentAction
     }
@@ -141,11 +131,6 @@ impl FakeStreamingTimeline {
         self.spinner_ticks
     }
 
-    /// Returns how many assistant reveal ticks were reduced independently of agent actions.
-    pub fn assistant_reveal_tick_count(&self) -> usize {
-        self.assistant_reveal_ticks
-    }
-
     /// Returns whether the current status is idle.
     pub fn is_idle(&self) -> bool {
         self.state.status == Status::Idle
@@ -156,19 +141,8 @@ impl FakeStreamingTimeline {
         matches!(self.state.status, Status::Failed { .. })
     }
 
-    /// Returns the fully received assistant text for a transcript item ID.
+    /// Returns the visible assistant text for a transcript item ID.
     pub fn assistant_text(&self, id: &str) -> Option<String> {
-        let item_id = TranscriptItemId::new(id);
-        if let Some(stream) = self
-            .state
-            .assistant_stream
-            .streams
-            .iter()
-            .find(|stream| stream.id == item_id)
-        {
-            return Some(stream.received.clone());
-        }
-
         self.find_content(id).and_then(|content| match content {
             TranscriptItemContent::AssistantMessage(message) => Some(message.text.clone()),
             _ => None,
@@ -238,24 +212,8 @@ impl FakeStreamingTimeline {
         FakeStreamingTickOutcome::SpinnerTick
     }
 
-    /// Applies an assistant reveal tick and advances the deterministic ticker schedule.
-    fn apply_assistant_reveal_tick(&mut self) -> FakeStreamingTickOutcome {
-        self.elapsed = self.next_assistant_reveal_tick;
-        let Some(id) = self.state.assistant_stream.active_reveal_id() else {
-            return FakeStreamingTickOutcome::Finished;
-        };
-
-        reduce(&mut self.state, ChatTuiAction::AssistantRevealTick { id });
-        self.next_assistant_reveal_tick += ASSISTANT_REVEAL_TICK_INTERVAL;
-        self.assistant_reveal_ticks += 1;
-        FakeStreamingTickOutcome::AssistantRevealTick
-    }
-
     /// Emits one pending timer tick after all agent actions when runtime status is still active.
     fn step_remaining_spinner(&mut self) -> FakeStreamingTickOutcome {
-        if self.assistant_reveal_is_active() {
-            return self.apply_assistant_reveal_tick();
-        }
         if !self.spinner_is_active() {
             return FakeStreamingTickOutcome::Finished;
         }
@@ -270,21 +228,7 @@ impl FakeStreamingTimeline {
             .scheduled_actions
             .get(self.next_action)
             .is_some_and(|action| action.at <= elapsed);
-        next_action_due
-            || self.spinner_is_active() && self.next_spinner_tick <= elapsed
-            || self.assistant_reveal_is_active() && self.next_assistant_reveal_tick <= elapsed
-    }
-
-    /// Returns whether assistant streams have queued text to reveal.
-    fn assistant_reveal_is_active(&self) -> bool {
-        self.state.assistant_stream.active_reveal_id().is_some()
-    }
-
-    /// Skips assistant timer slots that elapsed before there was queued text.
-    fn advance_missed_assistant_reveal_ticks(&mut self) {
-        while self.next_assistant_reveal_tick <= self.elapsed {
-            self.next_assistant_reveal_tick += ASSISTANT_REVEAL_TICK_INTERVAL;
-        }
+        next_action_due || self.spinner_is_active() && self.next_spinner_tick <= elapsed
     }
 
     /// Returns whether the status line should continue receiving spinner ticks.

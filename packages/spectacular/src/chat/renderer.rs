@@ -32,7 +32,6 @@ use std::collections::BTreeMap;
 use std::io::{self, Write};
 use std::path::Path;
 use std::sync::Mutex;
-use std::time::Duration;
 use style::{assistant_style, command_style, error_style, success_style, warning_style};
 pub(crate) use style::{
     command_output_style, dim_style, paint, selection_style, title_style, user_style,
@@ -46,13 +45,6 @@ use working_line::WorkingLineState;
 
 use super::RuntimeSelection;
 
-/// Number of visible characters the terminal typewriter writes per tick while
-/// an assistant delta is streaming. Combined with the 50 ms tick this paces
-/// revealed text at ~600 chars/sec. Each provider delta is drained before the
-/// renderer handles the next event, so no backlog is retained after the run
-/// finishes or fails.
-pub(crate) const TYPEWRITER_CHARS_PER_TICK: usize = 30;
-const TYPEWRITER_TICK_INTERVAL: Duration = Duration::from_millis(50);
 const OPENING_BANNER_MIN_WIDTH: usize = 52;
 const WORKING_FRAMES: &[&str] = &["⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
@@ -95,9 +87,9 @@ impl Renderer {
         print!("{}", paint(user_style(), "> "));
     }
 
-    /// Streams assistant text with typewriter pacing while the runner owns working-line pauses.
-    pub async fn assistant_delta(&self, content: &str) -> Result<(), ChatError> {
-        self.write_styled_delta(content, assistant_style()).await
+    /// Writes assistant stream text immediately while the runner owns working-line pauses.
+    pub fn assistant_delta(&self, content: &str) -> Result<(), ChatError> {
+        self.write_styled_delta(content, assistant_style())
     }
 
     /// Renders a complete assistant response block when replaying persisted records.
@@ -145,9 +137,9 @@ impl Renderer {
         });
     }
 
-    /// Streams visible model reasoning with typewriter pacing while preserving cursor ownership.
-    pub async fn reasoning_delta(&self, content: &str) -> Result<(), ChatError> {
-        self.write_styled_delta(content, dim_style()).await
+    /// Writes visible model reasoning immediately while preserving cursor ownership.
+    pub fn reasoning_delta(&self, content: &str) -> Result<(), ChatError> {
+        self.write_styled_delta(content, dim_style())
     }
 
     /// Renders a complete reasoning block when replaying persisted records.
@@ -382,21 +374,10 @@ impl Renderer {
         buffer.clear();
     }
 
-    /// Writes styled stream chunks while caller-controlled pauses protect response text.
-    async fn write_styled_delta(&self, content: &str, style: Style) -> Result<(), ChatError> {
-        let mut characters = content.chars().peekable();
-        while characters.peek().is_some() {
-            let chunk = characters
-                .by_ref()
-                .take(TYPEWRITER_CHARS_PER_TICK)
-                .collect::<String>();
-            print!("{}", paint(style, chunk));
-            io::stdout().flush().map_err(ChatError::Io)?;
-            if characters.peek().is_some() {
-                tokio::time::sleep(TYPEWRITER_TICK_INTERVAL).await;
-            }
-        }
-
+    /// Writes styled stream content immediately while caller-controlled pauses protect response text.
+    fn write_styled_delta(&self, content: &str, style: Style) -> Result<(), ChatError> {
+        print!("{}", paint(style, content));
+        io::stdout().flush().map_err(ChatError::Io)?;
         Ok(())
     }
 

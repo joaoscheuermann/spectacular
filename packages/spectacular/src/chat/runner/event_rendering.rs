@@ -15,7 +15,7 @@ pub async fn render_agent_event(
                 return Ok(());
             }
 
-            renderer.assistant_delta(content).await?;
+            renderer.assistant_delta(content)?;
         }
         AgentEvent::ReasoningDelta { content, .. } => renderer.reasoning_text(content),
         AgentEvent::ToolCallStart {

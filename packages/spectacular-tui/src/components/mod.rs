@@ -1,6 +1,19 @@
 mod app;
-mod layout;
-mod owned_app;
+mod assistant_message;
+mod cancellation;
+mod command;
+mod error;
+mod footer;
+mod notice;
+mod opening_banner;
+mod prompt_area;
+mod reasoning;
+mod success;
+mod tool_call;
+mod transcript_content;
+mod user_prompt;
+mod warning;
+mod worked_summary;
+mod working_indicator;
 
-pub use app::App;
-pub use owned_app::AppState;
+pub use app::{App, AppProps};

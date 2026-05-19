@@ -38,17 +38,6 @@ pub fn tui_timer_tick_effects() -> Vec<EventEffect> {
     vec![EventEffect::Action(ChatTuiAction::SpinnerTick)]
 }
 
-/// Returns the effects emitted by the assistant reveal timer source.
-pub fn tui_assistant_reveal_tick_effects(state: &State) -> Vec<EventEffect> {
-    let Some(id) = state.assistant_stream.active_reveal_id() else {
-        return Vec::new();
-    };
-
-    vec![EventEffect::Action(ChatTuiAction::AssistantRevealTick {
-        id,
-    })]
-}
-
 /// Converts one key event into a reducer action or shell-level exit request.
 fn key_effects(state: &State, key: KeyEvent) -> Vec<EventEffect> {
     if key.kind == KeyEventKind::Release {

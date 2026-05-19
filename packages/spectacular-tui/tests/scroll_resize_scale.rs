@@ -1,4 +1,4 @@
-use iocraft::prelude::*;
+use iocraft::prelude::{KeyCode, KeyEvent, KeyEventKind, TerminalEvent};
 use spectacular_tui::{
     reduce, render_state_to_string, tui_event_effects, AssistantMessageItem, ChatTuiAction,
     DisplayMetadata, EventEffect, ReasoningLevel, RuntimeSelection, SessionId, State,
@@ -124,7 +124,7 @@ fn new_transcript_content_preserves_review_viewport_when_not_following_tail() {
     assert!(!after.contains("streamed tail content"));
 }
 
-/// Verifies returning to the bottom re-enables tail following and reveals streamed tail content.
+/// Verifies returning to the bottom re-enables tail following and shows streamed tail content.
 #[test]
 fn returning_to_bottom_reenables_follow_tail() {
     let mut state = state();
@@ -143,12 +143,6 @@ fn returning_to_bottom_reenables_follow_tail() {
         ChatTuiAction::MessageDelta {
             id: TranscriptItemId::new("assistant-active"),
             text: "streamed tail content".to_string(),
-        },
-    );
-    reduce(
-        &mut state,
-        ChatTuiAction::AssistantRevealTick {
-            id: TranscriptItemId::new("assistant-active"),
         },
     );
     let output = render_state_to_string(&state, Some(120));
@@ -191,15 +185,13 @@ fn large_transcript_render_uses_bounded_visible_window() {
     assert!(!output.contains("large transcript item 0"));
 }
 
-/// Verifies the runtime AppState path uses the same bounded transcript window as test rendering.
+/// Verifies the runtime App path uses the same bounded transcript window as test rendering.
 #[test]
-fn runtime_app_state_render_uses_bounded_visible_window() {
+fn runtime_app_render_uses_bounded_visible_window() {
     let mut state = state();
     populate_large_transcript(&mut state);
 
-    let output = element!(spectacular_tui::components::AppState(state))
-        .render(Some(120))
-        .to_string();
+    let output = render_state_to_string(&state, Some(120));
 
     assert!(output.contains("large transcript item 4999"));
     assert!(!output.contains("large transcript item 0"));

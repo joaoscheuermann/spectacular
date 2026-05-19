@@ -27,9 +27,6 @@ pub enum ChatTuiAction {
         id: TranscriptItemId,
         text: String,
     },
-    AssistantRevealTick {
-        id: TranscriptItemId,
-    },
     MessageFinished {
         id: TranscriptItemId,
     },

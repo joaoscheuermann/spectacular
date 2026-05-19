@@ -51,10 +51,6 @@ fn assistant_lifecycle_updates_one_item_and_status() {
             text: "world".to_owned(),
         },
     );
-    reduce(
-        &mut state,
-        ChatTuiAction::AssistantRevealTick { id: id.clone() },
-    );
 
     assert_eq!(state.session.transcript.len(), 1);
     assert_eq!(

@@ -38,9 +38,9 @@ fn assistant_text(state: &State) -> &str {
     &item.text
 }
 
-/// Verifies assistant deltas are queued and hidden until a reveal tick.
+/// Verifies assistant deltas are visible as soon as they arrive.
 #[test]
-fn assistant_delta_is_queued_until_reveal_tick() {
+fn assistant_delta_is_visible_immediately() {
     let mut state = state();
     let item_id = id("assistant-1");
 
@@ -54,16 +54,16 @@ fn assistant_delta_is_queued_until_reveal_tick() {
         &mut state,
         ChatTuiAction::MessageDelta {
             id: item_id,
-            text: "queued text".to_owned(),
+            text: "streamed text".to_owned(),
         },
     );
 
-    assert_eq!(assistant_text(&state), "");
+    assert_eq!(assistant_text(&state), "streamed text");
 }
 
-/// Verifies assistant reveal ticks expose at most thirty Unicode scalar values.
+/// Verifies assistant deltas append directly without reveal chunking.
 #[test]
-fn assistant_reveal_tick_reveals_thirty_characters() {
+fn assistant_deltas_are_not_typewriter_chunked() {
     let mut state = state();
     let item_id = id("assistant-1");
     let text = format!("{}🙂{}", "a".repeat(30), "b".repeat(69));
@@ -77,48 +77,17 @@ fn assistant_reveal_tick_reveals_thirty_characters() {
     reduce(
         &mut state,
         ChatTuiAction::MessageDelta {
-            id: item_id.clone(),
-            text,
+            id: item_id,
+            text: text.clone(),
         },
     );
 
-    reduce(
-        &mut state,
-        ChatTuiAction::AssistantRevealTick {
-            id: item_id.clone(),
-        },
-    );
-    assert_eq!(assistant_text(&state), "a".repeat(30));
-
-    reduce(
-        &mut state,
-        ChatTuiAction::AssistantRevealTick {
-            id: item_id.clone(),
-        },
-    );
-    assert_eq!(
-        assistant_text(&state),
-        format!("{}🙂{}", "a".repeat(30), "b".repeat(29))
-    );
-
-    reduce(
-        &mut state,
-        ChatTuiAction::AssistantRevealTick {
-            id: item_id.clone(),
-        },
-    );
-    assert_eq!(assistant_text(&state).chars().count(), 90);
-
-    reduce(
-        &mut state,
-        ChatTuiAction::AssistantRevealTick { id: item_id },
-    );
-    assert_eq!(assistant_text(&state).chars().count(), 100);
+    assert_eq!(assistant_text(&state), text);
 }
 
-/// Verifies queued text continues revealing after stream completion.
+/// Verifies visible text remains available after stream completion.
 #[test]
-fn assistant_reveal_continues_after_stream_finish() {
+fn assistant_text_remains_after_stream_finish() {
     let mut state = state();
     let item_id = id("assistant-1");
 
@@ -135,29 +104,14 @@ fn assistant_reveal_continues_after_stream_finish() {
             text: "x".repeat(35),
         },
     );
-    reduce(
-        &mut state,
-        ChatTuiAction::MessageFinished {
-            id: item_id.clone(),
-        },
-    );
-    reduce(
-        &mut state,
-        ChatTuiAction::AssistantRevealTick {
-            id: item_id.clone(),
-        },
-    );
-    reduce(
-        &mut state,
-        ChatTuiAction::AssistantRevealTick { id: item_id },
-    );
+    reduce(&mut state, ChatTuiAction::MessageFinished { id: item_id });
 
     assert_eq!(assistant_text(&state), "x".repeat(35));
 }
 
-/// Verifies reveal ticks do not advance the spinner frame.
+/// Verifies assistant deltas do not advance the spinner frame.
 #[test]
-fn assistant_reveal_does_not_advance_spinner() {
+fn assistant_delta_does_not_advance_spinner() {
     let mut state = state();
     let item_id = id("assistant-1");
     let frame = state.spinner.current_frame().to_owned();
@@ -171,21 +125,17 @@ fn assistant_reveal_does_not_advance_spinner() {
     reduce(
         &mut state,
         ChatTuiAction::MessageDelta {
-            id: item_id.clone(),
+            id: item_id,
             text: "hello".to_owned(),
         },
-    );
-    reduce(
-        &mut state,
-        ChatTuiAction::AssistantRevealTick { id: item_id },
     );
 
     assert_eq!(state.spinner.current_frame(), frame);
 }
 
-/// Verifies spinner ticks do not reveal queued assistant text.
+/// Verifies spinner ticks do not mutate visible assistant text.
 #[test]
-fn spinner_tick_does_not_reveal_assistant_text() {
+fn spinner_tick_does_not_mutate_assistant_text() {
     let mut state = state();
     let item_id = id("assistant-1");
 
@@ -199,12 +149,12 @@ fn spinner_tick_does_not_reveal_assistant_text() {
         &mut state,
         ChatTuiAction::MessageDelta {
             id: item_id,
-            text: "hidden".to_owned(),
+            text: "visible".to_owned(),
         },
     );
     reduce(&mut state, ChatTuiAction::SpinnerTick);
 
-    assert_eq!(assistant_text(&state), "");
+    assert_eq!(assistant_text(&state), "visible");
 }
 
 /// Verifies reasoning rendering keeps original-style semantic treatment without labels.
@@ -377,7 +327,7 @@ fn warning_error_success_cancellation_shapes_match_original() {
     assert!(output.iter().any(|line| line == "stopped"));
 }
 
-/// Verifies following tail keeps newly revealed assistant text visible.
+/// Verifies following tail keeps newly streamed assistant text visible.
 #[test]
 fn scroll_follow_mode_tracks_bottom_on_new_output() {
     let mut state = state();
@@ -399,12 +349,6 @@ fn scroll_follow_mode_tracks_bottom_on_new_output() {
         ChatTuiAction::MessageDelta {
             id: id("assistant-1"),
             text: "tail".to_owned(),
-        },
-    );
-    reduce(
-        &mut state,
-        ChatTuiAction::AssistantRevealTick {
-            id: id("assistant-1"),
         },
     );
 
@@ -438,12 +382,6 @@ fn scroll_manual_mode_does_not_snap_on_new_output() {
         ChatTuiAction::MessageDelta {
             id: id("assistant-1"),
             text: "tail".to_owned(),
-        },
-    );
-    reduce(
-        &mut state,
-        ChatTuiAction::AssistantRevealTick {
-            id: id("assistant-1"),
         },
     );
 
