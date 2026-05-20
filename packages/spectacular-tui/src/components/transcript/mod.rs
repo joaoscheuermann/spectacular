@@ -24,7 +24,8 @@ pub use notice::{Notice, NoticeProps};
 pub use projection::{
     transcript_item_layout_rows, transcript_item_lines, transcript_item_render_lines,
     transcript_layout_item_range, transcript_layout_row_starts, transcript_layout_total_rows,
-    transcript_lines, transcript_render_lines, transcript_total_render_rows, wrapped_layout_text_rows,
+    transcript_lines, transcript_render_lines, transcript_total_render_rows,
+    wrapped_layout_text_rows,
 };
 pub use reasoning::{Reasoning, ReasoningProps};
 pub use scroll::{Scroll, ScrollProps};
@@ -34,11 +35,11 @@ pub use tool::{Tool, ToolProps};
 pub use user::{User, UserProps};
 pub use warning::{Warning, WarningProps};
 
-use projection::TranscriptLayout;
-use scroll::{scroll_offset_from_top, transcript_scroll_delta, TranscriptViewportState};
 use crate::state::State;
 use crate::transcript::{TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;
+use projection::TranscriptLayout;
+use scroll::{scroll_offset_from_top, transcript_scroll_delta, TranscriptViewportState};
 
 /// Renders the transcript as scrollable IOCraft item components.
 #[component]
@@ -178,6 +179,8 @@ fn transcript_item_element(item: &TranscriptItem) -> AnyElement<'static> {
         TranscriptItemContent::Cancellation(_) => {
             element!(Cancellation(key: key, item: item)).into_any()
         }
-        TranscriptItemContent::WorkedSummary(_) => element!(Summary(key: key, item: item)).into_any(),
+        TranscriptItemContent::WorkedSummary(_) => {
+            element!(Summary(key: key, item: item)).into_any()
+        }
     }
 }

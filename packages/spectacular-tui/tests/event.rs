@@ -1,7 +1,7 @@
 use iocraft::prelude::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers, TerminalEvent};
 use spectacular_tui::{
-    reduce, effects, ChatTuiAction, CommandDescriptor, DisplayMetadata, EventEffect,
-    PromptState, ReasoningLevel, RuntimeSelection, SessionId, State, Status, TranscriptItemContent,
+    effects, reduce, ChatTuiAction, CommandDescriptor, DisplayMetadata, EventEffect, PromptState,
+    ReasoningLevel, RuntimeSelection, SessionId, State, Status, TranscriptItemContent,
     TranscriptItemId, SPINNER_TICK_INTERVAL,
 };
 use std::time::Duration;
@@ -97,13 +97,26 @@ fn multiline_enter_and_shift_navigation_update_prompt_state() {
     assert_eq!(state.session.prompt.selection_range(), Some(0..4));
 }
 
-/// Verifies Enter submits the current prompt through the reducer and clears prompt state.
+/// Verifies plain Enter inserts a line break instead of submitting.
 #[test]
-fn enter_submits_prompt_appends_user_transcript_and_clears_prompt() {
+fn enter_with_text_inserts_newline_without_transcript_change() {
     let mut state = state();
     state.session.prompt = PromptState::from_text("run this");
 
     let action = single_action(&state, key(KeyCode::Enter, KeyModifiers::empty()));
+    reduce(&mut state, action);
+
+    assert_eq!(state.session.prompt.text, "run this\n");
+    assert_eq!(state.session.transcript.len(), 0);
+}
+
+/// Verifies Ctrl+Enter submits the current prompt through the reducer and clears prompt state.
+#[test]
+fn ctrl_enter_submits_prompt_appends_user_transcript_and_clears_prompt() {
+    let mut state = state();
+    state.session.prompt = PromptState::from_text("run this");
+
+    let action = single_action(&state, key(KeyCode::Enter, KeyModifiers::CONTROL));
     reduce(&mut state, action);
 
     assert_eq!(state.session.prompt, PromptState::empty());
@@ -116,6 +129,20 @@ fn enter_submits_prompt_appends_user_transcript_and_clears_prompt() {
         &state.session.transcript[0].content,
         TranscriptItemContent::UserPrompt(item) if item.text == "run this"
     ));
+}
+
+/// Verifies terminal newline chars are paste-like prompt edits, not submissions.
+#[test]
+fn newline_char_key_stream_preserves_multiline_prompt_without_submission() {
+    let mut state = state();
+
+    for code in [KeyCode::Char('a'), KeyCode::Char('\n'), KeyCode::Char('b')] {
+        let action = single_action(&state, key(code, KeyModifiers::empty()));
+        reduce(&mut state, action);
+    }
+
+    assert_eq!(state.session.prompt.text, "a\nb");
+    assert_eq!(state.session.transcript.len(), 0);
 }
 
 /// Verifies Ctrl+C cancels only cancellable running states.

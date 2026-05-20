@@ -39,13 +39,10 @@ fn render_app(state: &State) -> String {
     render_state_to_string(state, Some(100))
 }
 
-/// Renders actual IOCraft canvas rows for layout-position assertions.
-fn render_canvas_lines(state: &State, width: u16, height: u16) -> Vec<String> {
-    canvas_text_lines(
-        &render_app_canvas_with_events(state, width, height, Vec::new()),
-        width,
-        height,
-    )
+
+/// Renders actual IOCraft canvas cells for style assertions.
+fn render_canvas(state: &State, width: u16, height: u16) -> Canvas {
+    render_app_canvas_with_events(state, width, height, Vec::new())
 }
 
 /// Renders the App through IOCraft's terminal loop after applying terminal events.
@@ -155,6 +152,30 @@ fn has_scrollbar_marker(canvas: &Canvas, x: usize, y: usize) -> bool {
     })
 }
 
+/// Returns true when a rendered cell uses inverted colors.
+fn has_inverted_cell(canvas: &Canvas, x: usize, y: usize) -> bool {
+    canvas
+        .cell(x, y)
+        .and_then(|cell| cell.text_style())
+        .is_some_and(|style| style.invert)
+}
+
+/// Verifies prompt line breaks render as separate IOCraft terminal rows.
+#[test]
+fn multiline_prompt_renders_explicit_rows_on_canvas() {
+    let mut state = state();
+    state.session.prompt = PromptState::from_text("first\nsecond");
+
+    let canvas = render_canvas(&state, 80, 8);
+    let lines = canvas_text_lines(&canvas, 80, 8);
+
+    assert_eq!(lines[0], "> first");
+    assert_eq!(lines[1], "  second ");
+    assert!(has_inverted_cell(&canvas, 8, 1));
+    assert_eq!(lines[2], "");
+    assert!(lines[3].contains("/workspace/spectacular"));
+}
+
 /// Verifies short transcript content starts at the top and leaves unused rows below chrome.
 #[test]
 fn short_transcript_starts_at_top_without_bottom_anchoring() {
@@ -166,11 +187,13 @@ fn short_transcript_starts_at_top_without_bottom_anchoring() {
         },
     );
 
-    let lines = render_canvas_lines(&state, 80, 10);
+    let canvas = render_canvas(&state, 80, 10);
+    let lines = canvas_text_lines(&canvas, 80, 10);
 
     assert_eq!(lines[0], "top transcript row");
     assert_eq!(lines[1], "");
-    assert_eq!(lines[2], "> ");
+    assert_eq!(lines[2], ">  What we are going to build today?");
+    assert!(has_inverted_cell(&canvas, 2, 2));
     assert_eq!(lines[3], "");
     assert!(lines[4].contains("/workspace/spectacular"));
     assert!(lines[5..].iter().all(String::is_empty));
@@ -273,12 +296,14 @@ fn no_wrap_transcript_rows_do_not_create_bottom_gap_at_tail() {
         },
     );
 
-    let lines = render_canvas_lines(&state, 40, 6);
+    let canvas = render_canvas(&state, 40, 6);
+    let lines = canvas_text_lines(&canvas, 40, 6);
 
     assert!(lines[0].starts_with("output 2"));
     assert!(lines[1].starts_with("output 3"));
     assert_eq!(lines[2].trim_end_matches(['│', '┃']).trim_end(), "");
-    assert_eq!(lines[3], "> ");
+    assert_eq!(lines[3], ">  What we are going to build today?");
+    assert!(has_inverted_cell(&canvas, 2, 3));
     assert_eq!(lines[4], "");
     assert!(lines[5].contains("/workspace/spectacular"));
 }

@@ -1,7 +1,7 @@
 use crate::action::{ChatTuiAction, SelectionPromptAnswer};
-use crate::runtime::{effects, EventEffect};
 use crate::ids::TranscriptItemId;
 use crate::reducer::reduce;
+use crate::runtime::{effects, EventEffect};
 use crate::state::State;
 use iocraft::prelude::TerminalEvent;
 use tokio::sync::mpsc;

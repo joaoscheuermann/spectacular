@@ -1,8 +1,8 @@
 use iocraft::prelude::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers, TerminalEvent};
 use spectacular_tui::{
-    reduce, effects, ChatTuiAction, CommandDescriptor, DisplayMetadata, EventEffect,
-    PromptState, ReasoningLevel, RenderStyle, RuntimeSelection, SelectionPromptAnswer,
-    SelectionPromptChoice, SelectionPromptState, SessionId, State,
+    effects, reduce, ChatTuiAction, CommandDescriptor, DisplayMetadata, EventEffect, PromptState,
+    ReasoningLevel, RenderStyle, RuntimeSelection, SelectionPromptAnswer, SelectionPromptChoice,
+    SelectionPromptState, SessionId, State,
 };
 
 /// Builds runtime metadata for prompt parity tests.
@@ -181,7 +181,7 @@ fn prompt_ctrl_c_idle_clear_then_exit_matches_original() {
 }
 
 #[test]
-fn prompt_enter_and_modified_enter_match_original() {
+fn prompt_enter_variants_insert_newline_and_ctrl_enter_submits() {
     let mut state = state();
     state.session.prompt = PromptState::from_text("one");
 
@@ -189,6 +189,10 @@ fn prompt_enter_and_modified_enter_match_original() {
     assert_eq!(state.session.prompt.text, "one\n");
 
     press(&mut state, KeyCode::Enter, KeyModifiers::empty());
+    assert_eq!(state.session.prompt.text, "one\n\n");
+    assert_eq!(state.session.transcript.len(), 0);
+
+    press(&mut state, KeyCode::Enter, KeyModifiers::CONTROL);
     assert_eq!(state.session.transcript.len(), 1);
     assert_eq!(state.session.prompt, PromptState::empty());
 }
@@ -217,6 +221,7 @@ fn prompt_selection_renders_styled_ranges() {
         .spans
         .iter()
         .any(|span| span.text == "l" && span.style == RenderStyle::Selection));
+    assert!(!lines[0].plain_text().contains('█'));
 }
 
 #[test]

@@ -300,7 +300,8 @@ fn prompt_rows_use_original_marker_and_continuation_indentation() {
     let text = visible_text(&app_render_lines(&state));
 
     assert!(text.contains(&"> first".to_string()));
-    assert!(text.contains(&"  second".to_string()));
+    assert!(text.contains(&"  second ".to_string()));
+    assert!(!text.iter().any(|line| line.contains('█')));
 }
 
 #[test]

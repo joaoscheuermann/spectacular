@@ -113,7 +113,7 @@ pub fn semantic_iocraft_style(style: RenderStyle) -> (Option<Color>, Weight) {
                 g: 163,
                 b: 184,
             }),
-            Weight::Light,
+            Weight::Normal,
         ),
         RenderStyle::Title => (
             Some(Color::Rgb {
@@ -215,6 +215,9 @@ pub fn iocraft_content(line: &RenderLine) -> Vec<MixedTextContent> {
             let mut content = MixedTextContent::new(&span.text).weight(weight);
             if let Some(color) = color {
                 content = content.color(color);
+            }
+            if span.style == RenderStyle::Selection {
+                content = content.invert();
             }
             content
         })

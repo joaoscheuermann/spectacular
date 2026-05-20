@@ -34,9 +34,7 @@ pub fn error_render_lines(message: &str, details: Option<&str>) -> Vec<RenderLin
 
 /// Counts rows for an error item without allocating detail rows.
 pub fn error_row_count(details: Option<&str>) -> usize {
-    1 + details
-        .map(visible_text_row_count)
-        .unwrap_or(0)
+    1 + details.map(visible_text_row_count).unwrap_or(0)
 }
 
 /// Props for the error component.

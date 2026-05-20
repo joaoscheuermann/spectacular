@@ -21,10 +21,7 @@ use unicode_width::UnicodeWidthChar;
 
 /// Formats the semantic transcript region for legacy text assertions.
 pub fn transcript_render_lines(state: &State) -> Vec<RenderLine> {
-    transcript_render_lines_for_rows(
-        state,
-        crate::transcript::visible_row_count(&state.scroll),
-    )
+    transcript_render_lines_for_rows(state, crate::transcript::visible_row_count(&state.scroll))
 }
 
 /// Formats the row-windowed transcript region for a known viewport height.
@@ -201,7 +198,9 @@ pub fn transcript_item_lines(item: &TranscriptItem) -> Vec<String> {
 fn transcript_item_row_count(item: &TranscriptItem) -> usize {
     match &item.content {
         TranscriptItemContent::OpeningBanner(_) => 8,
-        TranscriptItemContent::UserPrompt(prompt) => prompt_text_row_count(&prompt.text).saturating_add(1),
+        TranscriptItemContent::UserPrompt(prompt) => {
+            prompt_text_row_count(&prompt.text).saturating_add(1)
+        }
         TranscriptItemContent::AssistantMessage(message) => {
             visible_text_row_count(&message.text).saturating_add(1)
         }

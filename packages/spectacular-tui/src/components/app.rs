@@ -1,6 +1,6 @@
 use crate::components::{
-    footer_render_line, prompt_render_lines, transcript_render_lines, working_render_line, Footer,
-    Prompt, Transcript, Working,
+    footer_render_line, prompt_render_lines, prompt_render_lines_with_width,
+    transcript_render_lines, working_render_line, Footer, Prompt, Transcript, Working,
 };
 use crate::render::{RenderLine, RenderStyle};
 use crate::state::State;
@@ -20,13 +20,13 @@ pub fn App(mut hooks: Hooks, props: &AppProps) -> impl Into<AnyElement<'static>>
         return element!(View(width)).into_any();
     };
 
-    let transcript_capacity = transcript_capacity_rows(&state, height);
+    let transcript_capacity = transcript_capacity_rows(&state, height, Some(width));
 
     element!(View(flex_direction: FlexDirection::Column, width, height) {
         Transcript(state: state.clone(), capacity: transcript_capacity, width: width)
         #(working_render_line(&state).is_some().then_some(element!(Working(state: state.clone()))))
         View(flex_direction: FlexDirection::Column, width: 100pct, flex_shrink: 0.0) {
-            Prompt(state: state.clone())
+            Prompt(state: state.clone(), width: width)
             Footer(state: state.clone())
         }
     })
@@ -52,13 +52,13 @@ pub fn app_lines(state: &State) -> Vec<String> {
 }
 
 /// Returns rows available to transcript content after fixed chrome is accounted for.
-fn transcript_capacity_rows(state: &State, height: u16) -> u16 {
+fn transcript_capacity_rows(state: &State, height: u16, width: Option<u16>) -> u16 {
     let working_rows = if working_render_line(state).is_some() {
         2
     } else {
         0
     };
-    let chrome_rows = prompt_render_lines(state)
+    let chrome_rows = prompt_render_lines_with_width(state, width)
         .len()
         .saturating_add(working_rows)
         .saturating_add(2);

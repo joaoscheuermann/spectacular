@@ -1,10 +1,9 @@
 use iocraft::prelude::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers, TerminalEvent};
 use spectacular_tui::{
-    reduce, render_state_to_string, effects, CancellationItem, ChatTuiAction,
-    CommandDescriptor, CommandStatus, ContextTokenUsage, DisplayMetadata, EventEffect,
-    OpeningBannerItem, PromptState, ReasoningLevel, RuntimeSelection, SessionId, State,
-    SuccessItem, ToolStatus, TranscriptItem, TranscriptItemContent, TranscriptItemId, WarningItem,
-    WorkedSummaryItem,
+    effects, reduce, render_state_to_string, CancellationItem, ChatTuiAction, CommandDescriptor,
+    CommandStatus, ContextTokenUsage, DisplayMetadata, EventEffect, OpeningBannerItem, PromptState,
+    ReasoningLevel, RuntimeSelection, SessionId, State, SuccessItem, ToolStatus, TranscriptItem,
+    TranscriptItemContent, TranscriptItemId, WarningItem, WorkedSummaryItem,
 };
 
 fn runtime() -> RuntimeSelection {

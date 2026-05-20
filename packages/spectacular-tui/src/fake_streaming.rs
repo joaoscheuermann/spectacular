@@ -1,9 +1,9 @@
 use crate::action::ChatTuiAction;
-use crate::runtime::SPINNER_TICK_INTERVAL;
 use crate::ids::{SessionId, TranscriptItemId};
 use crate::metadata::{DisplayMetadata, ReasoningLevel, RuntimeSelection};
 use crate::reducer::reduce;
 use crate::render::render_state_to_string;
+use crate::runtime::SPINNER_TICK_INTERVAL;
 use crate::session::PromptState;
 use crate::state::State;
 use crate::status::Status;

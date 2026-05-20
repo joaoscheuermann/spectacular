@@ -52,16 +52,18 @@ fn key_effects(state: &State, key: KeyEvent) -> Vec<EventEffect> {
     if is_ctrl_char(&key, 'y') {
         return prompt_change_effect(state, PromptState::yank);
     }
-    if is_newline_key(&key) {
+    if is_submit_key(&key) {
+        return submit_prompt_effects(state);
+    }
+    if is_line_break_key(&key) {
         return prompt_change_effect(state, PromptState::insert_newline);
     }
 
-    let selecting = key.modifiers.contains(KeyModifiers::SHIFT);
+    let selecting = is_shift_arrow(&key) || key.modifiers.contains(KeyModifiers::SHIFT);
     let by_word = key
         .modifiers
         .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT);
     match key.code {
-        KeyCode::Enter => prompt_enter_effects(state),
         KeyCode::Tab => accept_slash_completion_effects(state),
         KeyCode::Esc => prompt_change_effect(state, PromptState::escape),
         KeyCode::Char(' ') => space_effects(state),
@@ -145,20 +147,9 @@ where
     vec![EventEffect::Action(ChatTuiAction::PromptChanged(prompt))]
 }
 
-/// Handles Enter after slash completion has a chance to accept a candidate.
-fn prompt_enter_effects(state: &State) -> Vec<EventEffect> {
-    let accepted = accept_slash_completion_effects(state);
-    if !accepted.is_empty() {
-        return accepted;
-    }
-
-    submit_prompt_effects(state)
-}
-
 /// Accepts the selected slash command completion into prompt text when available.
 fn accept_slash_completion_effects(state: &State) -> Vec<EventEffect> {
-    let suggestions =
-        crate::prompt::slash_suggestions(&state.session.prompt, &state.commands);
+    let suggestions = crate::prompt::slash_suggestions(&state.session.prompt, &state.commands);
     let Some(command) = suggestions
         .get(state.session.prompt.selected_completion)
         .or_else(|| suggestions.first())
@@ -183,7 +174,9 @@ fn space_effects(state: &State) -> Vec<EventEffect> {
 
 /// Moves through slash completions before falling back to prompt cursor up movement.
 fn prompt_up_effects(state: &State, selecting: bool) -> Vec<EventEffect> {
-    if !crate::prompt::slash_suggestions(&state.session.prompt, &state.commands).is_empty() {
+    if !selecting
+        && !crate::prompt::slash_suggestions(&state.session.prompt, &state.commands).is_empty()
+    {
         return prompt_change_effect(state, PromptState::select_previous_completion);
     }
 
@@ -192,9 +185,8 @@ fn prompt_up_effects(state: &State, selecting: bool) -> Vec<EventEffect> {
 
 /// Moves through slash completions before falling back to prompt cursor down movement.
 fn prompt_down_effects(state: &State, selecting: bool) -> Vec<EventEffect> {
-    let count =
-        crate::prompt::slash_suggestions(&state.session.prompt, &state.commands).len();
-    if count > 0 {
+    let count = crate::prompt::slash_suggestions(&state.session.prompt, &state.commands).len();
+    if !selecting && count > 0 {
         return prompt_change_effect(state, |prompt| prompt.select_next_completion(count));
     }
 
@@ -294,13 +286,29 @@ fn next_local_prompt_id(state: &State) -> TranscriptItemId {
     ))
 }
 
+/// Returns true when a key event should submit the active prompt.
+fn is_submit_key(key: &KeyEvent) -> bool {
+    key.code == KeyCode::Enter && key.modifiers.contains(KeyModifiers::CONTROL)
+        || matches!(key.code, KeyCode::Char('\n' | '\r'))
+            && key.modifiers.contains(KeyModifiers::CONTROL)
+}
+
 /// Returns true when a key event should insert a multiline prompt line break.
-fn is_newline_key(key: &KeyEvent) -> bool {
-    key.code == KeyCode::Enter
-        && (key.modifiers.contains(KeyModifiers::ALT)
-            || key.modifiers.contains(KeyModifiers::CONTROL)
-            || key.modifiers.contains(KeyModifiers::SHIFT))
-        || is_ctrl_char(key, 'j')
+fn is_line_break_key(key: &KeyEvent) -> bool {
+    if key.modifiers.contains(KeyModifiers::CONTROL) {
+        return false;
+    }
+
+    key.code == KeyCode::Enter || matches!(key.code, KeyCode::Char('\n' | '\r'))
+}
+
+/// Returns true when a key event is a Shift+arrow selection chord.
+fn is_shift_arrow(key: &KeyEvent) -> bool {
+    key.modifiers.contains(KeyModifiers::SHIFT)
+        && matches!(
+            key.code,
+            KeyCode::Left | KeyCode::Right | KeyCode::Up | KeyCode::Down
+        )
 }
 
 /// Returns true when a key event is a specific Ctrl+character chord.

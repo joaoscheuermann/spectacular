@@ -35,12 +35,12 @@ fn key(code: KeyCode, modifiers: KeyModifiers) -> TerminalEvent {
 
 /// Verifies the IOCraft shell emits submitted prompts to the runtime controller.
 #[tokio::test]
-async fn shell_submit_prompt_emits_runtime_intent() {
+async fn shell_ctrl_enter_submit_prompt_emits_runtime_intent() {
     let mut state = state();
     state.session.prompt.text = "hello runtime".to_owned();
 
     let (mut shell, mut intents) = spectacular_tui::Shell::new(state);
-    shell.apply_terminal_event(key(KeyCode::Enter, KeyModifiers::empty()));
+    shell.apply_terminal_event(key(KeyCode::Enter, KeyModifiers::CONTROL));
 
     assert_eq!(
         intents.recv().await,

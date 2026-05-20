@@ -1,9 +1,7 @@
 use crate::components::TRANSCRIPT_SEPARATOR;
-use crate::render::format_directory;
 use crate::metadata::{ContextTokenUsage, TokenUsageTotal};
-use crate::render::{
-    context_pressure_style, iocraft_content, RenderLine, RenderSpan, RenderStyle,
-};
+use crate::render::format_directory;
+use crate::render::{context_pressure_style, iocraft_content, RenderLine, RenderSpan, RenderStyle};
 use crate::state::State;
 use iocraft::prelude::*;
 use std::path::Path;
