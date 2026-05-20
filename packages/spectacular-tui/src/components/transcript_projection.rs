@@ -16,7 +16,8 @@ use crate::components::worked_summary::worked_summary_render_lines;
 use crate::render_model::RenderLine;
 use crate::state::State;
 use crate::transcript::{TranscriptItem, TranscriptItemContent};
-use unicode_width::UnicodeWidthStr;
+use std::ops::Range;
+use unicode_width::UnicodeWidthChar;
 
 /// Formats the semantic transcript region for legacy text assertions.
 pub fn transcript_render_lines(state: &State) -> Vec<RenderLine> {
@@ -48,18 +49,76 @@ pub fn transcript_total_render_rows(state: &State) -> usize {
         .sum()
 }
 
-/// Estimates laid-out transcript rows for a known wrapping width.
-pub fn transcript_total_render_rows_for_width(state: &State, width: usize) -> usize {
-    if width == 0 {
-        return transcript_total_render_rows(state);
+/// Row-aware transcript layout used by the live IOCraft virtualized transcript.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) struct TranscriptLayout {
+    pub(crate) total_rows: usize,
+    pub(crate) items: Vec<TranscriptItemLayout>,
+}
+
+impl TranscriptLayout {
+    /// Builds cumulative row metadata for transcript items at a known content width.
+    pub(crate) fn for_state(state: &State, width: usize) -> Self {
+        let mut next_start_row = 0usize;
+        let items = state
+            .session
+            .transcript
+            .iter()
+            .enumerate()
+            .map(|(item_index, item)| {
+                let row_count = transcript_item_row_count_for_width(item, width);
+                let layout = TranscriptItemLayout {
+                    item_index,
+                    start_row: next_start_row,
+                    row_count,
+                };
+                next_start_row = next_start_row.saturating_add(row_count);
+                layout
+            })
+            .collect();
+
+        Self {
+            total_rows: next_start_row,
+            items,
+        }
     }
 
-    state
-        .session
-        .transcript
-        .iter()
-        .map(|item| transcript_item_row_count_for_width(item, width))
-        .sum()
+    /// Returns the item indices intersecting a half-open virtual row window.
+    pub(crate) fn item_range(&self, rows: Range<usize>) -> Range<usize> {
+        if rows.start >= rows.end || self.items.is_empty() {
+            return 0..0;
+        }
+
+        let start = self
+            .items
+            .partition_point(|item| item.end_row() <= rows.start);
+        let end = self.items.partition_point(|item| item.start_row < rows.end);
+
+        start..end.max(start)
+    }
+
+    /// Returns the virtual row where an item starts, or zero for an empty range.
+    pub(crate) fn item_start_row(&self, item_index: usize) -> usize {
+        self.items
+            .get(item_index)
+            .map(|item| item.start_row)
+            .unwrap_or_default()
+    }
+}
+
+/// Cumulative row metadata for one semantic transcript item.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TranscriptItemLayout {
+    pub(crate) item_index: usize,
+    pub(crate) start_row: usize,
+    pub(crate) row_count: usize,
+}
+
+impl TranscriptItemLayout {
+    /// Returns the first row after this item in the virtual transcript coordinate space.
+    fn end_row(&self) -> usize {
+        self.start_row.saturating_add(self.row_count)
+    }
 }
 
 /// Formats the transcript region as plain visible text for compatibility tests.
@@ -120,22 +179,124 @@ fn transcript_item_row_count(item: &TranscriptItem) -> usize {
 
 /// Estimates rendered rows for one transcript item after IOCraft text wrapping.
 fn transcript_item_row_count_for_width(item: &TranscriptItem, width: usize) -> usize {
+    if transcript_item_uses_no_wrap(item) {
+        return transcript_item_row_count(item);
+    }
+
     transcript_item_render_lines(item)
         .iter()
         .map(|line| wrapped_render_line_row_count(line, width))
         .sum()
 }
 
+/// Returns true when the IOCraft component renders each semantic row without wrapping.
+fn transcript_item_uses_no_wrap(item: &TranscriptItem) -> bool {
+    matches!(
+        item.content,
+        TranscriptItemContent::OpeningBanner(_)
+            | TranscriptItemContent::ToolCall(_)
+            | TranscriptItemContent::Command(_)
+    )
+}
+
 /// Estimates wrapped terminal rows for one semantic render line.
 fn wrapped_render_line_row_count(line: &RenderLine, width: usize) -> usize {
-    let visible_width: usize = line
-        .spans
-        .iter()
-        .map(|span| UnicodeWidthStr::width(span.text.as_str()))
-        .sum();
+    if width == 0 {
+        return 1;
+    }
 
-    visible_width.checked_div(width).unwrap_or(0)
-        + usize::from(visible_width % width != 0 || visible_width == 0)
+    let text = line.plain_text();
+    wrapped_text_row_count(&text, width)
+}
+
+/// Counts rows for IOCraft-style wrapping using break opportunities after whitespace.
+fn wrapped_text_row_count(text: &str, width: usize) -> usize {
+    if text.is_empty() || width == 0 {
+        return 1;
+    }
+
+    let mut rows = 1usize;
+    let mut current_width = 0usize;
+    for token in wrapping_tokens(text) {
+        if current_width + token.non_trailing_width <= width {
+            current_width = current_width.saturating_add(token.total_width);
+            continue;
+        }
+
+        if current_width > 0 {
+            rows = rows.saturating_add(1);
+        }
+
+        let (token_rows, token_width) = forced_wrap_width(token.non_trailing_width, width);
+        rows = rows.saturating_add(token_rows.saturating_sub(1));
+        current_width = token_width.saturating_add(token.trailing_width);
+    }
+
+    rows
+}
+
+/// Splits text into word-plus-trailing-whitespace units for local row estimation.
+fn wrapping_tokens(text: &str) -> Vec<WrappingToken> {
+    let mut tokens = Vec::new();
+    let mut non_trailing_width = 0usize;
+    let mut trailing_width = 0usize;
+
+    for character in text.chars() {
+        let width = character.width().unwrap_or(0);
+        if character.is_whitespace() {
+            trailing_width = trailing_width.saturating_add(width);
+            continue;
+        }
+
+        if trailing_width > 0 && non_trailing_width > 0 {
+            tokens.push(WrappingToken::new(non_trailing_width, trailing_width));
+            non_trailing_width = 0;
+            trailing_width = 0;
+        }
+
+        non_trailing_width = non_trailing_width.saturating_add(trailing_width);
+        trailing_width = 0;
+        non_trailing_width = non_trailing_width.saturating_add(width);
+    }
+
+    if non_trailing_width > 0 || trailing_width > 0 {
+        tokens.push(WrappingToken::new(non_trailing_width, trailing_width));
+    }
+
+    tokens
+}
+
+/// Returns rows and final-row width after force-wrapping an unbreakable token.
+fn forced_wrap_width(width: usize, row_width: usize) -> (usize, usize) {
+    if width == 0 {
+        return (1, 0);
+    }
+
+    let rows = width.saturating_add(row_width.saturating_sub(1)) / row_width;
+    let remainder = width % row_width;
+    (
+        rows.max(1),
+        if remainder == 0 { row_width } else { remainder },
+    )
+}
+
+/// One local wrapping unit with whitespace that may be trimmed from fit decisions.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct WrappingToken {
+    non_trailing_width: usize,
+    trailing_width: usize,
+    total_width: usize,
+}
+
+impl WrappingToken {
+    /// Creates a wrapping token from non-trailing and trailing display widths.
+    fn new(non_trailing_width: usize, trailing_width: usize) -> Self {
+        Self {
+            non_trailing_width,
+            trailing_width,
+            total_width: non_trailing_width.saturating_add(trailing_width),
+        }
+    }
 }
 
 /// Returns transcript rows that are within the current row-aware scroll window.

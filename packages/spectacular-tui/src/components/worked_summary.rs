@@ -10,12 +10,13 @@ pub fn WorkedSummary(props: &WorkedSummaryProps) -> impl Into<AnyElement<'static
     let TranscriptItemContent::WorkedSummary(worked_summary) = item.content else {
         panic!("WorkedSummary requires worked-summary content");
     };
-    let elements = worked_summary_render_lines(&worked_summary.duration, worked_summary.turn_tokens)
-        .into_iter()
-        .map(|line| {
-            let contents = iocraft_content(&line);
-            element!(MixedText(wrap: TextWrap::Wrap, contents))
-        });
+    let elements =
+        worked_summary_render_lines(&worked_summary.duration, worked_summary.turn_tokens)
+            .into_iter()
+            .map(|line| {
+                let contents = iocraft_content(&line);
+                element!(MixedText(wrap: TextWrap::Wrap, contents))
+            });
 
     element!(View(flex_direction: FlexDirection::Column) { #(elements) })
 }

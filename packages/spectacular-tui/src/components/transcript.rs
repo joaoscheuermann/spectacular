@@ -1,7 +1,7 @@
-use crate::components::transcript_projection::{
-    transcript_total_render_rows, transcript_total_render_rows_for_width,
+use crate::components::transcript_projection::TranscriptLayout;
+use crate::components::transcript_scroll_view::{
+    scroll_offset_from_top, transcript_scroll_delta, TranscriptScrollView, TranscriptViewportState,
 };
-use crate::components::transcript_scroll_view::TranscriptScrollView;
 use crate::components::{
     AssistantMessage, Cancellation, Command, Error, Notice, OpeningBanner, Reasoning, Success,
     ToolCall, UserPrompt, Warning, WorkedSummary,
@@ -17,16 +17,57 @@ pub fn Transcript(mut hooks: Hooks, props: &TranscriptProps) -> impl Into<AnyEle
     let capacity = props.capacity.unwrap_or_default();
     let (terminal_width, _) = hooks.use_terminal_size();
     let width = props.width.unwrap_or(terminal_width);
-    let total_rows = transcript_layout_rows(&state, width);
-    let height = transcript_height(total_rows, capacity);
-    let items = transcript_item_elements(&state);
+    let content_width = transcript_content_width(width);
+    let layout = TranscriptLayout::for_state(&state, content_width);
+    let height = transcript_height(layout.total_rows, capacity);
+    let scroll = state.scroll.clone();
+    let selection_active = state.selection.is_some();
+    let mut viewport =
+        hooks.use_state(|| TranscriptViewportState::from_scroll(&scroll, layout.total_rows));
+    let normalized = viewport
+        .get()
+        .with_render_context(layout.total_rows, height);
+
+    hooks.use_terminal_events({
+        let mut viewport = viewport;
+        move |event| {
+            let Some(delta) = transcript_scroll_delta(event, height, selection_active) else {
+                return;
+            };
+
+            let mut next = viewport
+                .get()
+                .with_render_context(layout.total_rows, height);
+            next.scroll_by(delta, layout.total_rows, height);
+            viewport.set(next);
+        }
+    });
+
+    hooks.use_effect(
+        move || {
+            viewport.set(normalized);
+        },
+        (
+            normalized.offset,
+            normalized.follow_tail,
+            layout.total_rows,
+            height,
+        ),
+    );
+
+    let scroll_offset = scroll_offset_from_top(layout.total_rows, height, normalized.offset);
+    let window = transcript_virtual_window(layout.total_rows, height, scroll_offset);
+    let item_range = layout.item_range(window);
+    let slice_start_row = layout.item_start_row(item_range.start);
+    let items = transcript_item_elements(&state, item_range);
 
     element!(TranscriptScrollView(
         key: state.session.id.as_str().to_owned(),
-        scroll: state.scroll.clone(),
-        total_rows: total_rows,
+        scroll_offset: scroll_offset,
+        scroll_offset_from_tail: normalized.offset,
+        slice_start_row: slice_start_row,
+        total_rows: layout.total_rows,
         visible_rows: height,
-        selection_active: state.selection.is_some(),
     ) {
         #(items.into_iter())
     })
@@ -40,14 +81,14 @@ pub struct TranscriptProps {
     pub width: Option<u16>,
 }
 
-/// Returns the estimated laid-out transcript row count for the current width.
-fn transcript_layout_rows(state: &State, width: u16) -> usize {
+/// Returns the transcript content width after reserving the scrollbar column.
+fn transcript_content_width(width: u16) -> usize {
     let content_width = width.saturating_sub(1);
     if content_width == 0 {
-        return transcript_total_render_rows(state);
+        return usize::MAX;
     }
 
-    transcript_total_render_rows_for_width(state, usize::from(content_width))
+    usize::from(content_width)
 }
 
 /// Returns the transcript pane height, growing until content reaches capacity.
@@ -55,12 +96,31 @@ fn transcript_height(total_rows: usize, capacity: u16) -> u16 {
     u16::try_from(total_rows).unwrap_or(u16::MAX).min(capacity)
 }
 
-/// Builds keyed child component elements for every semantic transcript item.
-fn transcript_item_elements(state: &State) -> Vec<AnyElement<'static>> {
+/// Returns the overscanned virtual row window to materialize for the viewport.
+fn transcript_virtual_window(
+    total_rows: usize,
+    visible_rows: u16,
+    scroll_offset: usize,
+) -> std::ops::Range<usize> {
+    let visible_rows = usize::from(visible_rows);
+    let visible_start = scroll_offset.min(total_rows);
+    let visible_end = visible_start.saturating_add(visible_rows).min(total_rows);
+    let overscan = visible_rows.max(1);
+
+    visible_start.saturating_sub(overscan)..visible_end.saturating_add(overscan).min(total_rows)
+}
+
+/// Builds keyed child component elements for the visible semantic transcript item range.
+fn transcript_item_elements(
+    state: &State,
+    item_range: std::ops::Range<usize>,
+) -> Vec<AnyElement<'static>> {
     state
         .session
         .transcript
         .iter()
+        .skip(item_range.start)
+        .take(item_range.end.saturating_sub(item_range.start))
         .map(transcript_item_element)
         .collect()
 }

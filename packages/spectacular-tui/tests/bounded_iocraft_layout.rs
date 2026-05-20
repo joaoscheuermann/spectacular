@@ -1,7 +1,8 @@
 use futures::{self, StreamExt};
 use iocraft::prelude::*;
 use spectacular_tui::{
-    components::App, reduce, render_state_to_string, ChatTuiAction, DisplayMetadata, PromptState,
+    components::App, reduce, render_state_to_string, ChatTuiAction, CommandDisplayChunk,
+    CommandDisplayStatus, DisplayLine, DisplayLineStyle, DisplayMetadata, PromptState,
     ReasoningLevel, RuntimeSelection, SessionId, State, TranscriptItemId,
 };
 
@@ -228,6 +229,53 @@ fn overflowing_transcript_shows_scrollbar() {
 
     assert!(has_scrollbar_marker(&canvas, 79, 0));
     assert!(has_scrollbar_marker(&canvas, 79, 3));
+}
+
+/// Verifies tail-follow rendering does not overshift when no-wrap rows exceed viewport width.
+#[test]
+fn no_wrap_transcript_rows_do_not_create_bottom_gap_at_tail() {
+    let mut state = state();
+    reduce(
+        &mut state,
+        ChatTuiAction::CommandDisplayStarted {
+            id: TranscriptItemId::new("command-1"),
+            command_id: "command-1".to_string(),
+            command_line: DisplayLine::new(
+                format!("$ {}", "x".repeat(120)),
+                DisplayLineStyle::Command,
+            ),
+        },
+    );
+    for index in 0..4 {
+        reduce(
+            &mut state,
+            ChatTuiAction::CommandDisplayOutput {
+                command_id: "command-1".to_string(),
+                chunk: CommandDisplayChunk::new(
+                    format!("output {index} {}", "y".repeat(120)),
+                    DisplayLineStyle::CommandOutput,
+                ),
+            },
+        );
+    }
+    reduce(
+        &mut state,
+        ChatTuiAction::CommandDisplayFinished {
+            command_id: "command-1".to_string(),
+            status: CommandDisplayStatus::Succeeded,
+            exit_code: Some(0),
+            summary_line: None,
+        },
+    );
+
+    let lines = render_canvas_lines(&state, 40, 6);
+
+    assert!(lines[0].starts_with("output 0"));
+    assert!(lines[1].starts_with("output 1"));
+    assert!(lines[2].starts_with("output 2"));
+    assert!(lines[3].starts_with("output 3"));
+    assert_eq!(lines[4], "> ");
+    assert!(lines[5].contains("/workspace/spectacular"));
 }
 
 /// Verifies full-width transcript rows leave the rightmost column for the scrollbar.

@@ -5,45 +5,16 @@ use iocraft::taffy;
 /// Scrollable transcript viewport that preserves Spectacular's bottom-relative scroll behavior.
 #[component]
 pub fn TranscriptScrollView<'a>(
-    mut hooks: Hooks,
+    _hooks: Hooks,
     props: &mut TranscriptScrollViewProps<'a>,
 ) -> impl Into<AnyElement<'a>> {
-    let scroll = props.scroll.clone().unwrap_or_default();
     let total_rows = props.total_rows;
     let visible_rows = props.visible_rows;
-    let selection_active = props.selection_active;
+    let scroll_offset = props.scroll_offset.unwrap_or_default();
+    let slice_start_row = props.slice_start_row;
     let children = std::mem::take(&mut props.children);
-    let mut viewport =
-        hooks.use_state(|| TranscriptViewportState::from_scroll(&scroll, total_rows));
-    let normalized = viewport.get().with_render_context(total_rows, visible_rows);
-
-    hooks.use_terminal_events({
-        let mut viewport = viewport;
-        move |event| {
-            let Some(delta) = transcript_scroll_delta(event, visible_rows, selection_active) else {
-                return;
-            };
-
-            let mut next = viewport.get().with_render_context(total_rows, visible_rows);
-            next.scroll_by(delta, total_rows, visible_rows);
-            viewport.set(next);
-        }
-    });
-
-    hooks.use_effect(
-        move || {
-            viewport.set(normalized);
-        },
-        (
-            normalized.offset,
-            normalized.follow_tail,
-            normalized.total_rows,
-            visible_rows,
-        ),
-    );
-
-    let top_offset = scroll_offset_from_top(total_rows, visible_rows, normalized.offset);
-    let scrollbar_marks = scrollbar_marks(total_rows, visible_rows, normalized.offset);
+    let top_offset = slice_top_offset(slice_start_row, scroll_offset);
+    let scrollbar_marks = scrollbar_marks(total_rows, visible_rows, props.scroll_offset_from_tail);
     let scrollbar = (!scrollbar_marks.is_empty()).then_some(element!(TranscriptScrollbar(
         marks: scrollbar_marks
     )));
@@ -63,7 +34,7 @@ pub fn TranscriptScrollView<'a>(
         ) {
             View(
                 position: Position::Absolute,
-                top: -top_offset,
+                top: top_offset,
                 flex_direction: FlexDirection::Column,
                 width: 100pct,
                 min_width: 0,
@@ -80,24 +51,24 @@ pub fn TranscriptScrollView<'a>(
 #[derive(Default, Props)]
 pub struct TranscriptScrollViewProps<'a> {
     pub children: Vec<AnyElement<'a>>,
-    pub scroll: Option<TranscriptScrollState>,
+    pub scroll_offset: Option<usize>,
+    pub scroll_offset_from_tail: u32,
+    pub slice_start_row: usize,
     pub total_rows: usize,
     pub visible_rows: u16,
-    pub selection_active: bool,
 }
-
 
 /// Component-owned transcript scroll position derived from layout rows.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct TranscriptViewportState {
-    offset: u32,
-    follow_tail: bool,
+pub(crate) struct TranscriptViewportState {
+    pub(crate) offset: u32,
+    pub(crate) follow_tail: bool,
     total_rows: usize,
 }
 
 impl TranscriptViewportState {
     /// Creates component viewport state from an externally supplied scroll snapshot.
-    fn from_scroll(scroll: &TranscriptScrollState, total_rows: usize) -> Self {
+    pub(crate) fn from_scroll(scroll: &TranscriptScrollState, total_rows: usize) -> Self {
         Self {
             offset: scroll.offset,
             follow_tail: scroll.follow_tail,
@@ -106,7 +77,7 @@ impl TranscriptViewportState {
     }
 
     /// Returns viewport state normalized to the current rendered row count and height.
-    fn with_render_context(self, total_rows: usize, visible_rows: u16) -> Self {
+    pub(crate) fn with_render_context(self, total_rows: usize, visible_rows: u16) -> Self {
         let offset = self.render_offset(total_rows, visible_rows);
         Self {
             offset,
@@ -116,7 +87,7 @@ impl TranscriptViewportState {
     }
 
     /// Applies a relative scroll delta after first preserving review position across row growth.
-    fn scroll_by(&mut self, delta: i32, total_rows: usize, visible_rows: u16) {
+    pub(crate) fn scroll_by(&mut self, delta: i32, total_rows: usize, visible_rows: u16) {
         *self = self.with_render_context(total_rows, visible_rows);
         if delta > 0 {
             self.offset = self
@@ -147,13 +118,26 @@ impl TranscriptViewportState {
     }
 }
 
-
 /// Converts a bottom-relative transcript offset into a top-relative layout offset.
-fn scroll_offset_from_top(total_rows: usize, visible_rows: u16, offset: u32) -> i32 {
+pub(crate) fn scroll_offset_from_top(total_rows: usize, visible_rows: u16, offset: u32) -> usize {
     let max_offset = max_scroll_offset(total_rows, visible_rows);
     let offset_from_top = max_offset.saturating_sub(offset.min(max_offset));
 
-    i32::try_from(offset_from_top).unwrap_or(i32::MAX)
+    usize::try_from(offset_from_top).unwrap_or(usize::MAX)
+}
+
+/// Computes the visible slice's absolute position inside the viewport.
+fn slice_top_offset(slice_start_row: usize, scroll_offset: usize) -> i32 {
+    let relative_offset = i64::try_from(slice_start_row).unwrap_or(i64::MAX)
+        - i64::try_from(scroll_offset).unwrap_or(i64::MAX);
+
+    i32::try_from(relative_offset).unwrap_or_else(|_| {
+        if relative_offset.is_negative() {
+            i32::MIN
+        } else {
+            i32::MAX
+        }
+    })
 }
 
 /// Returns one scrollbar cell per transcript viewport row when overflow exists.
@@ -310,7 +294,7 @@ fn max_scroll_offset(total_rows: usize, visible_rows: u16) -> u32 {
 }
 
 /// Converts terminal input handled by the viewport into row deltas.
-fn transcript_scroll_delta(
+pub(crate) fn transcript_scroll_delta(
     event: TerminalEvent,
     visible_rows: u16,
     selection_active: bool,
