@@ -37,9 +37,7 @@ fn final_assistant_response(events: &[AgentEvent]) -> String {
     events
         .iter()
         .filter_map(|event| match event {
-            AgentEvent::MessageDelta(delta) if delta.role == ProviderMessageRole::Assistant => {
-                Some(delta.content.as_str())
-            }
+            AgentEvent::MessageDelta { content, .. } => Some(content.as_str()),
             _ => None,
         })
         .collect::<String>()
@@ -58,9 +56,14 @@ fn no_tool_run_stores_events_in_order() {
         agent.events()[1],
         AgentEvent::ContextTokenUsage(_)
     ));
-    assert!(matches!(agent.events()[2], AgentEvent::MessageDelta(_)));
-    assert!(matches!(agent.events()[3], AgentEvent::UsageMetadata(_)));
-    assert!(matches!(agent.events()[4], AgentEvent::Finished { .. }));
+    assert!(matches!(agent.events()[2], AgentEvent::MessageStart { .. }));
+    assert!(matches!(agent.events()[3], AgentEvent::MessageDelta { .. }));
+    assert!(matches!(
+        agent.events()[4],
+        AgentEvent::MessageFinish { .. }
+    ));
+    assert!(matches!(agent.events()[5], AgentEvent::UsageMetadata(_)));
+    assert!(matches!(agent.events()[6], AgentEvent::Finished { .. }));
 }
 
 #[test]

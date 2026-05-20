@@ -15,13 +15,15 @@ impl RunId {
 pub struct RunRequest {
     id: RunId,
     prompt: String,
+    prompt_event_id: Option<String>,
 }
 
 impl RunRequest {
-    fn new(id: RunId, prompt: impl Into<String>) -> Self {
+    fn new(id: RunId, prompt: impl Into<String>, prompt_event_id: Option<String>) -> Self {
         Self {
             id,
             prompt: prompt.into(),
+            prompt_event_id,
         }
     }
 
@@ -31,6 +33,10 @@ impl RunRequest {
 
     pub fn prompt(&self) -> &str {
         &self.prompt
+    }
+
+    pub fn prompt_event_id(&self) -> Option<&str> {
+        self.prompt_event_id.as_deref()
     }
 }
 
@@ -56,8 +62,16 @@ struct WaitingRun {
 
 impl RunQueue {
     pub fn enqueue_prompt(&self, prompt: impl Into<String>) -> RunId {
+        self.enqueue_prompt_with_event_id(prompt, None::<String>)
+    }
+
+    pub fn enqueue_prompt_with_event_id(
+        &self,
+        prompt: impl Into<String>,
+        prompt_event_id: Option<impl Into<String>>,
+    ) -> RunId {
         let mut state = self.state.lock().unwrap();
-        let request = next_request(&mut state, prompt);
+        let request = next_request(&mut state, prompt, prompt_event_id);
         let id = request.id();
         state.manual.push_back(request);
         id
@@ -75,13 +89,22 @@ impl RunQueue {
     }
 
     pub async fn enqueue_and_wait(&self, prompt: impl Into<String>) -> Result<RunRequest, ()> {
+        self.enqueue_and_wait_with_event_id(prompt, None::<String>)
+            .await
+    }
+
+    pub async fn enqueue_and_wait_with_event_id(
+        &self,
+        prompt: impl Into<String>,
+        prompt_event_id: Option<impl Into<String>>,
+    ) -> Result<RunRequest, ()> {
         let receiver = {
             let mut state = self.state.lock().unwrap();
             if state.rejecting {
                 return Err(());
             }
 
-            let request = next_request(&mut state, prompt);
+            let request = next_request(&mut state, prompt, prompt_event_id);
             if !state.active {
                 state.active = true;
                 return Ok(request);
@@ -128,10 +151,14 @@ impl RunQueue {
     }
 }
 
-fn next_request(state: &mut QueueState, prompt: impl Into<String>) -> RunRequest {
+fn next_request(
+    state: &mut QueueState,
+    prompt: impl Into<String>,
+    prompt_event_id: Option<impl Into<String>>,
+) -> RunRequest {
     let id = RunId(state.next_id);
     state.next_id += 1;
-    RunRequest::new(id, prompt)
+    RunRequest::new(id, prompt, prompt_event_id.map(Into::into))
 }
 
 fn cancel_waiting(state: &mut QueueState) {

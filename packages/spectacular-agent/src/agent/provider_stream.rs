@@ -27,8 +27,9 @@ where
     ) -> Result<Option<Self::Output>, AgentError>;
 
     /// Produces an output when a provider stream ends without an explicit finish event.
-    fn stream_finished_without_event(
+    async fn stream_finished_without_event(
         &mut self,
+        recorder: &mut RunRecorder<'_, P, C>,
         saw_provider_event: bool,
     ) -> Result<Self::Output, AgentError>;
 }
@@ -56,7 +57,7 @@ where
         {
             Ok(stream) => stream,
             Err(ProviderError::CancellationError) => {
-                return cancel_from_provider(recorder).await;
+                return cancel_from_provider(recorder, handler, false).await;
             }
             Err(error)
                 if should_retry_provider_error(&error, provider_retries, false, retry_config) =>
@@ -72,12 +73,12 @@ where
 
         let mut saw_provider_event = false;
         while let Some(provider_event) = stream.next().await {
-            recorder.return_if_cancelled().await?;
+            return_if_cancelled_after_stream_event(recorder, handler, saw_provider_event).await?;
 
             let provider_event = match provider_event {
                 Ok(provider_event) => provider_event,
                 Err(ProviderError::CancellationError) => {
-                    return cancel_from_provider(recorder).await;
+                    return cancel_from_provider(recorder, handler, saw_provider_event).await;
                 }
                 Err(error)
                     if should_retry_provider_error(
@@ -91,7 +92,15 @@ where
                     wait_before_provider_retry(recorder, retry_config.provider_retry_delay).await?;
                     continue 'provider_attempt;
                 }
-                Err(error) => return Err(error.into()),
+                Err(error) => {
+                    let agent_error = error.into();
+                    if saw_provider_event {
+                        let _ = handler
+                            .stream_finished_without_event(recorder, saw_provider_event)
+                            .await;
+                    }
+                    return Err(agent_error);
+                }
             };
 
             saw_provider_event = true;
@@ -100,18 +109,49 @@ where
             }
         }
 
-        return handler.stream_finished_without_event(saw_provider_event);
+        return_if_cancelled_after_stream_event(recorder, handler, saw_provider_event).await?;
+        return handler
+            .stream_finished_without_event(recorder, saw_provider_event)
+            .await;
     }
 }
 
-/// Converts provider-side cancellation into an agent cancellation error and event.
-async fn cancel_from_provider<P, C, T>(
+/// Closes any active lifecycle state before run cancellation records the terminal event.
+async fn return_if_cancelled_after_stream_event<P, C, H>(
     recorder: &mut RunRecorder<'_, P, C>,
-) -> Result<T, AgentError>
+    handler: &mut H,
+    saw_provider_event: bool,
+) -> Result<(), AgentError>
 where
     P: LlmProvider,
     C: TokenCounter + Clone,
+    H: ProviderStreamHandler<P, C>,
 {
+    if recorder.cancellation().is_cancelled() && saw_provider_event {
+        let _ = handler
+            .stream_finished_without_event(recorder, saw_provider_event)
+            .await;
+    }
+
+    recorder.return_if_cancelled().await
+}
+
+/// Converts provider-side cancellation into an agent cancellation error and event.
+async fn cancel_from_provider<P, C, H>(
+    recorder: &mut RunRecorder<'_, P, C>,
+    handler: &mut H,
+    saw_provider_event: bool,
+) -> Result<H::Output, AgentError>
+where
+    P: LlmProvider,
+    C: TokenCounter + Clone,
+    H: ProviderStreamHandler<P, C>,
+{
+    if saw_provider_event {
+        let _ = handler
+            .stream_finished_without_event(recorder, saw_provider_event)
+            .await;
+    }
     recorder.cancel();
     recorder.return_if_cancelled().await?;
     Err(AgentError::CancellationError)

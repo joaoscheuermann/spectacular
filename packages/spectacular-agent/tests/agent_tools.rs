@@ -30,7 +30,7 @@ fn tool_call_loop_stores_tool_result_then_finishes() {
     assert!(agent
         .events()
         .iter()
-        .any(|event| matches!(event, AgentEvent::ToolResult { .. })));
+        .any(|event| matches!(event, AgentEvent::ToolCallFinish { .. })));
 }
 
 #[test]
@@ -82,7 +82,7 @@ fn tool_call_loop_emits_structured_tool_events_with_matching_id() {
     futures::executor::block_on(agent.run_next()).unwrap();
 
     let tool_call = agent.events().into_iter().find_map(|event| match event {
-        AgentEvent::AssistantToolCallRequest {
+        AgentEvent::ToolCallStart {
             tool_call_id,
             name,
             arguments,
@@ -90,11 +90,11 @@ fn tool_call_loop_emits_structured_tool_events_with_matching_id() {
         _ => None,
     });
     let tool_result = agent.events().into_iter().find_map(|event| match event {
-        AgentEvent::ToolResult {
+        AgentEvent::ToolCallFinish {
             tool_call_id,
             name,
-            content,
-        } => Some((tool_call_id, name, content)),
+            output,
+        } => Some((tool_call_id, name, output)),
         _ => None,
     });
 
@@ -189,11 +189,11 @@ fn fake_provider_receives_built_in_style_tool_result_with_matching_id() {
     futures::executor::block_on(agent.run_next()).unwrap();
 
     let tool_result_event = agent.events().into_iter().find_map(|event| match event {
-        AgentEvent::ToolResult {
+        AgentEvent::ToolCallFinish {
             tool_call_id,
             name,
-            content,
-        } => Some((tool_call_id, name, content)),
+            output,
+        } => Some((tool_call_id, name, output)),
         _ => None,
     });
     let requests = requests.lock().unwrap();

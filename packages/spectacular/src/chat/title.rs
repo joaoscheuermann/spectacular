@@ -39,7 +39,7 @@ pub(super) fn spawn_title_task(
         let mut title = String::new();
         while let Some(event) = stream.next().await {
             match event {
-                AgentEvent::MessageDelta(delta) => title.push_str(&delta.content),
+                AgentEvent::MessageDelta { content, .. } => title.push_str(&content),
                 AgentEvent::Finished { .. } => break,
                 AgentEvent::Error { .. } | AgentEvent::Cancelled { .. } => return,
                 _ => {}

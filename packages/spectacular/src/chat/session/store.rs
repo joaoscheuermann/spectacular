@@ -1,6 +1,7 @@
 use crate::chat::session::{now, ChatEvent, ChatRecord};
 use crate::chat::ChatError;
 use serde_json::Value;
+use spectacular_tui::Session;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -25,12 +26,39 @@ impl SessionStore {
         &self.dir
     }
 
+    /// Returns the append-only JSONL event path for a session identifier.
     pub fn path(&self, id: &str) -> PathBuf {
         self.dir.join(format!("{id}.jsonl"))
     }
 
+    /// Returns the durable semantic snapshot path for a session identifier.
+    pub fn snapshot_path(&self, id: &str) -> PathBuf {
+        self.dir.join(format!("{id}.snapshot.json"))
+    }
+
+    /// Returns whether either persisted session representation exists for an identifier.
     pub fn exists(&self, id: &str) -> bool {
-        self.path(id).exists()
+        self.path(id).exists() || self.snapshot_path(id).exists()
+    }
+
+    /// Saves the durable semantic TUI session snapshot without terminal output replay data.
+    #[allow(dead_code)]
+    pub fn save_snapshot(&self, session: &Session) -> Result<(), ChatError> {
+        let path = self.snapshot_path(session.id.as_str());
+        let mut file = File::create(path).map_err(|error| ChatError::Session(error.to_string()))?;
+        serde_json::to_writer_pretty(&mut file, session)
+            .map_err(|error| ChatError::Session(error.to_string()))?;
+        writeln!(file).map_err(|error| ChatError::Session(error.to_string()))?;
+        file.flush()
+            .map_err(|error| ChatError::Session(error.to_string()))
+    }
+
+    /// Loads a durable semantic TUI session snapshot by session identifier.
+    #[allow(dead_code)]
+    pub fn load_snapshot(&self, id: &str) -> Result<Session, ChatError> {
+        let path = self.snapshot_path(id);
+        let file = File::open(path).map_err(|error| ChatError::Session(error.to_string()))?;
+        serde_json::from_reader(file).map_err(|error| ChatError::Session(error.to_string()))
     }
 
     pub fn append(&self, path: &Path, event: &ChatEvent) -> Result<(), ChatError> {
@@ -133,5 +161,13 @@ mod tests {
     include!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/tests/unit/chat/session/store.rs"
+    ));
+}
+
+#[cfg(test)]
+mod snapshot_tests {
+    include!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/unit/chat/session/snapshot.rs"
     ));
 }

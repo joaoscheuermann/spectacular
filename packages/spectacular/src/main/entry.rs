@@ -29,7 +29,7 @@ async fn main() -> ExitCode {
 
 async fn handle(cli: Cli, debug_logger: LlmDebugLogger) -> Result<Option<String>, AppError> {
     match cli.command {
-        Command::Chat => match chat::run(debug_logger).await {
+        Command::Chat(args) => match chat::run(debug_logger, args.tui).await {
             Ok(()) | Err(chat::ChatError::Exit) => Ok(None),
             Err(error) => Err(error.into()),
         },

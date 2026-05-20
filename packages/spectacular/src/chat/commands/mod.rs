@@ -4,6 +4,7 @@ pub mod git;
 pub mod runtime;
 pub mod session;
 
+use crate::chat::command_event::CommandEvent;
 use crate::chat::model::{
     ChatModel, ChatPromptFooterModel, ChatRunRequestModel, HistoryTableModel,
 };
@@ -134,6 +135,11 @@ impl<'a> ChatCommandContext<'a> {
     )]
     pub fn append_agent_event(&self, event: &AgentEvent) -> Result<(), ChatError> {
         self.model.append_agent_event(event)
+    }
+
+    /// Appends an app-owned command lifecycle event to the active session transcript.
+    pub fn append_command_event(&self, event: &CommandEvent) -> Result<(), ChatError> {
+        self.model.append_command_event(event)
     }
 
     /// Renders chat records through the injected renderer and tool storage.

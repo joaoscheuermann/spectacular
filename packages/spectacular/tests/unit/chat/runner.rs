@@ -1,9 +1,7 @@
     use super::*;
     use crate::chat::title::title_generation_agent;
     use spectacular_config::ReasoningLevel;
-    use spectacular_llms::{
-        MessageDelta, OpenRouterProvider, ReasoningDelta, UsageMetadata, OPENROUTER_PROVIDER_ID,
-    };
+    use spectacular_llms::{OpenRouterProvider, UsageMetadata, OPENROUTER_PROVIDER_ID};
     use spectacular_tools::{
         EDIT_TOOL_NAME, FIND_TOOL_NAME, GREP_TOOL_NAME, TERMINAL_TOOL_NAME, TREE_TOOL_NAME,
         WEB_SEARCH_TOOL_NAME, WRITE_TOOL_NAME,
@@ -172,7 +170,7 @@
     /// Verifies that assistant events render before append.
     #[test]
     fn assistant_events_render_before_append() {
-        let event = AgentEvent::MessageDelta(MessageDelta::assistant("hello"));
+        let event = AgentEvent::message_delta("message-1", "hello");
 
         assert!(!should_append_without_render(&event));
     }
@@ -180,10 +178,7 @@
     /// Verifies that reasoning events render before append.
     #[test]
     fn reasoning_events_render_before_append() {
-        let event = AgentEvent::ReasoningDelta(ReasoningDelta {
-            content: "thinking".to_owned(),
-            metadata: None,
-        });
+        let event = AgentEvent::reasoning_delta("reasoning-1", "thinking");
 
         assert!(!should_append_without_render(&event));
     }
@@ -204,14 +199,11 @@
         let mut counter = AssistantTurnTokenCounter::default();
 
         record_generated_tokens(
-            &AgentEvent::ReasoningDelta(ReasoningDelta {
-                content: "thinking".to_owned(),
-                metadata: None,
-            }),
+            &AgentEvent::reasoning_delta("reasoning-1", "thinking"),
             &mut counter,
         );
         record_generated_tokens(
-            &AgentEvent::assistant_tool_call_request("call-1", "read", "{\"path\":\"a\"}"),
+            &AgentEvent::tool_call_start("call-1", "read", "{\"path\":\"a\"}"),
             &mut counter,
         );
 
@@ -251,24 +243,14 @@
     /// Verifies only nonblank assistant deltas count toward spinner turn tokens.
     #[test]
     fn visible_assistant_delta_requires_assistant_role_and_nonblank_content() {
-        assert!(is_visible_assistant_delta(
-            spectacular_llms::ProviderMessageRole::Assistant,
-            "answer"
-        ));
-        assert!(!is_visible_assistant_delta(
-            spectacular_llms::ProviderMessageRole::Assistant,
-            " \n\t"
-        ));
-        assert!(!is_visible_assistant_delta(
-            spectacular_llms::ProviderMessageRole::User,
-            "answer"
-        ));
+        assert!(is_visible_assistant_delta("answer"));
+        assert!(!is_visible_assistant_delta(" \n\t"));
     }
 
     /// Verifies non-terminal rendered events repaint working tokens immediately.
     #[test]
     fn working_tokens_refresh_for_nonterminal_rendered_events() {
-        let event = AgentEvent::assistant_tool_call_request("call-1", "read", "{}");
+        let event = AgentEvent::tool_call_start("call-1", "read", "{}");
 
         assert!(should_refresh_working_tokens(true, false, &event));
     }
@@ -276,7 +258,7 @@
     /// Verifies terminal states do not repaint working token counts.
     #[test]
     fn working_tokens_do_not_refresh_for_terminal_events() {
-        let tool_event = AgentEvent::assistant_tool_call_request("call-1", "read", "{}");
+        let tool_event = AgentEvent::tool_call_start("call-1", "read", "{}");
         let finished_event = AgentEvent::finished(spectacular_llms::ProviderFinished::stopped());
 
         assert!(!should_refresh_working_tokens(false, false, &tool_event));

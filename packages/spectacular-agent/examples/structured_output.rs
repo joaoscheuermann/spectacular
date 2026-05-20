@@ -98,7 +98,7 @@ fn run_case(label: &str, response: &'static str) -> Result<(), Box<dyn std::erro
 
     for event in agent.events() {
         match event {
-            AgentEvent::MessageDelta(_)
+            AgentEvent::MessageDelta { .. }
             | AgentEvent::UsageMetadata(_)
             | AgentEvent::Finished { .. }
             | AgentEvent::ValidationError { .. }

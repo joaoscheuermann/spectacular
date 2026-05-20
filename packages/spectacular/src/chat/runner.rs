@@ -10,7 +10,7 @@ use spectacular_agent::{
     Agent, AgentConfig, AgentEvent, ContextPolicy, Store, ToolRegistrationError, ToolStorage,
 };
 use spectacular_config::ReasoningLevel;
-use spectacular_llms::{LlmProvider, ProviderMessageRole};
+use spectacular_llms::LlmProvider;
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -45,6 +45,7 @@ pub trait ChatTurnRunner {
 /// Runtime request for one chat turn after controller-level context has been resolved.
 pub struct ChatRunRequest {
     pub prompt: String,
+    pub prompt_event_id: Option<String>,
     pub render_user_prompt: bool,
     pub retry_existing_prompt: bool,
     pub runtime: RuntimeSelection,
@@ -86,6 +87,7 @@ impl ChatRunnerService {
         ChatRunner::new(model, renderer, tools.clone())
             .run(ChatRunRequest {
                 prompt: request.prompt,
+                prompt_event_id: request.prompt_event_id,
                 render_user_prompt: request.render_user_prompt,
                 retry_existing_prompt: request.retry_existing_prompt,
                 runtime: request.runtime,
@@ -127,7 +129,10 @@ impl<'a> ChatRunner<'a> {
             store,
             self.tools.clone(),
         ));
-        let mut stream = agent.run_stream(request.prompt.clone());
+        let mut stream = Arc::clone(&agent).run_stream_with_prompt_event_id(
+            request.prompt.clone(),
+            request.prompt_event_id.clone(),
+        );
         let mut title_text = String::new();
         let mut assistant_output = AssistantResponseRenderState::default();
         let mut reasoning_output = ReasoningResponseRenderState::default();
@@ -177,40 +182,38 @@ impl<'a> ChatRunner<'a> {
                         }
                     }
 
-                    if let AgentEvent::MessageDelta(delta) = &event {
-                        if delta.role == ProviderMessageRole::Assistant {
-                            if reasoning_output.close_visible_response() {
-                                self.renderer.response_spacer();
-                                if is_streaming {
-                                    self.renderer.resume_working_line();
-                                    is_streaming = false;
-                                }
+                    if let AgentEvent::MessageDelta { content, .. } = &event {
+                        if reasoning_output.close_visible_response() {
+                            self.renderer.response_spacer();
+                            if is_streaming {
+                                self.renderer.resume_working_line();
+                                is_streaming = false;
                             }
-                            if let Some(render) = assistant_output.delta(&delta.content) {
-                                if render.started && !is_streaming {
-                                    self.renderer.pause_working_line();
-                                    is_streaming = true;
-                                }
-                                self.renderer.assistant_delta(&render.content).await?;
-                            }
-                            self.model.append_agent_event(&event)?;
-                            title_text.push_str(&delta.content);
-                            if should_spawn_title_task(title_spawned, &title_text) {
-                                spawn_title_task(
-                                    self.model.session_manager().clone(),
-                                    request.prompt.clone(),
-                                    title_text.clone(),
-                                    &request.runtime,
-                                    self.renderer,
-                                    self.model.debug_logger().clone(),
-                                )?;
-                                title_spawned = true;
-                            }
-                            continue;
                         }
+                        if let Some(render) = assistant_output.delta(content) {
+                            if render.started && !is_streaming {
+                                self.renderer.pause_working_line();
+                                is_streaming = true;
+                            }
+                            self.renderer.assistant_delta(&render.content)?;
+                        }
+                        self.model.append_agent_event(&event)?;
+                        title_text.push_str(content);
+                        if should_spawn_title_task(title_spawned, &title_text) {
+                            spawn_title_task(
+                                self.model.session_manager().clone(),
+                                request.prompt.clone(),
+                                title_text.clone(),
+                                &request.runtime,
+                                self.renderer,
+                                self.model.debug_logger().clone(),
+                            )?;
+                            title_spawned = true;
+                        }
+                        continue;
                     }
 
-                    if let AgentEvent::ReasoningDelta(delta) = &event {
+                    if let AgentEvent::ReasoningDelta { content, .. } = &event {
                         if spinner_visible {
                             self.renderer.working_frame(
                                 spinner_frame,
@@ -224,12 +227,12 @@ impl<'a> ChatRunner<'a> {
                                 is_streaming = false;
                             }
                         }
-                        if let Some(render) = reasoning_output.delta(&delta.content) {
+                        if let Some(render) = reasoning_output.delta(content) {
                             if render.started && !is_streaming {
                                 self.renderer.pause_working_line();
                                 is_streaming = true;
                             }
-                            self.renderer.reasoning_delta(&render.content).await?;
+                            self.renderer.reasoning_delta(&render.content)?;
                         }
                         self.model.append_agent_event(&event)?;
                         continue;
@@ -295,7 +298,7 @@ pub fn main_chat_tool_storage(
 }
 
 /// Creates the main coding agent configured with runtime model, reasoning, and tools.
-fn main_chat_agent<P>(
+pub(crate) fn main_chat_agent<P>(
     provider: P,
     runtime: &RuntimeSelection,
     store: Store,

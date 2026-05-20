@@ -1,5 +1,5 @@
 use anstyle::RgbColor;
-use spectacular_terminal_ui::{diff_added_style, diff_removed_style, paint};
+use spectacular_tui::{diff_added_style, diff_removed_style, paint};
 
 /// Verifies that diff additions color text without painting the full row background.
 #[test]

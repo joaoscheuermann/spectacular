@@ -66,7 +66,7 @@ fn format_fallback_call(name: &str, arguments: &str) -> String {
 
 /// Formats compatibility display parts with renderer styles.
 pub(crate) fn format_tool_call_parts(label: &str, input: &str, metadata: Option<&str>) -> String {
-    spectacular_terminal_ui::tool_line(label, input, metadata)
+    spectacular_tui::tool_line(label, input, metadata)
 }
 
 /// Reports whether a tool output matches the renderer's common failure markers.

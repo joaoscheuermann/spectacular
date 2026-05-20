@@ -1,5 +1,5 @@
 use spectacular_agent::{AgentEvent, TiktokenTokenCounter, TokenCounter};
-use spectacular_llms::{ProviderMessageRole, UsageMetadata};
+use spectacular_llms::UsageMetadata;
 
 /// Tracks total model tokens for the current assistant turn.
 #[derive(Default)]
@@ -108,15 +108,13 @@ impl Default for TurnTokenEstimator {
 /// Adds any generated-token-bearing event to the current turn token estimate.
 pub(super) fn record_generated_tokens(event: &AgentEvent, counter: &mut AssistantTurnTokenCounter) {
     match event {
-        AgentEvent::MessageDelta(delta)
-            if is_visible_assistant_delta(delta.role, &delta.content) =>
-        {
-            counter.add_visible_delta(&delta.content);
+        AgentEvent::MessageDelta { content, .. } if is_visible_assistant_delta(content) => {
+            counter.add_visible_delta(content);
         }
-        AgentEvent::ReasoningDelta(delta) if !delta.content.trim().is_empty() => {
-            counter.add_reasoning_delta(&delta.content);
+        AgentEvent::ReasoningDelta { content, .. } if !content.trim().is_empty() => {
+            counter.add_reasoning_delta(content);
         }
-        AgentEvent::AssistantToolCallRequest {
+        AgentEvent::ToolCallStart {
             name, arguments, ..
         } => counter.add_tool_call(name, arguments),
         AgentEvent::UsageMetadata(usage) => counter.reconcile_usage(usage),
@@ -125,8 +123,8 @@ pub(super) fn record_generated_tokens(event: &AgentEvent, counter: &mut Assistan
 }
 
 /// Returns true for streamed assistant deltas that should count toward turn tokens.
-pub(super) fn is_visible_assistant_delta(role: ProviderMessageRole, content: &str) -> bool {
-    role == ProviderMessageRole::Assistant && !content.trim().is_empty()
+pub(super) fn is_visible_assistant_delta(content: &str) -> bool {
+    !content.trim().is_empty()
 }
 
 /// Adds provider input and output tokens when both sides of the turn are known.

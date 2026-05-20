@@ -2,6 +2,7 @@ mod event;
 mod index;
 mod store;
 
+use crate::chat::command_event::CommandEvent;
 use crate::chat::{ChatError, RuntimeSelection};
 use chrono::{DateTime, Local, Utc};
 pub use event::ChatEvent;
@@ -9,6 +10,7 @@ use index::SessionIndex;
 use serde_json::Value;
 use spectacular_agent::AgentEvent;
 use spectacular_config::TaskModelSlot;
+use spectacular_tui::Session;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -94,6 +96,11 @@ impl SessionManager {
         self.append_event(&event)
     }
 
+    /// Appends an app-owned command lifecycle event to the active session transcript.
+    pub fn append_command_event(&self, event: &CommandEvent) -> Result<(), ChatError> {
+        self.append_event(&ChatEvent::from_command_event(event, now()))
+    }
+
     pub fn append_title(
         &self,
         title: &str,
@@ -120,6 +127,19 @@ impl SessionManager {
     pub fn records(&self) -> Result<Vec<ChatRecord>, ChatError> {
         let active = self.active()?;
         self.store.read(&active.path)
+    }
+
+    /// Saves the durable semantic TUI snapshot for the active session.
+    #[allow(dead_code)]
+    pub fn save_snapshot(&self, session: &Session) -> Result<(), ChatError> {
+        self.store.save_snapshot(session)
+    }
+
+    /// Loads the durable semantic TUI snapshot for the active session.
+    #[allow(dead_code)]
+    pub fn load_snapshot(&self) -> Result<Session, ChatError> {
+        let active = self.active()?;
+        self.store.load_snapshot(&active.id)
     }
 
     pub fn history(&self, query: HistoryQuery) -> Result<HistoryPage, ChatError> {

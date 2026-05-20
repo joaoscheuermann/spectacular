@@ -1,4 +1,5 @@
 use super::RuntimeSelection;
+use crate::chat::command_event::CommandEvent;
 use crate::chat::commands::CompletionEnvironment;
 use crate::chat::session::{ChatRecord, HistoryQuery, HistorySummary, SessionManager};
 use crate::chat::ChatError;
@@ -199,6 +200,11 @@ impl ChatModel {
         self.session.append_agent_event(event)
     }
 
+    /// Appends an app-owned command lifecycle event to the active session transcript.
+    pub fn append_command_event(&self, event: &CommandEvent) -> Result<(), ChatError> {
+        self.session.append_command_event(event)
+    }
+
     /// Stores the latest provider-context token usage for prompt footer rendering.
     pub fn set_context_token_usage(&self, usage: ContextTokenUsage) {
         *self.context_token_usage_state() = Some(usage);
@@ -385,6 +391,7 @@ impl ChatPromptFooterModel {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ChatRunRequestModel {
     pub prompt: String,
+    pub prompt_event_id: Option<String>,
     pub render_user_prompt: bool,
     pub retry_existing_prompt: bool,
     pub runtime: RuntimeSelection,

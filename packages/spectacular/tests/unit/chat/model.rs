@@ -41,9 +41,7 @@
         model.start_new_session().unwrap();
 
         model
-            .append_agent_event(&spectacular_agent::AgentEvent::UserPrompt {
-                content: "hello".to_owned(),
-            })
+            .append_agent_event(&spectacular_agent::AgentEvent::user_prompt("hello"))
             .unwrap();
 
         assert!(model.records().unwrap().iter().any(|record| matches!(

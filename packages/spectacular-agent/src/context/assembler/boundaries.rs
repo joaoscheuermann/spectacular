@@ -61,10 +61,10 @@ fn same_turn_compaction_boundaries(
     for index in turn_start..events.len() {
         let mut completed_tool_result = false;
         match &events[index] {
-            AgentEvent::AssistantToolCallRequest { tool_call_id, .. } => {
+            AgentEvent::ToolCallStart { tool_call_id, .. } => {
                 pending_tool_calls.push(tool_call_id.clone());
             }
-            AgentEvent::ToolResult { tool_call_id, .. } => {
+            AgentEvent::ToolCallFinish { tool_call_id, .. } => {
                 if remove_pending_tool_call(&mut pending_tool_calls, tool_call_id) {
                     completed_tool_result = true;
                 } else {

@@ -322,6 +322,65 @@ impl LlmProvider for StreamErrorProvider {
 }
 
 #[derive(Clone, Debug)]
+pub(crate) struct PartialThenPendingEventProvider {
+    pub(crate) partial_sent: Arc<tokio::sync::Notify>,
+}
+
+impl LlmProvider for PartialThenPendingEventProvider {
+    /// Returns provider metadata for this implementation.
+    fn metadata(&self) -> ProviderMetadata {
+        provider_by_id(OPENROUTER_PROVIDER_ID).unwrap()
+    }
+
+    /// Validates provider-specific input for the requested validation mode.
+    fn validate(&self, _mode: ValidationMode, _value: &str) -> Result<(), ProviderError> {
+        Ok(())
+    }
+
+    /// Fetches model metadata available to the supplied API key.
+    fn models(&self, _api_key: &str) -> Result<Vec<Model>, ProviderError> {
+        Ok(Vec::new())
+    }
+
+    /// Returns provider capabilities advertised by this implementation.
+    fn capabilities(&self) -> ProviderCapabilities {
+        capabilities()
+    }
+
+    /// Starts a stream that emits partial output, then waits for cancellation before another event.
+    fn stream_completion<'a>(
+        &'a self,
+        _request: ProviderRequest,
+        cancellation: Cancellation,
+    ) -> ProviderCall<'a> {
+        let partial_sent = Arc::clone(&self.partial_sent);
+        Box::pin(async move {
+            let (sender, receiver) = tokio::sync::mpsc::channel(4);
+            tokio::spawn(async move {
+                let _ = sender
+                    .send(Ok(ProviderStreamEvent::MessageDelta(
+                        MessageDelta::assistant("partial"),
+                    )))
+                    .await;
+                partial_sent.notify_waiters();
+
+                while !cancellation.is_cancelled() {
+                    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+                }
+
+                let _ = sender
+                    .send(Ok(ProviderStreamEvent::MessageDelta(
+                        MessageDelta::assistant("ignored"),
+                    )))
+                    .await;
+            });
+
+            Ok(ProviderStream::new(receiver))
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
 pub(crate) struct SlowProvider {
     pub(crate) started: Arc<tokio::sync::Notify>,
 }

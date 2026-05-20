@@ -51,8 +51,11 @@ impl<'a> SessionIndex<'a> {
             fs::read_dir(self.dir).map_err(|error| ChatError::Session(error.to_string()))?
         {
             let entry = entry.map_err(|error| ChatError::Session(error.to_string()))?;
-            let Some(id) = entry
-                .path()
+            let path = entry.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("jsonl") {
+                continue;
+            }
+            let Some(id) = path
                 .file_stem()
                 .and_then(|value| value.to_str())
                 .map(str::to_owned)

@@ -148,8 +148,9 @@ where
     }
 
     /// Rejects a hidden summary stream that yielded events but no finish event.
-    fn stream_finished_without_event(
+    async fn stream_finished_without_event(
         &mut self,
+        _recorder: &mut RunRecorder<'_, P, C>,
         saw_provider_event: bool,
     ) -> Result<Self::Output, AgentError> {
         if saw_provider_event {

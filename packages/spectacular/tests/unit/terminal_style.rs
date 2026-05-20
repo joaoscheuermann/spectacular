@@ -1,5 +1,5 @@
 use crate::terminal_style::*;
-use spectacular_terminal_ui::tool_style;
+use spectacular_tui::tool_style;
 
 #[test]
 fn paint_wraps_value_with_style_and_reset() {
