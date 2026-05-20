@@ -30,9 +30,32 @@ pub fn app_lines(state: &State) -> Vec<String> {
 
 /// Formats the semantic transcript region without prototype headings or placeholders.
 pub fn transcript_render_lines(state: &State) -> Vec<RenderLine> {
-    visible_transcript_items(state)
-        .flat_map(transcript_item_render_lines)
-        .collect()
+    transcript_render_lines_for_rows(
+        state,
+        crate::transcript_window::visible_transcript_row_count(&state.scroll),
+    )
+}
+
+/// Formats the row-windowed transcript region for a known viewport height.
+pub(crate) fn transcript_render_lines_for_rows(
+    state: &State,
+    visible_rows: usize,
+) -> Vec<RenderLine> {
+    if visible_rows == 0 {
+        return Vec::new();
+    }
+
+    visible_transcript_rows(state, visible_rows)
+}
+
+/// Counts all rendered transcript rows before scroll windowing.
+pub fn transcript_total_render_rows(state: &State) -> usize {
+    state
+        .session
+        .transcript
+        .iter()
+        .map(transcript_item_row_count)
+        .sum()
 }
 
 /// Formats the transcript region as plain visible text for compatibility tests.
@@ -139,18 +162,65 @@ pub fn transcript_item_lines(item: &TranscriptItem) -> Vec<String> {
     plain_lines(transcript_item_render_lines(item))
 }
 
+/// Counts rendered rows for one transcript item without materializing every row when possible.
+fn transcript_item_row_count(item: &TranscriptItem) -> usize {
+    match &item.content {
+        TranscriptItemContent::OpeningBanner(_) => 7,
+        TranscriptItemContent::UserPrompt(prompt) => prompt_text_row_count(&prompt.text),
+        TranscriptItemContent::AssistantMessage(message) => visible_text_row_count(&message.text),
+        TranscriptItemContent::Reasoning(reasoning) => {
+            trimmed_visible_text_row_count(&reasoning.text)
+        }
+        TranscriptItemContent::ToolCall(tool) => tool_row_count(tool),
+        TranscriptItemContent::Command(command) => command_row_count(command),
+        TranscriptItemContent::Error(error) => {
+            1 + error
+                .details
+                .as_deref()
+                .map(visible_text_row_count)
+                .unwrap_or(0)
+        }
+        TranscriptItemContent::Warning(_)
+        | TranscriptItemContent::Success(_)
+        | TranscriptItemContent::Notice(_)
+        | TranscriptItemContent::Cancellation(_)
+        | TranscriptItemContent::WorkedSummary(_) => 1,
+    }
+}
+
 /// Flattens semantic rows into plain visible text rows.
 pub fn plain_lines(lines: Vec<RenderLine>) -> Vec<String> {
     lines.into_iter().map(|line| line.plain_text()).collect()
 }
 
-/// Returns transcript items that are within the current scroll window.
-fn visible_transcript_items(state: &State) -> impl Iterator<Item = &TranscriptItem> {
-    let range = crate::transcript_window::visible_transcript_range(
-        state.session.transcript.len(),
-        &state.scroll,
-    );
-    state.session.transcript[range].iter()
+/// Returns transcript rows that are within the current row-aware scroll window.
+fn visible_transcript_rows(state: &State, visible_rows: usize) -> Vec<RenderLine> {
+    let mut skipped_rows = state.scroll.offset as usize;
+    let mut rows = Vec::with_capacity(visible_rows);
+
+    for item in state.session.transcript.iter().rev() {
+        let mut item_rows = transcript_item_render_lines(item);
+        if skipped_rows >= item_rows.len() {
+            skipped_rows = skipped_rows.saturating_sub(item_rows.len());
+            continue;
+        }
+
+        if skipped_rows > 0 {
+            item_rows.truncate(item_rows.len().saturating_sub(skipped_rows));
+            skipped_rows = 0;
+        }
+
+        for row in item_rows.into_iter().rev() {
+            rows.push(row);
+            if rows.len() >= visible_rows {
+                rows.reverse();
+                return rows;
+            }
+        }
+    }
+
+    rows.reverse();
+    rows
 }
 
 /// Formats the opening banner as original-width Unicode box drawing rows.
@@ -250,6 +320,11 @@ fn prompt_text_render_lines(text: &str, style: RenderStyle) -> Vec<RenderLine> {
         .collect()
 }
 
+/// Counts rows emitted for a prompt with original marker rows.
+fn prompt_text_row_count(text: &str) -> usize {
+    text.lines().count().max(1)
+}
+
 /// Formats slash command suggestions under the active prompt.
 fn slash_suggestion_render_lines(state: &State) -> Vec<RenderLine> {
     slash_suggestions(state)
@@ -307,6 +382,21 @@ fn tool_render_lines(tool: &ToolCallItem) -> Vec<RenderLine> {
     lines
 }
 
+/// Counts rows for a tool-call item without building output rows.
+fn tool_row_count(tool: &ToolCallItem) -> usize {
+    if let Some(display) = &tool.display {
+        return usize::from(display.call_line.is_some())
+            + display.argument_lines.len()
+            + display.output_lines.len();
+    }
+
+    1 + tool
+        .output_preview
+        .as_deref()
+        .map(visible_text_row_count)
+        .unwrap_or(0)
+}
+
 /// Formats a command transcript item as original-shaped semantic rows.
 fn command_render_lines(command: &CommandItem) -> Vec<RenderLine> {
     if let Some(display) = &command.display {
@@ -339,6 +429,18 @@ fn command_render_lines(command: &CommandItem) -> Vec<RenderLine> {
         ));
     }
     lines
+}
+
+/// Counts rows for a command item without building output rows.
+fn command_row_count(command: &CommandItem) -> usize {
+    if let Some(display) = &command.display {
+        return usize::from(display.command_line.is_some())
+            + display.output_lines.len()
+            + usize::from(display.summary_line.is_some());
+    }
+
+    1 + visible_text_row_count(&command.output)
+        + usize::from(command.status == CommandStatus::Failed && command.exit_code.is_some())
 }
 
 /// Converts one adapter display line into one semantic render row.
@@ -504,10 +606,26 @@ fn visible_lines(text: &str) -> Vec<String> {
     text.lines().map(ToOwned::to_owned).collect()
 }
 
+/// Counts visible rows without allocating row strings.
+fn visible_text_row_count(text: &str) -> usize {
+    if text.is_empty() {
+        return 0;
+    }
+    text.lines().count()
+}
+
 /// Splits text into visible rows only when it contains non-whitespace content.
 fn visible_trimmed_lines(text: &str) -> Vec<String> {
     if text.trim().is_empty() {
         return Vec::new();
     }
     visible_lines(text)
+}
+
+/// Counts trimmed visible rows without allocating row strings.
+fn trimmed_visible_text_row_count(text: &str) -> usize {
+    if text.trim().is_empty() {
+        return 0;
+    }
+    visible_text_row_count(text)
 }

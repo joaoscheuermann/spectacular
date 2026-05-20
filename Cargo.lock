@@ -1787,6 +1787,7 @@ name = "spectacular-tui"
 version = "0.1.0"
 dependencies = [
  "anstyle",
+ "futures",
  "iocraft",
  "serde",
  "serde_json",

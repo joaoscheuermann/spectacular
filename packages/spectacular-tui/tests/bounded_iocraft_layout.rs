@@ -1,6 +1,8 @@
+use futures::{self, StreamExt};
+use iocraft::prelude::*;
 use spectacular_tui::{
-    reduce, render_state_to_string, ChatTuiAction, DisplayMetadata, PromptState, ReasoningLevel,
-    RuntimeSelection, SessionId, State, TranscriptItemId,
+    components::App, reduce, render_state_to_string, ChatTuiAction, DisplayMetadata, PromptState,
+    ReasoningLevel, RuntimeSelection, SessionId, State, TranscriptItemId,
 };
 
 /// Builds a representative runtime selection for bounded layout tests.
@@ -36,9 +38,219 @@ fn render_app(state: &State) -> String {
     render_state_to_string(state, Some(100))
 }
 
+/// Renders actual IOCraft canvas rows for layout-position assertions.
+fn render_canvas_lines(state: &State, width: u16, height: u16) -> Vec<String> {
+    canvas_text_lines(
+        &render_app_canvas_with_events(state, width, height, Vec::new()),
+        width,
+        height,
+    )
+}
+
+/// Renders the App through IOCraft's terminal loop after applying terminal events.
+async fn render_canvas_after_events(
+    state: &State,
+    width: u16,
+    height: u16,
+    events: Vec<TerminalEvent>,
+) -> Canvas {
+    render_app_canvas_after_events(state, width, height, events).await
+}
+
+/// Renders the App once as a canvas without terminal events.
+fn render_app_canvas_with_events(
+    state: &State,
+    width: u16,
+    height: u16,
+    _events: Vec<TerminalEvent>,
+) -> Canvas {
+    let mut app = element!(App(state: state.clone(), width: Some(width), height: Some(height)));
+    app.render(Some(usize::from(width)))
+}
+
+/// Renders the App through IOCraft's mock terminal and returns the latest canvas.
+async fn render_app_canvas_after_events(
+    state: &State,
+    width: u16,
+    height: u16,
+    mut events: Vec<TerminalEvent>,
+) -> Canvas {
+    events.push(TerminalEvent::Key(KeyEvent::new(
+        KeyEventKind::Press,
+        KeyCode::Char('q'),
+    )));
+    let mut app = element!(TestHarness(
+        state: state.clone(),
+        width: Some(width),
+        height: Some(height)
+    ));
+    let canvases = app
+        .mock_terminal_render_loop(MockTerminalConfig::with_events(futures::stream::iter(
+            events,
+        )))
+        .collect::<Vec<_>>()
+        .await;
+
+    canvases
+        .last()
+        .cloned()
+        .expect("test harness should render at least one canvas")
+}
+
+/// Extracts fixed viewport text rows from an IOCraft canvas.
+fn canvas_text_lines(canvas: &Canvas, width: u16, height: u16) -> Vec<String> {
+    canvas
+        .get_text(0, 0, usize::from(width), usize::from(height))
+        .split('\n')
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+/// Test wrapper that exits after receiving the synthetic quit event.
+#[component]
+fn TestHarness(mut hooks: Hooks, props: &TestHarnessProps) -> impl Into<AnyElement<'static>> {
+    let state = props.state.clone().expect("TestHarness requires state");
+    let width = props.width;
+    let height = props.height;
+    let mut system = hooks.use_context_mut::<SystemContext>();
+    let mut should_exit = hooks.use_state(|| false);
+
+    hooks.use_terminal_events(move |event| {
+        if let TerminalEvent::Key(KeyEvent {
+            code: KeyCode::Char('q'),
+            kind: KeyEventKind::Press,
+            ..
+        }) = event
+        {
+            should_exit.set(true);
+        }
+    });
+
+    if should_exit.get() {
+        system.exit();
+    }
+
+    element!(App(state, width, height))
+}
+
+/// Props for the App test harness.
+#[derive(Default, Props)]
+struct TestHarnessProps {
+    state: Option<State>,
+    width: Option<u16>,
+    height: Option<u16>,
+}
+
 /// Counts occurrences of a substring in rendered output.
 fn occurrences(output: &str, needle: &str) -> usize {
     output.match_indices(needle).count()
+}
+
+/// Returns true when the canvas contains a scrollbar marker at the given cell.
+fn has_scrollbar_marker(canvas: &Canvas, x: usize, y: usize) -> bool {
+    canvas.cell(x, y).is_some_and(|cell| {
+        matches!(cell.text(), Some("│" | "┃"))
+            && cell.text_style().is_some_and(|style| style.color.is_some())
+    })
+}
+
+/// Verifies short transcript content starts at the top and leaves unused rows below chrome.
+#[test]
+fn short_transcript_starts_at_top_without_bottom_anchoring() {
+    let mut state = state();
+    reduce(
+        &mut state,
+        ChatTuiAction::NoticeReported {
+            message: "top transcript row".to_string(),
+        },
+    );
+
+    let lines = render_canvas_lines(&state, 80, 10);
+
+    assert_eq!(lines[0], "top transcript row");
+    assert_eq!(lines[1], "> ");
+    assert!(lines[2].contains("/workspace/spectacular"));
+    assert!(lines[3..].iter().all(String::is_empty));
+}
+
+/// Verifies scrolling past the oldest transcript row does not render blank viewport gaps.
+#[tokio::test]
+async fn scroll_up_clamps_when_oldest_row_reaches_viewport_top() {
+    let mut state = state();
+    for index in 0..8 {
+        reduce(
+            &mut state,
+            ChatTuiAction::SubmitPrompt {
+                id: TranscriptItemId::new(format!("prompt-{index}")),
+                text: format!("submitted prompt {index}"),
+            },
+        );
+    }
+
+    let page_up = TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::PageUp));
+    let overscroll_canvas = render_canvas_after_events(
+        &state,
+        80,
+        6,
+        vec![
+            page_up.clone(),
+            page_up.clone(),
+            page_up.clone(),
+            page_up.clone(),
+            page_up,
+        ],
+    )
+    .await;
+    let overscroll_lines = canvas_text_lines(&overscroll_canvas, 80, 6);
+
+    assert!(overscroll_lines[0].starts_with("> submitted prompt 0"));
+    assert!(overscroll_lines[3].starts_with("> submitted prompt 3"));
+    assert!(overscroll_lines[..4].iter().all(|line| !line.is_empty()));
+    assert!(has_scrollbar_marker(&overscroll_canvas, 79, 0));
+    assert!(has_scrollbar_marker(&overscroll_canvas, 79, 3));
+}
+
+/// Verifies overflowing transcript content renders a scrollbar next to the transcript pane.
+#[test]
+fn overflowing_transcript_shows_scrollbar() {
+    let mut state = state();
+    for index in 0..8 {
+        reduce(
+            &mut state,
+            ChatTuiAction::SubmitPrompt {
+                id: TranscriptItemId::new(format!("prompt-{index}")),
+                text: format!("submitted prompt {index}"),
+            },
+        );
+    }
+
+    let canvas = render_app_canvas_with_events(&state, 80, 6, Vec::new());
+
+    assert!(has_scrollbar_marker(&canvas, 79, 0));
+    assert!(has_scrollbar_marker(&canvas, 79, 3));
+}
+
+/// Verifies full-width transcript rows leave the rightmost column for the scrollbar.
+#[test]
+fn full_width_transcript_rows_do_not_push_scrollbar_out_of_view() {
+    let mut state = state();
+    for index in 0..8 {
+        reduce(
+            &mut state,
+            ChatTuiAction::SubmitPrompt {
+                id: TranscriptItemId::new(format!("prompt-{index}")),
+                text: format!("{index}{}", "x".repeat(120)),
+            },
+        );
+    }
+
+    for width in [20, 40, 80] {
+        let canvas = render_app_canvas_with_events(&state, width, 6, Vec::new());
+        let scrollbar_x = usize::from(width.saturating_sub(1));
+
+        assert!(has_scrollbar_marker(&canvas, scrollbar_x, 0));
+        assert!(has_scrollbar_marker(&canvas, scrollbar_x, 3));
+    }
 }
 
 /// Verifies transcript overflow is bounded without duplicating fixed rows.

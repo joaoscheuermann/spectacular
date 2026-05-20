@@ -10,6 +10,7 @@ pub fn WorkingIndicator(props: &WorkingIndicatorProps) -> impl Into<AnyElement<'
         .state
         .clone()
         .expect("WorkingIndicator requires state");
+
     let lines: Vec<AnyElement<'static>> = working_render_line(&state)
         .into_iter()
         .map(render_line_element)

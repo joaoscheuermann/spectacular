@@ -295,7 +295,7 @@ fn appended_content_honors_scroll_follow_tail_state() {
         },
     );
 
-    assert_eq!(reviewing.scroll.offset, 5);
+    assert_eq!(reviewing.scroll.offset, 4);
     assert!(!reviewing.scroll.follow_tail);
 }
 

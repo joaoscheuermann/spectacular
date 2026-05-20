@@ -1,7 +1,4 @@
-use iocraft::prelude::{
-    FullscreenMouseEvent, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEventKind,
-    TerminalEvent,
-};
+use iocraft::prelude::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers, TerminalEvent};
 use spectacular_tui::{
     reduce, tui_event_effects, ChatTuiAction, CommandDescriptor, DisplayMetadata, EventEffect,
     PromptState, ReasoningLevel, RuntimeSelection, SessionId, State, Status, TranscriptItemContent,
@@ -147,16 +144,7 @@ fn ctrl_c_while_idle_requests_exit_without_mutating_transcript() {
 /// Verifies timer ticks are represented as explicit spinner actions at the documented cadence.
 #[test]
 fn timer_tick_dispatches_spinner_tick_without_terminal_output() {
-    let state = state();
-
     assert_eq!(TUI_SPINNER_TICK_INTERVAL, Duration::from_millis(90));
-    assert_eq!(
-        single_action(&state, TerminalEvent::Resize(80, 24)),
-        ChatTuiAction::Resize {
-            width: 80,
-            height: 24,
-        }
-    );
     assert_eq!(
         spectacular_tui::tui_timer_tick_effects(),
         vec![EventEffect::Action(ChatTuiAction::SpinnerTick)]
@@ -190,28 +178,25 @@ fn assistant_delta_is_visible_without_reveal_timer_effects() {
     }));
 }
 
-/// Verifies scroll input maps into transcript scrolling actions and reducer tail-following behavior.
+/// Verifies transcript scroll input is left to the layout-owned viewport.
 #[test]
-fn transcript_scroll_input_updates_scroll_state_and_tail_following() {
-    let mut state = state();
+fn transcript_scroll_input_does_not_emit_reducer_actions() {
+    let state = state();
 
-    let action = single_action(
-        &state,
-        TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(MouseEventKind::ScrollUp, 0, 0)),
+    assert_eq!(
+        tui_event_effects(
+            &state,
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::PageUp))
+        ),
+        Vec::new()
     );
-    reduce(&mut state, action);
-
-    assert_eq!(state.scroll.offset, 3);
-    assert!(!state.scroll.follow_tail);
-
-    let action = single_action(
-        &state,
-        TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(MouseEventKind::ScrollDown, 0, 0)),
+    assert_eq!(
+        tui_event_effects(
+            &state,
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::PageDown))
+        ),
+        Vec::new()
     );
-    reduce(&mut state, action);
-
-    assert_eq!(state.scroll.offset, 0);
-    assert!(state.scroll.follow_tail);
 }
 
 /// Verifies slash-command suggestions render in the original terminal-flow shape.

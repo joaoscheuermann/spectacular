@@ -370,6 +370,14 @@ fn scroll_manual_mode_does_not_snap_on_new_output() {
             height: 2,
         },
     );
+    for message in ["older 1", "older 2", "older 3"] {
+        reduce(
+            &mut state,
+            ChatTuiAction::NoticeReported {
+                message: message.to_owned(),
+            },
+        );
+    }
     reduce(&mut state, ChatTuiAction::ScrollTranscript(1));
     reduce(
         &mut state,

@@ -16,11 +16,14 @@ impl TranscriptScrollState {
         }
     }
 
-    /// Applies a relative scroll delta where positive moves toward older content.
-    pub fn scroll_by(&mut self, delta: i32) {
+    /// Applies a bounded relative scroll delta where positive moves toward older content.
+    pub fn scroll_by(&mut self, delta: i32, max_offset: u32) {
         if delta > 0 {
-            self.offset = self.offset.saturating_add(delta.unsigned_abs());
-            self.follow_tail = false;
+            self.offset = self
+                .offset
+                .saturating_add(delta.unsigned_abs())
+                .min(max_offset);
+            self.follow_tail = self.offset == 0;
             return;
         }
 

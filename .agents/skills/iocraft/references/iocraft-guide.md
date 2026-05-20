@@ -321,6 +321,16 @@ Extract a component when it:
 
 Avoid splitting every `View` into a component; shallow components can make IOCraft UIs harder to read.
 
+## Spectacular TUI transcript rendering
+
+Repository invariant: Spectacular TUI rendering is component-first. When rendering visible transcript items, status rows, prompt rows, or other terminal lines in `packages/spectacular-tui`, prefer meaningful IOCraft components from `src/components/*` and compose them with `element!`.
+
+Good component boundaries for this codebase include named transcript concepts such as user prompts, assistant messages, tool calls, command output, reasoning, notices, warnings, success, cancellation, worked summaries, the opening banner, prompt area, footer, and scrollable transcript content. Use the existing component for the concept when one exists. If the UI concept is missing, add or improve that component instead of adding another line-formatting function.
+
+Avoid shallow rendering wrappers that only convert domain data into `Vec<RenderLine>`, `Vec<String>`, or equivalent terminal-flow rows. These flattening helpers hide UI structure, duplicate component behavior, make layout harder to evolve, and become bypasses around IOCraft. `packages/spectacular-tui/src/format.rs::transcript_item_render_lines` is the reference bad pattern: a broad match over transcript item variants that delegates to ad hoc per-kind line formatters and returns line vectors. Keep that shape as legacy compatibility only; do not copy it, expand it for new UI, or route new TUI rendering through it.
+
+Use line-vector output only at narrow compatibility boundaries, snapshots that deliberately assert plain text, or adapters that are actively being retired. New rendering behavior should preserve semantic structure as IOCraft elements until the final render mode (`to_string`, `write`, `render_loop`, or `fullscreen`).
+
 ## Rendering modes
 
 Choose the rendering mode based on the output lifecycle.
@@ -898,6 +908,7 @@ Event handlers should usually update state. Let rendering derive UI from state. 
 When implementing an IOCraft feature, verify:
 
 - The root rendering mode matches the use case.
+- Spectacular TUI transcript/status/prompt rows are composed from IOCraft components rather than new `Vec<RenderLine>`/`Vec<String>` formatters.
 - Components have clear names and boundaries.
 - Props borrow domain data when practical.
 - Required props are validated early.

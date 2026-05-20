@@ -2,13 +2,10 @@ use crate::action::ChatTuiAction;
 use crate::ids::TranscriptItemId;
 use crate::session::{PromptState, SelectionPromptState};
 use crate::state::State;
-use iocraft::prelude::{
-    KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEventKind, TerminalEvent,
-};
+use iocraft::prelude::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers, TerminalEvent};
 use std::time::Duration;
 
 pub const TUI_SPINNER_TICK_INTERVAL: Duration = Duration::from_millis(90);
-const MOUSE_SCROLL_LINES: i32 = 3;
 
 /// Effect requested by local TUI event handling without performing side effects directly.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -21,14 +18,6 @@ pub enum EventEffect {
 pub fn tui_event_effects(state: &State, event: TerminalEvent) -> Vec<EventEffect> {
     match event {
         TerminalEvent::Key(key) => key_effects(state, key),
-        TerminalEvent::Resize(width, height) => {
-            vec![EventEffect::Action(ChatTuiAction::Resize { width, height })]
-        }
-        TerminalEvent::FullscreenMouse(mouse) => mouse_scroll_effect(mouse.kind)
-            .into_iter()
-            .map(ChatTuiAction::ScrollTranscript)
-            .map(EventEffect::Action)
-            .collect(),
         _ => Vec::new(),
     }
 }
@@ -72,12 +61,6 @@ fn key_effects(state: &State, key: KeyEvent) -> Vec<EventEffect> {
         .modifiers
         .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT);
     match key.code {
-        KeyCode::PageUp => vec![EventEffect::Action(ChatTuiAction::ScrollTranscript(
-            page_scroll_delta(state),
-        ))],
-        KeyCode::PageDown => vec![EventEffect::Action(ChatTuiAction::ScrollTranscript(
-            -page_scroll_delta(state),
-        ))],
         KeyCode::Enter => prompt_enter_effects(state),
         KeyCode::Tab => accept_slash_completion_effects(state),
         KeyCode::Esc => prompt_change_effect(state, PromptState::escape),
@@ -301,22 +284,6 @@ fn should_insert_char(key: &KeyEvent, character: char) -> bool {
         && !key
             .modifiers
             .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
-}
-
-/// Returns a page-sized scroll delta from current known viewport height.
-fn page_scroll_delta(state: &State) -> i32 {
-    i32::try_from(state.scroll.visible_rows)
-        .unwrap_or(i32::MAX)
-        .max(1)
-}
-
-/// Maps mouse wheel events to transcript scroll deltas.
-fn mouse_scroll_effect(kind: MouseEventKind) -> Option<i32> {
-    match kind {
-        MouseEventKind::ScrollUp => Some(MOUSE_SCROLL_LINES),
-        MouseEventKind::ScrollDown => Some(-MOUSE_SCROLL_LINES),
-        _ => None,
-    }
 }
 
 /// Allocates a deterministic local prompt ID from current semantic transcript length.

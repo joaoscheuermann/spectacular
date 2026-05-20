@@ -1,8 +1,7 @@
-use iocraft::prelude::{KeyCode, KeyEvent, KeyEventKind, TerminalEvent};
 use spectacular_tui::{
-    reduce, render_state_to_string, tui_event_effects, AssistantMessageItem, ChatTuiAction,
-    DisplayMetadata, EventEffect, ReasoningLevel, RuntimeSelection, SessionId, State,
-    TranscriptItem, TranscriptItemContent, TranscriptItemId, UserPromptItem,
+    reduce, render_state_to_string, AssistantMessageItem, ChatTuiAction, DisplayMetadata,
+    ReasoningLevel, RuntimeSelection, SessionId, State, TranscriptItem, TranscriptItemContent,
+    TranscriptItemId, UserPromptItem,
 };
 use std::time::{Duration, Instant};
 
@@ -29,13 +28,7 @@ fn display() -> DisplayMetadata {
 /// Builds an initialized state with stable metadata and viewport size.
 fn state() -> State {
     let mut state = State::new(SessionId::new("session-1"), runtime(), display());
-    reduce(
-        &mut state,
-        ChatTuiAction::Resize {
-            width: 100,
-            height: VISIBLE_TRANSCRIPT_ROWS,
-        },
-    );
+    state.scroll.visible_rows = u32::from(VISIBLE_TRANSCRIPT_ROWS);
     state
 }
 
@@ -89,6 +82,11 @@ fn scrolling_up_disables_follow_tail_and_clamps_to_valid_range() {
     assert!(!state.scroll.follow_tail);
 
     reduce(&mut state, ChatTuiAction::ScrollTranscript(i32::MAX));
+
+    assert_eq!(state.scroll.offset, 4_980);
+    assert!(!state.scroll.follow_tail);
+
+    reduce(&mut state, ChatTuiAction::ScrollTranscript(10));
 
     assert_eq!(state.scroll.offset, 4_980);
     assert!(!state.scroll.follow_tail);
@@ -152,12 +150,12 @@ fn returning_to_bottom_reenables_follow_tail() {
     assert!(output.contains("streamed tail content"));
 }
 
-/// Verifies resize actions update the viewport and preserve valid scroll state.
+/// Verifies resize actions do not mutate reducer scroll position.
 #[test]
-fn resize_action_preserves_valid_scroll_state() {
+fn resize_action_does_not_own_transcript_viewport_state() {
     let mut state = state();
     populate_large_transcript(&mut state);
-    reduce(&mut state, ChatTuiAction::ScrollTranscript(i32::MAX));
+    reduce(&mut state, ChatTuiAction::ScrollTranscript(10));
 
     reduce(
         &mut state,
@@ -167,8 +165,11 @@ fn resize_action_preserves_valid_scroll_state() {
         },
     );
 
-    assert_eq!(state.scroll.visible_rows, 100);
-    assert_eq!(state.scroll.offset, 4_900);
+    assert_eq!(
+        state.scroll.visible_rows,
+        u32::from(VISIBLE_TRANSCRIPT_ROWS)
+    );
+    assert_eq!(state.scroll.offset, 10);
     assert!(!state.scroll.follow_tail);
 }
 
@@ -255,44 +256,4 @@ fn spinner_ticks_during_large_streaming_keep_rendering_responsive() {
 
     let elapsed = started.elapsed();
     assert!(elapsed < RENDER_BUDGET, "spinner redraws took {elapsed:?}");
-}
-
-/// Verifies keyboard page scrolling uses reducer-owned viewport state.
-#[test]
-fn page_keys_scroll_transcript_by_visible_rows() {
-    let state = state();
-
-    let page_up = tui_event_effects(
-        &state,
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::PageUp)),
-    );
-    let page_down = tui_event_effects(
-        &state,
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::PageDown)),
-    );
-
-    assert_eq!(
-        page_up,
-        vec![EventEffect::Action(ChatTuiAction::ScrollTranscript(20))]
-    );
-    assert_eq!(
-        page_down,
-        vec![EventEffect::Action(ChatTuiAction::ScrollTranscript(-20))]
-    );
-}
-
-/// Verifies IOCraft resize events retain terminal dimensions for reducer-owned layout state.
-#[test]
-fn resize_event_carries_terminal_dimensions_to_reducer() {
-    let state = state();
-
-    let effects = tui_event_effects(&state, iocraft::prelude::TerminalEvent::Resize(132, 43));
-
-    assert_eq!(
-        effects,
-        vec![EventEffect::Action(ChatTuiAction::Resize {
-            width: 132,
-            height: 43,
-        })]
-    );
 }

@@ -10,6 +10,7 @@ mod prompt_area;
 mod reasoning;
 mod success;
 mod tool_call;
+mod transcript;
 mod transcript_content;
 mod user_prompt;
 mod warning;
@@ -17,3 +18,4 @@ mod worked_summary;
 mod working_indicator;
 
 pub use app::{App, AppProps};
+pub use transcript::{Transcript, TranscriptProps};

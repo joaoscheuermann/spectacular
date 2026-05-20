@@ -1,21 +1,9 @@
-use crate::components::assistant_message::AssistantMessage;
-use crate::components::cancellation::Cancellation;
-use crate::components::command::Command;
-use crate::components::error::Error;
 use crate::components::footer::Footer;
-use crate::components::notice::Notice;
-use crate::components::opening_banner::OpeningBanner;
 use crate::components::prompt_area::PromptArea;
-use crate::components::reasoning::Reasoning;
-use crate::components::success::Success;
-use crate::components::tool_call::ToolCall;
-use crate::components::user_prompt::UserPrompt;
-use crate::components::warning::Warning;
-use crate::components::worked_summary::WorkedSummary;
+use crate::components::transcript::Transcript;
 use crate::components::working_indicator::WorkingIndicator;
+use crate::format::{prompt_render_lines, working_render_line};
 use crate::state::State;
-use crate::transcript::{TranscriptItem, TranscriptItemContent};
-use crate::transcript_window::visible_transcript_range;
 use iocraft::prelude::*;
 
 /// Composes the full-screen application layout from owned state for runtime rendering.
@@ -28,66 +16,37 @@ pub fn App(mut hooks: Hooks, props: &AppProps) -> impl Into<AnyElement<'static>>
 
     let state = props.state.clone().expect("App requires state");
 
-    let transcript_range = visible_transcript_range(state.session.transcript.len(), &state.scroll);
-
-    let transcript_items: Vec<AnyElement<'static>> = state
-        .session
-        .transcript
-        .get(transcript_range)
-        .unwrap_or_default()
-        .iter()
-        .map(transcript_item_element)
-        .collect();
-
     let Some(height) = height else {
         return element!(View(width)).into_any();
     };
 
+    let transcript_capacity = transcript_capacity_rows(&state, height);
+
     element!(View(flex_direction: FlexDirection::Column, width, height) {
-        View(flex_direction: FlexDirection::Column, width: 100pct, flex_grow: 1.0, overflow: Overflow::Hidden) {
-            View(width: 100pct, flex_grow: 1.0, overflow: Overflow::Hidden) {
-                ScrollView(auto_scroll: true, keyboard_scroll: false, scrollbar: Some(false)) {
-                  View(flex_direction: FlexDirection::Column, width: 100pct) {
-                    #(transcript_items.into_iter())
-                  }
-                }
-            }
-            WorkingIndicator(state: state.clone())
-        }
+        Transcript(state: state.clone(), capacity: transcript_capacity)
+        WorkingIndicator(state: state.clone())
         View(flex_direction: FlexDirection::Column, width: 100pct, flex_shrink: 0.0) {
             PromptArea(state: state.clone())
             Footer(state: state.clone())
         }
-    }).into_any()
+    })
+    .into_any()
 }
 
-/// Renders one keyed transcript item while preserving its original identity.
-fn transcript_item_element(item: &TranscriptItem) -> AnyElement<'static> {
-    let key = item.id.as_str().to_owned();
-    match &item.content {
-        TranscriptItemContent::OpeningBanner(_) => {
-            element!(OpeningBanner(key, item: item.clone())).into()
-        }
-        TranscriptItemContent::UserPrompt(_) => {
-            element!(UserPrompt(key, item: item.clone())).into()
-        }
-        TranscriptItemContent::AssistantMessage(_) => {
-            element!(AssistantMessage(key, item: item.clone())).into()
-        }
-        TranscriptItemContent::Reasoning(_) => element!(Reasoning(key, item: item.clone())).into(),
-        TranscriptItemContent::ToolCall(_) => element!(ToolCall(key, item: item.clone())).into(),
-        TranscriptItemContent::Command(_) => element!(Command(key, item: item.clone())).into(),
-        TranscriptItemContent::Error(_) => element!(Error(key, item: item.clone())).into(),
-        TranscriptItemContent::Warning(_) => element!(Warning(key, item: item.clone())).into(),
-        TranscriptItemContent::Success(_) => element!(Success(key, item: item.clone())).into(),
-        TranscriptItemContent::Notice(_) => element!(Notice(key, item: item.clone())).into(),
-        TranscriptItemContent::Cancellation(_) => {
-            element!(Cancellation(key, item: item.clone())).into()
-        }
-        TranscriptItemContent::WorkedSummary(_) => {
-            element!(WorkedSummary(key, item: item.clone())).into()
-        }
-    }
+/// Returns rows available to transcript content after fixed chrome is accounted for.
+fn transcript_capacity_rows(state: &State, height: u16) -> u16 {
+    let working_rows = if working_render_line(state).is_some() {
+        1
+    } else {
+        0
+    };
+    let chrome_rows = prompt_render_lines(state)
+        .len()
+        .saturating_add(working_rows)
+        .saturating_add(1);
+    let chrome_rows = u16::try_from(chrome_rows).unwrap_or(u16::MAX);
+
+    height.saturating_sub(chrome_rows)
 }
 
 /// Props for the full-screen root application component.

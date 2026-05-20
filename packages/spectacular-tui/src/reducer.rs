@@ -1,4 +1,5 @@
 use crate::action::ChatTuiAction;
+use crate::format::transcript_total_render_rows;
 use crate::ids::TranscriptItemId;
 use crate::reducer_display::{
     append_display_command, append_display_command_output, append_display_tool_call,
@@ -69,7 +70,9 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
             };
         }
         ChatTuiAction::MessageDelta { id, text } => {
+            let old_rows = transcript_total_render_rows(state);
             append_assistant_delta_directly(state, &id, &text);
+            preserve_review_position_for_rendered_row_growth(state, old_rows);
         }
         ChatTuiAction::MessageFinished { id } => {
             clear_matching_activity(
@@ -89,7 +92,9 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
             };
         }
         ChatTuiAction::ReasoningDelta { id, text } => {
+            let old_rows = transcript_total_render_rows(state);
             append_reasoning_delta(state, &id, &text);
+            preserve_review_position_for_rendered_row_growth(state, old_rows);
         }
         ChatTuiAction::ReasoningFinished { id } => {
             clear_matching_activity(
@@ -119,7 +124,9 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
             };
         }
         ChatTuiAction::ToolCallDelta { tool_call_id, text } => {
+            let old_rows = transcript_total_render_rows(state);
             append_tool_delta(state, &tool_call_id, &text);
+            preserve_review_position_for_rendered_row_growth(state, old_rows);
         }
         ChatTuiAction::ToolCallFinished {
             tool_call_id,
@@ -192,7 +199,9 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
             };
         }
         ChatTuiAction::CommandOutput { command_id, text } => {
+            let old_rows = transcript_total_render_rows(state);
             append_command_output(state, &command_id, &text);
+            preserve_review_position_for_rendered_row_growth(state, old_rows);
         }
         ChatTuiAction::CommandFinished {
             command_id,
@@ -273,28 +282,33 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
             state.spinner.tick();
         }
         ChatTuiAction::ScrollTranscript(delta) => {
-            state.scroll.scroll_by(delta);
-            clamp_scroll_to_transcript(&mut state.scroll, state.session.transcript.len());
+            let total_rows = transcript_total_render_rows(state);
+            state.scroll.scroll_by(
+                delta,
+                max_scroll_offset(total_rows, state.scroll.visible_rows),
+            );
         }
-        ChatTuiAction::Resize { height, .. } => {
-            state.scroll.visible_rows = u32::from(height);
-            clamp_scroll_to_transcript(&mut state.scroll, state.session.transcript.len());
-        }
+        ChatTuiAction::Resize { .. } => {}
     }
 }
 
-/// Clamps transcript scroll offset to the valid range for the current transcript length.
-fn clamp_scroll_to_transcript(scroll: &mut TranscriptScrollState, transcript_len: usize) {
-    if scroll.visible_rows == 0 {
-        return;
-    }
-    if !scroll.follow_tail && transcript_len as u32 <= scroll.visible_rows {
-        return;
+/// Clamps transcript scroll offset to the valid range for the current rendered row count.
+fn clamp_scroll_to_transcript(scroll: &mut TranscriptScrollState, total_rows: usize) {
+    scroll.offset = scroll
+        .offset
+        .min(max_scroll_offset(total_rows, scroll.visible_rows));
+    scroll.follow_tail = scroll.offset == 0;
+}
+
+/// Returns the maximum valid distance from the transcript tail for the current viewport.
+fn max_scroll_offset(total_rows: usize, visible_rows: u32) -> u32 {
+    if visible_rows == 0 {
+        return u32::MAX;
     }
 
-    let max_offset = (transcript_len as u32).saturating_sub(scroll.visible_rows);
-    scroll.offset = scroll.offset.min(max_offset);
-    scroll.follow_tail = scroll.offset == 0;
+    u32::try_from(total_rows)
+        .unwrap_or(u32::MAX)
+        .saturating_sub(visible_rows)
 }
 
 /// Inserts a user prompt unless the transcript already contains the prompt occurrence ID.
@@ -330,25 +344,25 @@ pub(crate) fn append_transcript_item(
     id: TranscriptItemId,
     content: TranscriptItemContent,
 ) {
-    preserve_review_position_for_append(state);
+    let old_rows = transcript_total_render_rows(state);
     let timestamp = state.session.allocate_timestamp();
     state
         .session
         .transcript
         .push(TranscriptItem::new(id, timestamp, content));
+    preserve_review_position_for_rendered_row_growth(state, old_rows);
 }
 
-/// Keeps the same rendered rows visible when appending while not following the transcript tail.
-fn preserve_review_position_for_append(state: &mut State) {
+/// Keeps the same rendered rows visible when transcript content grows while reviewing history.
+fn preserve_review_position_for_rendered_row_growth(state: &mut State, old_rows: usize) {
     if state.scroll.follow_tail {
         return;
     }
 
-    state.scroll.offset = state.scroll.offset.saturating_add(1);
-    clamp_scroll_to_transcript(
-        &mut state.scroll,
-        state.session.transcript.len().saturating_add(1),
-    );
+    let new_rows = transcript_total_render_rows(state);
+    let row_delta = u32::try_from(new_rows.saturating_sub(old_rows)).unwrap_or(u32::MAX);
+    state.scroll.offset = state.scroll.offset.saturating_add(row_delta);
+    clamp_scroll_to_transcript(&mut state.scroll, new_rows);
 }
 
 /// Appends assistant text directly to the semantic transcript item.
