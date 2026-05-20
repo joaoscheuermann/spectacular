@@ -6,8 +6,8 @@ use spectacular_llms::{FinishReason, UsageMetadata};
 use spectacular_tui::{
     ChatTuiAction, CommandDescriptor, ContextTokenUsage as TuiContextTokenUsage,
     DisplayLine, DisplayLineStyle, DisplayMetadata as TuiDisplayMetadata,
-    ReasoningLevel as TuiReasoningLevel, RuntimeSelection as TuiRuntimeSelection, SessionId,
-    ToolDisplayStatus, TranscriptItemId,
+    ProviderUsageMetadata as TuiProviderUsageMetadata, ReasoningLevel as TuiReasoningLevel,
+    RuntimeSelection as TuiRuntimeSelection, SessionId, ToolDisplayStatus, TranscriptItemId,
 };
 use std::future::Future;
 use std::path::Path;
@@ -234,9 +234,9 @@ fn user_prompt_agent_events_require_prompt_id() {
         .is_empty());
 }
 
-/// Verifies provider usage and context usage events map to TUI usage state updates.
+/// Verifies usage events map to distinct context estimates and provider turn usage updates.
 #[test]
-fn usage_events_map_to_usage_updated() {
+fn usage_events_map_to_usage_actions() {
     let mut adapter = TuiEventAdapter::new();
 
     assert_eq!(
@@ -246,10 +246,9 @@ fn usage_events_map_to_usage_updated() {
                 context_window_tokens: Some(100),
             },
         )),
-        vec![ChatTuiAction::UsageUpdated(TuiContextTokenUsage::new(
-            42,
-            Some(100),
-        ))]
+        vec![ChatTuiAction::ContextUsageUpdated(
+            TuiContextTokenUsage::new(42, Some(100)),
+        )]
     );
     assert_eq!(
         adapter.adapt_agent_event(&AgentEvent::UsageMetadata(UsageMetadata {
@@ -257,9 +256,9 @@ fn usage_events_map_to_usage_updated() {
             output_tokens: Some(11),
             total_tokens: Some(18),
         })),
-        vec![ChatTuiAction::UsageUpdated(TuiContextTokenUsage::new(
-            18, None,
-        ))]
+        vec![ChatTuiAction::ProviderUsageReported(
+            TuiProviderUsageMetadata::new(Some(7), Some(11), Some(18)),
+        )]
     );
 }
 

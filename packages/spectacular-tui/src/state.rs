@@ -1,5 +1,5 @@
 use crate::ids::SessionId;
-use crate::metadata::{CommandDescriptor, DisplayMetadata, RuntimeSelection};
+use crate::metadata::{CommandDescriptor, ContextTokenUsage, DisplayMetadata, RuntimeSelection};
 use crate::scroll::TranscriptScrollState;
 use crate::session::{SelectionPromptState, Session};
 use crate::spinner::SpinnerState;
@@ -20,7 +20,12 @@ pub struct State {
 
 impl State {
     /// Creates initial TUI state from caller-owned runtime and display metadata.
-    pub fn new(session_id: SessionId, runtime: RuntimeSelection, display: DisplayMetadata) -> Self {
+    pub fn new(
+        session_id: SessionId,
+        runtime: RuntimeSelection,
+        mut display: DisplayMetadata,
+    ) -> Self {
+        default_display_context_usage(&runtime, &mut display);
         Self {
             session: Session::new(session_id),
             commands: Vec::new(),
@@ -41,7 +46,10 @@ impl State {
         mut display: DisplayMetadata,
     ) -> Self {
         session.refresh_next_timestamp();
-        display.usage = session.usage;
+        display.context_usage = session.context_usage;
+        display.turn_usage = session.turn_usage;
+        display.total_usage = session.total_usage;
+        default_display_context_usage(&runtime, &mut display);
         Self {
             session,
             commands,
@@ -53,4 +61,16 @@ impl State {
             scroll: TranscriptScrollState::follow_tail(),
         }
     }
+}
+
+/// Populates display context usage from the runtime context window when no context estimate exists.
+pub(crate) fn default_display_context_usage(
+    runtime: &RuntimeSelection,
+    display: &mut DisplayMetadata,
+) {
+    if display.context_usage.is_some() {
+        return;
+    }
+
+    display.context_usage = ContextTokenUsage::default_for_window(runtime.context_window_tokens);
 }

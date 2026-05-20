@@ -1,8 +1,8 @@
     use super::*;
     use spectacular_tui::{
-        CommandItem, CommandStatus, ContextTokenUsage, ErrorItem, NoticeItem, PromptState,
-        ReasoningItem, Session, SessionId, Timestamp, ToolCallItem, ToolStatus, TranscriptItem,
-        TranscriptItemContent, TranscriptItemId, UserPromptItem, AssistantMessageItem,
+        AssistantMessageItem, CommandItem, CommandStatus, ContextTokenUsage, ErrorItem,
+        NoticeItem, PromptState, ReasoningItem, Session, SessionId, Timestamp, ToolCallItem,
+        ToolStatus, TranscriptItem, TranscriptItemContent, TranscriptItemId, UserPromptItem,
     };
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -68,7 +68,9 @@
             ],
             next_timestamp: Timestamp::new(8),
             prompt: PromptState::from_text("draft"),
-            usage: Some(ContextTokenUsage::new(70, Some(100))),
+            context_usage: Some(ContextTokenUsage::new(70, Some(100))),
+            turn_usage: None,
+            total_usage: None,
         }
     }
 

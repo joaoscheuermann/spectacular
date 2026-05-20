@@ -24,7 +24,10 @@ pub use assistant_message::{AssistantMessage, AssistantMessageProps};
 pub use cancellation::{Cancellation, CancellationProps};
 pub use command::{Command, CommandProps};
 pub use error::{Error, ErrorProps};
-pub use footer::{footer_render_line, footer_text, usage_text, Footer, FooterProps};
+pub use footer::{
+    footer_left_render_line, footer_render_line, footer_right_render_line, footer_text,
+    turn_usage_text, usage_text, Footer, FooterProps,
+};
 pub use notice::{Notice, NoticeProps};
 pub use opening_banner::{OpeningBanner, OpeningBannerProps};
 pub use prompt_area::{prompt_lines, prompt_render_lines, PromptArea, PromptAreaProps};
@@ -33,6 +36,10 @@ pub use success::{Success, SuccessProps};
 pub use tool_call::{ToolCall, ToolCallProps};
 pub use transcript::{Transcript, TranscriptProps};
 pub use transcript_content::plain_lines;
+pub use transcript_projection::{
+    transcript_item_layout_rows, transcript_layout_item_range, transcript_layout_row_starts,
+    transcript_layout_total_rows, wrapped_layout_text_rows,
+};
 pub use transcript_projection::{
     transcript_item_lines, transcript_item_render_lines, transcript_lines, transcript_render_lines,
     transcript_total_render_rows,

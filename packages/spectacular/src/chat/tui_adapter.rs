@@ -5,11 +5,12 @@ use crate::chat::tui_adapter_display::{
 use crate::chat::RuntimeSelection;
 use spectacular_agent::{AgentEvent, ToolStorage};
 use spectacular_commands::CommandRegistry;
-use spectacular_llms::{FinishReason, UsageMetadata};
+use spectacular_llms::FinishReason;
 use spectacular_tui::{
     ChatTuiAction, CommandDescriptor, ContextTokenUsage as TuiContextTokenUsage,
-    DisplayMetadata as TuiDisplayMetadata, ReasoningLevel as TuiReasoningLevel,
-    RuntimeSelection as TuiRuntimeSelection, SessionId, TranscriptItemId,
+    DisplayMetadata as TuiDisplayMetadata, ProviderUsageMetadata as TuiProviderUsageMetadata,
+    ReasoningLevel as TuiReasoningLevel, RuntimeSelection as TuiRuntimeSelection, SessionId,
+    TranscriptItemId,
 };
 use std::path::Path;
 
@@ -87,10 +88,14 @@ impl TuiEventAdapter {
             } => self
                 .tool_display
                 .result_actions(tool_call_id, name, output, tools),
-            AgentEvent::UsageMetadata(usage) => {
-                usage_action_from_metadata(usage).into_iter().collect()
-            }
-            AgentEvent::ContextTokenUsage(usage) => vec![ChatTuiAction::UsageUpdated(
+            AgentEvent::UsageMetadata(usage) => vec![ChatTuiAction::ProviderUsageReported(
+                TuiProviderUsageMetadata::new(
+                    usage.input_tokens,
+                    usage.output_tokens,
+                    usage.total_tokens,
+                ),
+            )],
+            AgentEvent::ContextTokenUsage(usage) => vec![ChatTuiAction::ContextUsageUpdated(
                 TuiContextTokenUsage::new(usage.input_tokens, usage.context_window_tokens),
             )],
             AgentEvent::ValidationError { message } | AgentEvent::Error { message } => {
@@ -222,21 +227,6 @@ pub(crate) fn session_changed_action(session_id: &str) -> ChatTuiAction {
     ChatTuiAction::SessionChanged {
         id: SessionId::new(session_id),
     }
-}
-
-/// Converts provider usage metadata into a compact TUI usage action when token data exists.
-fn usage_action_from_metadata(usage: &UsageMetadata) -> Option<ChatTuiAction> {
-    let tokens = usage.total_tokens.or_else(|| {
-        Some(
-            usage
-                .input_tokens?
-                .saturating_add(usage.output_tokens.unwrap_or_default()),
-        )
-    })?;
-
-    Some(ChatTuiAction::UsageUpdated(TuiContextTokenUsage::new(
-        tokens, None,
-    )))
 }
 
 /// Converts runtime context token usage into TUI token usage metadata.

@@ -58,7 +58,7 @@ fn opening_banner_empty_transcript_prompt_and_footer_match_original_shape() {
         runtime(),
         display(Some(usage)),
     );
-    state.session.usage = Some(usage);
+    state.session.context_usage = Some(usage);
     state.session.transcript.push(item(
         1,
         TranscriptItemContent::OpeningBanner(OpeningBannerItem::new(
@@ -77,7 +77,9 @@ fn opening_banner_empty_transcript_prompt_and_footer_match_original_shape() {
     assert!(output.contains("directory: /workspace/spectacular"));
     assert!(output.contains("session:   session-123"));
     assert!(output.contains(">"));
-    assert!(output.contains("/workspace/spectacular · GPT 5.1 (high) · 42k/200k tks"));
+    assert!(
+        output.contains("session-123 · /workspace/spectacular · GPT 5.1 (high) · ~42k/200k ctx")
+    );
     assert!(!output.contains("Transcript"));
     assert!(!output.contains("No transcript items yet"));
     assert!(!output.contains("Status:"));

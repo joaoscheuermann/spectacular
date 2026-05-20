@@ -11,7 +11,7 @@ use crate::reducer_lookup::{
 };
 use crate::scroll::TranscriptScrollState;
 use crate::session::Session;
-use crate::state::State;
+use crate::state::{default_display_context_usage, State};
 use crate::status::{Activity, Status};
 use crate::transcript::{
     AssistantMessageItem, CancellationItem, CommandItem, CommandStatus, ErrorItem, NoticeItem,
@@ -53,6 +53,9 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
             state.scroll = Default::default();
         }
         ChatTuiAction::AgentStarted => {
+            state.session.turn_usage = None;
+            state.display.turn_usage = None;
+            state.session.context_usage = None;
             state.status = Status::Running {
                 activity: Activity::WaitingForModel,
                 cancellable: true,
@@ -270,13 +273,27 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
         }
         ChatTuiAction::RuntimeSelectionChanged(runtime) => {
             state.runtime = runtime;
+            default_display_context_usage(&state.runtime, &mut state.display);
         }
-        ChatTuiAction::DisplayMetadataChanged(display) => {
+        ChatTuiAction::DisplayMetadataChanged(mut display) => {
+            default_display_context_usage(&state.runtime, &mut display);
             state.display = display;
         }
-        ChatTuiAction::UsageUpdated(usage) => {
-            state.session.usage = Some(usage);
-            state.display.usage = Some(usage);
+        ChatTuiAction::WorktreeMetadataChanged(worktree) => {
+            state.display.worktree = worktree;
+        }
+        ChatTuiAction::ContextUsageUpdated(usage) => {
+            state.session.context_usage = Some(usage);
+            state.display.context_usage = Some(usage);
+        }
+        ChatTuiAction::ProviderUsageReported(reported) => {
+            let turn_usage = state.session.turn_usage.get_or_insert_default();
+            turn_usage.record_provider_usage(reported);
+            state.display.turn_usage = state.session.turn_usage;
+
+            let total_usage = state.session.total_usage.get_or_insert_default();
+            total_usage.record_provider_usage(reported);
+            state.display.total_usage = state.session.total_usage;
         }
         ChatTuiAction::SpinnerTick => {
             state.spinner.tick();

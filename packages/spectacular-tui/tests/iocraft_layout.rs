@@ -193,11 +193,11 @@ fn usage_renders_in_footer() {
         runtime(),
         display(Some(usage)),
     );
-    state.session.usage = Some(usage);
+    state.session.context_usage = Some(usage);
 
     let output = render(&state);
 
-    assert!(output.contains("42k/200k tks"));
+    assert!(output.contains("~42k/200k ctx"));
     assert!(!output.contains("tokens:"));
     assert!(!output.contains("context:"));
 }

@@ -6,12 +6,13 @@ use crate::chat::session::{
     agent_events_from_records, records_before_latest_user_prompt, SessionManager,
 };
 use crate::chat::tui_adapter::{commands_loaded_action, TuiEventAdapter};
+use crate::chat::worktree::current_worktree_metadata;
 use crate::chat::{ChatBootstrap, ChatError, RuntimeSelection};
 use iocraft::prelude::*;
 use spectacular_agent::{AgentEvent, Store, ToolStorage};
 use spectacular_llms::LlmDebugLogger;
 use spectacular_tui::{
-    ChatTuiAction, DisplayMetadata, OpeningBannerItem, RuntimeIntent, RuntimeShell,
+    ChatTuiAction, DisplayMetadata, OpeningBannerItem, PromptState, RuntimeIntent, RuntimeShell,
     SelectionPromptAnswer, SelectionPromptChoice, SelectionPromptState, SessionId, State,
     TranscriptItemId,
 };
@@ -19,6 +20,7 @@ use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tokio::sync::mpsc;
 
 pub(crate) type TuiTurnFuture<'a> =
@@ -46,6 +48,7 @@ pub(crate) struct TuiRuntimeController<R = AgentTuiTurnRunner> {
     model: ChatModel,
     tools: ToolStorage,
     runner: R,
+    workspace_root: PathBuf,
     pending_selection: Option<PendingTuiSelectionPrompt>,
 }
 
@@ -101,6 +104,7 @@ where
             model,
             tools,
             runner,
+            workspace_root,
             pending_selection: None,
         })
     }
@@ -188,6 +192,7 @@ where
             return Ok(());
         }
 
+        self.refresh_worktree_metadata(state_sender).await;
         let prompt_event_id = id.as_str().to_owned();
         self.shell.apply_action(ChatTuiAction::SubmitPrompt {
             id,
@@ -203,22 +208,41 @@ where
             retry_existing_prompt: false,
             runtime: self.model.runtime().clone(),
         };
-        let mut dispatch = |action| {
-            self.shell.apply_action(action);
-            publish_state(&self.shell, state_sender);
+        let run_result = {
+            let mut dispatch = |action| {
+                self.shell.apply_action(action);
+                publish_state(&self.shell, state_sender);
+            };
+            self.runner
+                .run(
+                    &self.model,
+                    &self.tools,
+                    request,
+                    &mut dispatch,
+                    cancellation_receiver,
+                )
+                .await
         };
-        self.runner
-            .run(
-                &self.model,
-                &self.tools,
-                request,
-                &mut dispatch,
-                cancellation_receiver,
-            )
-            .await?;
+        self.refresh_worktree_metadata(state_sender).await;
+        run_result?;
         self.model
             .session_manager()
             .save_snapshot(&self.shell.state().session)
+    }
+
+    /// Refreshes display-safe worktree metadata from the controller-owned workspace.
+    async fn refresh_worktree_metadata(
+        &mut self,
+        state_sender: Option<&mpsc::UnboundedSender<State>>,
+    ) {
+        let workspace_root = self.workspace_root.clone();
+        let worktree =
+            tokio::task::spawn_blocking(move || current_worktree_metadata(&workspace_root))
+                .await
+                .unwrap_or(None);
+        self.shell
+            .apply_action(ChatTuiAction::WorktreeMetadataChanged(worktree));
+        publish_state(&self.shell, state_sender);
     }
 
     /// Opens a controller-owned TUI selection prompt for slash commands that require one.
@@ -345,16 +369,27 @@ async fn run_controller_loop<R>(
 where
     R: TuiTurnRunner,
 {
-    while let Some(intent) = intent_receiver.recv().await {
-        let should_exit = controller
-            .handle_intent_with_state_sender(intent, &state_sender, &mut cancellation_receiver)
-            .await?;
-        let _ = state_sender.send(controller.state_snapshot());
-        if should_exit {
-            return Ok(());
+    let mut worktree_refresh = tokio::time::interval(Duration::from_secs(2));
+
+    loop {
+        tokio::select! {
+            intent = intent_receiver.recv() => {
+                let Some(intent) = intent else {
+                    return Ok(());
+                };
+                let should_exit = controller
+                    .handle_intent_with_state_sender(intent, &state_sender, &mut cancellation_receiver)
+                    .await?;
+                let _ = state_sender.send(controller.state_snapshot());
+                if should_exit {
+                    return Ok(());
+                }
+            }
+            _ = worktree_refresh.tick() => {
+                controller.refresh_worktree_metadata(Some(&state_sender)).await;
+            }
         }
     }
-    Ok(())
 }
 
 /// Publishes the current reducer state for IOCraft rendering when a sender is available.
@@ -388,12 +423,14 @@ fn TuiRuntimeRoot(mut hooks: Hooks, props: &TuiRuntimeRootProps) -> impl Into<An
         .expect("TuiRuntimeRoot requires state receiver")
         .clone();
     let mut system = hooks.use_context_mut::<SystemContext>();
+    let current_prompt = hooks.use_state(|| initial_state.session.prompt.clone());
     let local_state = hooks.use_state(|| initial_state);
     let exit_requested = hooks.use_state(|| false);
-    synchronize_runtime_state(&mut hooks, local_state, state_receiver);
+    synchronize_runtime_state(&mut hooks, local_state, current_prompt, state_receiver);
     emit_terminal_intents(
         &mut hooks,
         local_state,
+        current_prompt,
         exit_requested,
         intent_sender,
         cancellation_sender,
@@ -401,7 +438,7 @@ fn TuiRuntimeRoot(mut hooks: Hooks, props: &TuiRuntimeRootProps) -> impl Into<An
     if exit_requested.get() {
         system.exit();
     }
-    let state = local_state.read().clone();
+    let state = state_with_current_prompt(&local_state.read(), &current_prompt.read());
     element!(spectacular_tui::components::App(state))
 }
 
@@ -418,19 +455,21 @@ struct TuiRuntimeRootProps {
 fn synchronize_runtime_state(
     hooks: &mut Hooks,
     mut local_state: iocraft::prelude::State<State>,
+    mut current_prompt: iocraft::prelude::State<PromptState>,
     state_receiver: Arc<Mutex<mpsc::UnboundedReceiver<State>>>,
 ) {
     hooks.use_future(async move {
         loop {
-            apply_state_updates(&mut local_state, &state_receiver);
+            apply_state_updates(&mut local_state, &mut current_prompt, &state_receiver);
             tokio::time::sleep(std::time::Duration::from_millis(16)).await;
         }
     });
 }
 
-/// Applies all pending state snapshots from the runtime controller.
+/// Applies all pending state snapshots from the runtime controller without clobbering local prompt edits.
 fn apply_state_updates(
     local_state: &mut iocraft::prelude::State<State>,
+    current_prompt: &mut iocraft::prelude::State<PromptState>,
     state_receiver: &Arc<Mutex<mpsc::UnboundedReceiver<State>>>,
 ) {
     loop {
@@ -441,23 +480,54 @@ fn apply_state_updates(
         else {
             return;
         };
+        let local_snapshot = local_state.read().clone();
+        let prompt_snapshot = current_prompt.read().clone();
+        let (state, prompt_reset) =
+            merge_controller_state_update(&local_snapshot, state, &prompt_snapshot);
+        if let Some(prompt) = prompt_reset {
+            current_prompt.set(prompt);
+        }
         local_state.set(state);
     }
+}
+
+/// Returns render state with the prompt value owned by the interactive prompt component.
+fn state_with_current_prompt(state: &State, prompt: &PromptState) -> State {
+    let mut state = state.clone();
+    state.session.prompt = prompt.clone();
+    state
+}
+
+/// Merges a controller snapshot while keeping same-session prompt input local to the TUI.
+fn merge_controller_state_update(
+    local_state: &State,
+    mut controller_state: State,
+    current_prompt: &PromptState,
+) -> (State, Option<PromptState>) {
+    if controller_state.session.id != local_state.session.id {
+        let reset_prompt = controller_state.session.prompt.clone();
+        return (controller_state, Some(reset_prompt));
+    }
+
+    controller_state.session.prompt = current_prompt.clone();
+    (controller_state, None)
 }
 
 /// Registers terminal input handling that emits runtime intents without performing side effects.
 fn emit_terminal_intents(
     hooks: &mut Hooks,
     local_state: iocraft::prelude::State<State>,
+    current_prompt: iocraft::prelude::State<PromptState>,
     exit_requested: iocraft::prelude::State<bool>,
     intent_sender: mpsc::UnboundedSender<RuntimeIntent>,
     cancellation_sender: mpsc::UnboundedSender<()>,
 ) {
     hooks.use_terminal_events({
         let mut local_state = local_state;
+        let mut current_prompt = current_prompt;
         let mut exit_requested = exit_requested;
         move |event| {
-            let state = local_state.read().clone();
+            let state = state_with_current_prompt(&local_state.read(), &current_prompt.read());
             let (mut shell, mut intents) = RuntimeShell::new(state);
             shell.apply_terminal_event(event);
             while let Ok(intent) = intents.try_recv() {
@@ -474,7 +544,9 @@ fn emit_terminal_intents(
                     }
                 }
             }
-            local_state.set(shell.state().clone());
+            let state = shell.state().clone();
+            current_prompt.set(state.session.prompt.clone());
+            local_state.set(state);
         }
     });
 }
@@ -605,7 +677,7 @@ fn initial_state(model: &ChatModel, workspace_root: &PathBuf) -> State {
             .context_window_tokens
             .map(|value| value as u64),
     );
-    let display = DisplayMetadata::new(
+    let mut display = DisplayMetadata::new(
         model.runtime().provider.clone(),
         model.runtime().model.clone(),
         model.runtime().reasoning.to_string(),
@@ -613,6 +685,7 @@ fn initial_state(model: &ChatModel, workspace_root: &PathBuf) -> State {
         model.current_session_id(),
         None,
     );
+    display.worktree = current_worktree_metadata(workspace_root);
     State::new(SessionId::new(model.current_session_id()), runtime, display)
 }
 

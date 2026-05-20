@@ -2,7 +2,7 @@ use spectacular_tui::{
     AssistantMessageItem, CommandDescriptor, CommandItem, CommandStatus, ContextTokenUsage,
     DisplayMetadata, ErrorItem, NoticeItem, PromptState, ReasoningItem, ReasoningLevel,
     RuntimeSelection, Session, SessionId, State, Status, Timestamp, ToolCallItem, ToolStatus,
-    TranscriptItem, TranscriptItemContent, TranscriptItemId, UserPromptItem,
+    TranscriptItem, TranscriptItemContent, TranscriptItemId, TurnTokenUsage, UserPromptItem,
 };
 
 /// Builds a stable transcript item with semantic content for snapshot tests.
@@ -87,7 +87,19 @@ fn session_snapshot() -> Session {
         ],
         next_timestamp: Timestamp::new(8),
         prompt: PromptState::from_text("draft"),
-        usage: Some(ContextTokenUsage::new(55, Some(128_000))),
+        context_usage: Some(ContextTokenUsage::new(55, Some(128_000))),
+        turn_usage: Some(TurnTokenUsage {
+            input_tokens: 20,
+            output_tokens: 35,
+            total_tokens: 55,
+            has_provider_metadata: true,
+        }),
+        total_usage: Some(TurnTokenUsage {
+            input_tokens: 80,
+            output_tokens: 120,
+            total_tokens: 200,
+            has_provider_metadata: true,
+        }),
     }
 }
 
@@ -128,9 +140,34 @@ fn session_snapshot_serializes_and_deserializes_durable_transcript_data() {
     ));
     assert_eq!(restored.prompt, PromptState::from_text("draft"));
     assert_eq!(
-        restored.usage,
+        restored.context_usage,
         Some(ContextTokenUsage::new(55, Some(128_000)))
     );
+    assert_eq!(restored.turn_usage, session.turn_usage);
+    assert_eq!(restored.total_usage, session.total_usage);
+}
+
+/// Verifies legacy snapshots using the old usage field restore context usage.
+#[test]
+fn legacy_usage_field_deserializes_as_context_usage() {
+    let value = serde_json::json!({
+        "id": "legacy-session",
+        "transcript": [],
+        "prompt": PromptState::empty(),
+        "usage": {
+            "input_tokens": 42,
+            "context_window_tokens": 100
+        }
+    });
+
+    let restored: Session = serde_json::from_value(value).unwrap();
+
+    assert_eq!(
+        restored.context_usage,
+        Some(ContextTokenUsage::new(42, Some(100)))
+    );
+    assert_eq!(restored.turn_usage, None);
+    assert_eq!(restored.total_usage, None);
 }
 
 /// Verifies replay reconstructs live state from durable session data and fresh metadata.
@@ -151,7 +188,9 @@ fn state_reconstruction_initializes_transient_fields_from_defaults() {
     assert_eq!(state.session, session);
     assert_eq!(state.commands, commands);
     assert_eq!(state.runtime, runtime);
-    assert_eq!(state.display.usage, session.usage);
+    assert_eq!(state.display.context_usage, session.context_usage);
+    assert_eq!(state.display.turn_usage, session.turn_usage);
+    assert_eq!(state.display.total_usage, session.total_usage);
     assert_eq!(state.display.provider_label, display.provider_label);
     assert_eq!(state.status, Status::Idle);
     assert_eq!(state.spinner, Default::default());

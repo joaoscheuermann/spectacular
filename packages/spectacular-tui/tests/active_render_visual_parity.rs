@@ -1,7 +1,8 @@
 use spectacular_tui::{
-    app_render_lines, footer_render_line, render_state_to_string, CommandStatus, ContextTokenUsage,
-    DisplayMetadata, OpeningBannerItem, ReasoningLevel, RenderLine, RenderStyle, RuntimeSelection,
-    SessionId, State, Status, ToolStatus, TranscriptItem, TranscriptItemContent, TranscriptItemId,
+    app_render_lines, footer_render_line, footer_right_render_line, render_state_to_string,
+    CommandStatus, ContextTokenUsage, DisplayMetadata, OpeningBannerItem, ReasoningLevel,
+    RenderLine, RenderStyle, RuntimeSelection, SessionId, State, Status, ToolStatus,
+    TranscriptItem, TranscriptItemContent, TranscriptItemId, TurnTokenUsage, WorktreeMetadata,
 };
 
 /// Builds a representative runtime selection for active render parity tests.
@@ -29,7 +30,22 @@ fn display(usage: Option<ContextTokenUsage>) -> DisplayMetadata {
 
 /// Builds an initialized state with stable metadata.
 fn state() -> State {
-    State::new(SessionId::new("session-123"), runtime(), display(None))
+    State::new(
+        SessionId::new("session-123"),
+        runtime_without_context_window(),
+        display(None),
+    )
+}
+
+/// Builds a runtime selection without context usage for legacy no-usage checks.
+fn runtime_without_context_window() -> RuntimeSelection {
+    RuntimeSelection::new(
+        "openai-compatible",
+        "openrouter",
+        "gpt-5.1",
+        ReasoningLevel::High,
+        None,
+    )
 }
 
 /// Creates a transcript item with stable test identity and timestamp.
@@ -56,7 +72,7 @@ fn active_app_renders_terminal_flow_without_prototype_chrome() {
     let output = render(&state());
 
     assert!(output.contains("> "));
-    assert!(output.contains("/workspace/spectacular · GPT 5.1 (high)"));
+    assert!(output.contains("session-123 · /workspace/spectacular · GPT 5.1 (high)"));
     assert!(!output.contains("Transcript"));
     assert!(!output.contains("No transcript items yet"));
     assert!(!output.contains("Prompt:"));
@@ -145,35 +161,110 @@ fn opening_banner_does_not_emit_mojibake() {
 }
 
 #[test]
-fn footer_matches_original_shape_without_usage() {
+fn footer_includes_session_first_without_usage() {
     let state = state();
     let footer = footer_render_line(&state);
 
     assert_eq!(
         footer.plain_text(),
-        "/workspace/spectacular · GPT 5.1 (high)"
+        "session-123 · /workspace/spectacular · GPT 5.1 (high)"
     );
-    assert_eq!(footer.spans[0].style, RenderStyle::Task);
-    assert_eq!(footer.spans[1].style, RenderStyle::Dim);
-    assert_eq!(footer.spans[2].style, RenderStyle::Model);
-    assert_eq!(footer.spans[3].style, RenderStyle::Dim);
+    assert!(footer
+        .spans
+        .iter()
+        .all(|span| span.style == RenderStyle::Dim));
+}
+
+#[test]
+fn footer_omits_worktree_metadata_when_unavailable() {
+    let state = State::new(SessionId::new("session-123"), runtime(), display(None));
+    let footer = footer_render_line(&state);
+
+    assert_eq!(
+        footer.plain_text(),
+        "session-123 · /workspace/spectacular · GPT 5.1 (high) · ~0/200k ctx"
+    );
+    assert!(footer
+        .spans
+        .iter()
+        .all(|span| span.style == RenderStyle::Dim));
+}
+
+#[test]
+fn footer_includes_clean_branch_worktree_metadata() {
+    let mut display = display(None);
+    display.worktree = Some(WorktreeMetadata::new("main"));
+    let state = State::new(SessionId::new("session-123"), runtime(), display);
+
+    assert_eq!(
+        footer_render_line(&state).plain_text(),
+        "session-123 · /workspace/spectacular · GPT 5.1 (high) · main · ~0/200k ctx"
+    );
+}
+
+#[test]
+fn footer_includes_dirty_branch_worktree_metadata() {
+    let mut display = display(None);
+    display.worktree = Some(WorktreeMetadata::new("main*"));
+    let state = State::new(SessionId::new("session-123"), runtime(), display);
+
+    assert_eq!(
+        footer_render_line(&state).plain_text(),
+        "session-123 · /workspace/spectacular · GPT 5.1 (high) · main* · ~0/200k ctx"
+    );
+}
+
+#[test]
+fn footer_includes_detached_head_worktree_metadata() {
+    let mut display = display(None);
+    display.worktree = Some(WorktreeMetadata::new("abc1234"));
+    let state = State::new(SessionId::new("session-123"), runtime(), display);
+
+    assert_eq!(
+        footer_render_line(&state).plain_text(),
+        "session-123 · /workspace/spectacular · GPT 5.1 (high) · abc1234 · ~0/200k ctx"
+    );
+}
+
+#[test]
+fn footer_includes_dirty_detached_head_worktree_metadata() {
+    let mut display = display(None);
+    display.worktree = Some(WorktreeMetadata::new("abc1234*"));
+    let state = State::new(SessionId::new("session-123"), runtime(), display);
+
+    assert_eq!(
+        footer_render_line(&state).plain_text(),
+        "session-123 · /workspace/spectacular · GPT 5.1 (high) · abc1234* · ~0/200k ctx"
+    );
 }
 
 #[test]
 fn footer_matches_original_shape_with_usage() {
-    let usage = ContextTokenUsage::new(42_000, Some(200_000));
+    let context_usage = ContextTokenUsage::new(80_000, Some(200_000));
     let mut state = State::new(
         SessionId::new("session-123"),
         runtime(),
-        display(Some(usage)),
+        display(Some(context_usage)),
     );
-    state.session.usage = Some(usage);
+    state.session.context_usage = Some(context_usage);
+    state.session.turn_usage = Some(TurnTokenUsage {
+        input_tokens: 3_000,
+        output_tokens: 9_000,
+        total_tokens: 12_000,
+        has_provider_metadata: true,
+    });
+    state.session.total_usage = Some(TurnTokenUsage {
+        input_tokens: 30_000,
+        output_tokens: 12_000,
+        total_tokens: 42_000,
+        has_provider_metadata: true,
+    });
 
     let footer = footer_render_line(&state);
 
     assert_eq!(
         footer.plain_text(),
-        "/workspace/spectacular · GPT 5.1 (high) · 42k/200k tks"
+        "session-123 · /workspace/spectacular · GPT 5.1 (high) · 42k/200k tks"
     );
     assert_eq!(footer.spans.last().unwrap().style, RenderStyle::Dim);
 }
@@ -192,11 +283,11 @@ fn footer_usage_uses_warning_and_critical_styles() {
     );
 
     assert_eq!(
-        footer_render_line(&warning).spans.last().unwrap().style,
+        footer_right_render_line(&warning).unwrap().spans[0].style,
         RenderStyle::Warning
     );
     assert_eq!(
-        footer_render_line(&critical).spans.last().unwrap().style,
+        footer_right_render_line(&critical).unwrap().spans[0].style,
         RenderStyle::Error
     );
 }
@@ -356,5 +447,5 @@ fn active_render_applies_semantic_styles() {
     assert!(styles.contains(&RenderStyle::User));
     assert!(styles.contains(&RenderStyle::Assistant));
     assert!(styles.contains(&RenderStyle::Warning));
-    assert!(styles.contains(&RenderStyle::Task));
+    assert!(styles.contains(&RenderStyle::Dim));
 }

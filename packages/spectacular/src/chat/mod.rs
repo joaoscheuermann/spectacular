@@ -15,6 +15,7 @@ mod title;
 mod tui_adapter;
 mod tui_adapter_display;
 mod tui_runtime;
+mod worktree;
 
 use crate::chat::renderer::Renderer;
 use crate::chat::runner::main_chat_tool_storage;

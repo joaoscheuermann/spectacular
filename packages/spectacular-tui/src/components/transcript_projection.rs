@@ -121,6 +121,39 @@ impl TranscriptItemLayout {
     }
 }
 
+/// Returns the width-aware total row count used by live transcript layout.
+pub fn transcript_layout_total_rows(state: &State, width: usize) -> usize {
+    TranscriptLayout::for_state(state, width).total_rows
+}
+
+/// Returns the width-aware row starts used by live transcript layout.
+pub fn transcript_layout_row_starts(state: &State, width: usize) -> Vec<usize> {
+    TranscriptLayout::for_state(state, width)
+        .items
+        .into_iter()
+        .map(|item| item.start_row)
+        .collect()
+}
+
+/// Returns the item range intersecting a half-open virtual row window.
+pub fn transcript_layout_item_range(
+    state: &State,
+    width: usize,
+    rows: Range<usize>,
+) -> Range<usize> {
+    TranscriptLayout::for_state(state, width).item_range(rows)
+}
+
+/// Returns the width-aware row count used by live layout for one transcript item.
+pub fn transcript_item_layout_rows(item: &TranscriptItem, width: usize) -> usize {
+    transcript_item_row_count_for_width(item, width)
+}
+
+/// Returns the row count from the local IOCraft-style text wrapping model.
+pub fn wrapped_layout_text_rows(text: &str, width: usize) -> usize {
+    wrapped_text_row_count(text, width)
+}
+
 /// Formats the transcript region as plain visible text for compatibility tests.
 pub fn transcript_lines(state: &State) -> Vec<String> {
     plain_lines(transcript_render_lines(state))

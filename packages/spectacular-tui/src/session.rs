@@ -64,7 +64,7 @@ pub struct SelectionPromptState {
     pub input_mode: crate::selection_prompt::SelectionInputMode,
 }
 
-/// Session-local TUI state for transcript, prompt, and context usage.
+/// Session-local TUI state for transcript, prompt, and token usage.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Session {
     pub id: SessionId,
@@ -72,7 +72,12 @@ pub struct Session {
     #[serde(skip_serializing)]
     pub next_timestamp: Timestamp,
     pub prompt: PromptState,
-    pub usage: Option<crate::metadata::ContextTokenUsage>,
+    #[serde(default, alias = "usage")]
+    pub context_usage: Option<crate::metadata::ContextTokenUsage>,
+    #[serde(default)]
+    pub turn_usage: Option<crate::metadata::TurnTokenUsage>,
+    #[serde(default)]
+    pub total_usage: Option<crate::metadata::TokenUsageTotal>,
 }
 
 impl<'de> Deserialize<'de> for Session {
@@ -86,7 +91,12 @@ impl<'de> Deserialize<'de> for Session {
             id: SessionId,
             transcript: Vec<TranscriptItem>,
             prompt: PromptState,
-            usage: Option<crate::metadata::ContextTokenUsage>,
+            #[serde(default, alias = "usage")]
+            context_usage: Option<crate::metadata::ContextTokenUsage>,
+            #[serde(default)]
+            turn_usage: Option<crate::metadata::TurnTokenUsage>,
+            #[serde(default)]
+            total_usage: Option<crate::metadata::TokenUsageTotal>,
         }
 
         let durable = DurableSession::deserialize(deserializer)?;
@@ -95,7 +105,9 @@ impl<'de> Deserialize<'de> for Session {
             transcript: durable.transcript,
             next_timestamp: default_next_timestamp(),
             prompt: durable.prompt,
-            usage: durable.usage,
+            context_usage: durable.context_usage,
+            turn_usage: durable.turn_usage,
+            total_usage: durable.total_usage,
         };
         session.refresh_next_timestamp();
         Ok(session)
@@ -110,7 +122,9 @@ impl Session {
             transcript: Vec::new(),
             next_timestamp: Timestamp::default(),
             prompt: PromptState::empty(),
-            usage: None,
+            context_usage: None,
+            turn_usage: None,
+            total_usage: None,
         }
     }
 

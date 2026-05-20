@@ -1,7 +1,7 @@
 use spectacular_tui::{
     reduce, Activity, ChatTuiAction, CommandDescriptor, ContextTokenUsage, DisplayMetadata,
-    PromptState, ReasoningLevel, RuntimeSelection, SessionId, State, Status, TranscriptItemContent,
-    TranscriptItemId,
+    PromptState, ProviderUsageMetadata, ReasoningLevel, RuntimeSelection, SessionId, State, Status,
+    TranscriptItemContent, TranscriptItemId, TurnTokenUsage, WorktreeMetadata,
 };
 
 /// Builds a representative runtime selection for reducer tests.
@@ -44,8 +44,12 @@ fn state_new_initializes_foundation_defaults() {
     assert!(state.session.transcript.is_empty());
     assert_eq!(state.session.prompt, PromptState::empty());
     assert!(state.commands.is_empty());
+    let mut expected_display = display.clone();
+    expected_display.context_usage =
+        ContextTokenUsage::default_for_window(runtime.context_window_tokens);
+
     assert_eq!(state.runtime, runtime);
-    assert_eq!(state.display, display);
+    assert_eq!(state.display, expected_display);
     assert_eq!(state.status, Status::Idle);
     assert_eq!(state.spinner.current_frame(), "⠙");
     assert_eq!(state.scroll.offset, 0);
@@ -148,6 +152,23 @@ fn submit_prompt_keeps_same_text_with_different_ids_distinct() {
 #[test]
 fn agent_started_and_finished_update_status() {
     let mut state = state();
+    let prior_context_usage = ContextTokenUsage::new(90, Some(100));
+    state.session.context_usage = Some(prior_context_usage);
+    state.display.context_usage = Some(prior_context_usage);
+    state.session.turn_usage = Some(TurnTokenUsage {
+        input_tokens: 10,
+        output_tokens: 20,
+        total_tokens: 30,
+        has_provider_metadata: true,
+    });
+    state.display.turn_usage = state.session.turn_usage;
+    state.session.total_usage = Some(TurnTokenUsage {
+        input_tokens: 100,
+        output_tokens: 200,
+        total_tokens: 300,
+        has_provider_metadata: true,
+    });
+    state.display.total_usage = state.session.total_usage;
 
     reduce(&mut state, ChatTuiAction::AgentStarted);
 
@@ -158,6 +179,20 @@ fn agent_started_and_finished_update_status() {
             cancellable: true,
         }
     );
+    assert_eq!(state.session.context_usage, None);
+    assert_eq!(state.display.context_usage, Some(prior_context_usage));
+    assert_eq!(state.session.turn_usage, None);
+    assert_eq!(state.display.turn_usage, None);
+    assert_eq!(
+        state.session.total_usage,
+        Some(TurnTokenUsage {
+            input_tokens: 100,
+            output_tokens: 200,
+            total_tokens: 300,
+            has_provider_metadata: true,
+        })
+    );
+    assert_eq!(state.display.total_usage, state.session.total_usage);
 
     reduce(&mut state, ChatTuiAction::AgentFinished);
 
@@ -228,8 +263,29 @@ fn runtime_and_display_metadata_actions_replace_state() {
         ChatTuiAction::DisplayMetadataChanged(display.clone()),
     );
 
+    let mut expected_display = display.clone();
+    expected_display.context_usage =
+        ContextTokenUsage::default_for_window(runtime.context_window_tokens);
+
     assert_eq!(state.runtime, runtime);
-    assert_eq!(state.display, display);
+    assert_eq!(state.display, expected_display);
+}
+
+/// Verifies worktree refreshes update only reducer-owned footer metadata.
+#[test]
+fn worktree_metadata_action_updates_footer_metadata() {
+    let mut state = state();
+
+    reduce(
+        &mut state,
+        ChatTuiAction::WorktreeMetadataChanged(Some(WorktreeMetadata::new("main*"))),
+    );
+
+    assert_eq!(state.display.worktree, Some(WorktreeMetadata::new("main*")));
+
+    reduce(&mut state, ChatTuiAction::WorktreeMetadataChanged(None));
+
+    assert_eq!(state.display.worktree, None);
 }
 
 /// Verifies spinner ticks only advance explicit spinner state.
@@ -299,16 +355,46 @@ fn session_created_starts_new_session_with_opening_banner() {
     ));
 }
 
-/// Verifies usage updates both session usage and display metadata usage.
+/// Verifies context usage updates both session usage and display metadata usage.
 #[test]
-fn usage_updated_updates_session_and_display_usage() {
+fn context_usage_updated_updates_session_and_display_usage() {
     let mut state = state();
     let usage = ContextTokenUsage::new(100, Some(1000));
 
-    reduce(&mut state, ChatTuiAction::UsageUpdated(usage));
+    reduce(&mut state, ChatTuiAction::ContextUsageUpdated(usage));
 
-    assert_eq!(state.session.usage, Some(usage));
-    assert_eq!(state.display.usage, Some(usage));
+    assert_eq!(state.session.context_usage, Some(usage));
+    assert_eq!(state.display.context_usage, Some(usage));
+}
+
+/// Verifies provider usage reports accumulate into active turn and session usage.
+#[test]
+fn provider_usage_reported_accumulates_turn_and_total_usage() {
+    let mut state = state();
+
+    reduce(
+        &mut state,
+        ChatTuiAction::ProviderUsageReported(ProviderUsageMetadata::new(Some(10), Some(20), None)),
+    );
+    reduce(
+        &mut state,
+        ChatTuiAction::ProviderUsageReported(ProviderUsageMetadata::new(
+            Some(5),
+            Some(15),
+            Some(25),
+        )),
+    );
+
+    let expected = Some(TurnTokenUsage {
+        input_tokens: 15,
+        output_tokens: 35,
+        total_tokens: 55,
+        has_provider_metadata: true,
+    });
+    assert_eq!(state.session.turn_usage, expected);
+    assert_eq!(state.display.turn_usage, expected);
+    assert_eq!(state.session.total_usage, expected);
+    assert_eq!(state.display.total_usage, expected);
 }
 
 /// Verifies transcript scrolling updates offset and tail following rules.

@@ -1,5 +1,8 @@
 use crate::ids::{SessionId, TranscriptItemId};
-use crate::metadata::{CommandDescriptor, ContextTokenUsage, DisplayMetadata, RuntimeSelection};
+use crate::metadata::{
+    CommandDescriptor, ContextTokenUsage, DisplayMetadata, ProviderUsageMetadata, RuntimeSelection,
+    WorktreeMetadata,
+};
 use crate::session::{PromptState, SelectionPromptState};
 use crate::transcript::{CommandDisplayStatus, DisplayLine, OpeningBannerItem, ToolDisplayStatus};
 
@@ -129,7 +132,9 @@ pub enum ChatTuiAction {
     },
     RuntimeSelectionChanged(RuntimeSelection),
     DisplayMetadataChanged(DisplayMetadata),
-    UsageUpdated(ContextTokenUsage),
+    WorktreeMetadataChanged(Option<WorktreeMetadata>),
+    ContextUsageUpdated(ContextTokenUsage),
+    ProviderUsageReported(ProviderUsageMetadata),
     SpinnerTick,
     ScrollTranscript(i32),
     Resize {

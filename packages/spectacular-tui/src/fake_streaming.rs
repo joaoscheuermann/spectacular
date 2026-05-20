@@ -368,7 +368,11 @@ pub fn fake_streaming_plan() -> FakeStreamingPlan {
         ),
         (
             Duration::from_millis(330),
-            ChatTuiAction::UsageUpdated(crate::metadata::ContextTokenUsage::new(42, Some(4096))),
+            ChatTuiAction::ProviderUsageReported(crate::metadata::ProviderUsageMetadata::new(
+                Some(21),
+                Some(21),
+                Some(42),
+            )),
         ),
         (Duration::from_millis(340), ChatTuiAction::AgentFinished),
     ])

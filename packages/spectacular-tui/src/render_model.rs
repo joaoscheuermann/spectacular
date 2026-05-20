@@ -221,8 +221,11 @@ pub fn iocraft_content(line: &RenderLine) -> Vec<MixedTextContent> {
         .collect()
 }
 
-/// Returns the semantic severity for a context token usage segment.
-pub fn context_usage_style(usage: ContextTokenUsage) -> RenderStyle {
+/// Returns the semantic severity for optional context pressure.
+pub fn context_pressure_style(usage: Option<ContextTokenUsage>) -> RenderStyle {
+    let Some(usage) = usage else {
+        return RenderStyle::Dim;
+    };
     let Some(window) = usage.context_window_tokens else {
         return RenderStyle::Dim;
     };
@@ -239,4 +242,9 @@ pub fn context_usage_style(usage: ContextTokenUsage) -> RenderStyle {
     }
 
     RenderStyle::Dim
+}
+
+/// Returns the semantic severity for a context token usage segment.
+pub fn context_usage_style(usage: ContextTokenUsage) -> RenderStyle {
+    context_pressure_style(Some(usage))
 }

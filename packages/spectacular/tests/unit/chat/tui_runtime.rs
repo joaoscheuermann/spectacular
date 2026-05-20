@@ -4,8 +4,8 @@ use spectacular_agent::{AgentEvent, ToolStorage};
 use spectacular_config::{ProviderAuthMode, ReasoningLevel};
 use spectacular_llms::FinishReason;
 use spectacular_tui::{
-    RuntimeIntent, SelectionPromptChoice as TuiSelectionPromptChoice, State, TranscriptItemContent,
-    TranscriptItemId,
+    DisplayMetadata, PromptState, RuntimeIntent, SelectionPromptChoice as TuiSelectionPromptChoice,
+    SessionId, State, TranscriptItemContent, TranscriptItemId,
 };
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -23,6 +23,11 @@ fn initial_state_uses_runtime_metadata_and_warnings() {
     assert_eq!(state.display.provider_label, "provider");
     assert_eq!(state.display.model_label, "model");
     assert_eq!(state.display.current_directory, "/workspace");
+    assert_eq!(state.display.worktree, None);
+    assert_eq!(
+        state.display.context_usage,
+        Some(spectacular_tui::ContextTokenUsage::new(0, Some(128_000)))
+    );
     assert!(matches!(
         &state.session.transcript[0].content,
         TranscriptItemContent::OpeningBanner(banner)
@@ -39,6 +44,53 @@ fn initial_state_uses_runtime_metadata_and_warnings() {
         .commands
         .iter()
         .any(|command| command.name == "provider" && !command.usage.is_empty()));
+}
+
+/// Verifies controller metadata updates preserve prompt input owned by the runtime root.
+#[test]
+fn controller_state_update_preserves_same_session_prompt_input() {
+    let mut local_state = State::new(
+        SessionId::new("session-1"),
+        tui_runtime(),
+        DisplayMetadata::new("provider", "model", "low", "/workspace", "session-1", None),
+    );
+    local_state.session.prompt = PromptState::from_text("draft prompt");
+    let mut controller_state = local_state.clone();
+    controller_state.display.current_directory = "/workspace/updated".to_owned();
+    controller_state.session.prompt = PromptState::empty();
+
+    let (merged, prompt_reset) = merge_controller_state_update(
+        &local_state,
+        controller_state,
+        &PromptState::from_text("draft prompt"),
+    );
+
+    assert_eq!(merged.display.current_directory, "/workspace/updated");
+    assert_eq!(merged.session.prompt.text, "draft prompt");
+    assert_eq!(prompt_reset, None);
+}
+
+/// Verifies session replacement accepts the controller-owned prompt snapshot.
+#[test]
+fn controller_state_update_resets_prompt_on_session_change() {
+    let local_state = State::new(
+        SessionId::new("session-1"),
+        tui_runtime(),
+        DisplayMetadata::new("provider", "model", "low", "/workspace", "session-1", None),
+    );
+    let mut controller_state = State::new(
+        SessionId::new("session-2"),
+        tui_runtime(),
+        DisplayMetadata::new("provider", "model", "low", "/workspace", "session-2", None),
+    );
+    controller_state.session.prompt = PromptState::from_text("restored");
+
+    let (merged, prompt_reset) =
+        merge_controller_state_update(&local_state, controller_state, &PromptState::from_text("draft"));
+
+    assert_eq!(merged.session.id, SessionId::new("session-2"));
+    assert_eq!(merged.session.prompt.text, "restored");
+    assert_eq!(prompt_reset, Some(PromptState::from_text("restored")));
 }
 
 /// Verifies streaming runtime actions are published before the full prompt run completes.
@@ -497,6 +549,17 @@ impl TestTuiBootstrapExt for TuiBootstrap {
         self.warnings.push(warning.to_owned());
         self
     }
+}
+
+/// Builds a TUI runtime selection for local state merge tests.
+fn tui_runtime() -> spectacular_tui::RuntimeSelection {
+    spectacular_tui::RuntimeSelection::new(
+        "openrouter",
+        "provider",
+        "model",
+        spectacular_tui::ReasoningLevel::Low,
+        Some(128_000),
+    )
 }
 
 /// Builds a runtime selection for TUI runtime tests.
