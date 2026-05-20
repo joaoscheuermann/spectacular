@@ -393,6 +393,6 @@ fn scroll_manual_mode_does_not_snap_on_new_output() {
         },
     );
 
-    assert_eq!(state.scroll.offset, 2);
+    assert_eq!(state.scroll.offset, 3);
     assert!(!state.scroll.follow_tail);
 }

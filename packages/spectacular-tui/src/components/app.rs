@@ -2,7 +2,7 @@ use crate::components::footer::{footer_render_line, Footer};
 use crate::components::prompt_area::{prompt_render_lines, PromptArea};
 use crate::components::working_indicator::{working_render_line, WorkingIndicator};
 use crate::components::{transcript_render_lines, Transcript};
-use crate::render_model::RenderLine;
+use crate::render_model::{RenderLine, RenderStyle};
 use crate::state::State;
 use iocraft::prelude::*;
 
@@ -24,7 +24,7 @@ pub fn App(mut hooks: Hooks, props: &AppProps) -> impl Into<AnyElement<'static>>
 
     element!(View(flex_direction: FlexDirection::Column, width, height) {
         Transcript(state: state.clone(), capacity: transcript_capacity, width: width)
-        WorkingIndicator(state: state.clone())
+        #(working_render_line(&state).is_some().then_some(element!(WorkingIndicator(state: state.clone()))))
         View(flex_direction: FlexDirection::Column, width: 100pct, flex_shrink: 0.0) {
             PromptArea(state: state.clone())
             Footer(state: state.clone())
@@ -38,8 +38,10 @@ pub fn app_render_lines(state: &State) -> Vec<RenderLine> {
     let mut lines = transcript_render_lines(state);
     if let Some(working) = working_render_line(state) {
         lines.push(working);
+        lines.push(RenderLine::styled("", RenderStyle::Text));
     }
     lines.extend(prompt_render_lines(state));
+    lines.push(RenderLine::styled("", RenderStyle::Text));
     lines.push(footer_render_line(state));
     lines
 }
@@ -52,14 +54,14 @@ pub fn app_lines(state: &State) -> Vec<String> {
 /// Returns rows available to transcript content after fixed chrome is accounted for.
 fn transcript_capacity_rows(state: &State, height: u16) -> u16 {
     let working_rows = if working_render_line(state).is_some() {
-        1
+        2
     } else {
         0
     };
     let chrome_rows = prompt_render_lines(state)
         .len()
         .saturating_add(working_rows)
-        .saturating_add(1);
+        .saturating_add(2);
     let chrome_rows = u16::try_from(chrome_rows).unwrap_or(u16::MAX);
 
     height.saturating_sub(chrome_rows)

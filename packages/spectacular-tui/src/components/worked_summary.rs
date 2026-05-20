@@ -18,7 +18,7 @@ pub fn WorkedSummary(props: &WorkedSummaryProps) -> impl Into<AnyElement<'static
                 element!(MixedText(wrap: TextWrap::Wrap, contents))
             });
 
-    element!(View(flex_direction: FlexDirection::Column) { #(elements) })
+    element!(View(flex_direction: FlexDirection::Column, margin_bottom: 1) { #(elements) })
 }
 
 /// Formats a completed work summary with duration and turn-token count.

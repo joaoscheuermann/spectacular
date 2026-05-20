@@ -17,7 +17,7 @@ pub fn UserPrompt(props: &UserPromptProps) -> impl Into<AnyElement<'static>> {
             element!(MixedText(wrap: TextWrap::Wrap, contents))
         });
 
-    element!(View(flex_direction: FlexDirection::Column) { #(elements) })
+    element!(View(flex_direction: FlexDirection::Column, margin_bottom: 1) { #(elements) })
 }
 
 /// Formats submitted user prompt content as prompt-marked rows.

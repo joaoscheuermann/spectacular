@@ -62,8 +62,8 @@ fn command_item(index: usize, row_count: usize) -> TranscriptItem {
 fn no_wrap_item_row_count_ignores_content_width() {
     let item = command_item(1, 3);
 
-    assert_eq!(spectacular_tui::transcript_item_layout_rows(&item, 4), 3);
-    assert_eq!(spectacular_tui::transcript_item_layout_rows(&item, 80), 3);
+    assert_eq!(spectacular_tui::transcript_item_layout_rows(&item, 4), 4);
+    assert_eq!(spectacular_tui::transcript_item_layout_rows(&item, 80), 4);
 }
 
 /// Verifies local wrapped row estimation handles core IOCraft text wrapping cases.
@@ -90,9 +90,9 @@ fn transcript_layout_rows_are_cumulative() {
 
     assert_eq!(
         spectacular_tui::transcript_layout_row_starts(&state, 4),
-        vec![0, 2, 5]
+        vec![0, 3, 7]
     );
-    assert_eq!(spectacular_tui::transcript_layout_total_rows(&state, 4), 6);
+    assert_eq!(spectacular_tui::transcript_layout_total_rows(&state, 4), 9);
 }
 
 /// Verifies row-window lookup includes every item intersecting the half-open row range.
@@ -111,15 +111,15 @@ fn transcript_layout_finds_intersecting_item_ranges() {
     );
     assert_eq!(
         spectacular_tui::transcript_layout_item_range(&state, 4, 2..5),
-        1..2
+        0..2
     );
     assert_eq!(
         spectacular_tui::transcript_layout_item_range(&state, 4, 3..6),
-        1..3
+        1..2
     );
     assert_eq!(
-        spectacular_tui::transcript_layout_item_range(&state, 4, 0..6),
-        0..3
+        spectacular_tui::transcript_layout_item_range(&state, 4, 7..9),
+        2..3
     );
     assert_eq!(
         spectacular_tui::transcript_layout_item_range(&state, 4, 4..4),

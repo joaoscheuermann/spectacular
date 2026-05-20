@@ -16,7 +16,7 @@ pub fn Notice(props: &NoticeProps) -> impl Into<AnyElement<'static>> {
             element!(MixedText(wrap: TextWrap::Wrap, contents))
         });
 
-    element!(View(flex_direction: FlexDirection::Column) { #(elements) })
+    element!(View(flex_direction: FlexDirection::Column, margin_bottom: 1) { #(elements) })
 }
 
 /// Formats notice content as one text row.

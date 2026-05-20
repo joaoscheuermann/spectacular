@@ -18,7 +18,7 @@ pub fn AssistantMessage(props: &AssistantMessageProps) -> impl Into<AnyElement<'
         element!(MixedText(wrap: TextWrap::Wrap, contents))
     });
 
-    element!(View(flex_direction: FlexDirection::Column) { #(elements) })
+    element!(View(flex_direction: FlexDirection::Column, margin_bottom: 1) { #(elements) })
 }
 
 /// Formats assistant message content as semantic rows.

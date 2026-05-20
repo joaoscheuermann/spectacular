@@ -21,7 +21,7 @@ pub fn OpeningBanner(props: &OpeningBannerProps) -> impl Into<AnyElement<'static
             element!(MixedText(wrap: TextWrap::NoWrap, contents))
         });
 
-    element!(View(flex_direction: FlexDirection::Column) { #(elements) })
+    element!(View(flex_direction: FlexDirection::Column, margin_bottom: 1) { #(elements) })
 }
 
 /// Formats the opening banner as fixed-width box-drawing rows.

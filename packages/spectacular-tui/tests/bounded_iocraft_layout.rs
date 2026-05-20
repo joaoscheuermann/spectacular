@@ -169,9 +169,11 @@ fn short_transcript_starts_at_top_without_bottom_anchoring() {
     let lines = render_canvas_lines(&state, 80, 10);
 
     assert_eq!(lines[0], "top transcript row");
-    assert_eq!(lines[1], "> ");
-    assert!(lines[2].contains("/workspace/spectacular"));
-    assert!(lines[3..].iter().all(String::is_empty));
+    assert_eq!(lines[1], "");
+    assert_eq!(lines[2], "> ");
+    assert_eq!(lines[3], "");
+    assert!(lines[4].contains("/workspace/spectacular"));
+    assert!(lines[5..].iter().all(String::is_empty));
 }
 
 /// Verifies scrolling past the oldest transcript row does not render blank viewport gaps.
@@ -205,10 +207,13 @@ async fn scroll_up_clamps_when_oldest_row_reaches_viewport_top() {
     let overscroll_lines = canvas_text_lines(&overscroll_canvas, 80, 6);
 
     assert!(overscroll_lines[0].starts_with("> submitted prompt 0"));
-    assert!(overscroll_lines[3].starts_with("> submitted prompt 3"));
-    assert!(overscroll_lines[..4].iter().all(|line| !line.is_empty()));
+    assert!(overscroll_lines[2].starts_with("> submitted prompt 1"));
+    assert!(overscroll_lines[0..3]
+        .iter()
+        .enumerate()
+        .all(|(index, line)| index % 2 == 1 || !line.is_empty()));
     assert!(has_scrollbar_marker(&overscroll_canvas, 79, 0));
-    assert!(has_scrollbar_marker(&overscroll_canvas, 79, 3));
+    assert!(has_scrollbar_marker(&overscroll_canvas, 79, 2));
 }
 
 /// Verifies overflowing transcript content renders a scrollbar next to the transcript pane.
@@ -228,7 +233,7 @@ fn overflowing_transcript_shows_scrollbar() {
     let canvas = render_app_canvas_with_events(&state, 80, 6, Vec::new());
 
     assert!(has_scrollbar_marker(&canvas, 79, 0));
-    assert!(has_scrollbar_marker(&canvas, 79, 3));
+    assert!(has_scrollbar_marker(&canvas, 79, 2));
 }
 
 /// Verifies tail-follow rendering does not overshift when no-wrap rows exceed viewport width.
@@ -270,11 +275,11 @@ fn no_wrap_transcript_rows_do_not_create_bottom_gap_at_tail() {
 
     let lines = render_canvas_lines(&state, 40, 6);
 
-    assert!(lines[0].starts_with("output 0"));
-    assert!(lines[1].starts_with("output 1"));
-    assert!(lines[2].starts_with("output 2"));
-    assert!(lines[3].starts_with("output 3"));
-    assert_eq!(lines[4], "> ");
+    assert!(lines[0].starts_with("output 2"));
+    assert!(lines[1].starts_with("output 3"));
+    assert_eq!(lines[2].trim_end_matches(['│', '┃']).trim_end(), "");
+    assert_eq!(lines[3], "> ");
+    assert_eq!(lines[4], "");
     assert!(lines[5].contains("/workspace/spectacular"));
 }
 
@@ -297,7 +302,7 @@ fn full_width_transcript_rows_do_not_push_scrollbar_out_of_view() {
         let scrollbar_x = usize::from(width.saturating_sub(1));
 
         assert!(has_scrollbar_marker(&canvas, scrollbar_x, 0));
-        assert!(has_scrollbar_marker(&canvas, scrollbar_x, 3));
+        assert!(has_scrollbar_marker(&canvas, scrollbar_x, 2));
     }
 }
 

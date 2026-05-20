@@ -17,7 +17,7 @@ pub fn Reasoning(props: &ReasoningProps) -> impl Into<AnyElement<'static>> {
             element!(MixedText(wrap: TextWrap::Wrap, contents))
         });
 
-    element!(View(flex_direction: FlexDirection::Column) { #(elements) })
+    element!(View(flex_direction: FlexDirection::Column, margin_bottom: 1) { #(elements) })
 }
 
 /// Formats reasoning content as non-blank semantic rows.

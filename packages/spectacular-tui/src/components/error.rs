@@ -17,7 +17,7 @@ pub fn Error(props: &ErrorProps) -> impl Into<AnyElement<'static>> {
             element!(MixedText(wrap: TextWrap::Wrap, contents))
         });
 
-    element!(View(flex_direction: FlexDirection::Column) { #(elements) })
+    element!(View(flex_direction: FlexDirection::Column, margin_bottom: 1) { #(elements) })
 }
 
 /// Formats an error transcript item as semantic rows.

@@ -12,7 +12,7 @@ pub fn PromptArea(props: &PromptAreaProps) -> impl Into<AnyElement<'static>> {
         element!(MixedText(wrap: TextWrap::NoWrap, contents))
     });
 
-    element!(View(width: 100pct) { #(elements) })
+    element!(View(width: 100pct, margin_bottom: 1) { #(elements) })
 }
 
 /// Formats the active prompt with the prompt marker and multiline continuation.

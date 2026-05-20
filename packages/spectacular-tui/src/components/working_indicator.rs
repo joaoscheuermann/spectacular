@@ -11,12 +11,15 @@ pub fn WorkingIndicator(props: &WorkingIndicatorProps) -> impl Into<AnyElement<'
         .clone()
         .expect("WorkingIndicator requires state");
 
-    let elements = working_render_line(&state).into_iter().map(|line| {
-        let contents = iocraft_content(&line);
-        element!(MixedText(wrap: TextWrap::NoWrap, contents))
-    });
+    let Some(line) = working_render_line(&state) else {
+        return element!(View(width: 100pct)).into_any();
+    };
 
-    element!(View(width: 100pct) { #(elements) })
+    let contents = iocraft_content(&line);
+    element!(View(width: 100pct, margin_bottom: 1) {
+        MixedText(wrap: TextWrap::NoWrap, contents)
+    })
+    .into_any()
 }
 
 /// Formats the current working status line as a semantic row when active.

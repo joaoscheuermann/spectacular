@@ -83,12 +83,12 @@ fn scrolling_up_disables_follow_tail_and_clamps_to_valid_range() {
 
     reduce(&mut state, ChatTuiAction::ScrollTranscript(i32::MAX));
 
-    assert_eq!(state.scroll.offset, 4_980);
+    assert_eq!(state.scroll.offset, 9_980);
     assert!(!state.scroll.follow_tail);
 
     reduce(&mut state, ChatTuiAction::ScrollTranscript(10));
 
-    assert_eq!(state.scroll.offset, 4_980);
+    assert_eq!(state.scroll.offset, 9_980);
     assert!(!state.scroll.follow_tail);
 }
 
@@ -115,10 +115,10 @@ fn new_transcript_content_preserves_review_viewport_when_not_following_tail() {
     );
     let after = render_state_to_string(&state, Some(120));
 
-    assert_eq!(state.scroll.offset, 11);
+    assert_eq!(state.scroll.offset, 12);
     assert!(!state.scroll.follow_tail);
-    assert!(before.contains("large transcript item 4970"));
-    assert!(after.contains("large transcript item 4970"));
+    assert!(before.contains("large transcript item 4985"));
+    assert!(after.contains("large transcript item 4985"));
     assert!(!after.contains("streamed tail content"));
 }
 

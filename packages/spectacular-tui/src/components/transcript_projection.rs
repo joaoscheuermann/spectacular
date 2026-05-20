@@ -13,7 +13,7 @@ use crate::components::transcript_content::{
 use crate::components::user_prompt::user_prompt_render_lines;
 use crate::components::warning::warning_render_lines;
 use crate::components::worked_summary::worked_summary_render_lines;
-use crate::render_model::RenderLine;
+use crate::render_model::{RenderLine, RenderStyle};
 use crate::state::State;
 use crate::transcript::{TranscriptItem, TranscriptItemContent};
 use std::ops::Range;
@@ -161,6 +161,13 @@ pub fn transcript_lines(state: &State) -> Vec<String> {
 
 /// Formats one transcript item into one or more terminal-flow lines.
 pub fn transcript_item_render_lines(item: &TranscriptItem) -> Vec<RenderLine> {
+    let mut lines = transcript_item_content_render_lines(item);
+    lines.push(RenderLine::styled("", RenderStyle::Text));
+    lines
+}
+
+/// Formats one transcript item into its content rows without layout margins.
+fn transcript_item_content_render_lines(item: &TranscriptItem) -> Vec<RenderLine> {
     match &item.content {
         TranscriptItemContent::OpeningBanner(banner) => opening_banner_render_lines(banner),
         TranscriptItemContent::UserPrompt(prompt) => user_prompt_render_lines(&prompt.text),
@@ -193,20 +200,24 @@ pub fn transcript_item_lines(item: &TranscriptItem) -> Vec<String> {
 /// Counts rendered rows for one transcript item without materializing every row when possible.
 fn transcript_item_row_count(item: &TranscriptItem) -> usize {
     match &item.content {
-        TranscriptItemContent::OpeningBanner(_) => 7,
-        TranscriptItemContent::UserPrompt(prompt) => prompt_text_row_count(&prompt.text),
-        TranscriptItemContent::AssistantMessage(message) => visible_text_row_count(&message.text),
-        TranscriptItemContent::Reasoning(reasoning) => {
-            trimmed_visible_text_row_count(&reasoning.text)
+        TranscriptItemContent::OpeningBanner(_) => 8,
+        TranscriptItemContent::UserPrompt(prompt) => prompt_text_row_count(&prompt.text).saturating_add(1),
+        TranscriptItemContent::AssistantMessage(message) => {
+            visible_text_row_count(&message.text).saturating_add(1)
         }
-        TranscriptItemContent::ToolCall(tool) => tool_row_count(tool),
-        TranscriptItemContent::Command(command) => command_row_count(command),
-        TranscriptItemContent::Error(error) => error_row_count(error.details.as_deref()),
+        TranscriptItemContent::Reasoning(reasoning) => {
+            trimmed_visible_text_row_count(&reasoning.text).saturating_add(1)
+        }
+        TranscriptItemContent::ToolCall(tool) => tool_row_count(tool).saturating_add(1),
+        TranscriptItemContent::Command(command) => command_row_count(command).saturating_add(1),
+        TranscriptItemContent::Error(error) => {
+            error_row_count(error.details.as_deref()).saturating_add(1)
+        }
         TranscriptItemContent::Warning(_)
         | TranscriptItemContent::Success(_)
         | TranscriptItemContent::Notice(_)
         | TranscriptItemContent::Cancellation(_)
-        | TranscriptItemContent::WorkedSummary(_) => 1,
+        | TranscriptItemContent::WorkedSummary(_) => 2,
     }
 }
 
@@ -216,10 +227,11 @@ fn transcript_item_row_count_for_width(item: &TranscriptItem, width: usize) -> u
         return transcript_item_row_count(item);
     }
 
-    transcript_item_render_lines(item)
+    transcript_item_content_render_lines(item)
         .iter()
         .map(|line| wrapped_render_line_row_count(line, width))
-        .sum()
+        .sum::<usize>()
+        .saturating_add(1)
 }
 
 /// Returns true when the IOCraft component renders each semantic row without wrapping.
