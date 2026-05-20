@@ -834,6 +834,27 @@ Use ordinary logging or printing outside IOCraft for post-render summaries.
 
 ## Testing
 
+Use Red-Green-Refactor for IOCraft behavior when practical:
+
+- **Red:** Design component props and APIs from the caller's perspective, write the smallest failing test for one visible behavior, and confirm it fails for the expected output or interaction reason rather than setup, syntax, or environment errors.
+- **Green:** Add the minimum component, prop, hook, or event-handling code needed to pass. Prefer short feedback loops and "Shameless Green" over speculative abstractions.
+- **Refactor:** Clean duplicated layout, magic strings, naming issues, and structural flaws while preserving behavior. Run the relevant render or mock-terminal tests after each meaningful change.
+
+Create unit tests with these rules:
+
+- Follow F.I.R.S.T.: fast, isolated/independent, repeatable without real terminals, network, databases, or wall-clock time, self-validating, and timely relative to implementation.
+- Use Arrange-Act-Assert: arrange props, mock data, and terminal events; act by rendering or driving the component; assert user-visible output or behavior.
+- Name tests with `MethodUnderTest_Scenario_ExpectedBehavior`, adapted to Rust snake_case while preserving the three-part meaning.
+- Verify one logical UI concept per test.
+
+Maintain unit tests with these rules:
+
+- Test public component behavior and terminal contracts, not private hook state or implementation details.
+- Use mocks, stubs, fakes, or injected test doubles for external dependencies.
+- Treat test code as production code with clear helpers or builders for repeated setup.
+- Quarantine flaky terminal or async tests immediately, then fix timing and event assumptions before trusting them again.
+- Run IOCraft tests in CI/CD on every commit or pull request where project tooling supports it.
+
 Use static rendering tests for deterministic UI output.
 
 ```rust
@@ -876,6 +897,8 @@ Test strategy:
 - Simulate key events for focus, form, and input flows.
 - Test exit behavior for render loops when practical.
 - Keep tests focused on user-visible behavior, not internal hook details.
+- Isolate external dependencies with test doubles so failures identify local component logic.
+- Keep tests in the repository-standard `tests/` directory.
 
 ## Common mistakes
 

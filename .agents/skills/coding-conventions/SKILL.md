@@ -10,6 +10,7 @@ Use this skill to ensure code and architectural designs adhere to our Nx monorep
 ## Success criteria
 - **Architecture/Planning**: The proposed design successfully implements SOLID principles, maintains deep modules with simple boundaries, and reuses existing code.
 - **Implementation**: The delivered code respects file size limits (250-500 lines), uses context-driven naming, uses early returns, applies explicit dependency injection, documents methods natively, and places tests in the correct folder structure.
+- **Testing**: New behavior is driven by focused unit tests where practical, follows Red-Green-Refactor, and keeps tests fast, isolated, repeatable, self-validating, and behavior-oriented.
 - **Scaffolding**: New projects correctly implement the `@nxlv/python` or `@monodon/rust` templates and targets.
 
 ## Naming: Context-Driven Brevity (Repository Invariant)
@@ -74,6 +75,29 @@ class BillingInvoice:
 class Invoice:
     def send(self, id: str): ...
 ```
+
+## Testing Practices
+
+Use Test-Driven Development for new or changed behavior when practical. Keep the feedback loop short and avoid speculative implementation.
+
+### Red-Green-Refactor
+- **Red:** Design APIs from the caller's perspective, write the smallest failing test for one new behavior, and confirm it fails for the expected assertion or contract reason rather than syntax, setup, or environment errors.
+- **Green:** Write the minimum implementation needed to pass. Use "Shameless Green" when helpful, including simple hardcoded values, to preserve a fast feedback loop and avoid future-feature work.
+- **Refactor:** Clean duplication, magic strings, naming issues, and structural flaws while the tests stay green. Refactor in small increments, run tests after each meaningful change, and do not add features or alter behavior during refactoring.
+
+### Unit Test Creation Rules
+- Apply F.I.R.S.T.: tests should be fast, isolated/independent, repeatable without network/databases/system-clock dependence, self-validating with pass/fail outcomes, and timely relative to implementation.
+- Structure tests with Arrange-Act-Assert: set up preconditions and dependencies, trigger one behavior, then assert expected outcomes.
+- Name tests with `MethodUnderTest_Scenario_ExpectedBehavior`, adapting casing to the language while preserving the three-part meaning.
+- Verify one logical concept per test so failures identify a single scenario.
+- Keep tests in the repository-standard `tests/` directory described in `references/implementation-standards.md`.
+
+### Unit Test Maintenance Rules
+- Test behavior through public APIs and contracts, not private methods or internal state details.
+- Isolate external dependencies with mocks, stubs, fakes, or injected test doubles so failures point to local unit logic.
+- Treat test code as production code: keep formatting, names, helpers, builders, and fixtures clean and maintainable.
+- Quarantine flaky tests immediately and resolve or isolate them so the suite remains trusted.
+- Integrate unit tests into CI/CD so they run on every commit or pull request where project tooling supports it.
 
 ## Retrieval & Stop Rules
 - Read the specific reference files below to gather context before implementing code or proposing architecture.

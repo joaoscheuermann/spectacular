@@ -14,6 +14,7 @@ Use this skill when working with the Rust `iocraft` crate for declarative termin
 - **Idiomatic components:** Components use `Props`, borrowed props where practical, stable `key` values for dynamic lists, and clear component boundaries.
 - **Hook safety:** Hooks are called unconditionally in a stable order, with state, refs, effects, futures, context, and terminal events used for their intended purposes.
 - **Terminal UX:** Keyboard input, focus, mouse capture, exit behavior, borders, colors, wrapping, and layout sizing are handled deliberately and tested where interaction matters.
+- **Testing:** Static output and interactive flows are developed with focused behavior tests where practical, using Red-Green-Refactor and deterministic IOCraft test utilities.
 
 ## Retrieval & Stop Rules
 Use the minimum evidence sufficient to implement or review the requested IOCraft work, then stop reading.
@@ -29,6 +30,29 @@ Use the minimum evidence sufficient to implement or review the requested IOCraft
 - Prefer borrowed props for domain data and owned state for interactive UI state.
 - Prefer `use_state` only when changes should trigger rerendering; use `use_ref` or local variables for non-render-affecting mutable data.
 - Prefer mock terminal tests for non-trivial keyboard, form, focus, or render-loop behavior.
+
+## Testing Practices
+
+Use Test-Driven Development for IOCraft behavior when practical, especially for formatting, static rendering, input handling, focus movement, form validation, and render-loop exit behavior.
+
+### Red-Green-Refactor
+- **Red:** Design the component API from the caller's perspective, write the smallest failing test for one visible behavior, and confirm the failure is caused by the expected output or interaction mismatch rather than terminal setup or async test wiring.
+- **Green:** Add the minimum component, prop, hook, or event-handling logic needed to pass. Prefer a quick deterministic pass over speculative abstractions.
+- **Refactor:** Clean duplicated layout fragments, magic strings, unclear component names, and awkward props while keeping behavior unchanged. Run the relevant static render or mock-terminal tests after each meaningful change.
+
+### Unit Test Creation Rules
+- Apply F.I.R.S.T.: tests should be fast, isolated, repeatable, self-validating, and written close to or before the implementation.
+- Use Arrange-Act-Assert: arrange props, mock terminal events, and dependencies; act with `to_string`, `write`, `render_loop`, or mock-terminal execution; assert stable user-visible output or state transitions.
+- Name tests with `MethodUnderTest_Scenario_ExpectedBehavior`, adapted to Rust snake_case when needed while preserving the three-part meaning.
+- Verify one logical UI behavior per test. For example, split static rendering, focus traversal, submission, and exit handling into separate scenarios.
+
+### Unit Test Maintenance Rules
+- Test public component behavior and terminal output rather than private hook state or implementation details.
+- Use IOCraft static rendering tests for deterministic output and `mock_terminal_render_loop` with synthetic events for interactive behavior.
+- Isolate external dependencies with mocks, stubs, fakes, or injected test doubles; do not require network, databases, wall-clock timing, or a real terminal.
+- Treat test code as production code with clear fixtures, helpers, and builders for repeated component setup.
+- Quarantine flaky terminal or async tests immediately, then fix timing/event assumptions before re-enabling them in the trusted suite.
+- Keep IOCraft tests in the repository-standard `tests/` directory and include them in CI/CD where project tooling supports it.
 
 ## Reference index
 
