@@ -10,12 +10,14 @@ pub fn UserPrompt(props: &UserPromptProps) -> impl Into<AnyElement<'static>> {
     let TranscriptItemContent::UserPrompt(prompt) = item.content else {
         panic!("UserPrompt requires user-prompt content");
     };
-    let lines = render_lines_elements(submitted_prompt_render_lines(
-        &prompt.text,
-        RenderStyle::User,
-    ));
+    let lines = render_lines_elements(user_prompt_render_lines(&prompt.text));
 
     element!(View(flex_direction: FlexDirection::Column) { #(lines.into_iter()) })
+}
+
+/// Formats submitted user prompt content as prompt-marked rows.
+pub fn user_prompt_render_lines(text: &str) -> Vec<crate::render_model::RenderLine> {
+    submitted_prompt_render_lines(text, RenderStyle::User)
 }
 
 /// Props for the user-prompt component.

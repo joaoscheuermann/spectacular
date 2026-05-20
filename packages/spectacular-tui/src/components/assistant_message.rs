@@ -12,9 +12,14 @@ pub fn AssistantMessage(props: &AssistantMessageProps) -> impl Into<AnyElement<'
         panic!("AssistantMessage requires assistant-message content");
     };
 
-    let lines = render_lines_elements(styled_visible_lines(&message.text, RenderStyle::Assistant));
+    let lines = render_lines_elements(assistant_message_render_lines(&message.text));
 
     element!(View(flex_direction: FlexDirection::Column) { #(lines.into_iter()) })
+}
+
+/// Formats assistant message content as semantic rows.
+pub fn assistant_message_render_lines(text: &str) -> Vec<crate::render_model::RenderLine> {
+    styled_visible_lines(text, RenderStyle::Assistant)
 }
 
 /// Props for the assistant-message component.

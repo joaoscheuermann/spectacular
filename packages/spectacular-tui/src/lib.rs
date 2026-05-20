@@ -2,7 +2,6 @@ pub mod action;
 pub mod components;
 pub mod event_loop;
 pub mod fake_streaming;
-pub mod format;
 mod format_directory;
 pub mod ids;
 pub mod metadata;
@@ -25,6 +24,11 @@ mod transcript_window;
 pub use action::{
     ChatTuiAction, CommandDisplayChunk, SelectionPromptAnswer, SelectionPromptChoice,
 };
+pub use components::{
+    app_lines, app_render_lines, footer_render_line, footer_text, prompt_lines,
+    prompt_render_lines, transcript_item_lines, transcript_item_render_lines, transcript_lines,
+    transcript_render_lines, transcript_total_render_rows, usage_text, working_render_line,
+};
 pub use event_loop::{
     tui_event_effects, tui_timer_tick_effects, EventEffect, TUI_SPINNER_TICK_INTERVAL,
 };
@@ -32,12 +36,7 @@ pub use fake_streaming::{
     fake_cancellation_plan, fake_failure_plan, fake_streaming_plan, fake_streaming_runtime_finding,
     FakeStreamingPlan, FakeStreamingTickOutcome, FakeStreamingTimeline,
 };
-pub use format::{
-    app_lines, app_render_lines, footer_render_line, footer_text, format_directory_with_home,
-    prompt_lines, prompt_render_lines, transcript_item_lines, transcript_item_render_lines,
-    transcript_lines, transcript_render_lines, transcript_total_render_rows, usage_text,
-    working_render_line,
-};
+pub use format_directory::format_directory_with_home;
 pub use ids::{SessionId, Timestamp, TranscriptItemId};
 pub use metadata::{
     CommandDescriptor, ContextTokenUsage, DisplayMetadata, ReasoningLevel, RuntimeSelection,

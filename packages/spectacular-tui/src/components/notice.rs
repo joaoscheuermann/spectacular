@@ -10,9 +10,14 @@ pub fn Notice(props: &NoticeProps) -> impl Into<AnyElement<'static>> {
     let TranscriptItemContent::Notice(notice) = item.content else {
         panic!("Notice requires notice content");
     };
-    let lines = render_lines_elements(vec![RenderLine::text(&notice.message)]);
+    let lines = render_lines_elements(notice_render_lines(&notice.message));
 
     element!(View(flex_direction: FlexDirection::Column) { #(lines.into_iter()) })
+}
+
+/// Formats notice content as one text row.
+pub fn notice_render_lines(message: &str) -> Vec<RenderLine> {
+    vec![RenderLine::text(message)]
 }
 
 /// Props for the notice component.

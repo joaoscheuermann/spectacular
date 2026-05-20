@@ -1,8 +1,8 @@
-use crate::components::footer::Footer;
-use crate::components::prompt_area::PromptArea;
-use crate::components::transcript::Transcript;
-use crate::components::working_indicator::WorkingIndicator;
-use crate::format::{prompt_render_lines, working_render_line};
+use crate::components::footer::{footer_render_line, Footer};
+use crate::components::prompt_area::{prompt_render_lines, PromptArea};
+use crate::components::working_indicator::{working_render_line, WorkingIndicator};
+use crate::components::{transcript_render_lines, Transcript};
+use crate::render_model::RenderLine;
 use crate::state::State;
 use iocraft::prelude::*;
 
@@ -31,6 +31,22 @@ pub fn App(mut hooks: Hooks, props: &AppProps) -> impl Into<AnyElement<'static>>
         }
     })
     .into_any()
+}
+
+/// Formats the complete visible app projection as semantic render rows.
+pub fn app_render_lines(state: &State) -> Vec<RenderLine> {
+    let mut lines = transcript_render_lines(state);
+    if let Some(working) = working_render_line(state) {
+        lines.push(working);
+    }
+    lines.extend(prompt_render_lines(state));
+    lines.push(footer_render_line(state));
+    lines
+}
+
+/// Formats the complete visible app projection using original chat UI text shapes.
+pub fn app_lines(state: &State) -> Vec<String> {
+    crate::components::plain_lines(app_render_lines(state))
 }
 
 /// Returns rows available to transcript content after fixed chrome is accounted for.

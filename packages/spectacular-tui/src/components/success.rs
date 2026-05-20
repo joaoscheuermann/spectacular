@@ -10,12 +10,14 @@ pub fn Success(props: &SuccessProps) -> impl Into<AnyElement<'static>> {
     let TranscriptItemContent::Success(success) = item.content else {
         panic!("Success requires success content");
     };
-    let lines = render_lines_elements(vec![RenderLine::styled(
-        &success.message,
-        RenderStyle::Success,
-    )]);
+    let lines = render_lines_elements(success_render_lines(&success.message));
 
     element!(View(flex_direction: FlexDirection::Column) { #(lines.into_iter()) })
+}
+
+/// Formats success content as one semantic row.
+pub fn success_render_lines(message: &str) -> Vec<RenderLine> {
+    vec![RenderLine::styled(message, RenderStyle::Success)]
 }
 
 /// Props for the success component.

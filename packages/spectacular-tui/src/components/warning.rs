@@ -10,12 +10,17 @@ pub fn Warning(props: &WarningProps) -> impl Into<AnyElement<'static>> {
     let TranscriptItemContent::Warning(warning) = item.content else {
         panic!("Warning requires warning content");
     };
-    let lines = render_lines_elements(vec![RenderLine::styled(
-        format!("warning: {}", warning.message),
-        RenderStyle::Warning,
-    )]);
+    let lines = render_lines_elements(warning_render_lines(&warning.message));
 
     element!(View(flex_direction: FlexDirection::Column) { #(lines.into_iter()) })
+}
+
+/// Formats warning content as one semantic row.
+pub fn warning_render_lines(message: &str) -> Vec<RenderLine> {
+    vec![RenderLine::styled(
+        format!("warning: {message}"),
+        RenderStyle::Warning,
+    )]
 }
 
 /// Props for the warning component.

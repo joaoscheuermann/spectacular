@@ -24,7 +24,7 @@ pub struct ToolCallProps {
 }
 
 /// Formats a tool-call transcript item as original-shaped semantic rows.
-fn tool_render_lines(tool: &ToolCallItem) -> Vec<RenderLine> {
+pub fn tool_render_lines(tool: &ToolCallItem) -> Vec<RenderLine> {
     if let Some(display) = &tool.display {
         let mut lines = Vec::new();
         if let Some(call_line) = &display.call_line {
@@ -49,4 +49,19 @@ fn tool_render_lines(tool: &ToolCallItem) -> Vec<RenderLine> {
         RenderStyle::CommandOutput,
     ));
     lines
+}
+
+/// Counts rows for a tool-call item without building output rows.
+pub fn tool_row_count(tool: &ToolCallItem) -> usize {
+    if let Some(display) = &tool.display {
+        return usize::from(display.call_line.is_some())
+            + display.argument_lines.len()
+            + display.output_lines.len();
+    }
+
+    1 + tool
+        .output_preview
+        .as_deref()
+        .map(crate::components::transcript_content::visible_text_row_count)
+        .unwrap_or(0)
 }

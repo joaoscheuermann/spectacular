@@ -24,7 +24,7 @@ pub struct CommandProps {
 }
 
 /// Formats a command transcript item as original-shaped semantic rows.
-fn command_render_lines(command: &CommandItem) -> Vec<RenderLine> {
+pub fn command_render_lines(command: &CommandItem) -> Vec<RenderLine> {
     if let Some(display) = &command.display {
         let mut lines = Vec::new();
         if let Some(command_line) = &display.command_line {
@@ -55,4 +55,16 @@ fn command_render_lines(command: &CommandItem) -> Vec<RenderLine> {
         ));
     }
     lines
+}
+
+/// Counts rows for a command item without building output rows.
+pub fn command_row_count(command: &CommandItem) -> usize {
+    if let Some(display) = &command.display {
+        return usize::from(display.command_line.is_some())
+            + display.output_lines.len()
+            + usize::from(display.summary_line.is_some());
+    }
+
+    1 + crate::components::transcript_content::visible_text_row_count(&command.output)
+        + usize::from(command.status == CommandStatus::Failed && command.exit_code.is_some())
 }

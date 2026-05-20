@@ -1,9 +1,10 @@
 use crate::components::transcript_content::render_line_element;
-use crate::format::working_render_line;
+use crate::render_model::{RenderLine, RenderStyle};
 use crate::state::State;
+use crate::status::Status;
 use iocraft::prelude::*;
 
-/// Renders the active working indicator row when the app is busy.
+/// Renders the active working indicator row when a request is in flight.
 #[component]
 pub fn WorkingIndicator(props: &WorkingIndicatorProps) -> impl Into<AnyElement<'static>> {
     let state = props
@@ -17,6 +18,20 @@ pub fn WorkingIndicator(props: &WorkingIndicatorProps) -> impl Into<AnyElement<'
         .collect();
 
     element!(View(width: 100pct) { #(lines.into_iter()) })
+}
+
+/// Formats the current working status line as a semantic row when active.
+pub fn working_render_line(state: &State) -> Option<RenderLine> {
+    match &state.status {
+        Status::Running { .. } | Status::Cancelling => Some(RenderLine::styled(
+            format!(
+                "{} Working (CTRL + C to stop)",
+                state.spinner.current_frame()
+            ),
+            RenderStyle::Dim,
+        )),
+        Status::Idle | Status::Failed { .. } => None,
+    }
 }
 
 /// Props for the working-indicator component.

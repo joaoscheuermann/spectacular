@@ -10,14 +10,21 @@ pub fn WorkedSummary(props: &WorkedSummaryProps) -> impl Into<AnyElement<'static
     let TranscriptItemContent::WorkedSummary(worked_summary) = item.content else {
         panic!("WorkedSummary requires worked-summary content");
     };
-    let summary = format!(
-        "Worked for {}{TRANSCRIPT_SEPARATOR}total {} tokens",
-        worked_summary.duration,
-        worked_summary.turn_tokens.unwrap_or(0)
-    );
-    let lines = render_lines_elements(vec![RenderLine::styled(summary, RenderStyle::Dim)]);
+    let lines = render_lines_elements(worked_summary_render_lines(
+        &worked_summary.duration,
+        worked_summary.turn_tokens,
+    ));
 
     element!(View(flex_direction: FlexDirection::Column) { #(lines.into_iter()) })
+}
+
+/// Formats a completed work summary with duration and turn-token count.
+pub fn worked_summary_render_lines(duration: &str, turn_tokens: Option<u64>) -> Vec<RenderLine> {
+    let summary = format!(
+        "Worked for {duration}{TRANSCRIPT_SEPARATOR}total {} tokens",
+        turn_tokens.unwrap_or(0)
+    );
+    vec![RenderLine::styled(summary, RenderStyle::Dim)]
 }
 
 /// Props for the worked-summary component.

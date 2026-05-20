@@ -10,12 +10,14 @@ pub fn Cancellation(props: &CancellationProps) -> impl Into<AnyElement<'static>>
     let TranscriptItemContent::Cancellation(cancellation) = item.content else {
         panic!("Cancellation requires cancellation content");
     };
-    let lines = render_lines_elements(vec![RenderLine::styled(
-        &cancellation.reason,
-        RenderStyle::Warning,
-    )]);
+    let lines = render_lines_elements(cancellation_render_lines(&cancellation.reason));
 
     element!(View(flex_direction: FlexDirection::Column) { #(lines.into_iter()) })
+}
+
+/// Formats cancellation content as one warning row.
+pub fn cancellation_render_lines(reason: &str) -> Vec<RenderLine> {
+    vec![RenderLine::styled(reason, RenderStyle::Warning)]
 }
 
 /// Props for the cancellation component.

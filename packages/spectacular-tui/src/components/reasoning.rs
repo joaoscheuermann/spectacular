@@ -10,12 +10,14 @@ pub fn Reasoning(props: &ReasoningProps) -> impl Into<AnyElement<'static>> {
     let TranscriptItemContent::Reasoning(reasoning) = item.content else {
         panic!("Reasoning requires reasoning content");
     };
-    let lines = render_lines_elements(styled_visible_trimmed_lines(
-        &reasoning.text,
-        RenderStyle::Reasoning,
-    ));
+    let lines = render_lines_elements(reasoning_render_lines(&reasoning.text));
 
     element!(View(flex_direction: FlexDirection::Column) { #(lines.into_iter()) })
+}
+
+/// Formats reasoning content as non-blank semantic rows.
+pub fn reasoning_render_lines(text: &str) -> Vec<crate::render_model::RenderLine> {
+    styled_visible_trimmed_lines(text, RenderStyle::Reasoning)
 }
 
 /// Props for the reasoning component.

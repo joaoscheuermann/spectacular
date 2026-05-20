@@ -16,6 +16,11 @@ pub fn render_lines_elements(lines: Vec<RenderLine>) -> Vec<AnyElement<'static>>
     lines.into_iter().map(render_line_element).collect()
 }
 
+/// Flattens semantic rows into plain visible text rows.
+pub fn plain_lines(lines: Vec<RenderLine>) -> Vec<String> {
+    lines.into_iter().map(|line| line.plain_text()).collect()
+}
+
 /// Converts one adapter display line into one semantic render row.
 pub fn display_line_render_line(line: &DisplayLine) -> RenderLine {
     RenderLine::styled(&line.text, RenderStyle::from(line.style))
@@ -62,6 +67,15 @@ fn visible_lines(text: &str) -> Vec<String> {
     text.lines().map(ToOwned::to_owned).collect()
 }
 
+/// Counts visible rows without allocating row strings.
+pub fn visible_text_row_count(text: &str) -> usize {
+    if text.is_empty() {
+        return 0;
+    }
+
+    text.lines().count()
+}
+
 /// Splits text into visible rows only when it contains non-whitespace content.
 fn visible_trimmed_lines(text: &str) -> Vec<String> {
     if text.trim().is_empty() {
@@ -69,4 +83,18 @@ fn visible_trimmed_lines(text: &str) -> Vec<String> {
     }
 
     visible_lines(text)
+}
+
+/// Counts trimmed visible rows without allocating row strings.
+pub fn trimmed_visible_text_row_count(text: &str) -> usize {
+    if text.trim().is_empty() {
+        return 0;
+    }
+
+    visible_text_row_count(text)
+}
+
+/// Counts rows emitted for prompt text with marker rows.
+pub fn prompt_text_row_count(text: &str) -> usize {
+    text.lines().count().max(1)
 }

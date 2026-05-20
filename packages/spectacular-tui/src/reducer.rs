@@ -1,5 +1,5 @@
 use crate::action::ChatTuiAction;
-use crate::format::transcript_total_render_rows;
+use crate::components::transcript_total_render_rows;
 use crate::ids::TranscriptItemId;
 use crate::reducer_display::{
     append_display_command, append_display_command_output, append_display_tool_call,
