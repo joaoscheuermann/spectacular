@@ -23,7 +23,7 @@ pub fn App(mut hooks: Hooks, props: &AppProps) -> impl Into<AnyElement<'static>>
     let transcript_capacity = transcript_capacity_rows(&state, height);
 
     element!(View(flex_direction: FlexDirection::Column, width, height) {
-        Transcript(state: state.clone(), capacity: transcript_capacity)
+        Transcript(state: state.clone(), capacity: transcript_capacity, width: width)
         WorkingIndicator(state: state.clone())
         View(flex_direction: FlexDirection::Column, width: 100pct, flex_shrink: 0.0) {
             PromptArea(state: state.clone())

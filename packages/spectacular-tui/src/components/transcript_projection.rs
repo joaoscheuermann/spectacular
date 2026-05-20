@@ -16,6 +16,7 @@ use crate::components::worked_summary::worked_summary_render_lines;
 use crate::render_model::RenderLine;
 use crate::state::State;
 use crate::transcript::{TranscriptItem, TranscriptItemContent};
+use unicode_width::UnicodeWidthStr;
 
 /// Formats the semantic transcript region for legacy text assertions.
 pub fn transcript_render_lines(state: &State) -> Vec<RenderLine> {
@@ -44,6 +45,20 @@ pub fn transcript_total_render_rows(state: &State) -> usize {
         .transcript
         .iter()
         .map(transcript_item_row_count)
+        .sum()
+}
+
+/// Estimates laid-out transcript rows for a known wrapping width.
+pub fn transcript_total_render_rows_for_width(state: &State, width: usize) -> usize {
+    if width == 0 {
+        return transcript_total_render_rows(state);
+    }
+
+    state
+        .session
+        .transcript
+        .iter()
+        .map(|item| transcript_item_row_count_for_width(item, width))
         .sum()
 }
 
@@ -101,6 +116,26 @@ fn transcript_item_row_count(item: &TranscriptItem) -> usize {
         | TranscriptItemContent::Cancellation(_)
         | TranscriptItemContent::WorkedSummary(_) => 1,
     }
+}
+
+/// Estimates rendered rows for one transcript item after IOCraft text wrapping.
+fn transcript_item_row_count_for_width(item: &TranscriptItem, width: usize) -> usize {
+    transcript_item_render_lines(item)
+        .iter()
+        .map(|line| wrapped_render_line_row_count(line, width))
+        .sum()
+}
+
+/// Estimates wrapped terminal rows for one semantic render line.
+fn wrapped_render_line_row_count(line: &RenderLine, width: usize) -> usize {
+    let visible_width: usize = line
+        .spans
+        .iter()
+        .map(|span| UnicodeWidthStr::width(span.text.as_str()))
+        .sum();
+
+    visible_width.checked_div(width).unwrap_or(0)
+        + usize::from(visible_width % width != 0 || visible_width == 0)
 }
 
 /// Returns transcript rows that are within the current row-aware scroll window.

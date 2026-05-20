@@ -9,47 +9,23 @@ pub fn TranscriptScrollView<'a>(
     props: &mut TranscriptScrollViewProps<'a>,
 ) -> impl Into<AnyElement<'a>> {
     let scroll = props.scroll.clone().unwrap_or_default();
-    let estimated_rows = props.total_rows;
-    let capacity_rows = props.visible_rows;
+    let total_rows = props.total_rows;
+    let visible_rows = props.visible_rows;
     let selection_active = props.selection_active;
-    let content_height_ref: Ref<u16> = hooks.use_ref(|| 0u16);
-    let mut measured_content_rows: State<u16> = hooks.use_state(|| 0u16);
-    let measured_viewport_rows: State<u16> = hooks.use_state(|| 0u16);
-    let viewport_measurer = hooks.use_hook(move || MeasureViewportHeightHook {
-        out: measured_viewport_rows,
-    });
-    viewport_measurer.out = measured_viewport_rows;
-
-    let measured_rows = content_height_ref.get();
-    if measured_content_rows.get() != measured_rows {
-        measured_content_rows.set(measured_rows);
-    }
-
-    let total_rows = measured_or_estimated_rows(measured_content_rows.get(), estimated_rows);
-    let visible_rows = transcript_viewport_height(total_rows, capacity_rows);
-    let scroll_visible_rows = measured_or_rendered_viewport_rows(measured_viewport_rows.get(), visible_rows);
     let children = std::mem::take(&mut props.children);
     let mut viewport =
         hooks.use_state(|| TranscriptViewportState::from_scroll(&scroll, total_rows));
-    let normalized = viewport
-        .get()
-        .with_render_context(total_rows, scroll_visible_rows);
+    let normalized = viewport.get().with_render_context(total_rows, visible_rows);
 
     hooks.use_terminal_events({
         let mut viewport = viewport;
         move |event| {
-            let total_rows = measured_or_estimated_rows(measured_content_rows.get(), estimated_rows);
-            let visible_rows = transcript_viewport_height(total_rows, capacity_rows);
-            let scroll_visible_rows =
-                measured_or_rendered_viewport_rows(measured_viewport_rows.get(), visible_rows);
-            let Some(delta) = transcript_scroll_delta(event, scroll_visible_rows, selection_active) else {
+            let Some(delta) = transcript_scroll_delta(event, visible_rows, selection_active) else {
                 return;
             };
 
-            let mut next = viewport
-                .get()
-                .with_render_context(total_rows, scroll_visible_rows);
-            next.scroll_by(delta, total_rows, scroll_visible_rows);
+            let mut next = viewport.get().with_render_context(total_rows, visible_rows);
+            next.scroll_by(delta, total_rows, visible_rows);
             viewport.set(next);
         }
     });
@@ -62,12 +38,12 @@ pub fn TranscriptScrollView<'a>(
             normalized.offset,
             normalized.follow_tail,
             normalized.total_rows,
-            scroll_visible_rows,
+            visible_rows,
         ),
     );
 
-    let top_offset = scroll_offset_from_top(total_rows, scroll_visible_rows, normalized.offset);
-    let scrollbar_marks = scrollbar_marks(total_rows, scroll_visible_rows, normalized.offset);
+    let top_offset = scroll_offset_from_top(total_rows, visible_rows, normalized.offset);
+    let scrollbar_marks = scrollbar_marks(total_rows, visible_rows, normalized.offset);
     let scrollbar = (!scrollbar_marks.is_empty()).then_some(element!(TranscriptScrollbar(
         marks: scrollbar_marks
     )));
@@ -88,15 +64,12 @@ pub fn TranscriptScrollView<'a>(
             View(
                 position: Position::Absolute,
                 top: -top_offset,
+                flex_direction: FlexDirection::Column,
                 width: 100pct,
                 min_width: 0,
                 overflow: Overflow::Hidden,
             ) {
-                TranscriptScrollContentMeasurer(
-                    content_height_ref: Some(content_height_ref),
-                ) {
-                    #(children.into_iter())
-                }
+                #(children.into_iter())
             }
         }
         #(scrollbar)
@@ -113,62 +86,6 @@ pub struct TranscriptScrollViewProps<'a> {
     pub selection_active: bool,
 }
 
-/// Hook that records the measured viewport height after IOCraft layout.
-struct MeasureViewportHeightHook {
-    out: State<u16>,
-}
-
-impl Hook for MeasureViewportHeightHook {
-    fn pre_component_draw(&mut self, drawer: &mut ComponentDrawer<'_>) {
-        let height = drawer.size().height;
-        if self.out.try_get() != Some(height) {
-            self.out.set(height);
-        }
-    }
-}
-
-/// Hook that records the measured natural content height after IOCraft layout.
-struct MeasureContentHeightHook {
-    out: Option<Ref<u16>>,
-}
-
-impl Hook for MeasureContentHeightHook {
-    fn pre_component_draw(&mut self, drawer: &mut ComponentDrawer<'_>) {
-        let Some(mut out) = self.out else {
-            return;
-        };
-
-        let height = drawer.size().height;
-        if out.try_get() != Some(height) {
-            out.set(height);
-        }
-    }
-}
-
-/// Props for the transcript content measurer.
-#[derive(Default, Props)]
-struct TranscriptScrollContentMeasurerProps<'a> {
-    children: Vec<AnyElement<'a>>,
-    content_height_ref: Option<Ref<u16>>,
-}
-
-/// Measures the natural laid-out transcript content height.
-#[component]
-fn TranscriptScrollContentMeasurer<'a>(
-    mut hooks: Hooks,
-    props: &mut TranscriptScrollContentMeasurerProps<'a>,
-) -> impl Into<AnyElement<'a>> {
-    let content_height_ref = props.content_height_ref;
-    let measurer = hooks.use_hook(move || MeasureContentHeightHook {
-        out: content_height_ref,
-    });
-    measurer.out = content_height_ref;
-
-    let children = std::mem::take(&mut props.children);
-    element!(View(flex_direction: FlexDirection::Column, width: 100pct, min_width: 0) {
-        #(children.into_iter())
-    })
-}
 
 /// Component-owned transcript scroll position derived from layout rows.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -230,28 +147,6 @@ impl TranscriptViewportState {
     }
 }
 
-/// Returns measured content rows when known, falling back to semantic estimated rows.
-fn measured_or_estimated_rows(measured_rows: u16, estimated_rows: usize) -> usize {
-    if measured_rows > 0 {
-        return usize::from(measured_rows);
-    }
-
-    estimated_rows
-}
-
-/// Returns the viewport height, growing with content until the parent capacity is reached.
-fn transcript_viewport_height(total_rows: usize, capacity_rows: u16) -> u16 {
-    u16::try_from(total_rows).unwrap_or(u16::MAX).min(capacity_rows)
-}
-
-/// Returns measured viewport rows when known, falling back to rendered viewport height.
-fn measured_or_rendered_viewport_rows(measured_rows: u16, rendered_rows: u16) -> u16 {
-    if measured_rows > 0 {
-        return measured_rows;
-    }
-
-    rendered_rows
-}
 
 /// Converts a bottom-relative transcript offset into a top-relative layout offset.
 fn scroll_offset_from_top(total_rows: usize, visible_rows: u16, offset: u32) -> i32 {
