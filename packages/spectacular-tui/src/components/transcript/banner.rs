@@ -1,5 +1,5 @@
-use crate::format_directory::format_directory;
-use crate::render_model::{iocraft_content, RenderLine, RenderSpan, RenderStyle};
+use crate::render::format_directory;
+use crate::render::{iocraft_content, RenderLine, RenderSpan, RenderStyle};
 use crate::transcript::{OpeningBannerItem, TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;
 use std::path::Path;

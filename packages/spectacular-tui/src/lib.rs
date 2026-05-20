@@ -1,25 +1,18 @@
 pub mod action;
 pub mod components;
-pub mod event_loop;
 pub mod fake_streaming;
-mod format_directory;
 pub mod ids;
 pub mod metadata;
-pub mod prompt_state;
+pub mod prompt;
 pub mod reducer;
-mod reducer_display;
-mod reducer_lookup;
 pub mod render;
-pub mod render_model;
-pub mod runtime_shell;
+pub mod runtime;
 pub mod scroll;
-pub mod selection_prompt;
 pub mod session;
 pub mod spinner;
 pub mod state;
 pub mod status;
 pub mod transcript;
-mod transcript_window;
 
 pub use action::{
     ChatTuiAction, CommandDisplayChunk, SelectionPromptAnswer, SelectionPromptChoice,
@@ -32,28 +25,24 @@ pub use components::{
     transcript_lines, transcript_render_lines, transcript_total_render_rows, turn_usage_text,
     usage_text, working_render_line, wrapped_layout_text_rows,
 };
-pub use event_loop::{
-    tui_event_effects, tui_timer_tick_effects, EventEffect, TUI_SPINNER_TICK_INTERVAL,
-};
+pub use runtime::{effects, timer_tick_effects, EventEffect, Intent, Shell, SPINNER_TICK_INTERVAL};
 pub use fake_streaming::{
     fake_cancellation_plan, fake_failure_plan, fake_streaming_plan, fake_streaming_runtime_finding,
     FakeStreamingPlan, FakeStreamingTickOutcome, FakeStreamingTimeline,
 };
-pub use format_directory::format_directory_with_home;
+pub use render::format_directory_with_home;
 pub use ids::{SessionId, Timestamp, TranscriptItemId};
 pub use metadata::{
     CommandDescriptor, ContextTokenUsage, DisplayMetadata, ProviderUsageMetadata, ReasoningLevel,
     RuntimeSelection, TokenUsageTotal, TurnTokenUsage, WorktreeMetadata,
 };
 pub use reducer::reduce;
-pub use render::render_state_to_string;
-pub use render_model::{
-    context_pressure_style, context_usage_style, iocraft_content, semantic_ansi_style,
-    semantic_iocraft_style, RenderLine, RenderSpan, RenderStyle,
+pub use render::{
+    context_pressure_style, context_usage_style, iocraft_content, render_state_to_string,
+    semantic_ansi_style, semantic_iocraft_style, RenderLine, RenderSpan, RenderStyle,
 };
-pub use runtime_shell::{RuntimeIntent, RuntimeShell};
 pub use scroll::TranscriptScrollState;
-pub use selection_prompt::SelectionInputMode;
+pub use prompt::SelectionInputMode;
 pub use session::{PromptPasteBurstState, PromptState, SelectionPromptState, Session};
 pub use spinner::SpinnerState;
 pub use state::State;

@@ -1,5 +1,5 @@
 use super::content::styled_visible_trimmed_lines;
-use crate::render_model::{iocraft_content, RenderStyle};
+use crate::render::{iocraft_content, RenderStyle};
 use crate::transcript::{TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;
 
@@ -21,7 +21,7 @@ pub fn Reasoning(props: &ReasoningProps) -> impl Into<AnyElement<'static>> {
 }
 
 /// Formats reasoning content as non-blank semantic rows.
-pub fn reasoning_render_lines(text: &str) -> Vec<crate::render_model::RenderLine> {
+pub fn reasoning_render_lines(text: &str) -> Vec<crate::render::RenderLine> {
     styled_visible_trimmed_lines(text, RenderStyle::Reasoning)
 }
 

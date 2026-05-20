@@ -4,7 +4,7 @@ use spectacular_agent::{AgentEvent, ToolStorage};
 use spectacular_config::{ProviderAuthMode, ReasoningLevel};
 use spectacular_llms::FinishReason;
 use spectacular_tui::{
-    DisplayMetadata, PromptState, RuntimeIntent, SelectionPromptChoice as TuiSelectionPromptChoice,
+    DisplayMetadata, PromptState, Intent, SelectionPromptChoice as TuiSelectionPromptChoice,
     SessionId, State, TranscriptItemContent, TranscriptItemId,
 };
 use std::path::PathBuf;
@@ -116,7 +116,7 @@ async fn controller_publishes_state_while_prompt_run_is_streaming() {
     ));
 
     intent_sender
-        .send(RuntimeIntent::SubmitPrompt {
+        .send(Intent::SubmitPrompt {
             id: TranscriptItemId::new("prompt-1"),
             text: "stream please".to_owned(),
         })
@@ -135,7 +135,7 @@ async fn controller_publishes_state_while_prompt_run_is_streaming() {
 
     assert!(streamed_state.is_some());
     release_sender.send(()).unwrap();
-    intent_sender.send(RuntimeIntent::RequestExit).unwrap();
+    intent_sender.send(Intent::RequestExit).unwrap();
     controller_task.await.unwrap().unwrap();
 }
 
@@ -155,7 +155,7 @@ async fn submit_prompt_intent_runs_real_controller_path() {
     let mut controller = TuiRuntimeController::new_with_runner(bootstrap, runner).unwrap();
 
     controller
-        .handle_intent(RuntimeIntent::SubmitPrompt {
+        .handle_intent(Intent::SubmitPrompt {
             id: TranscriptItemId::new("prompt-1"),
             text: "hello runtime".to_owned(),
         })
@@ -191,7 +191,7 @@ async fn completed_tui_run_saves_session_snapshot() {
     let mut controller = TuiRuntimeController::new_with_runner(bootstrap, runner).unwrap();
 
     controller
-        .handle_intent(RuntimeIntent::SubmitPrompt {
+        .handle_intent(Intent::SubmitPrompt {
             id: TranscriptItemId::new("prompt-1"),
             text: "save this".to_owned(),
         })
@@ -240,7 +240,7 @@ async fn cancel_intent_cancels_active_runner() {
     )
     .unwrap();
 
-    controller.handle_intent(RuntimeIntent::CancelRun).await.unwrap();
+    controller.handle_intent(Intent::CancelRun).await.unwrap();
 
     assert_eq!(controller.runner().cancel_count, 1);
     assert_eq!(controller.state().status, spectacular_tui::Status::Cancelling);
@@ -257,7 +257,7 @@ async fn tui_command_can_request_selection_prompt() {
     .unwrap();
 
     controller
-        .handle_intent(RuntimeIntent::SubmitPrompt {
+        .handle_intent(Intent::SubmitPrompt {
             id: TranscriptItemId::new("prompt-1"),
             text: "/git commit".to_owned(),
         })
@@ -285,14 +285,14 @@ async fn tui_selection_answer_returns_to_waiting_runtime_flow() {
     .unwrap();
 
     controller
-        .handle_intent(RuntimeIntent::SubmitPrompt {
+        .handle_intent(Intent::SubmitPrompt {
             id: TranscriptItemId::new("prompt-1"),
             text: "/git commit".to_owned(),
         })
         .await
         .unwrap();
     controller
-        .handle_intent(RuntimeIntent::SelectionPromptSubmitted(
+        .handle_intent(Intent::SelectionPromptSubmitted(
             spectacular_tui::SelectionPromptAnswer {
                 choice: TuiSelectionPromptChoice::Option {
                     index: 1,
@@ -324,14 +324,14 @@ async fn tui_selection_cancel_maps_to_original_exit_result() {
     .unwrap();
 
     controller
-        .handle_intent(RuntimeIntent::SubmitPrompt {
+        .handle_intent(Intent::SubmitPrompt {
             id: TranscriptItemId::new("prompt-1"),
             text: "/git commit".to_owned(),
         })
         .await
         .unwrap();
     controller
-        .handle_intent(RuntimeIntent::SelectionPromptCancelled)
+        .handle_intent(Intent::SelectionPromptCancelled)
         .await
         .unwrap();
 
@@ -360,7 +360,7 @@ async fn cancel_signal_reaches_active_prompt_run() {
     ));
 
     intent_sender
-        .send(RuntimeIntent::SubmitPrompt {
+        .send(Intent::SubmitPrompt {
             id: TranscriptItemId::new("prompt-1"),
             text: "cancel me".to_owned(),
         })
@@ -380,7 +380,7 @@ async fn cancel_signal_reaches_active_prompt_run() {
     .await;
 
     assert!(cancelled_state.is_some());
-    intent_sender.send(RuntimeIntent::RequestExit).unwrap();
+    intent_sender.send(Intent::RequestExit).unwrap();
     controller_task.await.unwrap().unwrap();
 }
 

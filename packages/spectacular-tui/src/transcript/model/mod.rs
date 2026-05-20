@@ -1,5 +1,5 @@
 use crate::ids::{Timestamp, TranscriptItemId};
-use crate::render_model::RenderStyle;
+use crate::render::RenderStyle;
 use serde::{Deserialize, Serialize};
 
 /// One semantic renderable unit in the conversation transcript.

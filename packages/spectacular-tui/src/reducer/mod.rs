@@ -1,11 +1,14 @@
+pub(crate) mod display;
+pub(crate) mod lookup;
+
 use crate::action::ChatTuiAction;
 use crate::components::transcript_total_render_rows;
 use crate::ids::TranscriptItemId;
-use crate::reducer_display::{
+use crate::reducer::display::{
     append_display_command, append_display_command_output, append_display_tool_call,
     finish_display_command, finish_display_tool_call,
 };
-use crate::reducer_lookup::{
+use crate::reducer::lookup::{
     clear_matching_activity, find_command, find_content_by_id, find_tool_call,
     matching_tool_activity_item_id, transcript_contains_id,
 };

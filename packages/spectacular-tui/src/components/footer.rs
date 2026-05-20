@@ -1,7 +1,7 @@
 use crate::components::TRANSCRIPT_SEPARATOR;
-use crate::format_directory::format_directory;
+use crate::render::format_directory;
 use crate::metadata::{ContextTokenUsage, TokenUsageTotal};
-use crate::render_model::{
+use crate::render::{
     context_pressure_style, iocraft_content, RenderLine, RenderSpan, RenderStyle,
 };
 use crate::state::State;

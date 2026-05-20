@@ -1,5 +1,5 @@
 use super::content::submitted_prompt_render_lines;
-use crate::render_model::{iocraft_content, RenderStyle};
+use crate::render::{iocraft_content, RenderStyle};
 use crate::transcript::{TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;
 
@@ -21,7 +21,7 @@ pub fn User(props: &UserProps) -> impl Into<AnyElement<'static>> {
 }
 
 /// Formats submitted user prompt content as prompt-marked rows.
-pub fn user_prompt_render_lines(text: &str) -> Vec<crate::render_model::RenderLine> {
+pub fn user_prompt_render_lines(text: &str) -> Vec<crate::render::RenderLine> {
     submitted_prompt_render_lines(text, RenderStyle::User)
 }
 

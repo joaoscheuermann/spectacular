@@ -1,6 +1,6 @@
 use spectacular_tui::{
     fake_streaming_plan, FakeStreamingTickOutcome, FakeStreamingTimeline, PromptState,
-    TUI_SPINNER_TICK_INTERVAL,
+    SPINNER_TICK_INTERVAL,
 };
 use std::time::Duration;
 
@@ -127,7 +127,7 @@ async fn spinner_ticks_independently_at_documented_cadence() {
     let first = harness.step().await;
     harness.run_for(Duration::from_millis(90)).await;
 
-    assert_eq!(TUI_SPINNER_TICK_INTERVAL, Duration::from_millis(90));
+    assert_eq!(SPINNER_TICK_INTERVAL, Duration::from_millis(90));
     assert_eq!(first, FakeStreamingTickOutcome::AgentAction);
     assert_eq!(harness.spinner_tick_count(), 1);
 }

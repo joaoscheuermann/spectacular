@@ -1,6 +1,6 @@
 use iocraft::prelude::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers, TerminalEvent};
 use spectacular_tui::{
-    reduce, render_state_to_string, tui_event_effects, CancellationItem, ChatTuiAction,
+    reduce, render_state_to_string, effects, CancellationItem, ChatTuiAction,
     CommandDescriptor, CommandStatus, ContextTokenUsage, DisplayMetadata, EventEffect,
     OpeningBannerItem, PromptState, ReasoningLevel, RuntimeSelection, SessionId, State,
     SuccessItem, ToolStatus, TranscriptItem, TranscriptItemContent, TranscriptItemId, WarningItem,
@@ -233,10 +233,10 @@ fn idle_ctrl_c_clears_non_empty_prompt_before_requesting_exit() {
     let mut state = state();
     state.session.prompt = PromptState::from_text("draft");
 
-    let effects = tui_event_effects(&state, key(KeyCode::Char('c'), KeyModifiers::CONTROL));
+    let event_effects = effects(&state, key(KeyCode::Char('c'), KeyModifiers::CONTROL));
 
     assert_eq!(
-        effects,
+        event_effects,
         vec![EventEffect::Action(ChatTuiAction::PromptChanged(
             PromptState::empty()
         ))]
@@ -244,12 +244,12 @@ fn idle_ctrl_c_clears_non_empty_prompt_before_requesting_exit() {
 
     reduce(
         &mut state,
-        match effects.into_iter().next().unwrap() {
+        match event_effects.into_iter().next().unwrap() {
             EventEffect::Action(action) => action,
             EventEffect::RequestExit => panic!("expected prompt clear"),
         },
     );
-    let effects = tui_event_effects(&state, key(KeyCode::Char('c'), KeyModifiers::CONTROL));
+    let event_effects = effects(&state, key(KeyCode::Char('c'), KeyModifiers::CONTROL));
 
-    assert_eq!(effects, vec![EventEffect::RequestExit]);
+    assert_eq!(event_effects, vec![EventEffect::RequestExit]);
 }

@@ -13,7 +13,7 @@ use super::summary::worked_summary_render_lines;
 use super::tool::{tool_render_lines, tool_row_count};
 use super::user::user_prompt_render_lines;
 use super::warning::warning_render_lines;
-use crate::render_model::{RenderLine, RenderStyle};
+use crate::render::{RenderLine, RenderStyle};
 use crate::state::State;
 use crate::transcript::{TranscriptItem, TranscriptItemContent};
 use std::ops::Range;
@@ -23,7 +23,7 @@ use unicode_width::UnicodeWidthChar;
 pub fn transcript_render_lines(state: &State) -> Vec<RenderLine> {
     transcript_render_lines_for_rows(
         state,
-        crate::transcript_window::visible_transcript_row_count(&state.scroll),
+        crate::transcript::visible_row_count(&state.scroll),
     )
 }
 

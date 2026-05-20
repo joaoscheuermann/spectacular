@@ -1,4 +1,4 @@
-use crate::render_model::{RenderLine, RenderStyle};
+use crate::render::{RenderLine, RenderStyle};
 use crate::transcript::DisplayLine;
 
 /// Separator used by completed work summaries.

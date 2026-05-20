@@ -5,7 +5,7 @@ use crate::state::State;
 use iocraft::prelude::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers, TerminalEvent};
 use std::time::Duration;
 
-pub const TUI_SPINNER_TICK_INTERVAL: Duration = Duration::from_millis(90);
+pub const SPINNER_TICK_INTERVAL: Duration = Duration::from_millis(90);
 
 /// Effect requested by local TUI event handling without performing side effects directly.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -15,7 +15,7 @@ pub enum EventEffect {
 }
 
 /// Converts one IOCraft terminal event into reducer actions or outer-shell requests.
-pub fn tui_event_effects(state: &State, event: TerminalEvent) -> Vec<EventEffect> {
+pub fn effects(state: &State, event: TerminalEvent) -> Vec<EventEffect> {
     match event {
         TerminalEvent::Key(key) => key_effects(state, key),
         _ => Vec::new(),
@@ -23,7 +23,7 @@ pub fn tui_event_effects(state: &State, event: TerminalEvent) -> Vec<EventEffect
 }
 
 /// Returns the effects emitted by the fixed-cadence spinner timer source.
-pub fn tui_timer_tick_effects() -> Vec<EventEffect> {
+pub fn timer_tick_effects() -> Vec<EventEffect> {
     vec![EventEffect::Action(ChatTuiAction::SpinnerTick)]
 }
 
@@ -158,7 +158,7 @@ fn prompt_enter_effects(state: &State) -> Vec<EventEffect> {
 /// Accepts the selected slash command completion into prompt text when available.
 fn accept_slash_completion_effects(state: &State) -> Vec<EventEffect> {
     let suggestions =
-        crate::prompt_state::slash_suggestions(&state.session.prompt, &state.commands);
+        crate::prompt::slash_suggestions(&state.session.prompt, &state.commands);
     let Some(command) = suggestions
         .get(state.session.prompt.selected_completion)
         .or_else(|| suggestions.first())
@@ -183,7 +183,7 @@ fn space_effects(state: &State) -> Vec<EventEffect> {
 
 /// Moves through slash completions before falling back to prompt cursor up movement.
 fn prompt_up_effects(state: &State, selecting: bool) -> Vec<EventEffect> {
-    if !crate::prompt_state::slash_suggestions(&state.session.prompt, &state.commands).is_empty() {
+    if !crate::prompt::slash_suggestions(&state.session.prompt, &state.commands).is_empty() {
         return prompt_change_effect(state, PromptState::select_previous_completion);
     }
 
@@ -193,7 +193,7 @@ fn prompt_up_effects(state: &State, selecting: bool) -> Vec<EventEffect> {
 /// Moves through slash completions before falling back to prompt cursor down movement.
 fn prompt_down_effects(state: &State, selecting: bool) -> Vec<EventEffect> {
     let count =
-        crate::prompt_state::slash_suggestions(&state.session.prompt, &state.commands).len();
+        crate::prompt::slash_suggestions(&state.session.prompt, &state.commands).len();
     if count > 0 {
         return prompt_change_effect(state, |prompt| prompt.select_next_completion(count));
     }

@@ -1,4 +1,4 @@
-use crate::render_model::{iocraft_content, RenderLine, RenderStyle};
+use crate::render::{iocraft_content, RenderLine, RenderStyle};
 use crate::transcript::{TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;
 

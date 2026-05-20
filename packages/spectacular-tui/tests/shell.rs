@@ -39,12 +39,12 @@ async fn shell_submit_prompt_emits_runtime_intent() {
     let mut state = state();
     state.session.prompt.text = "hello runtime".to_owned();
 
-    let (mut shell, mut intents) = spectacular_tui::RuntimeShell::new(state);
+    let (mut shell, mut intents) = spectacular_tui::Shell::new(state);
     shell.apply_terminal_event(key(KeyCode::Enter, KeyModifiers::empty()));
 
     assert_eq!(
         intents.recv().await,
-        Some(spectacular_tui::RuntimeIntent::SubmitPrompt {
+        Some(spectacular_tui::Intent::SubmitPrompt {
             id: TranscriptItemId::new("local-prompt-1"),
             text: "hello runtime".to_owned(),
         })
@@ -54,7 +54,7 @@ async fn shell_submit_prompt_emits_runtime_intent() {
 /// Verifies controller actions reduce into shell state for rendered transcript data.
 #[tokio::test]
 async fn shell_reduces_controller_actions_into_transcript() {
-    let (mut shell, _intents) = spectacular_tui::RuntimeShell::new(state());
+    let (mut shell, _intents) = spectacular_tui::Shell::new(state());
 
     shell.apply_action(ChatTuiAction::SubmitPrompt {
         id: TranscriptItemId::new("prompt-1"),
@@ -84,25 +84,25 @@ async fn shell_cancel_run_emits_cancel_intent() {
     let mut state = state();
     reduce(&mut state, ChatTuiAction::AgentStarted);
 
-    let (mut shell, mut intents) = spectacular_tui::RuntimeShell::new(state);
+    let (mut shell, mut intents) = spectacular_tui::Shell::new(state);
     shell.apply_terminal_event(key(KeyCode::Char('c'), KeyModifiers::CONTROL));
 
     assert_eq!(
         intents.recv().await,
-        Some(spectacular_tui::RuntimeIntent::CancelRun)
+        Some(spectacular_tui::Intent::CancelRun)
     );
     assert_eq!(shell.state().status, spectacular_tui::Status::Cancelling);
 }
 
 /// Verifies selection prompt answers are emitted to the runtime controller.
 #[tokio::test]
-async fn shell_selection_prompt_submit_emits_runtime_intent() {
+async fn shell_selection_submit_emits_intent() {
     let mut state = state();
     state.selection = Some(
         SelectionPromptState::new("Pick one", "", vec!["alpha".to_owned()]).with_inputs(true, true),
     );
 
-    let (mut shell, mut intents) = spectacular_tui::RuntimeShell::new(state);
+    let (mut shell, mut intents) = spectacular_tui::Shell::new(state);
     shell.apply_terminal_event(key(KeyCode::Char('x'), KeyModifiers::empty()));
     shell.apply_terminal_event(key(KeyCode::Tab, KeyModifiers::empty()));
     shell.apply_terminal_event(key(KeyCode::Char('!'), KeyModifiers::empty()));
@@ -110,7 +110,7 @@ async fn shell_selection_prompt_submit_emits_runtime_intent() {
 
     assert_eq!(
         intents.recv().await,
-        Some(spectacular_tui::RuntimeIntent::SelectionPromptSubmitted(
+        Some(spectacular_tui::Intent::SelectionPromptSubmitted(
             SelectionPromptAnswer {
                 choice: SelectionPromptChoice::Custom("x".to_owned()),
                 comment: Some("!".to_owned()),
@@ -122,7 +122,7 @@ async fn shell_selection_prompt_submit_emits_runtime_intent() {
 
 /// Verifies selection prompt cancellation is emitted to the runtime controller.
 #[tokio::test]
-async fn shell_selection_prompt_cancel_emits_runtime_intent() {
+async fn shell_selection_cancel_emits_intent() {
     let mut state = state();
     state.selection = Some(SelectionPromptState::new(
         "Pick one",
@@ -130,12 +130,12 @@ async fn shell_selection_prompt_cancel_emits_runtime_intent() {
         vec!["alpha".to_owned()],
     ));
 
-    let (mut shell, mut intents) = spectacular_tui::RuntimeShell::new(state);
+    let (mut shell, mut intents) = spectacular_tui::Shell::new(state);
     shell.apply_terminal_event(key(KeyCode::Esc, KeyModifiers::empty()));
 
     assert_eq!(
         intents.recv().await,
-        Some(spectacular_tui::RuntimeIntent::SelectionPromptCancelled)
+        Some(spectacular_tui::Intent::SelectionPromptCancelled)
     );
     assert!(shell.state().selection.is_none());
 }

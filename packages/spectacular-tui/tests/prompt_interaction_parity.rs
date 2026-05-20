@@ -1,6 +1,6 @@
 use iocraft::prelude::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers, TerminalEvent};
 use spectacular_tui::{
-    reduce, tui_event_effects, ChatTuiAction, CommandDescriptor, DisplayMetadata, EventEffect,
+    reduce, effects, ChatTuiAction, CommandDescriptor, DisplayMetadata, EventEffect,
     PromptState, ReasoningLevel, RenderStyle, RuntimeSelection, SelectionPromptAnswer,
     SelectionPromptChoice, SelectionPromptState, SessionId, State,
 };
@@ -35,7 +35,7 @@ fn key(code: KeyCode, modifiers: KeyModifiers) -> TerminalEvent {
 
 /// Extracts a single action from one terminal event.
 fn single_action(state: &State, event: TerminalEvent) -> ChatTuiAction {
-    let effects = tui_event_effects(state, event);
+    let effects = effects(state, event);
     assert_eq!(effects.len(), 1, "effects: {effects:?}");
     match effects.into_iter().next().unwrap() {
         EventEffect::Action(action) => action,
@@ -175,7 +175,7 @@ fn prompt_ctrl_c_idle_clear_then_exit_matches_original() {
     assert_eq!(state.session.prompt, PromptState::empty());
 
     assert_eq!(
-        tui_event_effects(&state, key(KeyCode::Char('c'), KeyModifiers::CONTROL)),
+        effects(&state, key(KeyCode::Char('c'), KeyModifiers::CONTROL)),
         vec![EventEffect::RequestExit]
     );
 }
@@ -310,7 +310,7 @@ fn selection_prompt_submit_and_cancel_match_original() {
     press(&mut active_state, KeyCode::Char('!'), KeyModifiers::empty());
 
     assert_eq!(
-        tui_event_effects(&active_state, key(KeyCode::Enter, KeyModifiers::empty())),
+        effects(&active_state, key(KeyCode::Enter, KeyModifiers::empty())),
         vec![EventEffect::Action(
             ChatTuiAction::SelectionPromptSubmitted(SelectionPromptAnswer {
                 choice: SelectionPromptChoice::Custom("x".to_owned()),
@@ -327,7 +327,7 @@ fn selection_prompt_submit_and_cancel_match_original() {
     ));
 
     assert_eq!(
-        tui_event_effects(&state, key(KeyCode::Esc, KeyModifiers::empty())),
+        effects(&state, key(KeyCode::Esc, KeyModifiers::empty())),
         vec![EventEffect::Action(ChatTuiAction::SelectionPromptCancelled)]
     );
 }

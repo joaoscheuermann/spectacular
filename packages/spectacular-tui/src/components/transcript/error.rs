@@ -1,5 +1,5 @@
 use super::content::{styled_visible_lines, visible_text_row_count};
-use crate::render_model::{iocraft_content, RenderLine, RenderStyle};
+use crate::render::{iocraft_content, RenderLine, RenderStyle};
 use crate::transcript::{TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;
 

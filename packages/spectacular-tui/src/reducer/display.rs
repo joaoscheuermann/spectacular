@@ -1,6 +1,6 @@
 use crate::ids::TranscriptItemId;
 use crate::reducer::append_transcript_item;
-use crate::reducer_lookup::{find_command, find_tool_call};
+use crate::reducer::lookup::{find_command, find_tool_call};
 use crate::state::State;
 use crate::transcript::{
     CommandDisplay, CommandDisplayStatus, CommandItem, CommandStatus, DisplayLine, ToolCallItem,

@@ -1,5 +1,5 @@
 use crate::metadata::CommandDescriptor;
-use crate::render_model::{iocraft_content, RenderLine, RenderSpan, RenderStyle};
+use crate::render::{iocraft_content, RenderLine, RenderSpan, RenderStyle};
 use crate::state::State;
 use iocraft::prelude::*;
 
@@ -116,7 +116,7 @@ fn slash_usage_render_lines(state: &State) -> Vec<RenderLine> {
 
 /// Returns display-ready slash command suggestions for the active prompt.
 fn slash_suggestions(state: &State) -> Vec<&CommandDescriptor> {
-    crate::prompt_state::slash_suggestions(&state.session.prompt, &state.commands)
+    crate::prompt::slash_suggestions(&state.session.prompt, &state.commands)
 }
 
 /// Returns the accepted leading slash command when the prompt has command arguments.

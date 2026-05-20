@@ -1,8 +1,8 @@
 use iocraft::prelude::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers, TerminalEvent};
 use spectacular_tui::{
-    reduce, tui_event_effects, ChatTuiAction, CommandDescriptor, DisplayMetadata, EventEffect,
+    reduce, effects, ChatTuiAction, CommandDescriptor, DisplayMetadata, EventEffect,
     PromptState, ReasoningLevel, RuntimeSelection, SessionId, State, Status, TranscriptItemContent,
-    TranscriptItemId, TUI_SPINNER_TICK_INTERVAL,
+    TranscriptItemId, SPINNER_TICK_INTERVAL,
 };
 use std::time::Duration;
 
@@ -36,7 +36,7 @@ fn key(code: KeyCode, modifiers: KeyModifiers) -> TerminalEvent {
 
 /// Extracts the single action produced by one terminal event.
 fn single_action(state: &State, event: TerminalEvent) -> ChatTuiAction {
-    let effects = tui_event_effects(state, event);
+    let effects = effects(state, event);
     assert_eq!(effects.len(), 1);
     match effects.into_iter().next().unwrap() {
         EventEffect::Action(action) => action,
@@ -135,7 +135,7 @@ fn ctrl_c_while_running_and_cancellable_dispatches_cancel() {
 fn ctrl_c_while_idle_requests_exit_without_mutating_transcript() {
     let state = state();
 
-    let effects = tui_event_effects(&state, key(KeyCode::Char('c'), KeyModifiers::CONTROL));
+    let effects = effects(&state, key(KeyCode::Char('c'), KeyModifiers::CONTROL));
 
     assert_eq!(effects, vec![EventEffect::RequestExit]);
     assert!(state.session.transcript.is_empty());
@@ -144,9 +144,9 @@ fn ctrl_c_while_idle_requests_exit_without_mutating_transcript() {
 /// Verifies timer ticks are represented as explicit spinner actions at the documented cadence.
 #[test]
 fn timer_tick_dispatches_spinner_tick_without_terminal_output() {
-    assert_eq!(TUI_SPINNER_TICK_INTERVAL, Duration::from_millis(90));
+    assert_eq!(SPINNER_TICK_INTERVAL, Duration::from_millis(90));
     assert_eq!(
-        spectacular_tui::tui_timer_tick_effects(),
+        spectacular_tui::timer_tick_effects(),
         vec![EventEffect::Action(ChatTuiAction::SpinnerTick)]
     );
 }
@@ -184,14 +184,14 @@ fn transcript_scroll_input_does_not_emit_reducer_actions() {
     let state = state();
 
     assert_eq!(
-        tui_event_effects(
+        effects(
             &state,
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::PageUp))
         ),
         Vec::new()
     );
     assert_eq!(
-        tui_event_effects(
+        effects(
             &state,
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::PageDown))
         ),

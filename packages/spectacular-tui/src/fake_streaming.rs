@@ -1,5 +1,5 @@
 use crate::action::ChatTuiAction;
-use crate::event_loop::TUI_SPINNER_TICK_INTERVAL;
+use crate::runtime::SPINNER_TICK_INTERVAL;
 use crate::ids::{SessionId, TranscriptItemId};
 use crate::metadata::{DisplayMetadata, ReasoningLevel, RuntimeSelection};
 use crate::reducer::reduce;
@@ -69,7 +69,7 @@ impl FakeStreamingTimeline {
             plan,
             next_action: 0,
             elapsed: Duration::ZERO,
-            next_spinner_tick: TUI_SPINNER_TICK_INTERVAL,
+            next_spinner_tick: SPINNER_TICK_INTERVAL,
             spinner_ticks: 0,
             direct_terminal_writes: 0,
         }
@@ -207,7 +207,7 @@ impl FakeStreamingTimeline {
     fn apply_spinner_tick(&mut self) -> FakeStreamingTickOutcome {
         self.elapsed = self.next_spinner_tick;
         reduce(&mut self.state, ChatTuiAction::SpinnerTick);
-        self.next_spinner_tick += TUI_SPINNER_TICK_INTERVAL;
+        self.next_spinner_tick += SPINNER_TICK_INTERVAL;
         self.spinner_ticks += 1;
         FakeStreamingTickOutcome::SpinnerTick
     }

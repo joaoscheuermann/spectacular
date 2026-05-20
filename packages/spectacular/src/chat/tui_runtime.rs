@@ -12,7 +12,7 @@ use iocraft::prelude::*;
 use spectacular_agent::{AgentEvent, Store, ToolStorage};
 use spectacular_llms::LlmDebugLogger;
 use spectacular_tui::{
-    ChatTuiAction, DisplayMetadata, OpeningBannerItem, PromptState, RuntimeIntent, RuntimeShell,
+    ChatTuiAction, DisplayMetadata, OpeningBannerItem, PromptState, Intent, Shell,
     SelectionPromptAnswer, SelectionPromptChoice, SelectionPromptState, SessionId, State,
     TranscriptItemId,
 };
@@ -44,7 +44,7 @@ pub(crate) trait TuiTurnRunner: Send {
 
 /// Controller for the opt-in IOCraft TUI runtime path.
 pub(crate) struct TuiRuntimeController<R = AgentTuiTurnRunner> {
-    shell: RuntimeShell,
+    shell: Shell,
     model: ChatModel,
     tools: ToolStorage,
     runner: R,
@@ -92,7 +92,7 @@ where
         let mut model = ChatModel::new_with_debug_logger(session, runtime, debug_logger);
         let started = model.start_new_session()?;
         let state = initial_state(&model, &workspace_root);
-        let (mut shell, _intents) = RuntimeShell::new(state);
+        let (mut shell, _intents) = Shell::new(state);
         shell.apply_action(session_created_action(&started.id, &model, &workspace_root));
         for warning in warnings {
             shell.apply_action(ChatTuiAction::NoticeReported { message: warning });
@@ -127,15 +127,15 @@ where
     }
 
     /// Handles one user intent emitted by the TUI shell.
-    pub(crate) async fn handle_intent(&mut self, intent: RuntimeIntent) -> Result<bool, ChatError> {
+    pub(crate) async fn handle_intent(&mut self, intent: Intent) -> Result<bool, ChatError> {
         match intent {
-            RuntimeIntent::SubmitPrompt { id, text } => {
+            Intent::SubmitPrompt { id, text } => {
                 let (_cancellation_sender, mut cancellation_receiver) = mpsc::unbounded_channel();
                 self.handle_submit_prompt(id, text, None, &mut cancellation_receiver)
                     .await?;
                 Ok(false)
             }
-            RuntimeIntent::CancelRun => {
+            Intent::CancelRun => {
                 self.runner.cancel();
                 if !self.shell.state().status.is_cancellable() {
                     self.shell.apply_action(ChatTuiAction::AgentStarted);
@@ -143,27 +143,27 @@ where
                 self.shell.apply_action(ChatTuiAction::CancelRun);
                 Ok(false)
             }
-            RuntimeIntent::SelectionPromptSubmitted(answer) => {
+            Intent::SelectionPromptSubmitted(answer) => {
                 self.handle_selection_prompt_submitted(answer);
                 Ok(false)
             }
-            RuntimeIntent::SelectionPromptCancelled => {
+            Intent::SelectionPromptCancelled => {
                 self.handle_selection_prompt_cancelled();
                 Ok(false)
             }
-            RuntimeIntent::RequestExit => Ok(true),
+            Intent::RequestExit => Ok(true),
         }
     }
 
     /// Handles one user intent and publishes state while long-running work streams.
     async fn handle_intent_with_state_sender(
         &mut self,
-        intent: RuntimeIntent,
+        intent: Intent,
         state_sender: &mpsc::UnboundedSender<State>,
         cancellation_receiver: &mut mpsc::UnboundedReceiver<()>,
     ) -> Result<bool, ChatError> {
         match intent {
-            RuntimeIntent::SubmitPrompt { id, text } => {
+            Intent::SubmitPrompt { id, text } => {
                 self.handle_submit_prompt(id, text, Some(state_sender), cancellation_receiver)
                     .await?;
                 Ok(false)
@@ -362,7 +362,7 @@ where
 /// Processes intents emitted by the IOCraft shell and publishes reducer snapshots for rendering.
 async fn run_controller_loop<R>(
     mut controller: TuiRuntimeController<R>,
-    mut intent_receiver: mpsc::UnboundedReceiver<RuntimeIntent>,
+    mut intent_receiver: mpsc::UnboundedReceiver<Intent>,
     mut cancellation_receiver: mpsc::UnboundedReceiver<()>,
     state_sender: mpsc::UnboundedSender<State>,
 ) -> Result<(), ChatError>
@@ -393,7 +393,7 @@ where
 }
 
 /// Publishes the current reducer state for IOCraft rendering when a sender is available.
-fn publish_state(shell: &RuntimeShell, state_sender: Option<&mpsc::UnboundedSender<State>>) {
+fn publish_state(shell: &Shell, state_sender: Option<&mpsc::UnboundedSender<State>>) {
     if let Some(state_sender) = state_sender {
         let _ = state_sender.send(shell.state().clone());
     }
@@ -446,7 +446,7 @@ fn TuiRuntimeRoot(mut hooks: Hooks, props: &TuiRuntimeRootProps) -> impl Into<An
 #[derive(Default, Props)]
 struct TuiRuntimeRootProps {
     initial_state: Option<State>,
-    intent_sender: Option<mpsc::UnboundedSender<RuntimeIntent>>,
+    intent_sender: Option<mpsc::UnboundedSender<Intent>>,
     cancellation_sender: Option<mpsc::UnboundedSender<()>>,
     state_receiver: Option<Arc<Mutex<mpsc::UnboundedReceiver<State>>>>,
 }
@@ -519,7 +519,7 @@ fn emit_terminal_intents(
     local_state: iocraft::prelude::State<State>,
     current_prompt: iocraft::prelude::State<PromptState>,
     exit_requested: iocraft::prelude::State<bool>,
-    intent_sender: mpsc::UnboundedSender<RuntimeIntent>,
+    intent_sender: mpsc::UnboundedSender<Intent>,
     cancellation_sender: mpsc::UnboundedSender<()>,
 ) {
     hooks.use_terminal_events({
@@ -528,15 +528,15 @@ fn emit_terminal_intents(
         let mut exit_requested = exit_requested;
         move |event| {
             let state = state_with_current_prompt(&local_state.read(), &current_prompt.read());
-            let (mut shell, mut intents) = RuntimeShell::new(state);
+            let (mut shell, mut intents) = Shell::new(state);
             shell.apply_terminal_event(event);
             while let Ok(intent) = intents.try_recv() {
                 match intent {
-                    RuntimeIntent::RequestExit => {
+                    Intent::RequestExit => {
                         exit_requested.set(true);
-                        let _ = intent_sender.send(RuntimeIntent::RequestExit);
+                        let _ = intent_sender.send(Intent::RequestExit);
                     }
-                    RuntimeIntent::CancelRun => {
+                    Intent::CancelRun => {
                         let _ = cancellation_sender.send(());
                     }
                     intent => {

@@ -1,5 +1,5 @@
 use super::content::styled_visible_lines;
-use crate::render_model::{iocraft_content, RenderStyle};
+use crate::render::{iocraft_content, RenderStyle};
 use crate::transcript::{TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;
 
@@ -22,7 +22,7 @@ pub fn Assistant(props: &AssistantProps) -> impl Into<AnyElement<'static>> {
 }
 
 /// Formats assistant message content as semantic rows.
-pub fn assistant_message_render_lines(text: &str) -> Vec<crate::render_model::RenderLine> {
+pub fn assistant_message_render_lines(text: &str) -> Vec<crate::render::RenderLine> {
     styled_visible_lines(text, RenderStyle::Assistant)
 }
 

@@ -61,7 +61,7 @@ pub struct SelectionPromptState {
     #[serde(default)]
     pub comment_cursor: usize,
     #[serde(default)]
-    pub input_mode: crate::selection_prompt::SelectionInputMode,
+    pub input_mode: crate::prompt::SelectionInputMode,
 }
 
 /// Session-local TUI state for transcript, prompt, and token usage.

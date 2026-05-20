@@ -2,7 +2,7 @@ use crate::components::{
     footer_render_line, prompt_render_lines, transcript_render_lines, working_render_line, Footer,
     Prompt, Transcript, Working,
 };
-use crate::render_model::{RenderLine, RenderStyle};
+use crate::render::{RenderLine, RenderStyle};
 use crate::state::State;
 use iocraft::prelude::*;
 
