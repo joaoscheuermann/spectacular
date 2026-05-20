@@ -1,7 +1,5 @@
-use crate::components::transcript_content::{
-    display_line_render_line, render_lines_elements, styled_visible_lines,
-};
-use crate::render_model::{RenderLine, RenderStyle};
+use crate::components::transcript_content::{display_line_render_line, styled_visible_lines};
+use crate::render_model::{iocraft_content, RenderLine, RenderStyle};
 use crate::transcript::{CommandItem, CommandStatus, TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;
 
@@ -12,9 +10,12 @@ pub fn Command(props: &CommandProps) -> impl Into<AnyElement<'static>> {
     let TranscriptItemContent::Command(command) = item.content else {
         panic!("Command requires command content");
     };
-    let lines = render_lines_elements(command_render_lines(&command));
+    let elements = command_render_lines(&command).into_iter().map(|line| {
+        let contents = iocraft_content(&line);
+        element!(MixedText(wrap: TextWrap::NoWrap, contents))
+    });
 
-    element!(View(flex_direction: FlexDirection::Column) { #(lines.into_iter()) })
+    element!(View(flex_direction: FlexDirection::Column) { #(elements) })
 }
 
 /// Props for the command component.

@@ -1,6 +1,5 @@
-use crate::components::transcript_content::render_lines_elements;
 use crate::format_directory::format_directory;
-use crate::render_model::{RenderLine, RenderSpan, RenderStyle};
+use crate::render_model::{iocraft_content, RenderLine, RenderSpan, RenderStyle};
 use crate::transcript::{OpeningBannerItem, TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;
 use std::path::Path;
@@ -15,9 +14,14 @@ pub fn OpeningBanner(props: &OpeningBannerProps) -> impl Into<AnyElement<'static
     let TranscriptItemContent::OpeningBanner(banner) = item.content else {
         panic!("OpeningBanner requires opening-banner content");
     };
-    let lines = render_lines_elements(opening_banner_render_lines(&banner));
+    let elements = opening_banner_render_lines(&banner)
+        .into_iter()
+        .map(|line| {
+            let contents = iocraft_content(&line);
+            element!(MixedText(wrap: TextWrap::NoWrap, contents))
+        });
 
-    element!(View(flex_direction: FlexDirection::Column) { #(lines.into_iter()) })
+    element!(View(flex_direction: FlexDirection::Column) { #(elements) })
 }
 
 /// Formats the opening banner as fixed-width box-drawing rows.

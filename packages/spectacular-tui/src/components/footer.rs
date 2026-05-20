@@ -1,7 +1,7 @@
-use crate::components::transcript_content::{render_line_element, TRANSCRIPT_SEPARATOR};
+use crate::components::transcript_content::TRANSCRIPT_SEPARATOR;
 use crate::format_directory::format_directory;
 use crate::metadata::ContextTokenUsage;
-use crate::render_model::{context_usage_style, RenderLine, RenderSpan, RenderStyle};
+use crate::render_model::{context_usage_style, iocraft_content, RenderLine, RenderSpan, RenderStyle};
 use crate::state::State;
 use iocraft::prelude::*;
 use std::path::Path;
@@ -11,8 +11,9 @@ use std::path::Path;
 pub fn Footer(props: &FooterProps) -> impl Into<AnyElement<'static>> {
     let state = props.state.clone().expect("Footer requires state");
     let line = footer_render_line(&state);
+    let contents = iocraft_content(&line);
 
-    element!(View(width: 100pct) { #(vec![render_line_element(line)].into_iter()) })
+    element!(View(width: 100pct) { MixedText(wrap: TextWrap::NoWrap, contents) })
 }
 
 /// Formats footer metadata with compact separators and optional usage.

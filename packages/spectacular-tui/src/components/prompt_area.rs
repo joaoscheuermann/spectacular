@@ -1,6 +1,5 @@
-use crate::components::transcript_content::render_line_element;
 use crate::metadata::CommandDescriptor;
-use crate::render_model::{RenderLine, RenderSpan, RenderStyle};
+use crate::render_model::{iocraft_content, RenderLine, RenderSpan, RenderStyle};
 use crate::state::State;
 use iocraft::prelude::*;
 
@@ -8,11 +7,12 @@ use iocraft::prelude::*;
 #[component]
 pub fn PromptArea(props: &PromptAreaProps) -> impl Into<AnyElement<'static>> {
     let state = props.state.clone().expect("PromptArea requires state");
-    let lines = prompt_render_lines(&state);
+    let elements = prompt_render_lines(&state).into_iter().map(|line| {
+        let contents = iocraft_content(&line);
+        element!(MixedText(wrap: TextWrap::NoWrap, contents))
+    });
 
-    element!(View(width: 100pct) {
-        #(lines.into_iter().map(render_line_element))
-    })
+    element!(View(width: 100pct) { #(elements) })
 }
 
 /// Formats the active prompt with the prompt marker and multiline continuation.

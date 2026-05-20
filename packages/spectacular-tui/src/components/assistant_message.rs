@@ -1,5 +1,5 @@
-use crate::components::transcript_content::{render_lines_elements, styled_visible_lines};
-use crate::render_model::RenderStyle;
+use crate::components::transcript_content::styled_visible_lines;
+use crate::render_model::{iocraft_content, RenderStyle};
 use crate::transcript::{TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;
 
@@ -12,9 +12,13 @@ pub fn AssistantMessage(props: &AssistantMessageProps) -> impl Into<AnyElement<'
         panic!("AssistantMessage requires assistant-message content");
     };
 
-    let lines = render_lines_elements(assistant_message_render_lines(&message.text));
+    let lines = assistant_message_render_lines(&message.text);
+    let elements = lines.into_iter().map(|line| {
+        let contents = iocraft_content(&line);
+        element!(MixedText(wrap: TextWrap::Wrap, contents))
+    });
 
-    element!(View(flex_direction: FlexDirection::Column) { #(lines.into_iter()) })
+    element!(View(flex_direction: FlexDirection::Column) { #(elements) })
 }
 
 /// Formats assistant message content as semantic rows.

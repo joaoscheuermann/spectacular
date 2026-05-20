@@ -1,5 +1,5 @@
-use crate::components::transcript_content::{render_lines_elements, submitted_prompt_render_lines};
-use crate::render_model::RenderStyle;
+use crate::components::transcript_content::submitted_prompt_render_lines;
+use crate::render_model::{iocraft_content, RenderStyle};
 use crate::transcript::{TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;
 
@@ -10,9 +10,14 @@ pub fn UserPrompt(props: &UserPromptProps) -> impl Into<AnyElement<'static>> {
     let TranscriptItemContent::UserPrompt(prompt) = item.content else {
         panic!("UserPrompt requires user-prompt content");
     };
-    let lines = render_lines_elements(user_prompt_render_lines(&prompt.text));
+    let elements = user_prompt_render_lines(&prompt.text)
+        .into_iter()
+        .map(|line| {
+            let contents = iocraft_content(&line);
+            element!(MixedText(wrap: TextWrap::Wrap, contents))
+        });
 
-    element!(View(flex_direction: FlexDirection::Column) { #(lines.into_iter()) })
+    element!(View(flex_direction: FlexDirection::Column) { #(elements) })
 }
 
 /// Formats submitted user prompt content as prompt-marked rows.

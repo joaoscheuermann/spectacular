@@ -1,5 +1,5 @@
-use crate::components::transcript_content::{render_lines_elements, styled_visible_lines};
-use crate::render_model::{RenderLine, RenderStyle};
+use crate::components::transcript_content::styled_visible_lines;
+use crate::render_model::{iocraft_content, RenderLine, RenderStyle};
 use crate::transcript::{TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;
 
@@ -10,9 +10,14 @@ pub fn Error(props: &ErrorProps) -> impl Into<AnyElement<'static>> {
     let TranscriptItemContent::Error(error) = item.content else {
         panic!("Error requires error content");
     };
-    let lines = render_lines_elements(error_render_lines(&error.message, error.details.as_deref()));
+    let elements = error_render_lines(&error.message, error.details.as_deref())
+        .into_iter()
+        .map(|line| {
+            let contents = iocraft_content(&line);
+            element!(MixedText(wrap: TextWrap::Wrap, contents))
+        });
 
-    element!(View(flex_direction: FlexDirection::Column) { #(lines.into_iter()) })
+    element!(View(flex_direction: FlexDirection::Column) { #(elements) })
 }
 
 /// Formats an error transcript item as semantic rows.

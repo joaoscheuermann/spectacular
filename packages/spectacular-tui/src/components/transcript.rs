@@ -15,12 +15,12 @@ pub fn Transcript(props: &TranscriptProps) -> impl Into<AnyElement<'static>> {
     let capacity = props.capacity.unwrap_or_default();
     let items = transcript_item_elements(&state);
     let total_rows = transcript_total_render_rows(&state);
-    let height = transcript_height(total_rows, capacity);
 
     element!(TranscriptScrollView(
+        key: state.session.id.as_str().to_owned(),
         scroll: state.scroll.clone(),
         total_rows: total_rows,
-        visible_rows: height,
+        visible_rows: capacity,
         selection_active: state.selection.is_some(),
     ) {
         #(items.into_iter())
@@ -34,10 +34,6 @@ pub struct TranscriptProps {
     pub capacity: Option<u16>,
 }
 
-/// Returns the transcript pane height, growing until content reaches capacity.
-fn transcript_height(total_rows: usize, capacity: u16) -> u16 {
-    u16::try_from(total_rows).unwrap_or(u16::MAX).min(capacity)
-}
 
 /// Builds keyed child component elements for every semantic transcript item.
 fn transcript_item_elements(state: &State) -> Vec<AnyElement<'static>> {

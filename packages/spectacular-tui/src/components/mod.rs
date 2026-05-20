@@ -32,7 +32,7 @@ pub use reasoning::{Reasoning, ReasoningProps};
 pub use success::{Success, SuccessProps};
 pub use tool_call::{ToolCall, ToolCallProps};
 pub use transcript::{Transcript, TranscriptProps};
-pub use transcript_content::{plain_lines, render_lines_elements};
+pub use transcript_content::plain_lines;
 pub use transcript_projection::{
     transcript_item_lines, transcript_item_render_lines, transcript_lines, transcript_render_lines,
     transcript_total_render_rows,

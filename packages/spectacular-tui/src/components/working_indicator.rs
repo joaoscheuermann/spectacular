@@ -1,5 +1,4 @@
-use crate::components::transcript_content::render_line_element;
-use crate::render_model::{RenderLine, RenderStyle};
+use crate::render_model::{iocraft_content, RenderLine, RenderStyle};
 use crate::state::State;
 use crate::status::Status;
 use iocraft::prelude::*;
@@ -12,12 +11,12 @@ pub fn WorkingIndicator(props: &WorkingIndicatorProps) -> impl Into<AnyElement<'
         .clone()
         .expect("WorkingIndicator requires state");
 
-    let lines: Vec<AnyElement<'static>> = working_render_line(&state)
-        .into_iter()
-        .map(render_line_element)
-        .collect();
+    let elements = working_render_line(&state).into_iter().map(|line| {
+        let contents = iocraft_content(&line);
+        element!(MixedText(wrap: TextWrap::NoWrap, contents))
+    });
 
-    element!(View(width: 100pct) { #(lines.into_iter()) })
+    element!(View(width: 100pct) { #(elements) })
 }
 
 /// Formats the current working status line as a semantic row when active.

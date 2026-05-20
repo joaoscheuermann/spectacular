@@ -1,5 +1,4 @@
-use crate::components::transcript_content::render_lines_elements;
-use crate::render_model::{RenderLine, RenderStyle};
+use crate::render_model::{iocraft_content, RenderLine, RenderStyle};
 use crate::transcript::{TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;
 
@@ -10,9 +9,14 @@ pub fn Warning(props: &WarningProps) -> impl Into<AnyElement<'static>> {
     let TranscriptItemContent::Warning(warning) = item.content else {
         panic!("Warning requires warning content");
     };
-    let lines = render_lines_elements(warning_render_lines(&warning.message));
+    let elements = warning_render_lines(&warning.message)
+        .into_iter()
+        .map(|line| {
+            let contents = iocraft_content(&line);
+            element!(MixedText(wrap: TextWrap::Wrap, contents))
+        });
 
-    element!(View(flex_direction: FlexDirection::Column) { #(lines.into_iter()) })
+    element!(View(flex_direction: FlexDirection::Column) { #(elements) })
 }
 
 /// Formats warning content as one semantic row.

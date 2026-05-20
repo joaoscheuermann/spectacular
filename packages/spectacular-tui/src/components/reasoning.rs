@@ -1,5 +1,5 @@
-use crate::components::transcript_content::{render_lines_elements, styled_visible_trimmed_lines};
-use crate::render_model::RenderStyle;
+use crate::components::transcript_content::styled_visible_trimmed_lines;
+use crate::render_model::{iocraft_content, RenderStyle};
 use crate::transcript::{TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;
 
@@ -10,9 +10,14 @@ pub fn Reasoning(props: &ReasoningProps) -> impl Into<AnyElement<'static>> {
     let TranscriptItemContent::Reasoning(reasoning) = item.content else {
         panic!("Reasoning requires reasoning content");
     };
-    let lines = render_lines_elements(reasoning_render_lines(&reasoning.text));
+    let elements = reasoning_render_lines(&reasoning.text)
+        .into_iter()
+        .map(|line| {
+            let contents = iocraft_content(&line);
+            element!(MixedText(wrap: TextWrap::Wrap, contents))
+        });
 
-    element!(View(flex_direction: FlexDirection::Column) { #(lines.into_iter()) })
+    element!(View(flex_direction: FlexDirection::Column) { #(elements) })
 }
 
 /// Formats reasoning content as non-blank semantic rows.

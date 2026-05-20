@@ -1,5 +1,4 @@
-use crate::components::transcript_content::render_lines_elements;
-use crate::render_model::RenderLine;
+use crate::render_model::{iocraft_content, RenderLine};
 use crate::transcript::{TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;
 
@@ -10,9 +9,14 @@ pub fn Notice(props: &NoticeProps) -> impl Into<AnyElement<'static>> {
     let TranscriptItemContent::Notice(notice) = item.content else {
         panic!("Notice requires notice content");
     };
-    let lines = render_lines_elements(notice_render_lines(&notice.message));
+    let elements = notice_render_lines(&notice.message)
+        .into_iter()
+        .map(|line| {
+            let contents = iocraft_content(&line);
+            element!(MixedText(wrap: TextWrap::Wrap, contents))
+        });
 
-    element!(View(flex_direction: FlexDirection::Column) { #(lines.into_iter()) })
+    element!(View(flex_direction: FlexDirection::Column) { #(elements) })
 }
 
 /// Formats notice content as one text row.

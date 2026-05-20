@@ -1,5 +1,4 @@
-use crate::components::transcript_content::render_lines_elements;
-use crate::render_model::{RenderLine, RenderStyle};
+use crate::render_model::{iocraft_content, RenderLine, RenderStyle};
 use crate::transcript::{TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;
 
@@ -10,9 +9,14 @@ pub fn Cancellation(props: &CancellationProps) -> impl Into<AnyElement<'static>>
     let TranscriptItemContent::Cancellation(cancellation) = item.content else {
         panic!("Cancellation requires cancellation content");
     };
-    let lines = render_lines_elements(cancellation_render_lines(&cancellation.reason));
+    let elements = cancellation_render_lines(&cancellation.reason)
+        .into_iter()
+        .map(|line| {
+            let contents = iocraft_content(&line);
+            element!(MixedText(wrap: TextWrap::Wrap, contents))
+        });
 
-    element!(View(flex_direction: FlexDirection::Column) { #(lines.into_iter()) })
+    element!(View(flex_direction: FlexDirection::Column) { #(elements) })
 }
 
 /// Formats cancellation content as one warning row.

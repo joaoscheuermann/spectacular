@@ -1,5 +1,5 @@
-use crate::components::transcript_content::{render_lines_elements, TRANSCRIPT_SEPARATOR};
-use crate::render_model::{RenderLine, RenderStyle};
+use crate::components::transcript_content::TRANSCRIPT_SEPARATOR;
+use crate::render_model::{iocraft_content, RenderLine, RenderStyle};
 use crate::transcript::{TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;
 
@@ -10,12 +10,14 @@ pub fn WorkedSummary(props: &WorkedSummaryProps) -> impl Into<AnyElement<'static
     let TranscriptItemContent::WorkedSummary(worked_summary) = item.content else {
         panic!("WorkedSummary requires worked-summary content");
     };
-    let lines = render_lines_elements(worked_summary_render_lines(
-        &worked_summary.duration,
-        worked_summary.turn_tokens,
-    ));
+    let elements = worked_summary_render_lines(&worked_summary.duration, worked_summary.turn_tokens)
+        .into_iter()
+        .map(|line| {
+            let contents = iocraft_content(&line);
+            element!(MixedText(wrap: TextWrap::Wrap, contents))
+        });
 
-    element!(View(flex_direction: FlexDirection::Column) { #(lines.into_iter()) })
+    element!(View(flex_direction: FlexDirection::Column) { #(elements) })
 }
 
 /// Formats a completed work summary with duration and turn-token count.

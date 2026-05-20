@@ -1,20 +1,8 @@
-use crate::render_model::{iocraft_content, RenderLine, RenderStyle};
+use crate::render_model::{RenderLine, RenderStyle};
 use crate::transcript::DisplayLine;
-use iocraft::prelude::*;
 
 /// Separator used by completed work summaries.
 pub const TRANSCRIPT_SEPARATOR: &str = " · ";
-
-/// Converts one semantic line into an IOCraft mixed-text element.
-pub fn render_line_element(line: RenderLine) -> AnyElement<'static> {
-    let contents = iocraft_content(&line);
-    element!(MixedText(wrap: TextWrap::NoWrap, contents)).into()
-}
-
-/// Converts semantic render lines into IOCraft row elements.
-pub fn render_lines_elements(lines: Vec<RenderLine>) -> Vec<AnyElement<'static>> {
-    lines.into_iter().map(render_line_element).collect()
-}
 
 /// Flattens semantic rows into plain visible text rows.
 pub fn plain_lines(lines: Vec<RenderLine>) -> Vec<String> {
