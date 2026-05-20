@@ -5,11 +5,8 @@ use iocraft::prelude::*;
 
 /// Renders the active working indicator row when a request is in flight.
 #[component]
-pub fn WorkingIndicator(props: &WorkingIndicatorProps) -> impl Into<AnyElement<'static>> {
-    let state = props
-        .state
-        .clone()
-        .expect("WorkingIndicator requires state");
+pub fn Working(props: &WorkingProps) -> impl Into<AnyElement<'static>> {
+    let state = props.state.clone().expect("Working requires state");
 
     let Some(line) = working_render_line(&state) else {
         return element!(View(width: 100pct)).into_any();
@@ -36,8 +33,8 @@ pub fn working_render_line(state: &State) -> Option<RenderLine> {
     }
 }
 
-/// Props for the working-indicator component.
+/// Props for the working component.
 #[derive(Default, Props)]
-pub struct WorkingIndicatorProps {
+pub struct WorkingProps {
     pub state: Option<State>,
 }

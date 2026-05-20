@@ -1,14 +1,14 @@
-use crate::components::transcript_content::{display_line_render_line, styled_visible_lines};
+use super::content::{display_line_render_line, styled_visible_lines, visible_text_row_count};
 use crate::render_model::{iocraft_content, RenderLine, RenderStyle};
 use crate::transcript::{ToolCallItem, TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;
 
 /// Renders a tool-call transcript item.
 #[component]
-pub fn ToolCall(props: &ToolCallProps) -> impl Into<AnyElement<'static>> {
-    let item = props.item.clone().expect("ToolCall requires item");
+pub fn Tool(props: &ToolProps) -> impl Into<AnyElement<'static>> {
+    let item = props.item.clone().expect("Tool requires item");
     let TranscriptItemContent::ToolCall(tool) = item.content else {
-        panic!("ToolCall requires tool-call content");
+        panic!("Tool requires tool-call content");
     };
     let elements = tool_render_lines(&tool).into_iter().map(|line| {
         let contents = iocraft_content(&line);
@@ -18,9 +18,9 @@ pub fn ToolCall(props: &ToolCallProps) -> impl Into<AnyElement<'static>> {
     element!(View(flex_direction: FlexDirection::Column, margin_bottom: 1) { #(elements) })
 }
 
-/// Props for the tool-call component.
+/// Props for the tool component.
 #[derive(Default, Props)]
-pub struct ToolCallProps {
+pub struct ToolProps {
     pub item: Option<TranscriptItem>,
 }
 
@@ -63,6 +63,6 @@ pub fn tool_row_count(tool: &ToolCallItem) -> usize {
     1 + tool
         .output_preview
         .as_deref()
-        .map(crate::components::transcript_content::visible_text_row_count)
+        .map(visible_text_row_count)
         .unwrap_or(0)
 }

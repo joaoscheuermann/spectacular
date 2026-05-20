@@ -1,4 +1,4 @@
-use crate::components::transcript_content::TRANSCRIPT_SEPARATOR;
+use crate::components::TRANSCRIPT_SEPARATOR;
 use crate::format_directory::format_directory;
 use crate::metadata::{ContextTokenUsage, TokenUsageTotal};
 use crate::render_model::{

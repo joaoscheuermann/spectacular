@@ -9,10 +9,10 @@ const OPENING_BANNER_MIN_WIDTH: usize = 52;
 
 /// Renders an opening-banner transcript item.
 #[component]
-pub fn OpeningBanner(props: &OpeningBannerProps) -> impl Into<AnyElement<'static>> {
-    let item = props.item.clone().expect("OpeningBanner requires item");
+pub fn Banner(props: &BannerProps) -> impl Into<AnyElement<'static>> {
+    let item = props.item.clone().expect("Banner requires item");
     let TranscriptItemContent::OpeningBanner(banner) = item.content else {
-        panic!("OpeningBanner requires opening-banner content");
+        panic!("Banner requires opening-banner content");
     };
     let elements = opening_banner_render_lines(&banner)
         .into_iter()
@@ -105,6 +105,6 @@ impl OpeningBannerRow {
 
 /// Props for the opening-banner component.
 #[derive(Default, Props)]
-pub struct OpeningBannerProps {
+pub struct BannerProps {
     pub item: Option<TranscriptItem>,
 }

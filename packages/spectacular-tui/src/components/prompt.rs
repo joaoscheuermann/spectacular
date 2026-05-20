@@ -5,8 +5,8 @@ use iocraft::prelude::*;
 
 /// Renders the active prompt rows and contextual suggestions.
 #[component]
-pub fn PromptArea(props: &PromptAreaProps) -> impl Into<AnyElement<'static>> {
-    let state = props.state.clone().expect("PromptArea requires state");
+pub fn Prompt(props: &PromptProps) -> impl Into<AnyElement<'static>> {
+    let state = props.state.clone().expect("Prompt requires state");
     let elements = prompt_render_lines(&state).into_iter().map(|line| {
         let contents = iocraft_content(&line);
         element!(MixedText(wrap: TextWrap::NoWrap, contents))
@@ -148,8 +148,8 @@ fn slash_suggestion_render_line(
     RenderLine::styled(format!("  {label:<18} {}", command.summary), style)
 }
 
-/// Props for the prompt area component.
+/// Props for the prompt component.
 #[derive(Default, Props)]
-pub struct PromptAreaProps {
+pub struct PromptProps {
     pub state: Option<State>,
 }

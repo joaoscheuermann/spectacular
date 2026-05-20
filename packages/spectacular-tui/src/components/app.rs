@@ -1,7 +1,7 @@
-use crate::components::footer::{footer_render_line, Footer};
-use crate::components::prompt_area::{prompt_render_lines, PromptArea};
-use crate::components::working_indicator::{working_render_line, WorkingIndicator};
-use crate::components::{transcript_render_lines, Transcript};
+use crate::components::{
+    footer_render_line, prompt_render_lines, transcript_render_lines, working_render_line, Footer,
+    Prompt, Transcript, Working,
+};
 use crate::render_model::{RenderLine, RenderStyle};
 use crate::state::State;
 use iocraft::prelude::*;
@@ -24,9 +24,9 @@ pub fn App(mut hooks: Hooks, props: &AppProps) -> impl Into<AnyElement<'static>>
 
     element!(View(flex_direction: FlexDirection::Column, width, height) {
         Transcript(state: state.clone(), capacity: transcript_capacity, width: width)
-        #(working_render_line(&state).is_some().then_some(element!(WorkingIndicator(state: state.clone()))))
+        #(working_render_line(&state).is_some().then_some(element!(Working(state: state.clone()))))
         View(flex_direction: FlexDirection::Column, width: 100pct, flex_shrink: 0.0) {
-            PromptArea(state: state.clone())
+            Prompt(state: state.clone())
             Footer(state: state.clone())
         }
     })

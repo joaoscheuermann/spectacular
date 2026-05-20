@@ -1,14 +1,14 @@
-use crate::components::transcript_content::TRANSCRIPT_SEPARATOR;
+use super::content::TRANSCRIPT_SEPARATOR;
 use crate::render_model::{iocraft_content, RenderLine, RenderStyle};
 use crate::transcript::{TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;
 
 /// Renders a completed work-summary transcript item.
 #[component]
-pub fn WorkedSummary(props: &WorkedSummaryProps) -> impl Into<AnyElement<'static>> {
-    let item = props.item.clone().expect("WorkedSummary requires item");
+pub fn Summary(props: &SummaryProps) -> impl Into<AnyElement<'static>> {
+    let item = props.item.clone().expect("Summary requires item");
     let TranscriptItemContent::WorkedSummary(worked_summary) = item.content else {
-        panic!("WorkedSummary requires worked-summary content");
+        panic!("Summary requires worked-summary content");
     };
     let elements =
         worked_summary_render_lines(&worked_summary.duration, worked_summary.turn_tokens)
@@ -30,8 +30,8 @@ pub fn worked_summary_render_lines(duration: &str, turn_tokens: Option<u64>) -> 
     vec![RenderLine::styled(summary, RenderStyle::Dim)]
 }
 
-/// Props for the worked-summary component.
+/// Props for the summary component.
 #[derive(Default, Props)]
-pub struct WorkedSummaryProps {
+pub struct SummaryProps {
     pub item: Option<TranscriptItem>,
 }

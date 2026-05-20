@@ -1,11 +1,41 @@
-use crate::components::transcript_projection::TranscriptLayout;
-use crate::components::transcript_scroll_view::{
-    scroll_offset_from_top, transcript_scroll_delta, TranscriptScrollView, TranscriptViewportState,
+mod assistant;
+mod banner;
+mod cancellation;
+mod command;
+mod content;
+mod error;
+mod notice;
+mod projection;
+mod reasoning;
+mod scroll;
+mod success;
+mod summary;
+mod tool;
+mod user;
+mod warning;
+
+pub use assistant::{Assistant, AssistantProps};
+pub use banner::{Banner, BannerProps};
+pub use cancellation::{Cancellation, CancellationProps};
+pub use command::{Command, CommandProps};
+pub use content::{plain_lines, TRANSCRIPT_SEPARATOR};
+pub use error::{Error, ErrorProps};
+pub use notice::{Notice, NoticeProps};
+pub use projection::{
+    transcript_item_layout_rows, transcript_item_lines, transcript_item_render_lines,
+    transcript_layout_item_range, transcript_layout_row_starts, transcript_layout_total_rows,
+    transcript_lines, transcript_render_lines, transcript_total_render_rows, wrapped_layout_text_rows,
 };
-use crate::components::{
-    AssistantMessage, Cancellation, Command, Error, Notice, OpeningBanner, Reasoning, Success,
-    ToolCall, UserPrompt, Warning, WorkedSummary,
-};
+pub use reasoning::{Reasoning, ReasoningProps};
+pub use scroll::{Scroll, ScrollProps};
+pub use success::{Success, SuccessProps};
+pub use summary::{Summary, SummaryProps};
+pub use tool::{Tool, ToolProps};
+pub use user::{User, UserProps};
+pub use warning::{Warning, WarningProps};
+
+use projection::TranscriptLayout;
+use scroll::{scroll_offset_from_top, transcript_scroll_delta, TranscriptViewportState};
 use crate::state::State;
 use crate::transcript::{TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;
@@ -61,7 +91,7 @@ pub fn Transcript(mut hooks: Hooks, props: &TranscriptProps) -> impl Into<AnyEle
     let slice_start_row = layout.item_start_row(item_range.start);
     let items = transcript_item_elements(&state, item_range);
 
-    element!(TranscriptScrollView(
+    element!(Scroll(
         key: state.session.id.as_str().to_owned(),
         scroll_offset: scroll_offset,
         scroll_offset_from_tail: normalized.offset,
@@ -132,16 +162,14 @@ fn transcript_item_element(item: &TranscriptItem) -> AnyElement<'static> {
 
     match &item.content {
         TranscriptItemContent::OpeningBanner(_) => {
-            element!(OpeningBanner(key: key, item: item)).into_any()
+            element!(Banner(key: key, item: item)).into_any()
         }
-        TranscriptItemContent::UserPrompt(_) => {
-            element!(UserPrompt(key: key, item: item)).into_any()
-        }
+        TranscriptItemContent::UserPrompt(_) => element!(User(key: key, item: item)).into_any(),
         TranscriptItemContent::AssistantMessage(_) => {
-            element!(AssistantMessage(key: key, item: item)).into_any()
+            element!(Assistant(key: key, item: item)).into_any()
         }
         TranscriptItemContent::Reasoning(_) => element!(Reasoning(key: key, item: item)).into_any(),
-        TranscriptItemContent::ToolCall(_) => element!(ToolCall(key: key, item: item)).into_any(),
+        TranscriptItemContent::ToolCall(_) => element!(Tool(key: key, item: item)).into_any(),
         TranscriptItemContent::Command(_) => element!(Command(key: key, item: item)).into_any(),
         TranscriptItemContent::Error(_) => element!(Error(key: key, item: item)).into_any(),
         TranscriptItemContent::Warning(_) => element!(Warning(key: key, item: item)).into_any(),
@@ -150,8 +178,6 @@ fn transcript_item_element(item: &TranscriptItem) -> AnyElement<'static> {
         TranscriptItemContent::Cancellation(_) => {
             element!(Cancellation(key: key, item: item)).into_any()
         }
-        TranscriptItemContent::WorkedSummary(_) => {
-            element!(WorkedSummary(key: key, item: item)).into_any()
-        }
+        TranscriptItemContent::WorkedSummary(_) => element!(Summary(key: key, item: item)).into_any(),
     }
 }

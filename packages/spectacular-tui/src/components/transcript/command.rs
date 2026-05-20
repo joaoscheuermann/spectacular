@@ -1,4 +1,4 @@
-use crate::components::transcript_content::{display_line_render_line, styled_visible_lines};
+use super::content::{display_line_render_line, styled_visible_lines, visible_text_row_count};
 use crate::render_model::{iocraft_content, RenderLine, RenderStyle};
 use crate::transcript::{CommandItem, CommandStatus, TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;
@@ -66,6 +66,6 @@ pub fn command_row_count(command: &CommandItem) -> usize {
             + usize::from(display.summary_line.is_some());
     }
 
-    1 + crate::components::transcript_content::visible_text_row_count(&command.output)
+    1 + visible_text_row_count(&command.output)
         + usize::from(command.status == CommandStatus::Failed && command.exit_code.is_some())
 }

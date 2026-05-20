@@ -1,4 +1,4 @@
-use crate::components::transcript_content::styled_visible_lines;
+use super::content::{styled_visible_lines, visible_text_row_count};
 use crate::render_model::{iocraft_content, RenderLine, RenderStyle};
 use crate::transcript::{TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;
@@ -35,7 +35,7 @@ pub fn error_render_lines(message: &str, details: Option<&str>) -> Vec<RenderLin
 /// Counts rows for an error item without allocating detail rows.
 pub fn error_row_count(details: Option<&str>) -> usize {
     1 + details
-        .map(crate::components::transcript_content::visible_text_row_count)
+        .map(visible_text_row_count)
         .unwrap_or(0)
 }
 

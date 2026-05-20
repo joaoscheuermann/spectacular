@@ -1,18 +1,18 @@
-use crate::components::assistant_message::assistant_message_render_lines;
-use crate::components::cancellation::cancellation_render_lines;
-use crate::components::command::{command_render_lines, command_row_count};
-use crate::components::error::{error_render_lines, error_row_count};
-use crate::components::notice::notice_render_lines;
-use crate::components::opening_banner::opening_banner_render_lines;
-use crate::components::reasoning::reasoning_render_lines;
-use crate::components::success::success_render_lines;
-use crate::components::tool_call::{tool_render_lines, tool_row_count};
-use crate::components::transcript_content::{
+use super::assistant::assistant_message_render_lines;
+use super::banner::opening_banner_render_lines;
+use super::cancellation::cancellation_render_lines;
+use super::command::{command_render_lines, command_row_count};
+use super::content::{
     plain_lines, prompt_text_row_count, trimmed_visible_text_row_count, visible_text_row_count,
 };
-use crate::components::user_prompt::user_prompt_render_lines;
-use crate::components::warning::warning_render_lines;
-use crate::components::worked_summary::worked_summary_render_lines;
+use super::error::{error_render_lines, error_row_count};
+use super::notice::notice_render_lines;
+use super::reasoning::reasoning_render_lines;
+use super::success::success_render_lines;
+use super::summary::worked_summary_render_lines;
+use super::tool::{tool_render_lines, tool_row_count};
+use super::user::user_prompt_render_lines;
+use super::warning::warning_render_lines;
 use crate::render_model::{RenderLine, RenderStyle};
 use crate::state::State;
 use crate::transcript::{TranscriptItem, TranscriptItemContent};

@@ -1,4 +1,4 @@
-use crate::components::transcript_content::styled_visible_trimmed_lines;
+use super::content::styled_visible_trimmed_lines;
 use crate::render_model::{iocraft_content, RenderStyle};
 use crate::transcript::{TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;

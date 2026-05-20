@@ -4,10 +4,7 @@ use iocraft::taffy;
 
 /// Scrollable transcript viewport that preserves Spectacular's bottom-relative scroll behavior.
 #[component]
-pub fn TranscriptScrollView<'a>(
-    _hooks: Hooks,
-    props: &mut TranscriptScrollViewProps<'a>,
-) -> impl Into<AnyElement<'a>> {
+pub fn Scroll<'a>(_hooks: Hooks, props: &mut ScrollProps<'a>) -> impl Into<AnyElement<'a>> {
     let total_rows = props.total_rows;
     let visible_rows = props.visible_rows;
     let scroll_offset = props.scroll_offset.unwrap_or_default();
@@ -47,9 +44,9 @@ pub fn TranscriptScrollView<'a>(
     })
 }
 
-/// Props for the transcript scroll viewport.
+/// Props for the scroll viewport.
 #[derive(Default, Props)]
-pub struct TranscriptScrollViewProps<'a> {
+pub struct ScrollProps<'a> {
     pub children: Vec<AnyElement<'a>>,
     pub scroll_offset: Option<usize>,
     pub scroll_offset_from_tail: u32,
