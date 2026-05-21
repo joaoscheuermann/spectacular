@@ -9,8 +9,7 @@ use crate::reducer::display::{
     finish_display_command, finish_display_tool_call,
 };
 use crate::reducer::lookup::{
-    clear_matching_activity, find_command, find_content_by_id, find_tool_call,
-    transcript_contains_id,
+    find_command, find_content_by_id, find_tool_call, transcript_contains_id,
 };
 use crate::scroll::TranscriptScrollState;
 use crate::session::Session;
@@ -71,44 +70,26 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
                 id.clone(),
                 TranscriptItemContent::AssistantMessage(AssistantMessageItem::new("")),
             );
-            state.status = Status::Running {
-                activity: Activity::StreamingAssistant { id },
-                cancellable: true,
-            };
         }
         ChatTuiAction::MessageDelta { id, text } => {
             let old_rows = transcript_total_render_rows(state);
             append_assistant_delta_directly(state, &id, &text);
             preserve_review_position_for_rendered_row_growth(state, old_rows);
         }
-        ChatTuiAction::MessageFinished { id } => {
-            clear_matching_activity(
-                state,
-                |activity| matches!(activity, Activity::StreamingAssistant { id: active_id } if active_id == &id),
-            );
-        }
+        ChatTuiAction::MessageFinished { id: _ } => {}
         ChatTuiAction::ReasoningStarted { id } => {
             append_transcript_item(
                 state,
                 id.clone(),
                 TranscriptItemContent::Reasoning(ReasoningItem::new("", false)),
             );
-            state.status = Status::Running {
-                activity: Activity::StreamingReasoning { id },
-                cancellable: true,
-            };
         }
         ChatTuiAction::ReasoningDelta { id, text } => {
             let old_rows = transcript_total_render_rows(state);
             append_reasoning_delta(state, &id, &text);
             preserve_review_position_for_rendered_row_growth(state, old_rows);
         }
-        ChatTuiAction::ReasoningFinished { id } => {
-            clear_matching_activity(
-                state,
-                |activity| matches!(activity, Activity::StreamingReasoning { id: active_id } if active_id == &id),
-            );
-        }
+        ChatTuiAction::ReasoningFinished { id: _ } => {}
         ChatTuiAction::ToolCallStarted {
             id,
             tool_call_id,
@@ -175,12 +156,8 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
             append_transcript_item(
                 state,
                 id.clone(),
-                TranscriptItemContent::Command(CommandItem::running(command_id.clone(), command)),
+                TranscriptItemContent::Command(CommandItem::running(command_id, command)),
             );
-            state.status = Status::Running {
-                activity: Activity::RunningCommand { id, command_id },
-                cancellable: true,
-            };
         }
         ChatTuiAction::CommandOutput { command_id, text } => {
             let old_rows = transcript_total_render_rows(state);
@@ -192,21 +169,13 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
             exit_code,
         } => {
             finish_command(state, &command_id, exit_code);
-            clear_matching_activity(
-                state,
-                |activity| matches!(activity, Activity::RunningCommand { command_id: active_id, .. } if active_id == &command_id),
-            );
         }
         ChatTuiAction::CommandDisplayStarted {
             id,
             command_id,
             command_line,
         } => {
-            append_display_command(state, id.clone(), command_id.clone(), command_line);
-            state.status = Status::Running {
-                activity: Activity::RunningCommand { id, command_id },
-                cancellable: true,
-            };
+            append_display_command(state, id.clone(), command_id, command_line);
         }
         ChatTuiAction::CommandDisplayOutput { command_id, chunk } => {
             append_display_command_output(state, &command_id, chunk.line);
@@ -218,10 +187,6 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
             summary_line,
         } => {
             finish_display_command(state, &command_id, status, exit_code, summary_line);
-            clear_matching_activity(
-                state,
-                |activity| matches!(activity, Activity::RunningCommand { command_id: active_id, .. } if active_id == &command_id),
-            );
         }
         ChatTuiAction::AgentFinished => {
             state.status = Status::Idle;

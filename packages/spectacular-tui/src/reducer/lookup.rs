@@ -1,23 +1,6 @@
 use crate::ids::TranscriptItemId;
 use crate::state::State;
-use crate::status::{Activity, Status};
 use crate::transcript::{CommandItem, ToolCallItem, TranscriptItemContent};
-
-/// Clears the active running status if the supplied predicate matches its activity.
-pub(crate) fn clear_matching_activity(
-    state: &mut State,
-    matches_activity: impl FnOnce(&Activity) -> bool,
-) {
-    let Status::Running { activity, .. } = &state.status else {
-        return;
-    };
-
-    if !matches_activity(activity) {
-        return;
-    }
-
-    state.status = Status::Idle;
-}
 
 /// Returns whether the transcript already contains an item with the supplied ID.
 pub(crate) fn transcript_contains_id(state: &State, id: &TranscriptItemId) -> bool {

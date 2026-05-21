@@ -30,11 +30,18 @@ fn item_id(value: &str) -> TranscriptItemId {
     TranscriptItemId::new(value)
 }
 
-/// Verifies assistant lifecycle actions update one semantic assistant item and status.
+/// Verifies assistant lifecycle actions preserve run status until the agent finishes.
 #[test]
-fn assistant_lifecycle_updates_one_item_and_status() {
+fn assistant_lifecycle_preserves_run_status_until_agent_finished() {
     let mut state = state();
     let id = item_id("assistant-1");
+    let running = Status::Running {
+        activity: Activity::WaitingForModel,
+        cancellable: true,
+    };
+
+    reduce(&mut state, ChatTuiAction::AgentStarted);
+    assert_eq!(state.status, running);
 
     reduce(&mut state, ChatTuiAction::MessageStarted { id: id.clone() });
     reduce(
@@ -51,31 +58,32 @@ fn assistant_lifecycle_updates_one_item_and_status() {
             text: "world".to_owned(),
         },
     );
+    reduce(&mut state, ChatTuiAction::MessageFinished { id });
 
+    assert_eq!(state.status, running);
     assert_eq!(state.session.transcript.len(), 1);
-    assert_eq!(
-        state.status,
-        Status::Running {
-            activity: Activity::StreamingAssistant { id: id.clone() },
-            cancellable: true,
-        }
-    );
     assert!(matches!(
         &state.session.transcript[0].content,
         TranscriptItemContent::AssistantMessage(item) if item.text == "hello world"
     ));
 
-    reduce(&mut state, ChatTuiAction::MessageFinished { id });
+    reduce(&mut state, ChatTuiAction::AgentFinished);
 
     assert_eq!(state.status, Status::Idle);
-    assert_eq!(state.session.transcript.len(), 1);
 }
 
-/// Verifies reasoning lifecycle actions update one reasoning item and status.
+/// Verifies reasoning lifecycle actions preserve run status until the agent finishes.
 #[test]
-fn reasoning_lifecycle_updates_one_item_and_status() {
+fn reasoning_lifecycle_preserves_run_status_until_agent_finished() {
     let mut state = state();
     let id = item_id("reasoning-1");
+    let running = Status::Running {
+        activity: Activity::WaitingForModel,
+        cancellable: true,
+    };
+
+    reduce(&mut state, ChatTuiAction::AgentStarted);
+    assert_eq!(state.status, running);
 
     reduce(
         &mut state,
@@ -95,24 +103,18 @@ fn reasoning_lifecycle_updates_one_item_and_status() {
             text: "step 2.".to_owned(),
         },
     );
+    reduce(&mut state, ChatTuiAction::ReasoningFinished { id });
 
+    assert_eq!(state.status, running);
     assert_eq!(state.session.transcript.len(), 1);
-    assert_eq!(
-        state.status,
-        Status::Running {
-            activity: Activity::StreamingReasoning { id: id.clone() },
-            cancellable: true,
-        }
-    );
     assert!(matches!(
         &state.session.transcript[0].content,
         TranscriptItemContent::Reasoning(item) if item.text == "step 1. step 2." && !item.collapsed
     ));
 
-    reduce(&mut state, ChatTuiAction::ReasoningFinished { id });
+    reduce(&mut state, ChatTuiAction::AgentFinished);
 
     assert_eq!(state.status, Status::Idle);
-    assert_eq!(state.session.transcript.len(), 1);
 }
 
 /// Verifies tool lifecycle actions update one semantic item without changing run status.
@@ -172,11 +174,18 @@ fn tool_lifecycle_updates_one_item_and_preserves_run_status() {
     ));
 }
 
-/// Verifies command lifecycle actions update one command item and record exit code.
+/// Verifies command lifecycle actions preserve run status until the agent finishes.
 #[test]
-fn command_lifecycle_updates_one_item_and_exit_code() {
+fn command_lifecycle_preserves_run_status_until_agent_finished() {
     let mut state = state();
     let id = item_id("command-item-1");
+    let running = Status::Running {
+        activity: Activity::WaitingForModel,
+        cancellable: true,
+    };
+
+    reduce(&mut state, ChatTuiAction::AgentStarted);
+    assert_eq!(state.status, running);
 
     reduce(
         &mut state,
@@ -201,7 +210,7 @@ fn command_lifecycle_updates_one_item_and_exit_code() {
         },
     );
 
-    assert_eq!(state.status, Status::Idle);
+    assert_eq!(state.status, running);
     assert_eq!(state.session.transcript.len(), 1);
     assert_eq!(state.session.transcript[0].id, id);
     assert!(matches!(
@@ -213,6 +222,10 @@ fn command_lifecycle_updates_one_item_and_exit_code() {
                 && item.status == CommandStatus::Finished
                 && item.exit_code == Some(0)
     ));
+
+    reduce(&mut state, ChatTuiAction::AgentFinished);
+
+    assert_eq!(state.status, Status::Idle);
 }
 
 /// Verifies failed command exits are represented on the existing command item.
