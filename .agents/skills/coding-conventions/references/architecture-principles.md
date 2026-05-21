@@ -20,7 +20,7 @@
 ### Dependency Inversion (DIP)
 
 - High-level policy must not depend directly on low-level details. Point source dependencies toward the policies that should survive library or vendor swaps.
-- Flow goes: **apps → bindings/surface → runtime/tooling APIs**, not the reverse.
+- Flow goes: **apps -> bindings/surface -> runtime/tooling APIs**, not the reverse.
 - Pass paths, credentials, and limits at initialization or call boundaries rather than using hidden globals.
 
 ### Interface Segregation (ISP)
@@ -41,8 +41,9 @@
 - Keep schemas, IDLs, or proto definitions as the source of truth for generated code in multiple languages.
 - **Workflow before writing new code:**
   1. Audit the workspace for similar logic.
-  2. Extract logic that could serve a second caller.
-  3. Move cross-app shared code into `packages/*` using workspace generators.
+  2. Reuse existing logic when a suitable implementation already exists.
+  3. Extract shared logic only after an actual second consumer or proven duplication validates the abstraction.
+  4. Move cross-app shared code into `packages/*` using workspace generators.
 
 ## 3. Deep and Shallow Modules
 
