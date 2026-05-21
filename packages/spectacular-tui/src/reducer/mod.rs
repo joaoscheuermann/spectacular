@@ -9,8 +9,7 @@ use crate::reducer::display::{
     finish_display_command, finish_display_tool_call,
 };
 use crate::reducer::lookup::{
-    clear_matching_activity, find_command, find_content_by_id, find_tool_call,
-    matching_tool_activity_item_id, transcript_contains_id,
+    clear_matching_activity, find_command, find_content_by_id, find_tool_call, transcript_contains_id,
 };
 use crate::scroll::TranscriptScrollState;
 use crate::session::Session;
@@ -124,10 +123,6 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
                     arguments_preview,
                 )),
             );
-            state.status = Status::Running {
-                activity: Activity::RunningTool { id, name },
-                cancellable: true,
-            };
         }
         ChatTuiAction::ToolCallDelta { tool_call_id, text } => {
             let old_rows = transcript_total_render_rows(state);
@@ -139,23 +134,13 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
             name,
             output,
         } => {
-            let active_item_id = matching_tool_activity_item_id(state, &tool_call_id);
             finish_tool_call(state, &tool_call_id, name, output);
-            clear_matching_activity(
-                state,
-                |activity| matches!(activity, Activity::RunningTool { id, .. } if Some(id) == active_item_id.as_ref()),
-            );
         }
         ChatTuiAction::ToolCallFailed {
             tool_call_id,
             error,
         } => {
-            let active_item_id = matching_tool_activity_item_id(state, &tool_call_id);
             fail_tool_call(state, &tool_call_id, error);
-            clear_matching_activity(
-                state,
-                |activity| matches!(activity, Activity::RunningTool { id, .. } if Some(id) == active_item_id.as_ref()),
-            );
         }
         ChatTuiAction::ToolDisplayStarted {
             id,
@@ -172,22 +157,13 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
                 call_line,
                 argument_lines,
             );
-            state.status = Status::Running {
-                activity: Activity::RunningTool { id, name },
-                cancellable: true,
-            };
         }
         ChatTuiAction::ToolDisplayFinished {
             tool_call_id,
             status,
             output_lines,
         } => {
-            let active_item_id = matching_tool_activity_item_id(state, &tool_call_id);
             finish_display_tool_call(state, &tool_call_id, status, output_lines);
-            clear_matching_activity(
-                state,
-                |activity| matches!(activity, Activity::RunningTool { id, .. } if Some(id) == active_item_id.as_ref()),
-            );
         }
         ChatTuiAction::CommandStarted {
             id,

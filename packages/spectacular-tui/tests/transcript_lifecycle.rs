@@ -115,12 +115,17 @@ fn reasoning_lifecycle_updates_one_item_and_status() {
     assert_eq!(state.session.transcript.len(), 1);
 }
 
-/// Verifies tool lifecycle actions update one semantic tool item without raw output items.
+/// Verifies tool lifecycle actions update one semantic item without changing run status.
 #[test]
-fn tool_lifecycle_updates_one_item_and_preserves_identity() {
+fn tool_lifecycle_updates_one_item_and_preserves_run_status() {
     let mut state = state();
     let id = item_id("tool-item-1");
+    let running = Status::Running {
+        activity: Activity::WaitingForModel,
+        cancellable: true,
+    };
 
+    reduce(&mut state, ChatTuiAction::AgentStarted);
     reduce(
         &mut state,
         ChatTuiAction::ToolCallStarted {
@@ -130,6 +135,9 @@ fn tool_lifecycle_updates_one_item_and_preserves_identity() {
             arguments: "pattern: State".to_owned(),
         },
     );
+
+    assert_eq!(state.status, running);
+
     reduce(
         &mut state,
         ChatTuiAction::ToolCallDelta {
@@ -145,6 +153,10 @@ fn tool_lifecycle_updates_one_item_and_preserves_identity() {
             output: "final output".to_owned(),
         },
     );
+
+    assert_eq!(state.status, running);
+
+    reduce(&mut state, ChatTuiAction::AgentFinished);
 
     assert_eq!(state.status, Status::Idle);
     assert_eq!(state.session.transcript.len(), 1);

@@ -73,34 +73,3 @@ pub(crate) fn find_command<'a>(
         })
 }
 
-/// Returns the active running tool item ID when it matches the supplied lifecycle ID.
-pub(crate) fn matching_tool_activity_item_id(
-    state: &State,
-    tool_call_id: &str,
-) -> Option<TranscriptItemId> {
-    let Status::Running {
-        activity: Activity::RunningTool { id, .. },
-        ..
-    } = &state.status
-    else {
-        return None;
-    };
-
-    if !transcript_item_has_tool_call(state, id, tool_call_id) {
-        return None;
-    }
-
-    Some(id.clone())
-}
-
-/// Returns whether a transcript item ID points at the supplied tool lifecycle ID.
-fn transcript_item_has_tool_call(state: &State, id: &TranscriptItemId, tool_call_id: &str) -> bool {
-    state.session.transcript.iter().any(|item| {
-        item.id == *id
-            && matches!(
-                &item.content,
-                TranscriptItemContent::ToolCall(tool_call)
-                    if tool_call.tool_call_id == tool_call_id
-            )
-    })
-}
