@@ -5,6 +5,37 @@ use crate::session::{SelectionPromptState, Session};
 use crate::spinner::SpinnerState;
 use crate::status::Status;
 
+const PROMPT_MARKER_WIDTH: u16 = 2;
+const DEFAULT_PROMPT_CONTENT_WIDTH: usize = 118;
+const DEFAULT_PROMPT_VIEWPORT_HEIGHT: usize = usize::MAX;
+
+/// Current terminal-derived prompt textarea layout metrics used by reducer input handling.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PromptLayoutMetrics {
+    pub content_width: usize,
+    pub viewport_height: usize,
+}
+
+impl PromptLayoutMetrics {
+    /// Builds prompt layout metrics from the latest terminal size.
+    pub fn from_terminal_size(width: u16, height: u16) -> Self {
+        Self {
+            content_width: width.saturating_sub(PROMPT_MARKER_WIDTH).max(1).into(),
+            viewport_height: height.saturating_sub(2).max(1).into(),
+        }
+    }
+}
+
+impl Default for PromptLayoutMetrics {
+    /// Creates unbounded prompt metrics for non-terminal tests and snapshots.
+    fn default() -> Self {
+        Self {
+            content_width: DEFAULT_PROMPT_CONTENT_WIDTH,
+            viewport_height: DEFAULT_PROMPT_VIEWPORT_HEIGHT,
+        }
+    }
+}
+
 /// Complete framework-independent state for the full terminal UI.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct State {
@@ -16,6 +47,7 @@ pub struct State {
     pub spinner: SpinnerState,
     pub selection: Option<SelectionPromptState>,
     pub scroll: TranscriptScrollState,
+    pub prompt_layout: PromptLayoutMetrics,
 }
 
 impl State {
@@ -35,6 +67,7 @@ impl State {
             spinner: SpinnerState::new(),
             selection: None,
             scroll: TranscriptScrollState::follow_tail(),
+            prompt_layout: PromptLayoutMetrics::default(),
         }
     }
 
@@ -59,6 +92,7 @@ impl State {
             spinner: SpinnerState::new(),
             selection: None,
             scroll: TranscriptScrollState::follow_tail(),
+            prompt_layout: PromptLayoutMetrics::default(),
         }
     }
 }

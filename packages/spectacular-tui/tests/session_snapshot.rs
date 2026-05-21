@@ -1,8 +1,9 @@
 use spectacular_tui::{
     AssistantMessageItem, CommandDescriptor, CommandItem, CommandStatus, ContextTokenUsage,
-    DisplayMetadata, ErrorItem, NoticeItem, PromptState, ReasoningItem, ReasoningLevel,
-    RuntimeSelection, Session, SessionId, State, Status, Timestamp, ToolCallItem, ToolStatus,
-    TranscriptItem, TranscriptItemContent, TranscriptItemId, TurnTokenUsage, UserPromptItem,
+    DisplayMetadata, ErrorItem, NoticeItem, PromptLayoutMetrics, PromptState, ReasoningItem,
+    ReasoningLevel, RuntimeSelection, Session, SessionId, State, Status, Timestamp, ToolCallItem,
+    ToolStatus, TranscriptItem, TranscriptItemContent, TranscriptItemId, TurnTokenUsage,
+    UserPromptItem,
 };
 
 /// Builds a stable transcript item with semantic content for snapshot tests.
@@ -197,6 +198,36 @@ fn state_reconstruction_initializes_transient_fields_from_defaults() {
     assert_eq!(state.selection, None);
     assert_eq!(state.scroll, Default::default());
     assert!(state.scroll.follow_tail);
+    assert_eq!(state.prompt_layout, PromptLayoutMetrics::default());
+}
+
+/// Verifies current prompt snapshots reconcile lines and legacy text to one prompt buffer.
+#[test]
+fn current_prompt_snapshot_rehydrates_from_lines_as_source_of_truth() {
+    let prompt: PromptState = serde_json::from_value(serde_json::json!({
+        "lines": ["line", "state"],
+        "text": "stale text",
+        "cursor": 10
+    }))
+    .unwrap();
+
+    assert_eq!(prompt.text(), "line\nstate");
+    assert_eq!(prompt.text, "line\nstate");
+    assert_eq!(prompt.lines, vec!["line".to_owned(), "state".to_owned()]);
+}
+
+/// Verifies legacy prompt snapshots rebuild lines and text from the durable text field.
+#[test]
+fn legacy_prompt_snapshot_rehydrates_from_text() {
+    let prompt: PromptState = serde_json::from_value(serde_json::json!({
+        "text": "line\r\nstate",
+        "cursor": 11
+    }))
+    .unwrap();
+
+    assert_eq!(prompt.text(), "line\nstate");
+    assert_eq!(prompt.text, "line\nstate");
+    assert_eq!(prompt.lines, vec!["line".to_owned(), "state".to_owned()]);
 }
 
 /// Verifies replay keeps prior ANSI output as semantic data instead of replaying terminal writes.

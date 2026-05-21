@@ -14,7 +14,7 @@ use tokio::sync::{mpsc, oneshot};
 /// Verifies TUI runtime state starts from controller-owned metadata and warnings.
 #[test]
 fn initial_state_uses_runtime_metadata_and_warnings() {
-    let bootstrap = TestTuiBootstrap::new("session-1").with_warning("configuration warning");
+    let bootstrap = TestTuiBootstrap::create("session-1").with_warning("configuration warning");
     let controller = TuiRuntimeController::new(bootstrap).unwrap();
 
     let state = controller.state();
@@ -97,7 +97,7 @@ fn controller_state_update_resets_prompt_on_session_change() {
 #[tokio::test]
 async fn controller_publishes_state_while_prompt_run_is_streaming() {
     let (release_sender, release_receiver) = oneshot::channel();
-    let bootstrap = TestTuiBootstrap::new("streaming-session");
+    let bootstrap = TestTuiBootstrap::create("streaming-session");
     let controller = TuiRuntimeController::new_with_runner(
         bootstrap,
         PausingTuiTurnRunner {
@@ -151,7 +151,7 @@ async fn submit_prompt_intent_runs_real_controller_path() {
             finish_reason: FinishReason::Stop,
         },
     ]);
-    let bootstrap = TestTuiBootstrap::new("session-1");
+    let bootstrap = TestTuiBootstrap::create("session-1");
     let mut controller = TuiRuntimeController::new_with_runner(bootstrap, runner).unwrap();
 
     controller
@@ -187,7 +187,7 @@ async fn completed_tui_run_saves_session_snapshot() {
             finish_reason: FinishReason::Stop,
         },
     ]);
-    let bootstrap = TestTuiBootstrap::new("snapshot-session");
+    let bootstrap = TestTuiBootstrap::create("snapshot-session");
     let mut controller = TuiRuntimeController::new_with_runner(bootstrap, runner).unwrap();
 
     controller
@@ -230,7 +230,7 @@ fn tui_runtime_path_has_no_direct_terminal_print_macros() {
 /// Verifies TUI cancellation intents cancel active runtime work through the runner seam.
 #[tokio::test]
 async fn cancel_intent_cancels_active_runner() {
-    let bootstrap = TestTuiBootstrap::new("session-1");
+    let bootstrap = TestTuiBootstrap::create("session-1");
     let mut controller = TuiRuntimeController::new_with_runner(
         bootstrap,
         RecordingTuiTurnRunner {
@@ -249,7 +249,7 @@ async fn cancel_intent_cancels_active_runner() {
 /// Verifies slash-command execution can request a TUI-owned selection prompt.
 #[tokio::test]
 async fn tui_command_can_request_selection_prompt() {
-    let bootstrap = TestTuiBootstrap::new("selection-request-session");
+    let bootstrap = TestTuiBootstrap::create("selection-request-session");
     let mut controller = TuiRuntimeController::new_with_runner(
         bootstrap,
         RecordingTuiTurnRunner::default(),
@@ -277,7 +277,7 @@ async fn tui_command_can_request_selection_prompt() {
 /// Verifies TUI selection answers resume the command path waiting on that prompt.
 #[tokio::test]
 async fn tui_selection_answer_returns_to_waiting_runtime_flow() {
-    let bootstrap = TestTuiBootstrap::new("selection-answer-session");
+    let bootstrap = TestTuiBootstrap::create("selection-answer-session");
     let mut controller = TuiRuntimeController::new_with_runner(
         bootstrap,
         RecordingTuiTurnRunner::default(),
@@ -316,7 +316,7 @@ async fn tui_selection_answer_returns_to_waiting_runtime_flow() {
 /// Verifies TUI selection cancellation maps to the original selection prompt exit result.
 #[tokio::test]
 async fn tui_selection_cancel_maps_to_original_exit_result() {
-    let bootstrap = TestTuiBootstrap::new("selection-cancel-session");
+    let bootstrap = TestTuiBootstrap::create("selection-cancel-session");
     let mut controller = TuiRuntimeController::new_with_runner(
         bootstrap,
         RecordingTuiTurnRunner::default(),
@@ -347,7 +347,7 @@ async fn tui_selection_cancel_maps_to_original_exit_result() {
 /// Verifies cancellation reaches an active prompt even while the controller awaits the turn.
 #[tokio::test]
 async fn cancel_signal_reaches_active_prompt_run() {
-    let bootstrap = TestTuiBootstrap::new("active-cancel-session");
+    let bootstrap = TestTuiBootstrap::create("active-cancel-session");
     let controller = TuiRuntimeController::new_with_runner(bootstrap, CancellingTuiTurnRunner).unwrap();
     let (intent_sender, intent_receiver) = mpsc::unbounded_channel();
     let (cancellation_sender, cancellation_receiver) = mpsc::unbounded_channel();
@@ -524,7 +524,7 @@ struct TestTuiBootstrap;
 
 impl TestTuiBootstrap {
     /// Builds a production bootstrap with isolated session and trace directories.
-    fn new(session_id: &str) -> TuiBootstrap {
+    fn create(session_id: &str) -> TuiBootstrap {
         let workspace_root = PathBuf::from("/workspace");
         let trace_dir = temp_dir("trace");
         TuiBootstrap {

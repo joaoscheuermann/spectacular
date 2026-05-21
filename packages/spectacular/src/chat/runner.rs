@@ -337,11 +337,12 @@ fn context_policy_for_runtime(
     runtime: &RuntimeSelection,
     context_window_tokens: Option<usize>,
 ) -> ContextPolicy {
-    let mut policy = ContextPolicy::default();
-    policy.model_context_window_tokens = context_window_tokens;
-    policy.reasoning_reserve_tokens = reasoning_reserve_tokens(runtime.reasoning);
-    policy.max_summary_passes_per_request = 4;
-    policy
+    ContextPolicy {
+        model_context_window_tokens: context_window_tokens,
+        reasoning_reserve_tokens: reasoning_reserve_tokens(runtime.reasoning),
+        max_summary_passes_per_request: 4,
+        ..ContextPolicy::default()
+    }
 }
 
 /// Reserves additional input budget for models configured to spend reasoning tokens.

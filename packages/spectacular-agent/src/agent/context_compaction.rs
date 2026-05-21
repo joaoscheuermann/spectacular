@@ -70,7 +70,7 @@ where
     fn summary_request(&self, summary_request: &ContextSummaryRequest) -> ProviderRequest {
         let mut request = ProviderRequest::new(vec![
             ProviderMessage::system(CONTEXT_SUMMARY_SYSTEM_PROMPT),
-            ProviderMessage::user(SummaryPrompt::default().user_prompt(
+            ProviderMessage::user(SummaryPrompt.user_prompt(
                 summary_request,
                 self.agent.config.context_policy.summary_max_tokens,
             )),

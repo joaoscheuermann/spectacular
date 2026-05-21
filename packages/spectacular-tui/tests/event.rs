@@ -1,8 +1,8 @@
 use iocraft::prelude::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers, TerminalEvent};
 use spectacular_tui::{
-    effects, reduce, ChatTuiAction, CommandDescriptor, DisplayMetadata, EventEffect, PromptState,
-    ReasoningLevel, RuntimeSelection, SessionId, State, Status, TranscriptItemContent,
-    TranscriptItemId, SPINNER_TICK_INTERVAL,
+    effects, reduce, ChatTuiAction, CommandDescriptor, DisplayMetadata, EventEffect,
+    PromptLayoutMetrics, PromptState, ReasoningLevel, RuntimeSelection, SessionId, State, Status,
+    TranscriptItemContent, TranscriptItemId, SPINNER_TICK_INTERVAL,
 };
 use std::time::Duration;
 
@@ -39,7 +39,7 @@ fn single_action(state: &State, event: TerminalEvent) -> ChatTuiAction {
     let effects = effects(state, event);
     assert_eq!(effects.len(), 1);
     match effects.into_iter().next().unwrap() {
-        EventEffect::Action(action) => action,
+        EventEffect::Action(action) => *action,
         EventEffect::RequestExit => panic!("expected action effect"),
     }
 }
@@ -56,6 +56,16 @@ fn typing_text_updates_prompt_state_through_prompt_changed() {
 
     assert_eq!(state.session.prompt.text, "hi");
     assert_eq!(state.session.prompt.cursor, 2);
+}
+
+/// Verifies public text access derives from reducer-owned logical lines.
+#[test]
+fn prompt_text_accessor_uses_logical_lines_as_source_of_truth() {
+    let mut prompt = PromptState::from_text("line one");
+    prompt.text = "stale text".to_owned();
+    prompt.lines = vec!["actual".to_owned(), "text".to_owned()];
+
+    assert_eq!(prompt.text(), "actual\ntext");
 }
 
 /// Verifies multiline editing, cursor movement, selection replacement, and paste insertion stay in prompt state.
@@ -108,6 +118,61 @@ fn enter_with_text_inserts_newline_without_transcript_change() {
 
     assert_eq!(state.session.prompt.text, "run this\n");
     assert_eq!(state.session.transcript.len(), 0);
+}
+
+/// Verifies vertical movement uses actual prompt content width instead of default fallback width.
+#[test]
+fn prompt_up_uses_current_layout_width_for_wrapped_rows() {
+    let mut state = state();
+    state.prompt_layout = PromptLayoutMetrics {
+        content_width: 3,
+        viewport_height: 10,
+    };
+    state.session.prompt = PromptState::from_text("abcdef");
+
+    let action = single_action(&state, key(KeyCode::Up, KeyModifiers::empty()));
+    reduce(&mut state, action);
+
+    assert_eq!(state.session.prompt.cursor, 3);
+}
+
+/// Verifies prompt changes keep the cursor visible within the current textarea viewport.
+#[test]
+fn prompt_changed_scrolls_prompt_viewport_to_cursor() {
+    let mut state = state();
+    state.prompt_layout = PromptLayoutMetrics {
+        content_width: 3,
+        viewport_height: 1,
+    };
+
+    reduce(
+        &mut state,
+        ChatTuiAction::PromptChanged(PromptState::from_text("abcdef")),
+    );
+
+    assert_eq!(state.session.prompt.scroll_top_row, 1);
+}
+
+/// Verifies resize updates prompt layout metrics while transcript viewport remains component-owned.
+#[test]
+fn resize_updates_prompt_layout_metrics() {
+    let mut state = state();
+
+    reduce(
+        &mut state,
+        ChatTuiAction::Resize {
+            width: 10,
+            height: 4,
+        },
+    );
+
+    assert_eq!(
+        state.prompt_layout,
+        PromptLayoutMetrics {
+            content_width: 8,
+            viewport_height: 2,
+        }
+    );
 }
 
 /// Verifies Ctrl+Enter submits the current prompt through the reducer and clears prompt state.
@@ -174,7 +239,7 @@ fn timer_tick_dispatches_spinner_tick_without_terminal_output() {
     assert_eq!(SPINNER_TICK_INTERVAL, Duration::from_millis(90));
     assert_eq!(
         spectacular_tui::timer_tick_effects(),
-        vec![EventEffect::Action(ChatTuiAction::SpinnerTick)]
+        vec![EventEffect::Action(Box::new(ChatTuiAction::SpinnerTick))]
     );
 }
 

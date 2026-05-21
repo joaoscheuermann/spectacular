@@ -38,7 +38,7 @@ fn single_action(state: &State, event: TerminalEvent) -> ChatTuiAction {
     let effects = effects(state, event);
     assert_eq!(effects.len(), 1, "effects: {effects:?}");
     match effects.into_iter().next().unwrap() {
-        EventEffect::Action(action) => action,
+        EventEffect::Action(action) => *action,
         EventEffect::RequestExit => panic!("expected action effect"),
     }
 }
@@ -208,6 +208,22 @@ fn prompt_paste_burst_preserves_multiline_text() {
 }
 
 #[test]
+fn prompt_cursor_renders_grapheme_cluster_cell() {
+    let mut state = state();
+    state.session.prompt = PromptState::from_text("e\u{301}x");
+    state.session.prompt.move_to_start(false);
+
+    let lines = spectacular_tui::prompt_render_lines(&state);
+    let cursor_text = lines[0]
+        .spans
+        .iter()
+        .find(|span| span.style == RenderStyle::Selection)
+        .map(|span| span.text.as_str());
+
+    assert_eq!(cursor_text, Some("e\u{301}"));
+}
+
+#[test]
 fn prompt_selection_renders_styled_ranges() {
     let mut state = state();
     state.session.prompt = PromptState::from_text("hello");
@@ -295,6 +311,11 @@ fn selection_prompt_custom_input_and_comment_mode_match_original() {
     assert_eq!(state.selection.as_ref().unwrap().custom_input, "x");
     assert_eq!(state.selection.as_ref().unwrap().selected, 1);
 
+    press(&mut state, KeyCode::Char('e'), KeyModifiers::empty());
+    press(&mut state, KeyCode::Char('\u{301}'), KeyModifiers::empty());
+    press(&mut state, KeyCode::Backspace, KeyModifiers::empty());
+    assert_eq!(state.selection.as_ref().unwrap().custom_input, "x");
+
     press(&mut state, KeyCode::Tab, KeyModifiers::empty());
     press(&mut state, KeyCode::Char('!'), KeyModifiers::empty());
     assert_eq!(state.selection.as_ref().unwrap().comment, "!");
@@ -316,12 +337,12 @@ fn selection_prompt_submit_and_cancel_match_original() {
 
     assert_eq!(
         effects(&active_state, key(KeyCode::Enter, KeyModifiers::empty())),
-        vec![EventEffect::Action(
+        vec![EventEffect::Action(Box::new(
             ChatTuiAction::SelectionPromptSubmitted(SelectionPromptAnswer {
                 choice: SelectionPromptChoice::Custom("x".to_owned()),
                 comment: Some("!".to_owned()),
             })
-        )]
+        ))]
     );
 
     let mut state = state();
@@ -333,6 +354,8 @@ fn selection_prompt_submit_and_cancel_match_original() {
 
     assert_eq!(
         effects(&state, key(KeyCode::Esc, KeyModifiers::empty())),
-        vec![EventEffect::Action(ChatTuiAction::SelectionPromptCancelled)]
+        vec![EventEffect::Action(Box::new(
+            ChatTuiAction::SelectionPromptCancelled
+        ))]
     );
 }

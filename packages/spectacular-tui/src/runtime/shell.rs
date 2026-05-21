@@ -57,7 +57,7 @@ impl Shell {
     /// Applies one local event effect without performing runtime work directly.
     fn apply_event_effect(&mut self, effect: EventEffect) {
         match effect {
-            EventEffect::Action(action) => self.apply_user_action(action),
+            EventEffect::Action(action) => self.apply_user_action(*action),
             EventEffect::RequestExit => self.emit_intent(Intent::RequestExit),
         }
     }

@@ -1,6 +1,6 @@
 use iocraft::prelude::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers, TerminalEvent};
 use spectacular_tui::{
-    reduce, ChatTuiAction, DisplayMetadata, ReasoningLevel, RuntimeSelection,
+    reduce, ChatTuiAction, DisplayMetadata, PromptState, ReasoningLevel, RuntimeSelection,
     SelectionPromptAnswer, SelectionPromptChoice, SelectionPromptState, SessionId, State,
     TranscriptItemContent, TranscriptItemId,
 };
@@ -37,7 +37,7 @@ fn key(code: KeyCode, modifiers: KeyModifiers) -> TerminalEvent {
 #[tokio::test]
 async fn shell_ctrl_enter_submit_prompt_emits_runtime_intent() {
     let mut state = state();
-    state.session.prompt.text = "hello runtime".to_owned();
+    state.session.prompt = PromptState::from_text("hello runtime");
 
     let (mut shell, mut intents) = spectacular_tui::Shell::new(state);
     shell.apply_terminal_event(key(KeyCode::Enter, KeyModifiers::CONTROL));

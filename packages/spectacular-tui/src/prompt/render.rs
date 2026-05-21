@@ -3,6 +3,7 @@ use crate::prompt::layout::{row_for_cursor, visual_rows, VisualRow};
 use crate::render::{RenderLine, RenderSpan, RenderStyle};
 use crate::session::PromptState;
 use std::ops::Range;
+use unicode_segmentation::UnicodeSegmentation;
 
 pub(crate) const PLACEHOLDER: &str = "What we are going to build today?";
 const CURSOR_CELL: &str = " ";
@@ -25,15 +26,17 @@ pub(crate) fn render_lines(
 
 /// Formats prompt text rows, including placeholder, selection, and cursor spans.
 fn prompt_text_lines(prompt: &PromptState, width: Option<u16>) -> Vec<RenderLine> {
-    if prompt.text.is_empty() {
+    if prompt.is_empty() {
         return vec![empty_prompt_line()];
     }
 
+    let text = prompt.text();
     let content_width = content_width(width);
-    let rows = visual_rows(&prompt.text, content_width);
+    let rows = visual_rows(&text, content_width);
     let cursor_row = row_for_cursor(&rows, prompt.cursor);
     rows.into_iter()
         .enumerate()
+        .skip(prompt.scroll_top_row)
         .map(|(index, row)| {
             let marker = if index == 0 {
                 PROMPT_MARKER
@@ -41,7 +44,7 @@ fn prompt_text_lines(prompt: &PromptState, width: Option<u16>) -> Vec<RenderLine
                 CONTINUATION_MARKER
             };
             let cursor = (index == cursor_row).then_some(prompt.cursor);
-            prompt_row_line(marker, &prompt.text, row, prompt, cursor)
+            prompt_row_line(marker, &text, row, prompt, cursor)
         })
         .collect()
 }
@@ -106,8 +109,8 @@ fn cursor_cell_range(text: &str, row: VisualRow, cursor: usize) -> Option<Range<
         return None;
     }
 
-    let character = text[cursor..row.end].chars().next()?;
-    Some(cursor..cursor + character.len_utf8())
+    let grapheme = text[cursor..row.end].graphemes(true).next()?;
+    Some(cursor..cursor + grapheme.len())
 }
 
 /// Returns sorted split points needed to apply text, selection, and cursor styles.
@@ -211,9 +214,13 @@ fn active_slash_command<'a>(
     prompt: &PromptState,
     commands: &'a [CommandDescriptor],
 ) -> Option<&'a CommandDescriptor> {
-    let text = prompt.text.trim_start();
-    let command_name = text.strip_prefix('/')?.split_whitespace().next()?;
-    if !text[command_name.len() + 1..].starts_with(char::is_whitespace) {
+    let prompt_text = prompt.text();
+    let text = prompt_text.trim_start();
+    let command_text = text.strip_prefix('/')?;
+    let command_name = command_text.split_whitespace().next()?;
+    let arguments_start = command_name.len();
+    let arguments = command_text.get(arguments_start..)?;
+    if !arguments.starts_with(char::is_whitespace) {
         return None;
     }
 

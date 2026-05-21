@@ -1,4 +1,5 @@
 use crate::ids::{SessionId, Timestamp};
+use crate::prompt::normalize_paste;
 use crate::transcript::TranscriptItem;
 use serde::{Deserialize, Serialize};
 
@@ -8,10 +9,21 @@ pub struct PromptPasteBurstState {
     pub buffer: String,
 }
 
-/// Editable prompt state owned by the reducer rather than terminal input code.
+/// One restorable prompt editing snapshot for undo and redo stacks.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+pub struct PromptHistoryEntry {
+    pub lines: Vec<String>,
+    pub cursor: usize,
+}
+
+/// Logical-line textarea state owned by the reducer rather than terminal input code.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(from = "DurablePromptState")]
 pub struct PromptState {
+    pub lines: Vec<String>,
+    #[serde(default)]
     pub text: String,
+    #[serde(default)]
     pub cursor: usize,
     #[serde(default)]
     pub preferred_column: Option<usize>,
@@ -23,6 +35,168 @@ pub struct PromptState {
     pub kill_buffer: String,
     #[serde(default)]
     pub paste_burst: PromptPasteBurstState,
+    #[serde(default)]
+    pub scroll_top_row: usize,
+    #[serde(default)]
+    pub undo_stack: Vec<PromptHistoryEntry>,
+    #[serde(default)]
+    pub redo_stack: Vec<PromptHistoryEntry>,
+    #[serde(default)]
+    pub history_group: Option<PromptHistoryEntry>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum DurablePromptState {
+    Current {
+        lines: Vec<String>,
+        #[serde(default)]
+        text: String,
+        #[serde(default)]
+        cursor: usize,
+        #[serde(default)]
+        preferred_column: Option<usize>,
+        #[serde(default)]
+        selection_anchor: Option<usize>,
+        #[serde(default)]
+        selected_completion: usize,
+        #[serde(default)]
+        kill_buffer: String,
+        #[serde(default)]
+        paste_burst: PromptPasteBurstState,
+        #[serde(default)]
+        scroll_top_row: usize,
+        #[serde(default)]
+        undo_stack: Vec<PromptHistoryEntry>,
+        #[serde(default)]
+        redo_stack: Vec<PromptHistoryEntry>,
+        #[serde(default)]
+        history_group: Option<PromptHistoryEntry>,
+    },
+    Legacy {
+        #[serde(default)]
+        text: String,
+        #[serde(default)]
+        cursor: usize,
+        #[serde(default)]
+        preferred_column: Option<usize>,
+        #[serde(default)]
+        selection_anchor: Option<usize>,
+        #[serde(default)]
+        selected_completion: usize,
+        #[serde(default)]
+        kill_buffer: String,
+        #[serde(default)]
+        paste_burst: PromptPasteBurstState,
+    },
+}
+
+impl Default for PromptState {
+    /// Creates a logical-line prompt with one empty editable line.
+    fn default() -> Self {
+        Self {
+            lines: vec![String::new()],
+            text: String::new(),
+            cursor: 0,
+            preferred_column: None,
+            selection_anchor: None,
+            selected_completion: 0,
+            kill_buffer: String::new(),
+            paste_burst: PromptPasteBurstState::default(),
+            scroll_top_row: 0,
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+            history_group: None,
+        }
+    }
+}
+
+impl From<DurablePromptState> for PromptState {
+    /// Rehydrates current prompt state or migrates legacy single-string snapshots.
+    fn from(value: DurablePromptState) -> Self {
+        match value {
+            DurablePromptState::Current {
+                lines,
+                text,
+                cursor,
+                preferred_column,
+                selection_anchor,
+                selected_completion,
+                kill_buffer,
+                paste_burst,
+                scroll_top_row,
+                undo_stack,
+                redo_stack,
+                history_group,
+            } => {
+                let text = normalize_paste(&text);
+                let lines = if lines.is_empty() {
+                    split_logical_lines(&text)
+                } else {
+                    normalize_lines(lines)
+                };
+                let text = lines.join("\n");
+                Self {
+                    lines,
+                    text,
+                    cursor,
+                    preferred_column,
+                    selection_anchor,
+                    selected_completion,
+                    kill_buffer,
+                    paste_burst,
+                    scroll_top_row,
+                    undo_stack,
+                    redo_stack,
+                    history_group,
+                }
+            }
+            DurablePromptState::Legacy {
+                text,
+                cursor,
+                preferred_column,
+                selection_anchor,
+                selected_completion,
+                kill_buffer,
+                paste_burst,
+            } => {
+                let text = normalize_paste(&text);
+                let lines = split_logical_lines(&text);
+                let text = lines.join("\n");
+                Self {
+                    lines,
+                    text,
+                    cursor,
+                    preferred_column,
+                    selection_anchor,
+                    selected_completion,
+                    kill_buffer,
+                    paste_burst,
+                    ..Self::default()
+                }
+            }
+        }
+    }
+}
+
+/// Ensures deserialized prompt state always has at least one logical line.
+fn non_empty_lines(lines: Vec<String>) -> Vec<String> {
+    if lines.is_empty() {
+        return vec![String::new()];
+    }
+
+    lines
+}
+
+/// Normalizes durable logical lines to the prompt's newline representation.
+fn normalize_lines(lines: Vec<String>) -> Vec<String> {
+    split_logical_lines(&normalize_paste(&non_empty_lines(lines).join("\n")))
+}
+
+/// Splits durable prompt text into logical lines while retaining trailing empty rows.
+fn split_logical_lines(text: &str) -> Vec<String> {
+    let lines: Vec<String> = text.split('\n').map(ToOwned::to_owned).collect();
+    non_empty_lines(lines)
 }
 
 /// Returns the initial session timestamp used when loading legacy snapshots.

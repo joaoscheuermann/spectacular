@@ -46,7 +46,7 @@ pub use runtime::{effects, timer_tick_effects, EventEffect, Intent, Shell, SPINN
 pub use scroll::TranscriptScrollState;
 pub use session::{PromptPasteBurstState, PromptState, SelectionPromptState, Session};
 pub use spinner::SpinnerState;
-pub use state::State;
+pub use state::{PromptLayoutMetrics, State};
 pub use status::{Activity, Status};
 pub use transcript::{
     AssistantMessageItem, CancellationItem, CommandDisplay, CommandDisplayStatus, CommandItem,

@@ -12,12 +12,11 @@ use iocraft::prelude::*;
 use spectacular_agent::{AgentEvent, Store, ToolStorage};
 use spectacular_llms::LlmDebugLogger;
 use spectacular_tui::{
-    ChatTuiAction, DisplayMetadata, OpeningBannerItem, PromptState, Intent, Shell,
-    SelectionPromptAnswer, SelectionPromptChoice, SelectionPromptState, SessionId, State,
-    TranscriptItemId,
+    ChatTuiAction, DisplayMetadata, Intent, OpeningBannerItem, PromptState, SelectionPromptAnswer,
+    SelectionPromptChoice, SelectionPromptState, SessionId, Shell, State, TranscriptItemId,
 };
 use std::future::Future;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -666,7 +665,7 @@ impl AgentTuiTurnRunner {
 }
 
 /// Builds initial TUI state from chat model metadata without direct terminal writes.
-fn initial_state(model: &ChatModel, workspace_root: &PathBuf) -> State {
+fn initial_state(model: &ChatModel, workspace_root: &Path) -> State {
     let runtime = spectacular_tui::RuntimeSelection::new(
         model.runtime().provider_type.clone(),
         model.runtime().provider.clone(),
@@ -690,7 +689,7 @@ fn initial_state(model: &ChatModel, workspace_root: &PathBuf) -> State {
 }
 
 /// Builds the semantic opening banner action for a newly created TUI session.
-fn session_created_action(id: &str, model: &ChatModel, workspace_root: &PathBuf) -> ChatTuiAction {
+fn session_created_action(id: &str, model: &ChatModel, workspace_root: &Path) -> ChatTuiAction {
     ChatTuiAction::SessionCreated {
         id: SessionId::new(id),
         banner: OpeningBannerItem::new(

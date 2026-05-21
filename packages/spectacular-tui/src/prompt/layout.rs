@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
-use unicode_width::UnicodeWidthChar;
+use crate::prompt::grapheme::graphemes_in;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 /// One visual prompt row represented as byte offsets into the prompt buffer.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -81,8 +82,8 @@ pub(crate) fn cursor_position(
 /// Returns the byte offset in a visual row nearest to a target display column.
 pub(crate) fn offset_for_column(text: &str, row: &VisualRow, target_column: usize) -> usize {
     let mut column = 0usize;
-    for (offset, character) in text[row.start..row.end].char_indices() {
-        let width = char_width(character);
+    for (offset, grapheme) in graphemes_in(&text[row.start..row.end]) {
+        let width = grapheme_width(grapheme);
         if column + width > target_column {
             return row.start + offset;
         }
@@ -94,7 +95,11 @@ pub(crate) fn offset_for_column(text: &str, row: &VisualRow, target_column: usiz
 
 /// Returns the terminal display width of prompt text.
 pub(crate) fn display_width(value: &str) -> usize {
-    value.chars().map(char_width).sum()
+    value
+        .split('\t')
+        .enumerate()
+        .map(|(index, segment)| UnicodeWidthStr::width(segment) + usize::from(index > 0) * 4)
+        .sum()
 }
 
 /// Returns a stable terminal cell width for one prompt character.
@@ -104,6 +109,15 @@ pub(crate) fn char_width(character: char) -> usize {
     }
 
     UnicodeWidthChar::width(character).unwrap_or(0)
+}
+
+/// Returns a stable terminal cell width for one grapheme cluster.
+fn grapheme_width(grapheme: &str) -> usize {
+    if grapheme == "\t" {
+        return 4;
+    }
+
+    UnicodeWidthStr::width(grapheme)
 }
 
 /// Adds wrapped rows for one explicit prompt line.
@@ -124,9 +138,9 @@ fn push_wrapped_line(
 
     let mut row_start = line_start;
     let mut row_width = 0usize;
-    for (offset, character) in text[line_start..line_end].char_indices() {
+    for (offset, grapheme) in graphemes_in(&text[line_start..line_end]) {
         let index = line_start + offset;
-        let width = char_width(character);
+        let width = grapheme_width(grapheme);
         if row_width > 0 && row_width + width > content_width {
             rows.push(VisualRow {
                 start: row_start,

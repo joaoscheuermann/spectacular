@@ -1,6 +1,11 @@
 use crate::metadata::CommandDescriptor;
-use crate::session::{PromptPasteBurstState, PromptState};
+use crate::prompt::grapheme::{clamp_boundary, grapheme_at, next_boundary, previous_boundary};
+use crate::prompt::layout::{cursor_position, offset_for_column, visual_rows};
+use crate::session::{PromptHistoryEntry, PromptState};
 use std::ops::Range;
+use unicode_segmentation::UnicodeSegmentation;
+
+const DEFAULT_VERTICAL_WIDTH: usize = 120;
 
 /// Editable prompt behavior owned by the reducer rather than terminal input code.
 impl PromptState {
@@ -11,26 +16,38 @@ impl PromptState {
 
     /// Creates a prompt from text with the cursor placed at the end.
     pub fn from_text(value: impl Into<String>) -> Self {
-        let text = value.into();
+        let text = normalize_paste(&value.into());
+        let cursor = text.len();
         Self {
-            cursor: text.len(),
+            lines: split_logical_lines(&text),
             text,
-            preferred_column: None,
-            selection_anchor: None,
-            selected_completion: 0,
-            kill_buffer: String::new(),
-            paste_burst: PromptPasteBurstState::default(),
+            cursor,
+            ..Self::default()
         }
+    }
+
+    /// Returns the complete prompt buffer by joining logical lines with line feeds.
+    pub fn text(&self) -> String {
+        self.lines.join("\n")
+    }
+
+    /// Returns whether the prompt has no user-authored content.
+    pub fn is_empty(&self) -> bool {
+        self.lines.len() == 1 && self.lines.first().is_none_or(String::is_empty)
     }
 
     /// Clears editable prompt content and resets cursor, selection, and paste metadata.
     pub fn clear(&mut self) {
+        self.record_history_boundary();
+        self.lines = vec![String::new()];
         self.text.clear();
         self.cursor = 0;
         self.preferred_column = None;
         self.selection_anchor = None;
         self.selected_completion = 0;
         self.paste_burst.buffer.clear();
+        self.scroll_top_row = 0;
+        self.redo_stack.clear();
     }
 
     /// Inserts normalized text at the cursor after replacing any active selection.
@@ -39,57 +56,95 @@ impl PromptState {
             return;
         }
 
-        self.delete_selection();
-        self.cursor = clamp_boundary(&self.text, self.cursor);
-        self.text.insert_str(self.cursor, value);
-        self.cursor += value.len();
-        self.after_edit();
+        let normalized = normalize_paste(value);
+        let grouped = is_groupable_insert(&normalized);
+        self.prepare_edit(grouped);
+        self.replace_selection_or_insert(&normalized);
+        self.finish_edit();
+        if should_close_group_after_insert(&normalized) {
+            self.record_history_boundary();
+        }
     }
 
-    /// Inserts one line break at the cursor after replacing any active selection.
+    /// Inserts one line break plus the current line indentation at the cursor.
     pub fn insert_newline(&mut self) {
-        self.insert_text("\n");
+        let indentation = current_line_indentation(&self.text(), self.cursor);
+        self.insert_text(&format!("\n{indentation}"));
+        self.record_history_boundary();
     }
 
     /// Inserts pasted text with CRLF/CR normalization tracked in prompt paste metadata.
     pub fn insert_paste(&mut self, value: &str) {
         let normalized = normalize_paste(value);
+        if normalized.is_empty() {
+            return;
+        }
+
         self.paste_burst.buffer = normalized.clone();
-        self.insert_text(&normalized);
+        self.prepare_edit(false);
+        self.replace_selection_or_insert(&normalized);
+        self.finish_edit();
+        self.record_history_boundary();
     }
 
-    /// Moves the cursor one character left and optionally extends selection state.
+    /// Inserts a character, applying auto-close and type-over pair behavior.
+    pub fn insert_character(&mut self, character: char) {
+        if self.selection_range().is_none() && is_closing_pair(character) {
+            let text = self.text();
+            if grapheme_at(&text, self.cursor) == Some(character.to_string().as_str()) {
+                self.move_right(false);
+                return;
+            }
+        }
+
+        if let Some(closing) = closing_pair(character) {
+            self.prepare_edit(false);
+            self.replace_selection_or_insert(&format!("{character}{closing}"));
+            self.cursor = previous_boundary(&self.text(), self.cursor);
+            self.finish_edit();
+            self.record_history_boundary();
+            return;
+        }
+
+        self.insert_text(&character.to_string());
+    }
+
+    /// Moves the cursor one grapheme left and optionally extends selection state.
     pub fn move_left(&mut self, selecting: bool) {
-        let cursor = previous_boundary(&self.text, self.cursor);
+        let cursor = previous_boundary(&self.text(), self.cursor);
         self.move_to(cursor, selecting);
     }
 
-    /// Moves the cursor one character right and optionally extends selection state.
+    /// Moves the cursor one grapheme right and optionally extends selection state.
     pub fn move_right(&mut self, selecting: bool) {
-        let cursor = next_boundary(&self.text, self.cursor);
+        let cursor = next_boundary(&self.text(), self.cursor);
         self.move_to(cursor, selecting);
     }
 
     /// Moves the cursor one original word boundary left and optionally selects text.
     pub fn move_word_left(&mut self, selecting: bool) {
-        let cursor = previous_navigation_word_boundary(&self.text, self.cursor);
+        let text = self.text();
+        let cursor = previous_navigation_word_boundary(&text, self.cursor);
         self.move_to(cursor, selecting);
     }
 
     /// Moves the cursor one original word boundary right and optionally selects text.
     pub fn move_word_right(&mut self, selecting: bool) {
-        let cursor = next_word_boundary(&self.text, self.cursor);
+        let text = self.text();
+        let cursor = next_word_boundary(&text, self.cursor);
         self.move_to(cursor, selecting);
     }
 
-    /// Moves the cursor to the current visual line start and optionally selects text.
+    /// Moves the cursor to the current logical line start and optionally selects text.
     pub fn move_line_start(&mut self, selecting: bool) {
-        self.move_to(line_start(&self.text, self.cursor), selecting);
+        let text = self.text();
+        self.move_to(line_start(&text, self.cursor), selecting);
     }
 
-    /// Moves the cursor to the current visual line end and optionally selects text.
+    /// Moves the cursor to the current logical line end and optionally selects text.
     pub fn move_line_end(&mut self, selecting: bool) {
-        self.move_to(line_end(&self.text, self.cursor), selecting);
+        let text = self.text();
+        self.move_to(line_end(&text, self.cursor), selecting);
     }
 
     /// Moves the cursor to the prompt start and optionally extends selection state.
@@ -99,35 +154,43 @@ impl PromptState {
 
     /// Moves the cursor to the prompt end and optionally extends selection state.
     pub fn move_to_end(&mut self, selecting: bool) {
-        self.move_to(self.text.len(), selecting);
+        self.move_to(self.text().len(), selecting);
     }
 
-    /// Moves the cursor to the same character column on the previous prompt line.
+    /// Moves the cursor to the same visual display column on the previous wrapped row.
     pub fn move_up(&mut self, selecting: bool) {
-        self.move_vertical(-1, selecting);
+        self.move_vertical(-1, selecting, DEFAULT_VERTICAL_WIDTH);
     }
 
-    /// Moves the cursor to the same character column on the next prompt line.
+    /// Moves the cursor to the same visual display column on the next wrapped row.
     pub fn move_down(&mut self, selecting: bool) {
-        self.move_vertical(1, selecting);
+        self.move_vertical(1, selecting, DEFAULT_VERTICAL_WIDTH);
+    }
+
+    /// Moves the cursor vertically using the caller's current prompt content width.
+    pub fn move_vertical_with_width(&mut self, delta: i32, selecting: bool, content_width: usize) {
+        self.move_vertical(delta, selecting, content_width);
     }
 
     /// Selects the complete prompt buffer when text is present.
     pub fn select_all(&mut self) {
-        if self.text.is_empty() {
+        let text = self.text();
+        if text.is_empty() {
             return;
         }
 
         self.selection_anchor = Some(0);
-        self.cursor = self.text.len();
+        self.cursor = text.len();
         self.preferred_column = None;
         self.selected_completion = 0;
+        self.record_history_boundary();
     }
 
     /// Clears selection first and clears the prompt on a second escape press.
     pub fn escape(&mut self) {
         if self.selection_anchor.is_some() {
             self.selection_anchor = None;
+            self.record_history_boundary();
             return;
         }
 
@@ -136,70 +199,80 @@ impl PromptState {
 
     /// Deletes one original word before the cursor or the active selected range.
     pub fn delete_previous_word(&mut self) {
-        if self.delete_selection() {
-            self.after_edit();
+        if self.delete_selection_as_edit() {
             return;
         }
 
-        let previous = previous_word_boundary(&self.text, self.cursor);
+        let text = self.text();
+        let previous = previous_word_boundary(&text, self.cursor);
         if previous == self.cursor {
             return;
         }
 
-        self.text.replace_range(previous..self.cursor, "");
+        self.prepare_edit(false);
+        self.replace_range(previous..self.cursor, "");
         self.cursor = previous;
-        self.after_edit();
+        self.finish_edit();
+        self.record_history_boundary();
     }
 
     /// Deletes one original word after the cursor or the active selected range.
     pub fn delete_next_word(&mut self) {
-        if self.delete_selection() {
-            self.after_edit();
+        if self.delete_selection_as_edit() {
             return;
         }
 
-        let next = next_word_boundary(&self.text, self.cursor);
+        let text = self.text();
+        let next = next_word_boundary(&text, self.cursor);
         if next == self.cursor {
             return;
         }
 
-        self.text.replace_range(self.cursor..next, "");
-        self.after_edit();
+        self.prepare_edit(false);
+        self.replace_range(self.cursor..next, "");
+        self.finish_edit();
+        self.record_history_boundary();
     }
 
     /// Kills text from the cursor to the current line start into the yank buffer.
     pub fn kill_to_line_start(&mut self) {
         if self.delete_selection_to_kill_buffer() {
-            self.after_edit();
+            self.record_history_boundary();
             return;
         }
 
-        let start = line_start(&self.text, self.cursor);
+        let text = self.text();
+        let start = line_start(&text, self.cursor);
         if start == self.cursor {
             return;
         }
 
-        self.kill_buffer = self.text[start..self.cursor].to_owned();
-        self.text.replace_range(start..self.cursor, "");
+        self.prepare_edit(false);
+        self.kill_buffer = text[start..self.cursor].to_owned();
+        self.replace_range(start..self.cursor, "");
         self.cursor = start;
-        self.after_edit();
+        self.finish_edit();
+        self.record_history_boundary();
     }
 
     /// Kills text from the cursor to the current line end into the yank buffer.
     pub fn kill_to_line_end(&mut self) {
         if self.delete_selection_to_kill_buffer() {
-            self.after_edit();
+            self.record_history_boundary();
             return;
         }
 
-        let end = line_end(&self.text, self.cursor);
+        let text = self.text();
+        let end = line_end(&text, self.cursor);
         if end == self.cursor {
             return;
         }
 
-        self.kill_buffer = self.text[self.cursor..end].to_owned();
-        self.text.replace_range(self.cursor..end, "");
-        self.after_edit();
+        self.prepare_edit(false);
+        self.kill_buffer = text[self.cursor..end].to_owned();
+        self.replace_range(self.cursor..end, "");
+        self.finish_edit();
+        self.record_history_boundary();
     }
 
     /// Inserts the current yank buffer at the cursor after replacing any selection.
@@ -209,67 +282,94 @@ impl PromptState {
         }
 
         let value = self.kill_buffer.clone();
-        self.insert_text(&value);
+        self.insert_paste(&value);
     }
 
     /// Deletes the active selection and moves the cursor to the selection start.
     pub fn delete_selection(&mut self) -> bool {
-        let Some(range) = self.selection_range() else {
-            self.selection_anchor = None;
-            return false;
-        };
-
-        self.text.replace_range(range.clone(), "");
-        self.cursor = range.start;
-        self.selection_anchor = None;
-        true
+        self.delete_selection_as_edit()
     }
 
-    /// Deletes the active selection into the yank buffer and moves the cursor to the start.
-    fn delete_selection_to_kill_buffer(&mut self) -> bool {
-        let Some(range) = self.selection_range() else {
-            self.selection_anchor = None;
-            return false;
-        };
-
-        self.kill_buffer = self.text[range.clone()].to_owned();
-        self.text.replace_range(range.clone(), "");
-        self.cursor = range.start;
-        self.selection_anchor = None;
-        true
+    /// Copies selected text into the prompt kill buffer and returns it.
+    pub fn copy_selection(&mut self) -> Option<String> {
+        let text = self.text();
+        let range = self.selection_range()?;
+        let value = text[range].to_owned();
+        self.kill_buffer = value.clone();
+        Some(value)
     }
 
-    /// Deletes one character before the cursor or the active selected range.
+    /// Cuts selected text into the prompt kill buffer and returns it.
+    pub fn cut_selection(&mut self) -> Option<String> {
+        let text = self.text();
+        let range = self.selection_range()?;
+        let value = text[range.clone()].to_owned();
+        self.prepare_edit(false);
+        self.replace_range(range.clone(), "");
+        self.cursor = range.start;
+        self.kill_buffer = value.clone();
+        self.finish_edit();
+        self.record_history_boundary();
+        Some(value)
+    }
+
+    /// Deletes one grapheme before the cursor or the active selected range.
     pub fn backspace(&mut self) {
-        if self.delete_selection() {
-            self.after_edit();
+        if self.delete_selection_as_edit() {
             return;
         }
 
-        let previous = previous_boundary(&self.text, self.cursor);
+        let text = self.text();
+        let previous = previous_boundary(&text, self.cursor);
         if previous == self.cursor {
             return;
         }
 
-        self.text.replace_range(previous..self.cursor, "");
+        self.prepare_edit(false);
+        self.replace_range(previous..self.cursor, "");
         self.cursor = previous;
-        self.after_edit();
+        self.finish_edit();
+        self.record_history_boundary();
     }
 
-    /// Deletes one character after the cursor or the active selected range.
+    /// Deletes one grapheme after the cursor or the active selected range.
     pub fn delete_forward(&mut self) {
-        if self.delete_selection() {
-            self.after_edit();
+        if self.delete_selection_as_edit() {
             return;
         }
 
-        let next = next_boundary(&self.text, self.cursor);
+        let text = self.text();
+        let next = next_boundary(&text, self.cursor);
         if next == self.cursor {
             return;
         }
 
-        self.text.replace_range(self.cursor..next, "");
-        self.after_edit();
+        self.prepare_edit(false);
+        self.replace_range(self.cursor..next, "");
+        self.finish_edit();
+        self.record_history_boundary();
+    }
+
+    /// Restores the previous prompt content snapshot when available.
+    pub fn undo(&mut self) {
+        self.record_history_boundary();
+        let Some(entry) = self.undo_stack.pop() else {
+            return;
+        };
+
+        self.redo_stack.push(self.history_entry());
+        self.restore_history_entry(entry);
+    }
+
+    /// Restores the next prompt content snapshot after an undo.
+    pub fn redo(&mut self) {
+        self.record_history_boundary();
+        let Some(entry) = self.redo_stack.pop() else {
+            return;
+        };
+
+        self.undo_stack.push(self.history_entry());
+        self.restore_history_entry(entry);
     }
 
     /// Returns the active selection range in byte offsets when text is selected.
@@ -294,36 +394,59 @@ impl PromptState {
 
     /// Accepts a display-ready slash command suggestion into the leading command token.
     pub fn accept_command_completion(&mut self, command: &CommandDescriptor) {
-        let Some(range) = slash_token_range(&self.text, self.cursor) else {
+        let text = self.text();
+        let Some(range) = slash_token_range(&text, self.cursor) else {
             return;
         };
 
-        let replacement = format!("{} ", command.name);
-        self.text.replace_range(range, &replacement);
-        self.cursor = 1 + replacement.len();
-        self.preferred_column = None;
-        self.selection_anchor = None;
+        let replacement = format!("/{} ", command.name);
+        let cursor = range.start + replacement.len();
+        self.prepare_edit(false);
+        self.replace_range(range, &replacement);
+        self.cursor = cursor;
+        self.finish_edit();
+        self.record_history_boundary();
     }
 
-    /// Moves the cursor to a byte offset while preserving character-boundary safety.
+    /// Keeps the cursor visible inside a vertical prompt viewport.
+    pub fn ensure_cursor_visible(&mut self, content_width: usize, viewport_height: usize) {
+        let text = self.text();
+        let rows = visual_rows(&text, content_width);
+        let cursor_row = cursor_position(&text, self.cursor, content_width, &rows).row;
+        let viewport_height = viewport_height.max(1);
+        if cursor_row < self.scroll_top_row {
+            self.scroll_top_row = cursor_row;
+            return;
+        }
+
+        if cursor_row >= self.scroll_top_row.saturating_add(viewport_height) {
+            self.scroll_top_row = cursor_row.saturating_add(1).saturating_sub(viewport_height);
+        }
+    }
+
+    /// Moves the cursor to a byte offset while preserving grapheme-boundary safety.
     fn move_to(&mut self, cursor: usize, selecting: bool) {
+        self.record_history_boundary();
         self.preferred_column = None;
         self.move_to_preserving_preferred_column(cursor, selecting);
     }
 
-    /// Moves the cursor vertically while keeping the original character column when possible.
-    fn move_vertical(&mut self, delta: i32, selecting: bool) {
-        let cursor = clamp_boundary(&self.text, self.cursor);
-        let current_start = line_start(&self.text, cursor);
-        let current_end = line_end(&self.text, cursor);
-        let column = self
-            .preferred_column
-            .unwrap_or_else(|| character_column(&self.text, current_start, cursor));
-        let target = if delta < 0 {
-            previous_line_target(&self.text, current_start, column)
+    /// Moves the cursor vertically while keeping the original visual display column when possible.
+    fn move_vertical(&mut self, delta: i32, selecting: bool, content_width: usize) {
+        self.record_history_boundary();
+        let text = self.text();
+        let rows = visual_rows(&text, content_width);
+        let position = cursor_position(&text, self.cursor, content_width, &rows);
+        let column = self.preferred_column.unwrap_or(position.column);
+        let target_row = if delta < 0 {
+            position.row.saturating_sub(1)
         } else {
-            next_line_target(&self.text, current_end, column)
+            (position.row + 1).min(rows.len().saturating_sub(1))
         };
+        let target = rows
+            .get(target_row)
+            .map(|row| offset_for_column(&text, row, column))
+            .unwrap_or(self.cursor);
 
         self.preferred_column = Some(column);
         self.move_to_preserving_preferred_column(target, selecting);
@@ -331,8 +454,9 @@ impl PromptState {
 
     /// Moves the cursor without clearing vertical movement column tracking.
     fn move_to_preserving_preferred_column(&mut self, cursor: usize, selecting: bool) {
+        let text = self.text();
         let previous_cursor = self.cursor;
-        self.cursor = clamp_boundary(&self.text, cursor);
+        self.cursor = clamp_boundary(&text, cursor);
         if selecting {
             self.selection_anchor.get_or_insert(previous_cursor);
             if self.selection_anchor == Some(self.cursor) {
@@ -344,11 +468,119 @@ impl PromptState {
         self.selection_anchor = None;
     }
 
+    /// Captures undo state before an edit, grouping adjacent plain character insertions.
+    fn prepare_edit(&mut self, grouped: bool) {
+        if grouped {
+            if self.history_group.is_none() {
+                self.history_group = Some(self.history_entry());
+            }
+        } else {
+            self.record_history_boundary();
+            self.undo_stack.push(self.history_entry());
+        }
+        self.redo_stack.clear();
+    }
+
+    /// Commits active grouped insertion history to the undo stack.
+    fn record_history_boundary(&mut self) {
+        if let Some(entry) = self.history_group.take() {
+            self.undo_stack.push(entry);
+        }
+    }
+
+    /// Replaces a selection or inserts text at the cursor.
+    fn replace_selection_or_insert(&mut self, value: &str) {
+        let range = self.selection_range().unwrap_or(self.cursor..self.cursor);
+        let start = range.start;
+        self.replace_range(range, value);
+        self.cursor = start + value.len();
+    }
+
+    /// Replaces a byte range in the joined buffer and rebuilds logical lines.
+    fn replace_range(&mut self, range: Range<usize>, replacement: &str) {
+        let mut text = self.text();
+        text.replace_range(range, replacement);
+        self.set_text(text);
+    }
+
+    /// Deletes the active selection as an undoable edit.
+    fn delete_selection_as_edit(&mut self) -> bool {
+        let Some(range) = self.selection_range() else {
+            self.selection_anchor = None;
+            return false;
+        };
+
+        self.prepare_edit(false);
+        self.replace_range(range.clone(), "");
+        self.cursor = range.start;
+        self.finish_edit();
+        self.record_history_boundary();
+        true
+    }
+
+    /// Deletes the active selection into the yank buffer and moves the cursor to the start.
+    fn delete_selection_to_kill_buffer(&mut self) -> bool {
+        let text = self.text();
+        let Some(range) = self.selection_range() else {
+            self.selection_anchor = None;
+            return false;
+        };
+
+        self.prepare_edit(false);
+        self.kill_buffer = text[range.clone()].to_owned();
+        self.replace_range(range.clone(), "");
+        self.cursor = range.start;
+        self.finish_edit();
+        true
+    }
+
     /// Resets transient editing metadata after prompt content changes.
-    fn after_edit(&mut self) {
+    fn finish_edit(&mut self) {
         self.preferred_column = None;
         self.selection_anchor = None;
         self.selected_completion = 0;
+        self.scroll_top_row = self
+            .scroll_top_row
+            .min(self.text().lines().count().saturating_sub(1));
+    }
+
+    /// Captures the content and cursor state used by history stacks.
+    fn history_entry(&self) -> PromptHistoryEntry {
+        PromptHistoryEntry {
+            lines: self.lines.clone(),
+            cursor: self.cursor,
+        }
+    }
+
+    /// Restores a history snapshot and clears transient selection/navigation state.
+    fn restore_history_entry(&mut self, entry: PromptHistoryEntry) {
+        let lines = if entry.lines.is_empty() {
+            vec![String::new()]
+        } else {
+            entry.lines
+        };
+        self.set_lines(lines);
+        self.cursor = clamp_boundary(&self.text(), entry.cursor);
+        self.preferred_column = None;
+        self.selection_anchor = None;
+        self.selected_completion = 0;
+        self.scroll_top_row = 0;
+    }
+
+    /// Replaces prompt text and keeps legacy public text storage synchronized.
+    fn set_text(&mut self, text: String) {
+        self.lines = split_logical_lines(&text);
+        self.text = text;
+    }
+
+    /// Replaces prompt logical lines and keeps legacy public text storage synchronized.
+    fn set_lines(&mut self, lines: Vec<String>) {
+        self.lines = if lines.is_empty() {
+            vec![String::new()]
+        } else {
+            lines
+        };
+        self.text = self.lines.join("\n");
     }
 }
 
@@ -357,7 +589,8 @@ pub fn slash_suggestions<'a>(
     prompt: &PromptState,
     commands: &'a [CommandDescriptor],
 ) -> Vec<&'a CommandDescriptor> {
-    let Some(query) = slash_command_query(&prompt.text, prompt.cursor) else {
+    let text = prompt.text();
+    let Some(query) = slash_command_query(&text, prompt.cursor) else {
         return Vec::new();
     };
 
@@ -367,49 +600,97 @@ pub fn slash_suggestions<'a>(
         .collect()
 }
 
-/// Extracts a slash-command query from the first prompt token at the cursor.
+/// Returns the current slash command query when the cursor is in the leading token.
 pub fn slash_command_query(text: &str, cursor: usize) -> Option<&str> {
-    if !text.starts_with('/') || line_start(text, clamp_boundary(text, cursor)) != 0 {
-        return None;
-    }
-
-    let cursor = clamp_boundary(text, cursor);
-    let token_end = text[cursor..]
-        .find(char::is_whitespace)
-        .map(|index| cursor + index)
-        .unwrap_or(text.len());
-    if text[..token_end].contains(char::is_whitespace) {
-        return None;
-    }
-
-    Some(&text[1..cursor])
+    let range = slash_token_range(text, cursor)?;
+    text.get(range)?.strip_prefix('/')
 }
 
-/// Normalizes terminal paste content to LF-only line breaks.
-fn normalize_paste(value: &str) -> String {
+/// Normalizes pasted text to the prompt's internal newline representation.
+pub fn normalize_paste(value: &str) -> String {
     value.replace("\r\n", "\n").replace('\r', "\n")
 }
 
-/// Returns the leading slash-token range excluding the slash marker.
-fn slash_token_range(text: &str, cursor: usize) -> Option<Range<usize>> {
-    slash_command_query(text, cursor)?;
-    let cursor = clamp_boundary(text, cursor);
-    let end = text[cursor..]
-        .find(char::is_whitespace)
-        .map(|index| cursor + index)
-        .unwrap_or(text.len());
-    Some(1..end)
+/// Splits text into logical lines while retaining a trailing empty line.
+fn split_logical_lines(text: &str) -> Vec<String> {
+    let lines: Vec<String> = text.split('\n').map(ToOwned::to_owned).collect();
+    if lines.is_empty() {
+        return vec![String::new()];
+    }
+
+    lines
 }
 
-/// Returns the byte offset for the beginning of the line containing the cursor.
+/// Returns true when text can continue a grouped character insertion history frame.
+fn is_groupable_insert(value: &str) -> bool {
+    let mut graphemes = value.graphemes(true);
+    let Some(grapheme) = graphemes.next() else {
+        return false;
+    };
+    graphemes.next().is_none() && grapheme.chars().all(|character| !character.is_whitespace())
+}
+
+/// Returns true when an insertion should stop grouped undo accumulation.
+fn should_close_group_after_insert(value: &str) -> bool {
+    value.chars().any(char::is_whitespace)
+}
+
+/// Returns the closing pair character for an opening pair.
+fn closing_pair(character: char) -> Option<char> {
+    match character {
+        '(' => Some(')'),
+        '{' => Some('}'),
+        '[' => Some(']'),
+        '"' => Some('"'),
+        '\'' => Some('\''),
+        '`' => Some('`'),
+        _ => None,
+    }
+}
+
+/// Returns true when the character is a supported auto-close closing delimiter.
+fn is_closing_pair(character: char) -> bool {
+    matches!(character, ')' | '}' | ']' | '"' | '\'' | '`')
+}
+
+/// Returns leading spaces and tabs from the current logical line.
+fn current_line_indentation(text: &str, cursor: usize) -> String {
+    let start = line_start(text, cursor);
+    text[start..]
+        .chars()
+        .take_while(|character| matches!(character, ' ' | '\t'))
+        .collect()
+}
+
+/// Returns the byte range for the leading slash token when cursor is inside it.
+fn slash_token_range(text: &str, cursor: usize) -> Option<Range<usize>> {
+    let trimmed_start = text.len() - text.trim_start().len();
+    if !text[trimmed_start..].starts_with('/') {
+        return None;
+    }
+
+    let token_start = trimmed_start;
+    let token_end = text[token_start..]
+        .find(char::is_whitespace)
+        .map(|index| token_start + index)
+        .unwrap_or(text.len());
+    if cursor < token_start || cursor > token_end {
+        return None;
+    }
+
+    Some(token_start..token_end)
+}
+
+/// Returns the start offset for the line containing cursor.
 fn line_start(value: &str, cursor: usize) -> usize {
-    value[..clamp_boundary(value, cursor)]
+    let cursor = clamp_boundary(value, cursor);
+    value[..cursor]
         .rfind('\n')
         .map(|index| index + 1)
         .unwrap_or(0)
 }
 
-/// Returns the byte offset for the end of the line containing the cursor.
+/// Returns the end offset for the line containing cursor.
 fn line_end(value: &str, cursor: usize) -> usize {
     let cursor = clamp_boundary(value, cursor);
     value[cursor..]
@@ -418,121 +699,68 @@ fn line_end(value: &str, cursor: usize) -> usize {
         .unwrap_or(value.len())
 }
 
-/// Returns the character column between the line start and cursor byte offsets.
-fn character_column(value: &str, line_start: usize, cursor: usize) -> usize {
-    value[line_start..cursor].chars().count()
-}
-
-/// Returns the cursor byte offset for the previous line at the requested character column.
-fn previous_line_target(value: &str, current_start: usize, column: usize) -> usize {
-    if current_start == 0 {
-        return 0;
-    }
-
-    let previous_end = current_start.saturating_sub(1);
-    let previous_start = line_start(value, previous_end);
-    offset_for_column(value, previous_start, previous_end, column)
-}
-
-/// Returns the cursor byte offset for the next line at the requested character column.
-fn next_line_target(value: &str, current_end: usize, column: usize) -> usize {
-    if current_end >= value.len() {
-        return value.len();
-    }
-
-    let next_start = current_end + 1;
-    let next_end = line_end(value, next_start);
-    offset_for_column(value, next_start, next_end, column)
-}
-
-/// Returns the byte offset at a character column within a line range.
-fn offset_for_column(value: &str, start: usize, end: usize, column: usize) -> usize {
-    value[start..end]
-        .char_indices()
-        .nth(column)
-        .map(|(index, _)| start + index)
-        .unwrap_or(end)
-}
-
-/// Returns the previous word-navigation boundary from the supplied cursor.
+/// Returns the previous navigation word boundary, skipping separators before words.
 fn previous_navigation_word_boundary(value: &str, cursor: usize) -> usize {
     let mut cursor = clamp_boundary(value, cursor);
-    cursor = move_while_previous(value, cursor, char::is_whitespace);
-    cursor = move_while_previous(value, cursor, |character| {
-        word_category(character) == WordCategory::Separator
-    });
-    move_while_previous(value, cursor, |character| {
-        word_category(character) == WordCategory::Word
-    })
+    while cursor > 0 && previous_character(value, cursor).is_some_and(|c| !is_word_character(c)) {
+        cursor = previous_boundary(value, cursor);
+    }
+
+    while cursor > 0 && previous_character(value, cursor).is_some_and(is_word_character) {
+        cursor = previous_boundary(value, cursor);
+    }
+
+    cursor
 }
 
-/// Returns the previous original deletion word boundary from the supplied cursor.
+/// Returns the previous word boundary for deletion/navigation.
 fn previous_word_boundary(value: &str, cursor: usize) -> usize {
     let mut cursor = clamp_boundary(value, cursor);
-    cursor = move_while_previous(value, cursor, char::is_whitespace);
     let Some(category) = previous_character(value, cursor).map(word_category) else {
         return cursor;
     };
 
-    move_while_previous(value, cursor, |character| {
-        word_category(character) == category
-    })
+    while cursor > 0
+        && previous_character(value, cursor).is_some_and(|c| word_category(c) == category)
+    {
+        cursor = previous_boundary(value, cursor);
+    }
+
+    cursor
 }
 
-/// Returns the next original word boundary from the supplied cursor.
+/// Returns the next word boundary for deletion/navigation.
 fn next_word_boundary(value: &str, cursor: usize) -> usize {
     let mut cursor = clamp_boundary(value, cursor);
-    cursor = move_while_next(value, cursor, char::is_whitespace);
     let Some(category) = next_character(value, cursor).map(word_category) else {
         return cursor;
     };
 
-    move_while_next(value, cursor, |character| {
-        word_category(character) == category
-    })
-}
-
-/// Moves left while the previous character matches a predicate.
-fn move_while_previous(value: &str, mut cursor: usize, predicate: impl Fn(char) -> bool) -> usize {
-    while let Some(character) = previous_character(value, cursor) {
-        if !predicate(character) {
-            break;
-        }
-        cursor = previous_boundary(value, cursor);
-    }
-    cursor
-}
-
-/// Moves right while the next character matches a predicate.
-fn move_while_next(value: &str, mut cursor: usize, predicate: impl Fn(char) -> bool) -> usize {
-    while let Some(character) = next_character(value, cursor) {
-        if !predicate(character) {
-            break;
-        }
+    while cursor < value.len()
+        && next_character(value, cursor).is_some_and(|c| word_category(c) == category)
+    {
         cursor = next_boundary(value, cursor);
     }
+
     cursor
 }
 
-/// Returns the previous Unicode scalar value before the cursor.
+/// Returns the last character from the previous grapheme cluster.
 fn previous_character(value: &str, cursor: usize) -> Option<char> {
-    if cursor == 0 {
+    let previous = previous_boundary(value, cursor);
+    if previous == cursor {
         return None;
     }
 
-    value[..cursor].chars().next_back()
+    value[previous..cursor].chars().last()
 }
 
-/// Returns the next Unicode scalar value at the cursor.
+/// Returns the first character from the next grapheme cluster.
 fn next_character(value: &str, cursor: usize) -> Option<char> {
-    if cursor >= value.len() {
-        return None;
-    }
-
-    value[cursor..].chars().next()
+    grapheme_at(value, cursor)?.chars().next()
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum WordCategory {
     Word,
     Separator,
@@ -540,46 +768,14 @@ enum WordCategory {
 
 /// Classifies a character using the original editor word grouping.
 fn word_category(character: char) -> WordCategory {
-    if character.is_alphanumeric() || character == '_' {
+    if is_word_character(character) {
         return WordCategory::Word;
     }
 
     WordCategory::Separator
 }
 
-/// Returns the nearest valid character boundary at or before an offset.
-fn clamp_boundary(value: &str, offset: usize) -> usize {
-    let mut cursor = offset.min(value.len());
-    while cursor > 0 && !value.is_char_boundary(cursor) {
-        cursor -= 1;
-    }
-    cursor
-}
-
-/// Returns the previous character boundary from the supplied cursor.
-fn previous_boundary(value: &str, cursor: usize) -> usize {
-    let cursor = clamp_boundary(value, cursor);
-    if cursor == 0 {
-        return 0;
-    }
-
-    value[..cursor]
-        .char_indices()
-        .last()
-        .map(|(index, _)| index)
-        .unwrap_or(0)
-}
-
-/// Returns the next character boundary from the supplied cursor.
-fn next_boundary(value: &str, cursor: usize) -> usize {
-    let cursor = clamp_boundary(value, cursor);
-    if cursor >= value.len() {
-        return value.len();
-    }
-
-    value[cursor..]
-        .char_indices()
-        .nth(1)
-        .map(|(index, _)| cursor + index)
-        .unwrap_or(value.len())
+/// Returns true for characters treated as word constituents by prompt shortcuts.
+fn is_word_character(character: char) -> bool {
+    character.is_alphanumeric() || character == '_'
 }

@@ -236,15 +236,15 @@ fn idle_ctrl_c_clears_non_empty_prompt_before_requesting_exit() {
 
     assert_eq!(
         event_effects,
-        vec![EventEffect::Action(ChatTuiAction::PromptChanged(
+        vec![EventEffect::Action(Box::new(ChatTuiAction::PromptChanged(
             PromptState::empty()
-        ))]
+        )))]
     );
 
     reduce(
         &mut state,
         match event_effects.into_iter().next().unwrap() {
-            EventEffect::Action(action) => action,
+            EventEffect::Action(action) => *action,
             EventEffect::RequestExit => panic!("expected prompt clear"),
         },
     );

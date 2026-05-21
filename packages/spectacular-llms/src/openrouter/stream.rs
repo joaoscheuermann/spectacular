@@ -58,9 +58,8 @@ async fn stream_openrouter_response(
     cancellation: Cancellation,
     sender: mpsc::Sender<Result<ProviderStreamEvent, ProviderError>>,
 ) -> Result<(), ProviderError> {
-    let body = OpenRouterChatRequest::from_provider_request(request).map_err(|error| {
-        debug::log_error(debug_logger, "chat_request_build_error", &error);
-        error
+    let body = OpenRouterChatRequest::from_provider_request(request).inspect_err(|error| {
+        debug::log_error(debug_logger, "chat_request_build_error", error);
     })?;
     if let Ok(raw_json) = serde_json::to_value(&body) {
         debug::log_raw_json(debug_logger, "chat_request", raw_json);
@@ -69,9 +68,8 @@ async fn stream_openrouter_response(
     let mut response = client
         .stream_response(api_key, &body)
         .await
-        .map_err(|error| {
-            debug::log_error(debug_logger, "chat_request_network_error", &error);
-            error
+        .inspect_err(|error| {
+            debug::log_error(debug_logger, "chat_request_network_error", error);
         })?;
 
     let status = response.status().as_u16();
@@ -175,9 +173,8 @@ fn parse_sse_payloads(
     chunk: &[u8],
     debug_logger: &LlmDebugLogger,
 ) -> Result<Vec<String>, ProviderError> {
-    sse_parser.push(chunk).map_err(|error| {
-        debug::log_error(debug_logger, "sse_parse_error", &error);
-        error
+    sse_parser.push(chunk).inspect_err(|error| {
+        debug::log_error(debug_logger, "sse_parse_error", error);
     })
 }
 
@@ -216,9 +213,8 @@ async fn send_openrouter_payload_events(
 ) -> Result<bool, ProviderError> {
     let events =
         parse_openrouter_chat_chunk_with_accumulator(payload, &mut state.tool_call_accumulator)
-            .map_err(|error| {
-                debug::log_error(debug_logger, "payload_parse_error", &error);
-                error
+            .inspect_err(|error| {
+                debug::log_error(debug_logger, "payload_parse_error", error);
             })?;
 
     for event in events {

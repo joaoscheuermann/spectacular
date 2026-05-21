@@ -58,9 +58,9 @@ fn same_turn_compaction_boundaries(
     let mut pending_tool_calls: Vec<String> = Vec::new();
     let mut has_orphan_tool_result = false;
 
-    for index in turn_start..events.len() {
+    for (index, event) in events.iter().enumerate().skip(turn_start) {
         let mut completed_tool_result = false;
-        match &events[index] {
+        match event {
             AgentEvent::ToolCallStart { tool_call_id, .. } => {
                 pending_tool_calls.push(tool_call_id.clone());
             }
@@ -223,8 +223,13 @@ where
 
 /// Returns the end event index for the current compactable user turn group.
 fn next_turn_end(events: &[AgentEvent], start: usize, protect_start: usize) -> usize {
-    for index in start.saturating_add(1)..protect_start {
-        if matches!(events[index], AgentEvent::UserPrompt { .. }) {
+    for (index, event) in events
+        .iter()
+        .enumerate()
+        .take(protect_start)
+        .skip(start.saturating_add(1))
+    {
+        if matches!(event, AgentEvent::UserPrompt { .. }) {
             return index;
         }
     }

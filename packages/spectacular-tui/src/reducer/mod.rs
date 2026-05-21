@@ -9,11 +9,12 @@ use crate::reducer::display::{
     finish_display_command, finish_display_tool_call,
 };
 use crate::reducer::lookup::{
-    clear_matching_activity, find_command, find_content_by_id, find_tool_call, transcript_contains_id,
+    clear_matching_activity, find_command, find_content_by_id, find_tool_call,
+    transcript_contains_id,
 };
 use crate::scroll::TranscriptScrollState;
 use crate::session::Session;
-use crate::state::{default_display_context_usage, State};
+use crate::state::{default_display_context_usage, PromptLayoutMetrics, State};
 use crate::status::{Activity, Status};
 use crate::transcript::{
     AssistantMessageItem, CancellationItem, CommandItem, CommandStatus, ErrorItem, NoticeItem,
@@ -24,7 +25,8 @@ use crate::transcript::{
 /// Applies one TUI action to state without performing IO or runtime side effects.
 pub fn reduce(state: &mut State, action: ChatTuiAction) {
     match action {
-        ChatTuiAction::PromptChanged(prompt) => {
+        ChatTuiAction::PromptChanged(mut prompt) => {
+            ensure_prompt_cursor_visible(&mut prompt, state.prompt_layout);
             state.session.prompt = prompt;
         }
         ChatTuiAction::SubmitPrompt { id, text } => {
@@ -284,8 +286,19 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
                 max_scroll_offset(total_rows, state.scroll.visible_rows),
             );
         }
-        ChatTuiAction::Resize { .. } => {}
+        ChatTuiAction::Resize { width, height } => {
+            state.prompt_layout = PromptLayoutMetrics::from_terminal_size(width, height);
+            ensure_prompt_cursor_visible(&mut state.session.prompt, state.prompt_layout);
+        }
     }
+}
+
+/// Keeps the prompt cursor visible within the current textarea viewport.
+fn ensure_prompt_cursor_visible(
+    prompt: &mut crate::session::PromptState,
+    metrics: PromptLayoutMetrics,
+) {
+    prompt.ensure_cursor_visible(metrics.content_width, metrics.viewport_height);
 }
 
 /// Clamps transcript scroll offset to the valid range for the current rendered row count.

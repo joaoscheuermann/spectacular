@@ -1,4 +1,5 @@
 use crate::action::{SelectionPromptAnswer, SelectionPromptChoice};
+use crate::prompt::grapheme::{next_boundary, previous_boundary};
 use crate::session::SelectionPromptState;
 use serde::{Deserialize, Serialize};
 
@@ -177,7 +178,7 @@ fn non_empty_trimmed(value: &str) -> Option<String> {
     Some(value.to_owned())
 }
 
-/// Deletes one Unicode scalar before a mutable cursor.
+/// Deletes one grapheme cluster before a mutable cursor.
 fn delete_previous_character(value: &mut String, cursor: &mut usize) {
     let previous = previous_boundary(value, *cursor);
     if previous == *cursor {
@@ -188,7 +189,7 @@ fn delete_previous_character(value: &mut String, cursor: &mut usize) {
     *cursor = previous;
 }
 
-/// Deletes one Unicode scalar after a cursor.
+/// Deletes one grapheme cluster after a cursor.
 fn delete_next_character(value: &mut String, cursor: usize) {
     let next = next_boundary(value, cursor);
     if next == cursor {
@@ -196,30 +197,4 @@ fn delete_next_character(value: &mut String, cursor: usize) {
     }
 
     value.replace_range(cursor..next, "");
-}
-
-/// Returns the previous character boundary from the supplied cursor.
-fn previous_boundary(value: &str, cursor: usize) -> usize {
-    if cursor == 0 {
-        return 0;
-    }
-
-    value[..cursor]
-        .char_indices()
-        .last()
-        .map(|(index, _)| index)
-        .unwrap_or(0)
-}
-
-/// Returns the next character boundary from the supplied cursor.
-fn next_boundary(value: &str, cursor: usize) -> usize {
-    if cursor >= value.len() {
-        return value.len();
-    }
-
-    value[cursor..]
-        .char_indices()
-        .nth(1)
-        .map(|(index, _)| cursor + index)
-        .unwrap_or(value.len())
 }

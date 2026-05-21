@@ -72,4 +72,3 @@ pub(crate) fn find_command<'a>(
             _ => None,
         })
 }
-
