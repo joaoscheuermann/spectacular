@@ -305,7 +305,7 @@ fn prompt_rows_use_original_marker_and_continuation_indentation() {
 }
 
 #[test]
-fn historical_user_prompt_matches_original_submitted_prompt_shape() {
+fn historical_user_prompt_renders_without_prompt_marker() {
     let mut state = state();
     state.session.transcript.push(item(
         1,
@@ -314,8 +314,8 @@ fn historical_user_prompt_matches_original_submitted_prompt_shape() {
 
     let text = visible_text(&app_render_lines(&state));
 
-    assert!(text.contains(&"> hello".to_string()));
-    assert!(text.contains(&"  there".to_string()));
+    assert!(text.contains(&"hello".to_string()));
+    assert!(text.contains(&"there".to_string()));
 }
 
 #[test]

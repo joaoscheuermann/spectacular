@@ -1,4 +1,4 @@
-use super::content::submitted_prompt_render_lines;
+use super::content::styled_visible_lines;
 use crate::render::{iocraft_content, RenderStyle};
 use crate::transcript::{TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;
@@ -20,9 +20,9 @@ pub fn User(props: &UserProps) -> impl Into<AnyElement<'static>> {
     element!(View(flex_direction: FlexDirection::Column, margin_bottom: 1) { #(elements) })
 }
 
-/// Formats submitted user prompt content as prompt-marked rows.
+/// Formats submitted user prompt content as unmarked user rows.
 pub fn user_prompt_render_lines(text: &str) -> Vec<crate::render::RenderLine> {
-    submitted_prompt_render_lines(text, RenderStyle::User)
+    styled_visible_lines(text, RenderStyle::User)
 }
 
 /// Props for the user component.

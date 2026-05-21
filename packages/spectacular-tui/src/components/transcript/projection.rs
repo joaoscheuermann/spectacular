@@ -2,9 +2,7 @@ use super::assistant::assistant_message_render_lines;
 use super::banner::opening_banner_render_lines;
 use super::cancellation::cancellation_render_lines;
 use super::command::{command_render_lines, command_row_count};
-use super::content::{
-    plain_lines, prompt_text_row_count, trimmed_visible_text_row_count, visible_text_row_count,
-};
+use super::content::{plain_lines, trimmed_visible_text_row_count, visible_text_row_count};
 use super::error::{error_render_lines, error_row_count};
 use super::notice::notice_render_lines;
 use super::reasoning::reasoning_render_lines;
@@ -199,7 +197,7 @@ fn transcript_item_row_count(item: &TranscriptItem) -> usize {
     match &item.content {
         TranscriptItemContent::OpeningBanner(_) => 8,
         TranscriptItemContent::UserPrompt(prompt) => {
-            prompt_text_row_count(&prompt.text).saturating_add(1)
+            visible_text_row_count(&prompt.text).saturating_add(1)
         }
         TranscriptItemContent::AssistantMessage(message) => {
             visible_text_row_count(&message.text).saturating_add(1)

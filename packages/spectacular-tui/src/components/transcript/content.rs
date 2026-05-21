@@ -30,22 +30,6 @@ pub fn styled_visible_trimmed_lines(text: &str, style: RenderStyle) -> Vec<Rende
         .collect()
 }
 
-/// Formats submitted prompt text as original marker rows.
-pub fn submitted_prompt_render_lines(text: &str, style: RenderStyle) -> Vec<RenderLine> {
-    let rows: Vec<&str> = text.lines().collect();
-    if rows.is_empty() {
-        return vec![RenderLine::styled("> ", style)];
-    }
-
-    rows.into_iter()
-        .enumerate()
-        .map(|(index, line)| {
-            let marker = if index == 0 { "> " } else { "  " };
-            RenderLine::styled(format!("{marker}{line}"), style)
-        })
-        .collect()
-}
-
 /// Splits non-empty text into visible rows without trimming row content.
 fn visible_lines(text: &str) -> Vec<String> {
     if text.is_empty() {
@@ -80,9 +64,4 @@ pub fn trimmed_visible_text_row_count(text: &str) -> usize {
     }
 
     visible_text_row_count(text)
-}
-
-/// Counts rows emitted for prompt text with marker rows.
-pub fn prompt_text_row_count(text: &str) -> usize {
-    text.lines().count().max(1)
 }

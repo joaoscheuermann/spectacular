@@ -39,7 +39,6 @@ fn render_app(state: &State) -> String {
     render_state_to_string(state, Some(100))
 }
 
-
 /// Renders actual IOCraft canvas cells for style assertions.
 fn render_canvas(state: &State, width: u16, height: u16) -> Canvas {
     render_app_canvas_with_events(state, width, height, Vec::new())
@@ -229,8 +228,8 @@ async fn scroll_up_clamps_when_oldest_row_reaches_viewport_top() {
     .await;
     let overscroll_lines = canvas_text_lines(&overscroll_canvas, 80, 6);
 
-    assert!(overscroll_lines[0].starts_with("> submitted prompt 0"));
-    assert!(overscroll_lines[2].starts_with("> submitted prompt 1"));
+    assert!(overscroll_lines[0].starts_with("submitted prompt 0"));
+    assert!(overscroll_lines[2].starts_with("submitted prompt 1"));
     assert!(overscroll_lines[0..3]
         .iter()
         .enumerate()

@@ -1,6 +1,6 @@
 use spectacular_tui::{
     DisplayLine, DisplayLineStyle, DisplayMetadata, ReasoningLevel, RuntimeSelection, SessionId,
-    State, Timestamp, TranscriptItem, TranscriptItemContent, TranscriptItemId,
+    State, Timestamp, TranscriptItem, TranscriptItemContent, TranscriptItemId, UserPromptItem,
 };
 
 /// Builds an initialized state with stable metadata for transcript projection tests.
@@ -54,6 +54,34 @@ fn command_item(index: usize, row_count: usize) -> TranscriptItem {
                 summary_line: None,
             }),
         }),
+    )
+}
+
+/// Verifies submitted user prompts render without the active-prompt marker.
+#[test]
+fn transcript_item_lines_user_prompt_omits_marker() {
+    let item = user_prompt_item("hello\nthere");
+
+    assert_eq!(
+        spectacular_tui::transcript_item_lines(&item),
+        vec!["hello", "there", ""]
+    );
+}
+
+/// Verifies submitted user prompt row counts are not inflated by removed marker rows.
+#[test]
+fn user_prompt_item_row_count_uses_visible_text_rows() {
+    let item = user_prompt_item("hello");
+
+    assert_eq!(spectacular_tui::transcript_item_layout_rows(&item, 80), 2);
+}
+
+/// Builds a submitted user prompt transcript item.
+fn user_prompt_item(text: &str) -> TranscriptItem {
+    TranscriptItem::new(
+        TranscriptItemId::new("prompt-1"),
+        Timestamp::new(1),
+        TranscriptItemContent::UserPrompt(UserPromptItem::new(text)),
     )
 }
 
