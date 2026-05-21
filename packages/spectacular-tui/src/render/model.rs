@@ -2,6 +2,17 @@ use crate::metadata::ContextTokenUsage;
 use anstyle::Style;
 use iocraft::prelude::{Color, MixedTextContent, Weight};
 
+const SELECTED_TEXT: Color = Color::Rgb {
+    r: 15,
+    g: 23,
+    b: 42,
+};
+const SELECTION_BACKGROUND: Color = Color::Rgb {
+    r: 240,
+    g: 240,
+    b: 240,
+};
+
 /// Semantic style categories used by active TUI render lines.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RenderStyle {
@@ -187,14 +198,7 @@ pub fn semantic_iocraft_style(style: RenderStyle) -> (Option<Color>, Weight) {
             }),
             Weight::Bold,
         ),
-        RenderStyle::Selection => (
-            Some(Color::Rgb {
-                r: 229,
-                g: 231,
-                b: 235,
-            }),
-            Weight::Bold,
-        ),
+        RenderStyle::Selection => (Some(SELECTED_TEXT), Weight::Bold),
         RenderStyle::Secret => (
             Some(Color::Rgb {
                 r: 251,
@@ -217,7 +221,7 @@ pub fn iocraft_content(line: &RenderLine) -> Vec<MixedTextContent> {
                 content = content.color(color);
             }
             if span.style == RenderStyle::Selection {
-                content = content.invert();
+                content = content.background_color(SELECTION_BACKGROUND);
             }
             content
         })

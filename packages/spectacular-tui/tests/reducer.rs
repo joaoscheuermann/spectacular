@@ -51,6 +51,8 @@ fn state_new_initializes_foundation_defaults() {
     assert_eq!(state.runtime, runtime);
     assert_eq!(state.display, expected_display);
     assert_eq!(state.status, Status::Idle);
+    assert!(!state.exit_requested);
+    assert_eq!(state.input_notice, None);
     assert_eq!(state.spinner.current_frame(), "⠙");
     assert_eq!(state.scroll.offset, 0);
     assert!(state.scroll.follow_tail);
@@ -69,6 +71,41 @@ fn prompt_changed_updates_only_prompt_state() {
     let mut expected = original;
     expected.session.prompt = prompt;
     assert_eq!(state, expected);
+}
+
+/// Verifies input notices are reducer-owned transient prompt feedback.
+#[test]
+fn input_notice_reported_and_cleared_updates_only_notice_state() {
+    let mut state = state();
+
+    reduce(
+        &mut state,
+        ChatTuiAction::InputNoticeReported {
+            message: "Use Ctrl+V to paste".to_owned(),
+        },
+    );
+
+    assert_eq!(state.input_notice, Some("Use Ctrl+V to paste".to_owned()));
+    assert!(state.session.transcript.is_empty());
+
+    reduce(&mut state, ChatTuiAction::InputNoticeCleared);
+
+    assert_eq!(state.input_notice, None);
+    assert!(state.session.transcript.is_empty());
+}
+
+/// Verifies normal prompt edits clear transient input notices.
+#[test]
+fn prompt_changed_with_input_notice_clears_notice() {
+    let mut state = state();
+    state.input_notice = Some("Use Ctrl+V to paste".to_owned());
+
+    reduce(
+        &mut state,
+        ChatTuiAction::PromptChanged(PromptState::from_text("hello")),
+    );
+
+    assert_eq!(state.input_notice, None);
 }
 
 /// Verifies submitting a prompt appends semantic prompt content and clears prompt state.

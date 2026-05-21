@@ -41,7 +41,7 @@ pub fn working_render_line(state: &State) -> Option<RenderLine> {
 fn working_render_line_with_frame(state: &State, frame: &str) -> Option<RenderLine> {
     match &state.status {
         Status::Running { .. } | Status::Cancelling => Some(RenderLine::styled(
-            format!("{frame} Working (CTRL + C to stop)"),
+            format!("{frame} Working (Esc to cancel)"),
             RenderStyle::Dim,
         )),
         Status::Idle | Status::Failed { .. } => None,

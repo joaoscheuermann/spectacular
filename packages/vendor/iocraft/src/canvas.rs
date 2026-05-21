@@ -61,6 +61,9 @@ pub struct CanvasTextStyle {
     /// The color of the text.
     pub color: Option<Color>,
 
+    /// The background color of the text.
+    pub background_color: Option<Color>,
+
     /// The weight of the text.
     pub weight: Weight,
 
@@ -352,13 +355,20 @@ impl Canvas {
                     did_clear_line = true;
                 }
 
-                if ansi && cell.background_color != background_color {
-                    write!(
-                        w,
-                        csi!("{}m"),
-                        Colored::BackgroundColor(cell.background_color.unwrap_or(Color::Reset))
-                    )?;
-                    background_color = cell.background_color;
+                if ansi {
+                    let character_background = cell
+                        .character
+                        .as_ref()
+                        .and_then(|character| character.style.background_color);
+                    let effective_background = character_background.or(cell.background_color);
+                    if effective_background != background_color {
+                        write!(
+                            w,
+                            csi!("{}m"),
+                            Colored::BackgroundColor(effective_background.unwrap_or(Color::Reset))
+                        )?;
+                        background_color = effective_background;
+                    }
                 }
 
                 if let Some(c) = &cell.character {
@@ -835,6 +845,42 @@ mod tests {
         write!(expected, ".").unwrap();
 
         write!(expected, csi!("K")).unwrap();
+        write!(expected, csi!("0m")).unwrap();
+        write!(expected, "\r\n").unwrap();
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_canvas_text_background_color_takes_precedence_over_cell_background() {
+        let mut canvas = Canvas::new(3, 1);
+        canvas
+            .subview_mut(0, 0, 0, 0, 3, 1)
+            .set_background_color(0, 0, 3, 1, Color::Blue);
+        canvas.subview_mut(0, 0, 0, 0, 3, 1).set_text(
+            1,
+            0,
+            "x",
+            CanvasTextStyle {
+                background_color: Some(Color::Red),
+                ..Default::default()
+            },
+        );
+
+        let mut actual = Vec::new();
+        canvas.write_ansi(&mut actual).unwrap();
+
+        let mut expected = Vec::new();
+        write!(expected, csi!("0m")).unwrap();
+        write!(expected, csi!("{}m"), Colored::BackgroundColor(Color::Blue)).unwrap();
+        write!(expected, " ").unwrap();
+        write!(expected, csi!("{}m"), Colored::BackgroundColor(Color::Red)).unwrap();
+        write!(expected, "x").unwrap();
+        write!(expected, csi!("{}m"), Colored::BackgroundColor(Color::Reset)).unwrap();
+        write!(expected, csi!("K")).unwrap();
+        write!(expected, csi!("{}m"), Colored::BackgroundColor(Color::Blue)).unwrap();
+        write!(expected, " ").unwrap();
+        write!(expected, csi!("{}m"), Colored::BackgroundColor(Color::Reset)).unwrap();
         write!(expected, csi!("0m")).unwrap();
         write!(expected, "\r\n").unwrap();
 

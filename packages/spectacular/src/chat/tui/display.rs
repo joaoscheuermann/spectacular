@@ -1,5 +1,5 @@
 use crate::chat::command_event::CommandStatus;
-use crate::chat::renderer::{
+use crate::chat::display::{
     styled_tool_output_lines, ToolCallView, ToolOutputLineStyle, ToolResultView, ToolStatus,
 };
 use serde_json::Value;
@@ -34,13 +34,13 @@ impl ToolDisplayAdapter {
 
         vec![
             ChatTuiAction::ToolCallStarted {
-                id: crate::chat::tui_adapter::transcript_item_id(tool_call_id),
+                id: super::adapter::transcript_item_id(tool_call_id),
                 tool_call_id: tool_call_id.to_owned(),
                 name: name.to_owned(),
                 arguments: arguments.to_owned(),
             },
             ChatTuiAction::ToolDisplayStarted {
-                id: crate::chat::tui_adapter::transcript_item_id(tool_call_id),
+                id: super::adapter::transcript_item_id(tool_call_id),
                 tool_call_id: tool_call_id.to_owned(),
                 name: name.to_owned(),
                 call_line: DisplayLine::new(

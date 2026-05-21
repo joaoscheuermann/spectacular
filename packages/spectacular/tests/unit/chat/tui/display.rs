@@ -1,15 +1,14 @@
 use super::*;
-use crate::chat::command_event::{
-    CommandDelta, CommandEvent, CommandFinished, CommandStart, CommandStatus,
-};
 use crate::chat::renderer::{ToolCallView, ToolResultView};
 use serde_json::{json, Value};
 use spectacular_agent::{AgentEvent, Cancellation, Tool, ToolDisplay, ToolExecution, ToolManifest, ToolStorage};
 use spectacular_tools::edit::EditTool;
 use spectacular_tui::{
-    ChatTuiAction, CommandDisplayChunk, CommandDisplayStatus, DisplayLine, DisplayLineStyle,
-    ToolDisplayStatus, TranscriptItemId,
+    ChatTuiAction, DisplayLine, DisplayLineStyle, ToolDisplayStatus, TranscriptItemId,
 };
+
+#[path = "display/command.rs"]
+mod command;
 
 #[derive(Clone, Debug)]
 struct DisplayTool;
@@ -428,103 +427,6 @@ fn adapter_tool_output_diff_lines_are_annotated() {
     );
 }
 
-/// Verifies command events emit display-ready start, output, and finish payloads.
-#[test]
-fn adapter_command_lifecycle_emits_start_delta_finish() {
-    let mut adapter = TuiEventAdapter::new();
-
-    assert_eq!(
-        adapter.adapt_command_event(&CommandEvent::Start(CommandStart {
-            command_id: "cmd-1".to_owned(),
-            source: "slash_command".to_owned(),
-            name: "git".to_owned(),
-            title: "Git status".to_owned(),
-            command: "/git status".to_owned(),
-            working_directory: None,
-        })),
-        vec![ChatTuiAction::CommandDisplayStarted {
-            id: TranscriptItemId::new("command-cmd-1"),
-            command_id: "cmd-1".to_owned(),
-            command_line: line("/git status", DisplayLineStyle::Command),
-        }]
-    );
-    assert_eq!(
-        adapter.adapt_command_event(&CommandEvent::Delta(CommandDelta {
-            command_id: "cmd-1".to_owned(),
-            channel: "stdout".to_owned(),
-            content: "ok".to_owned(),
-            sequence: 1,
-        })),
-        vec![ChatTuiAction::CommandDisplayOutput {
-            command_id: "cmd-1".to_owned(),
-            chunk: CommandDisplayChunk::new("• ok", DisplayLineStyle::CommandOutput),
-        }]
-    );
-    assert_eq!(
-        adapter.adapt_command_event(&CommandEvent::Finished(CommandFinished {
-            command_id: "cmd-1".to_owned(),
-            status: CommandStatus::Success,
-            summary: "done".to_owned(),
-        })),
-        vec![ChatTuiAction::CommandDisplayFinished {
-            command_id: "cmd-1".to_owned(),
-            status: CommandDisplayStatus::Succeeded,
-            exit_code: Some(0),
-            summary_line: Some(line("done", DisplayLineStyle::Success)),
-        }]
-    );
-}
-
-/// Verifies command output chunks preserve original renderer line-oriented payloads.
-#[test]
-fn adapter_command_output_preserves_partial_chunk_shape() {
-    let mut adapter = TuiEventAdapter::new();
-
-    assert_eq!(
-        adapter.adapt_command_event(&CommandEvent::Delta(CommandDelta {
-            command_id: "cmd-1".to_owned(),
-            channel: "stdout".to_owned(),
-            content: "part".to_owned(),
-            sequence: 1,
-        })),
-        vec![ChatTuiAction::CommandDisplayOutput {
-            command_id: "cmd-1".to_owned(),
-            chunk: CommandDisplayChunk::new("• part", DisplayLineStyle::CommandOutput),
-        }]
-    );
-    assert_eq!(
-        adapter.adapt_command_event(&CommandEvent::Delta(CommandDelta {
-            command_id: "cmd-1".to_owned(),
-            channel: "stdout".to_owned(),
-            content: "ial".to_owned(),
-            sequence: 2,
-        })),
-        vec![ChatTuiAction::CommandDisplayOutput {
-            command_id: "cmd-1".to_owned(),
-            chunk: CommandDisplayChunk::new("• ial", DisplayLineStyle::CommandOutput),
-        }]
-    );
-}
-
-/// Verifies cancelled commands keep cancellation status and original warning styling.
-#[test]
-fn adapter_command_cancelled_keeps_cancelled_warning_display() {
-    let mut adapter = TuiEventAdapter::new();
-
-    assert_eq!(
-        adapter.adapt_command_event(&CommandEvent::Finished(CommandFinished {
-            command_id: "cmd-1".to_owned(),
-            status: CommandStatus::Cancelled,
-            summary: "cancelled".to_owned(),
-        })),
-        vec![ChatTuiAction::CommandDisplayFinished {
-            command_id: "cmd-1".to_owned(),
-            status: CommandDisplayStatus::Cancelled,
-            exit_code: Some(1),
-            summary_line: Some(line("cancelled", DisplayLineStyle::Warning)),
-        }]
-    );
-}
 
 /// Verifies TUI adapter formatting uses pure payload builders rather than terminal renderer writes.
 #[test]

@@ -34,6 +34,23 @@ The prompt supports:
 - `Shift+Enter`, `Alt+Enter`, `Ctrl+Enter`, or `Ctrl+J` to insert a newline.
 - `Ctrl+C` to clear the current prompt, or exit when the prompt is empty.
 
+### Experimental Fullscreen TUI
+
+Start the IOCraft fullscreen TUI:
+
+```sh
+npx nx run spectacular:run --args='chat --tui'
+```
+
+This path owns clipboard shortcuts inside the app:
+
+- `Ctrl+C` copies the focused prompt selection.
+- `Ctrl+X` cuts the focused prompt selection.
+- `Ctrl+V` pastes from the OS clipboard with paste guardrails.
+- Terminal-native paste shows `Use Ctrl+V to paste`.
+- `Esc` cancels a running request, clears prompt selection/text while idle, or exits when the prompt is empty.
+- `Ctrl+Q` exits explicitly.
+
 ### Slash Commands
 
 Slash commands are strict. Empty commands, uppercase command names, unknown

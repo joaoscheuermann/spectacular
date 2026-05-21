@@ -9,6 +9,7 @@ use crate::transcript::{CommandDisplayStatus, DisplayLine, OpeningBannerItem, To
 /// Events that can deterministically update TUI state through the reducer.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ChatTuiAction {
+    ExitRequested,
     PromptChanged(PromptState),
     SubmitPrompt {
         id: TranscriptItemId,
@@ -130,6 +131,10 @@ pub enum ChatTuiAction {
     NoticeReported {
         message: String,
     },
+    InputNoticeReported {
+        message: String,
+    },
+    InputNoticeCleared,
     RuntimeSelectionChanged(RuntimeSelection),
     DisplayMetadataChanged(DisplayMetadata),
     WorktreeMetadataChanged(Option<WorktreeMetadata>),

@@ -1,15 +1,21 @@
 use super::*;
+use crate::chat::model::{ChatModel, ChatRunRequestModel};
 use crate::chat::runner::main_chat_tool_storage;
+use crate::chat::session::SessionManager;
+use crate::chat::RuntimeSelection;
 use spectacular_agent::{AgentEvent, ToolStorage};
 use spectacular_config::{ProviderAuthMode, ReasoningLevel};
-use spectacular_llms::FinishReason;
+use spectacular_llms::{FinishReason, LlmDebugLogger};
 use spectacular_tui::{
-    DisplayMetadata, PromptState, Intent, SelectionPromptChoice as TuiSelectionPromptChoice,
+    merge_controller_state_update, ChatTuiAction, DisplayMetadata, Intent, PromptState,
     SessionId, State, TranscriptItemContent, TranscriptItemId,
 };
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::{mpsc, oneshot};
+
+#[path = "tui_runtime/cancellation.rs"]
+mod cancellation;
 
 /// Verifies TUI runtime state starts from controller-owned metadata and warnings.
 #[test]
@@ -85,8 +91,11 @@ fn controller_state_update_resets_prompt_on_session_change() {
     );
     controller_state.session.prompt = PromptState::from_text("restored");
 
-    let (merged, prompt_reset) =
-        merge_controller_state_update(&local_state, controller_state, &PromptState::from_text("draft"));
+    let (merged, prompt_reset) = merge_controller_state_update(
+        &local_state,
+        controller_state,
+        &PromptState::from_text("draft"),
+    );
 
     assert_eq!(merged.session.id, SessionId::new("session-2"));
     assert_eq!(merged.session.prompt.text, "restored");
@@ -107,36 +116,40 @@ async fn controller_publishes_state_while_prompt_run_is_streaming() {
     .unwrap();
     let (intent_sender, intent_receiver) = mpsc::unbounded_channel();
     let (_cancellation_sender, cancellation_receiver) = mpsc::unbounded_channel();
+    let (_selection_sender, selection_receiver) = mpsc::unbounded_channel();
     let (state_sender, mut state_receiver) = mpsc::unbounded_channel();
-    let controller_task = tokio::spawn(run_controller_loop(
+    let controller_loop = run_controller_loop(
         controller,
         intent_receiver,
         cancellation_receiver,
+        selection_receiver,
         state_sender,
-    ));
+    );
+    let driver = async move {
+        intent_sender
+            .send(Intent::SubmitPrompt {
+                id: TranscriptItemId::new("prompt-1"),
+                text: "stream please".to_owned(),
+            })
+            .unwrap();
 
-    intent_sender
-        .send(Intent::SubmitPrompt {
-            id: TranscriptItemId::new("prompt-1"),
-            text: "stream please".to_owned(),
+        let streamed_state = next_state_matching(&mut state_receiver, |state| {
+            state.session.transcript.iter().any(|item| {
+                matches!(
+                    &item.content,
+                    TranscriptItemContent::AssistantMessage(message)
+                        if message.text == "streamed before completion"
+                )
+            })
         })
-        .unwrap();
+        .await;
 
-    let streamed_state = next_state_matching(&mut state_receiver, |state| {
-        state.session.transcript.iter().any(|item| {
-            matches!(
-                &item.content,
-                TranscriptItemContent::AssistantMessage(message)
-                    if message.text == "streamed before completion"
-            )
-        })
-    })
-    .await;
-
-    assert!(streamed_state.is_some());
-    release_sender.send(()).unwrap();
-    intent_sender.send(Intent::RequestExit).unwrap();
-    controller_task.await.unwrap().unwrap();
+        assert!(streamed_state.is_some());
+        release_sender.send(()).unwrap();
+        intent_sender.send(Intent::RequestExit).unwrap();
+    };
+    let (controller_result, _) = tokio::join!(controller_loop, driver);
+    controller_result.unwrap();
 }
 
 /// Verifies TUI submit intents use the injected turn runner and reducer state.
@@ -162,7 +175,10 @@ async fn submit_prompt_intent_runs_real_controller_path() {
         .await
         .unwrap();
 
-    assert_eq!(controller.runner().requests, vec!["hello runtime".to_owned()]);
+    assert_eq!(
+        controller.runner().requests,
+        vec!["hello runtime".to_owned()]
+    );
     assert_eq!(
         controller.runner().prompt_event_ids,
         vec![Some("prompt-1".to_owned())]
@@ -173,6 +189,26 @@ async fn submit_prompt_intent_runs_real_controller_path() {
             TranscriptItemContent::AssistantMessage(message) if message.text == "hello from runtime"
         )
     }));
+}
+
+/// Verifies slash command control requests propagate through the TUI controller.
+#[tokio::test]
+async fn exit_command_intent_requests_runtime_exit() {
+    let bootstrap = TestTuiBootstrap::create("exit-session");
+    let mut controller =
+        TuiRuntimeController::new_with_runner(bootstrap, RecordingTuiTurnRunner::default())
+            .unwrap();
+
+    let should_exit = controller
+        .handle_intent(Intent::SubmitPrompt {
+            id: TranscriptItemId::new("prompt-1"),
+            text: "/exit".to_owned(),
+        })
+        .await
+        .unwrap();
+
+    assert!(should_exit);
+    assert!(controller.state().exit_requested);
 }
 
 /// Verifies completed TUI runs persist the durable semantic session snapshot.
@@ -198,7 +234,7 @@ async fn completed_tui_run_saves_session_snapshot() {
         .await
         .unwrap();
 
-    let snapshot = controller.model.session_manager().load_snapshot().unwrap();
+    let snapshot = controller.model().session_manager().load_snapshot().unwrap();
     assert_eq!(snapshot.id, controller.state().session.id);
     assert!(controller.state().session.transcript.iter().any(|item| {
         matches!(
@@ -217,172 +253,34 @@ async fn completed_tui_run_saves_session_snapshot() {
 /// Verifies the new IOCraft runtime path does not bypass rendering with print macros.
 #[test]
 fn tui_runtime_path_has_no_direct_terminal_print_macros() {
-    let source = include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/src/chat/tui_runtime.rs"
-    ));
+    let source = [
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/chat/tui/controller.rs"
+        )),
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/chat/tui/launch.rs"
+        )),
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/chat/tui/runner.rs"
+        )),
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/chat/tui/state.rs"
+        )),
+    ]
+    .join("\n");
 
     for forbidden in ["print!(", "println!(", "eprint!(", "eprintln!("] {
-        assert!(!source.contains(forbidden), "found {forbidden} in TUI runtime");
+        assert!(
+            !source.contains(forbidden),
+            "found {forbidden} in TUI runtime"
+        );
     }
 }
 
-/// Verifies TUI cancellation intents cancel active runtime work through the runner seam.
-#[tokio::test]
-async fn cancel_intent_cancels_active_runner() {
-    let bootstrap = TestTuiBootstrap::create("session-1");
-    let mut controller = TuiRuntimeController::new_with_runner(
-        bootstrap,
-        RecordingTuiTurnRunner {
-            running: true,
-            ..RecordingTuiTurnRunner::default()
-        },
-    )
-    .unwrap();
-
-    controller.handle_intent(Intent::CancelRun).await.unwrap();
-
-    assert_eq!(controller.runner().cancel_count, 1);
-    assert_eq!(controller.state().status, spectacular_tui::Status::Cancelling);
-}
-
-/// Verifies slash-command execution can request a TUI-owned selection prompt.
-#[tokio::test]
-async fn tui_command_can_request_selection_prompt() {
-    let bootstrap = TestTuiBootstrap::create("selection-request-session");
-    let mut controller = TuiRuntimeController::new_with_runner(
-        bootstrap,
-        RecordingTuiTurnRunner::default(),
-    )
-    .unwrap();
-
-    controller
-        .handle_intent(Intent::SubmitPrompt {
-            id: TranscriptItemId::new("prompt-1"),
-            text: "/git commit".to_owned(),
-        })
-        .await
-        .unwrap();
-
-    let selection = controller.state().selection.as_ref().unwrap();
-    assert_eq!(selection.title, "Use generated commit message?");
-    assert_eq!(
-        selection.options,
-        vec!["Use generated message", "Cancel commit"]
-    );
-    assert!(selection.allow_custom);
-    assert!(!selection.allow_comment);
-}
-
-/// Verifies TUI selection answers resume the command path waiting on that prompt.
-#[tokio::test]
-async fn tui_selection_answer_returns_to_waiting_runtime_flow() {
-    let bootstrap = TestTuiBootstrap::create("selection-answer-session");
-    let mut controller = TuiRuntimeController::new_with_runner(
-        bootstrap,
-        RecordingTuiTurnRunner::default(),
-    )
-    .unwrap();
-
-    controller
-        .handle_intent(Intent::SubmitPrompt {
-            id: TranscriptItemId::new("prompt-1"),
-            text: "/git commit".to_owned(),
-        })
-        .await
-        .unwrap();
-    controller
-        .handle_intent(Intent::SelectionPromptSubmitted(
-            spectacular_tui::SelectionPromptAnswer {
-                choice: TuiSelectionPromptChoice::Option {
-                    index: 1,
-                    label: "Cancel commit".to_owned(),
-                },
-                comment: None,
-            },
-        ))
-        .await
-        .unwrap();
-
-    assert!(controller.state().selection.is_none());
-    assert!(controller.state().session.transcript.iter().any(|item| {
-        matches!(
-            &item.content,
-            TranscriptItemContent::Notice(notice) if notice.message == "commit cancelled"
-        )
-    }));
-}
-
-/// Verifies TUI selection cancellation maps to the original selection prompt exit result.
-#[tokio::test]
-async fn tui_selection_cancel_maps_to_original_exit_result() {
-    let bootstrap = TestTuiBootstrap::create("selection-cancel-session");
-    let mut controller = TuiRuntimeController::new_with_runner(
-        bootstrap,
-        RecordingTuiTurnRunner::default(),
-    )
-    .unwrap();
-
-    controller
-        .handle_intent(Intent::SubmitPrompt {
-            id: TranscriptItemId::new("prompt-1"),
-            text: "/git commit".to_owned(),
-        })
-        .await
-        .unwrap();
-    controller
-        .handle_intent(Intent::SelectionPromptCancelled)
-        .await
-        .unwrap();
-
-    assert!(controller.state().selection.is_none());
-    assert!(controller.state().session.transcript.iter().any(|item| {
-        matches!(
-            &item.content,
-            TranscriptItemContent::Error(error) if error.message == "chat exited"
-        )
-    }));
-}
-
-/// Verifies cancellation reaches an active prompt even while the controller awaits the turn.
-#[tokio::test]
-async fn cancel_signal_reaches_active_prompt_run() {
-    let bootstrap = TestTuiBootstrap::create("active-cancel-session");
-    let controller = TuiRuntimeController::new_with_runner(bootstrap, CancellingTuiTurnRunner).unwrap();
-    let (intent_sender, intent_receiver) = mpsc::unbounded_channel();
-    let (cancellation_sender, cancellation_receiver) = mpsc::unbounded_channel();
-    let (state_sender, mut state_receiver) = mpsc::unbounded_channel();
-    let controller_task = tokio::spawn(run_controller_loop(
-        controller,
-        intent_receiver,
-        cancellation_receiver,
-        state_sender,
-    ));
-
-    intent_sender
-        .send(Intent::SubmitPrompt {
-            id: TranscriptItemId::new("prompt-1"),
-            text: "cancel me".to_owned(),
-        })
-        .unwrap();
-    cancellation_sender.send(()).unwrap();
-
-    let cancelled_state = next_state_matching(&mut state_receiver, |state| {
-        matches!(state.status, spectacular_tui::Status::Idle)
-            && state.session.transcript.iter().any(|item| {
-                matches!(
-                    &item.content,
-                    TranscriptItemContent::Cancellation(cancellation)
-                        if cancellation.reason == "test cancellation"
-                )
-            })
-    })
-    .await;
-
-    assert!(cancelled_state.is_some());
-    intent_sender.send(Intent::RequestExit).unwrap();
-    controller_task.await.unwrap().unwrap();
-}
 
 #[derive(Default)]
 struct RecordingTuiTurnRunner {

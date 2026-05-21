@@ -168,7 +168,7 @@ impl Hook for UseTerminalEventsImpl {
                             }
                         }
                     }
-                    TerminalEvent::Key(_) | TerminalEvent::Resize(..) => {
+                    TerminalEvent::Key(_) | TerminalEvent::Paste(_) | TerminalEvent::Resize(..) => {
                         if let Some(f) = &mut self.f {
                             f(event);
                         }
@@ -225,6 +225,19 @@ mod tests {
                     modifiers: KeyModifiers::empty(),
                     kind: KeyEventKind::Press,
                 }),
+            ])))
+            .collect()
+            .await;
+        let actual = canvases.iter().map(|c| c.to_string()).collect::<Vec<_>>();
+        let expected = vec!["", "received event\n"];
+        assert_eq!(actual, expected);
+    }
+
+    #[apply(test!)]
+    async fn test_use_terminal_events_forwards_paste_events() {
+        let canvases: Vec<_> = element!(MyComponent)
+            .mock_terminal_render_loop(MockTerminalConfig::with_events(stream::iter(vec![
+                TerminalEvent::Paste("pasted text".to_owned()),
             ])))
             .collect()
             .await;

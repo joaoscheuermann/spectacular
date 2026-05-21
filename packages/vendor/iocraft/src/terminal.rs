@@ -11,12 +11,18 @@ use futures::{
 };
 use std::{
     collections::VecDeque,
+    fmt,
     io::{self, stdin, IsTerminal, Write},
     mem,
     pin::Pin,
     sync::{Arc, Mutex, Weak},
     task::{Context, Poll, Waker},
 };
+
+const SPECTACULAR_KEY_DEBUG_ENV: &str = "SPECTACULAR_TUI_KEY_DEBUG";
+const SPECTACULAR_KEY_DEBUG_FILE: &str = "spectacular-tui-key-debug.log";
+const SPECTACULAR_FORCE_KEYBOARD_ENHANCEMENT_ENV: &str =
+    "SPECTACULAR_TUI_FORCE_KEYBOARD_ENHANCEMENT";
 
 // Re-exports for basic types.
 pub use crossterm::event::{KeyCode, KeyEventKind, KeyEventState, KeyModifiers, MouseEventKind};
@@ -81,6 +87,8 @@ impl FullscreenMouseEvent {
 pub enum TerminalEvent {
     /// A key event, fired when a key is pressed.
     Key(KeyEvent),
+    /// A paste event, fired when bracketed paste mode reports pasted text.
+    Paste(String),
     /// A mouse event, fired when the mouse is moved, clicked, scrolled, etc. in fullscreen mode.
     FullscreenMouse(FullscreenMouseEvent),
     /// A resize event, fired when the terminal is resized.
@@ -151,7 +159,10 @@ struct StdTerminal<'a> {
     fullscreen: bool,
     mouse_capture: bool,
     raw_mode_enabled: bool,
+    bracketed_paste_enabled: bool,
     enabled_keyboard_enhancement: bool,
+    #[cfg(windows)]
+    previous_windows_input_mode: Option<u32>,
     prev_canvas_height: u16,
     size: Option<(u16, u16)>,
 }
@@ -229,25 +240,7 @@ impl TerminalImpl for StdTerminal<'_> {
         self.set_raw_mode_enabled(true)?;
 
         Ok(EventStream::new()
-            .filter_map(|event| async move {
-                match event {
-                    Ok(Event::Key(event)) => Some(TerminalEvent::Key(KeyEvent {
-                        code: event.code,
-                        modifiers: event.modifiers,
-                        kind: event.kind,
-                    })),
-                    Ok(Event::Mouse(event)) => {
-                        Some(TerminalEvent::FullscreenMouse(FullscreenMouseEvent {
-                            modifiers: event.modifiers,
-                            column: event.column,
-                            row: event.row,
-                            kind: event.kind,
-                        }))
-                    }
-                    Ok(Event::Resize(width, height)) => Some(TerminalEvent::Resize(width, height)),
-                    _ => None,
-                }
-            })
+            .filter_map(|event| async move { event.ok().and_then(terminal_event_from_crossterm) })
             .boxed())
     }
 
@@ -274,7 +267,10 @@ impl<'a> StdTerminal<'a> {
             fullscreen,
             mouse_capture,
             raw_mode_enabled: false,
+            bracketed_paste_enabled: false,
             enabled_keyboard_enhancement: false,
+            #[cfg(windows)]
+            previous_windows_input_mode: None,
             prev_canvas_height: 0,
             size: None,
         };
@@ -288,26 +284,85 @@ impl<'a> StdTerminal<'a> {
     fn set_raw_mode_enabled(&mut self, raw_mode_enabled: bool) -> io::Result<()> {
         if raw_mode_enabled != self.raw_mode_enabled {
             if raw_mode_enabled {
-                if terminal::supports_keyboard_enhancement().unwrap_or(false) {
-                    self.dest.execute(event::PushKeyboardEnhancementFlags(
-                        event::KeyboardEnhancementFlags::REPORT_EVENT_TYPES,
-                    ))?;
-                    self.enabled_keyboard_enhancement = true;
-                }
+                self.enable_keyboard_enhancement()?;
+                self.disable_windows_selection_interception()?;
                 if self.mouse_capture {
                     self.dest.execute(event::EnableMouseCapture)?;
                 }
-                terminal::enable_raw_mode()?;
+                self.dest.execute(event::EnableBracketedPaste)?;
+                self.bracketed_paste_enabled = true;
+                if let Err(error) = terminal::enable_raw_mode() {
+                    let _ = self.disable_bracketed_paste();
+                    let _ = self.restore_windows_input_mode();
+                    return Err(error);
+                }
             } else {
+                self.disable_bracketed_paste()?;
                 terminal::disable_raw_mode()?;
+                self.restore_windows_input_mode()?;
                 if self.mouse_capture {
                     self.dest.execute(event::DisableMouseCapture)?;
                 }
-                if self.enabled_keyboard_enhancement {
-                    self.dest.execute(event::PopKeyboardEnhancementFlags)?;
-                }
+                self.disable_keyboard_enhancement()?;
             }
             self.raw_mode_enabled = raw_mode_enabled;
+        }
+        Ok(())
+    }
+
+    fn enable_keyboard_enhancement(&mut self) -> io::Result<()> {
+        if self.enabled_keyboard_enhancement || !should_enable_keyboard_enhancement() {
+            return Ok(());
+        }
+
+        write!(self.dest, "\x1b[>{}u", keyboard_enhancement_flags().bits())?;
+        self.dest.flush()?;
+        self.enabled_keyboard_enhancement = true;
+        debug_terminal_note(format_args!(
+            "keyboard enhancement enabled: flags={}",
+            keyboard_enhancement_flags().bits()
+        ));
+        Ok(())
+    }
+
+    fn disable_keyboard_enhancement(&mut self) -> io::Result<()> {
+        if !self.enabled_keyboard_enhancement {
+            return Ok(());
+        }
+
+        self.dest.write_all(b"\x1b[<1u")?;
+        self.dest.flush()?;
+        self.enabled_keyboard_enhancement = false;
+        debug_terminal_note(format_args!("keyboard enhancement disabled"));
+        Ok(())
+    }
+
+    fn disable_bracketed_paste(&mut self) -> io::Result<()> {
+        if self.bracketed_paste_enabled {
+            self.dest.execute(event::DisableBracketedPaste)?;
+            self.bracketed_paste_enabled = false;
+        }
+        Ok(())
+    }
+
+    fn disable_windows_selection_interception(&mut self) -> io::Result<()> {
+        #[cfg(windows)]
+        {
+            if self.previous_windows_input_mode.is_none() {
+                self.previous_windows_input_mode =
+                    windows_console_input::disable_selection_interception()?;
+            }
+        }
+        Ok(())
+    }
+
+    fn restore_windows_input_mode(&mut self) -> io::Result<()> {
+        #[cfg(windows)]
+        {
+            let Some(mode) = self.previous_windows_input_mode.take() else {
+                return Ok(());
+            };
+            windows_console_input::restore(mode)?;
         }
         Ok(())
     }
@@ -322,6 +377,136 @@ impl Drop for StdTerminal<'_> {
             let _ = self.dest.write_all(b"\r\n");
         }
         let _ = self.dest.execute(cursor::Show);
+    }
+}
+
+fn terminal_event_from_crossterm(event: Event) -> Option<TerminalEvent> {
+    debug_terminal_event(&event);
+    match event {
+        Event::Key(event) => Some(TerminalEvent::Key(KeyEvent {
+            code: event.code,
+            modifiers: event.modifiers,
+            kind: event.kind,
+        })),
+        Event::Paste(text) => Some(TerminalEvent::Paste(text)),
+        Event::Mouse(event) => Some(TerminalEvent::FullscreenMouse(FullscreenMouseEvent {
+            modifiers: event.modifiers,
+            column: event.column,
+            row: event.row,
+            kind: event.kind,
+        })),
+        Event::Resize(width, height) => Some(TerminalEvent::Resize(width, height)),
+        _ => None,
+    }
+}
+
+fn keyboard_enhancement_flags() -> event::KeyboardEnhancementFlags {
+    event::KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+        | event::KeyboardEnhancementFlags::REPORT_EVENT_TYPES
+}
+
+fn should_enable_keyboard_enhancement() -> bool {
+    terminal::supports_keyboard_enhancement().unwrap_or(false)
+        || env_flag_enabled(SPECTACULAR_FORCE_KEYBOARD_ENHANCEMENT_ENV)
+        || should_enable_windows_terminal_keyboard_enhancement()
+}
+
+fn should_enable_windows_terminal_keyboard_enhancement() -> bool {
+    cfg!(windows)
+        && (std::env::var_os("WT_SESSION").is_some()
+            || std::env::var_os("WEZTERM_EXECUTABLE").is_some()
+            || std::env::var_os("ALACRITTY_LOG").is_some()
+            || std::env::var_os("KITTY_WINDOW_ID").is_some())
+}
+
+fn debug_terminal_event(event: &Event) {
+    debug_terminal_note(format_args!("event: {event:?}"));
+}
+
+fn debug_terminal_note(args: fmt::Arguments<'_>) {
+    if !env_flag_enabled(SPECTACULAR_KEY_DEBUG_ENV) {
+        return;
+    }
+
+    let path = std::env::temp_dir().join(SPECTACULAR_KEY_DEBUG_FILE);
+    let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    else {
+        return;
+    };
+    let _ = writeln!(file, "{args}");
+}
+
+fn env_flag_enabled(name: &str) -> bool {
+    std::env::var(name).is_ok_and(|value| {
+        !value.is_empty() && !matches!(value.to_ascii_lowercase().as_str(), "0" | "false" | "off")
+    })
+}
+
+#[cfg(windows)]
+mod windows_console_input {
+    use std::{ffi::c_void, io};
+
+    const STD_INPUT_HANDLE: u32 = -10i32 as u32;
+    const ENABLE_QUICK_EDIT_MODE: u32 = 0x0040;
+    const ENABLE_EXTENDED_FLAGS: u32 = 0x0080;
+
+    type Handle = *mut c_void;
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetStdHandle(n_std_handle: u32) -> Handle;
+        fn GetConsoleMode(h_console_handle: Handle, lp_mode: *mut u32) -> i32;
+        fn SetConsoleMode(h_console_handle: Handle, dw_mode: u32) -> i32;
+    }
+
+    /// Disables console text-selection interception so modified arrows reach the app.
+    pub(super) fn disable_selection_interception() -> io::Result<Option<u32>> {
+        let Some((handle, mode)) = input_mode()? else {
+            return Ok(None);
+        };
+        let next_mode = (mode | ENABLE_EXTENDED_FLAGS) & !ENABLE_QUICK_EDIT_MODE;
+        if next_mode != mode && unsafe { SetConsoleMode(handle, next_mode) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        super::debug_terminal_note(format_args!(
+            "windows input mode: original=0x{mode:08x}, active=0x{next_mode:08x}"
+        ));
+        Ok(Some(mode))
+    }
+
+    /// Restores the console input mode captured before raw-mode terminal ownership.
+    pub(super) fn restore(mode: u32) -> io::Result<()> {
+        let Some((handle, _)) = input_mode()? else {
+            return Ok(());
+        };
+        if unsafe { SetConsoleMode(handle, mode) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        super::debug_terminal_note(format_args!(
+            "windows input mode restored: mode=0x{mode:08x}"
+        ));
+        Ok(())
+    }
+
+    fn input_mode() -> io::Result<Option<(Handle, u32)>> {
+        let handle = unsafe { GetStdHandle(STD_INPUT_HANDLE) };
+        if handle.is_null() || handle == invalid_handle_value() {
+            return Ok(None);
+        }
+
+        let mut mode = 0;
+        if unsafe { GetConsoleMode(handle, &mut mode) } == 0 {
+            return Ok(None);
+        }
+
+        Ok(Some((handle, mode)))
+    }
+
+    fn invalid_handle_value() -> Handle {
+        -1isize as Handle
     }
 }
 
@@ -640,6 +825,30 @@ mod tests {
         assert!(!terminal.is_raw_mode_enabled());
         let canvas = Canvas::new(10, 1);
         terminal.write_canvas(&canvas).unwrap();
+    }
+
+    #[test]
+    fn test_terminal_event_from_crossterm_maps_paste_events() {
+        let event = terminal_event_from_crossterm(Event::Paste("pasted text".to_owned()));
+
+        assert!(matches!(event, Some(TerminalEvent::Paste(text)) if text == "pasted text"));
+    }
+
+    #[test]
+    fn test_terminal_event_from_crossterm_maps_key_events() {
+        let event = terminal_event_from_crossterm(Event::Key(crossterm::event::KeyEvent::new(
+            KeyCode::Char('v'),
+            KeyModifiers::CONTROL,
+        )));
+
+        assert!(matches!(
+            event,
+            Some(TerminalEvent::Key(KeyEvent {
+                code: KeyCode::Char('v'),
+                modifiers: KeyModifiers::CONTROL,
+                ..
+            }))
+        ));
     }
 
     fn render_canvas_to_vt(canvas: &Canvas, cols: usize, rows: usize) -> avt::Vt {

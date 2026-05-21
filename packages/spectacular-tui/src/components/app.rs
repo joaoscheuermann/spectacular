@@ -1,6 +1,7 @@
 use crate::components::{
-    footer_render_line, prompt_render_lines, prompt_render_lines_with_width,
-    transcript_render_lines, working_render_line, Footer, Prompt, Transcript, Working,
+    footer_render_line, input_notice_render_line, prompt_render_lines,
+    prompt_render_lines_with_width, transcript_render_lines, working_render_line, Footer,
+    InputNotice, Prompt, Transcript, Working,
 };
 use crate::render::{RenderLine, RenderStyle};
 use crate::state::State;
@@ -26,6 +27,7 @@ pub fn App(mut hooks: Hooks, props: &AppProps) -> impl Into<AnyElement<'static>>
         Transcript(state: state.clone(), capacity: transcript_capacity, width: width)
         #(working_render_line(&state).is_some().then_some(element!(Working(state: state.clone()))))
         View(flex_direction: FlexDirection::Column, width: 100pct, flex_shrink: 0.0) {
+            #(input_notice_render_line(&state).is_some().then_some(element!(InputNotice(state: state.clone()))))
             Prompt(state: state.clone(), width: width)
             Footer(state: state.clone())
         }
@@ -39,6 +41,9 @@ pub fn app_render_lines(state: &State) -> Vec<RenderLine> {
     if let Some(working) = working_render_line(state) {
         lines.push(working);
         lines.push(RenderLine::styled("", RenderStyle::Text));
+    }
+    if let Some(notice) = input_notice_render_line(state) {
+        lines.push(notice);
     }
     lines.extend(prompt_render_lines(state));
     lines.push(RenderLine::styled("", RenderStyle::Text));
@@ -58,9 +63,15 @@ fn transcript_capacity_rows(state: &State, height: u16, width: Option<u16>) -> u
     } else {
         0
     };
+    let notice_rows: usize = if input_notice_render_line(state).is_some() {
+        1
+    } else {
+        0
+    };
     let chrome_rows = prompt_render_lines_with_width(state, width)
         .len()
         .saturating_add(working_rows)
+        .saturating_add(notice_rows)
         .saturating_add(2);
     let chrome_rows = u16::try_from(chrome_rows).unwrap_or(u16::MAX);
 

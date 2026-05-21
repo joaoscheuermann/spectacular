@@ -24,11 +24,16 @@ use crate::transcript::{
 /// Applies one TUI action to state without performing IO or runtime side effects.
 pub fn reduce(state: &mut State, action: ChatTuiAction) {
     match action {
+        ChatTuiAction::ExitRequested => {
+            state.exit_requested = true;
+        }
         ChatTuiAction::PromptChanged(mut prompt) => {
+            state.input_notice = None;
             ensure_prompt_cursor_visible(&mut prompt, state.prompt_layout);
             state.session.prompt = prompt;
         }
         ChatTuiAction::SubmitPrompt { id, text } => {
+            state.input_notice = None;
             upsert_user_prompt(state, id, text);
             state.session.prompt = crate::session::PromptState::empty();
         }
@@ -38,9 +43,11 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
             }
         }
         ChatTuiAction::SelectionPromptChanged(selection) => {
+            state.input_notice = None;
             state.selection = selection;
         }
         ChatTuiAction::SelectionPromptSubmitted(_) | ChatTuiAction::SelectionPromptCancelled => {
+            state.input_notice = None;
             state.selection = None;
         }
         ChatTuiAction::CommandsLoaded(commands) => {
@@ -216,6 +223,12 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
         }
         ChatTuiAction::NoticeReported { message } => {
             append_notice(state, message);
+        }
+        ChatTuiAction::InputNoticeReported { message } => {
+            state.input_notice = Some(message);
+        }
+        ChatTuiAction::InputNoticeCleared => {
+            state.input_notice = None;
         }
         ChatTuiAction::RuntimeSelectionChanged(runtime) => {
             state.runtime = runtime;

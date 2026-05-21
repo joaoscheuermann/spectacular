@@ -1,10 +1,12 @@
 use super::*;
 use crate::chat::commands::test_support::NoopRunner;
+use crate::chat::prompt::SelectionPromptChoice;
 use crate::chat::RuntimeSelection;
 use spectacular_agent::AgentEvent;
 use spectacular_config::ReasoningLevel;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::sync::mpsc;
 
 /// Verifies that adapter executes registered command success.
 #[tokio::test]
@@ -206,6 +208,110 @@ fn context_render_history_accepts_transient_history() {
     let context = ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
 
     context.render_history(&table);
+}
+
+/// Verifies a TUI command context round-trips any command-owned selection request.
+#[tokio::test]
+async fn context_tui_selection_prompt_round_trips_command_request() {
+    let mut model = test_model();
+    let renderer = Renderer::default();
+    let tools = ToolStorage::default();
+    let runner = NoopRunner;
+    let mut control = ChatCommandControl::default();
+    let (selection_sender, mut selection_receiver) = mpsc::unbounded_channel();
+    selection_sender
+        .send(spectacular_tui::Intent::SelectionPromptSubmitted(
+            spectacular_tui::SelectionPromptAnswer {
+                choice: spectacular_tui::SelectionPromptChoice::Custom("typed".to_owned()),
+                comment: Some("note".to_owned()),
+            },
+        ))
+        .unwrap();
+    let mut actions = Vec::new();
+
+    let answer = {
+        let mut dispatch = |action| actions.push(action);
+        let context = ChatCommandContext::new_tui(
+            &mut model,
+            &renderer,
+            &tools,
+            &runner,
+            &mut control,
+            None,
+            &mut dispatch,
+            &mut selection_receiver,
+        );
+        context
+            .ask(
+                SelectionPromptRequest::new("Pick one", "Choose carefully", vec!["alpha".into()])
+                    .with_inputs(true, true),
+            )
+            .await
+            .unwrap()
+    };
+
+    assert_eq!(
+        answer,
+        SelectionPromptAnswer {
+            choice: SelectionPromptChoice::Custom("typed".to_owned()),
+            comment: Some("note".to_owned()),
+        }
+    );
+    assert!(matches!(
+        &actions[0],
+        spectacular_tui::ChatTuiAction::SelectionPromptChanged(Some(selection))
+            if selection.title == "Pick one"
+                && selection.description == "Choose carefully"
+                && selection.options == vec!["alpha".to_owned()]
+                && selection.allow_custom
+                && selection.allow_comment
+    ));
+    assert!(matches!(
+        actions.last(),
+        Some(spectacular_tui::ChatTuiAction::SelectionPromptSubmitted(_))
+    ));
+}
+
+/// Verifies TUI selection cancellation maps to the command prompt exit contract.
+#[tokio::test]
+async fn context_tui_selection_cancel_returns_exit() {
+    let mut model = test_model();
+    let renderer = Renderer::default();
+    let tools = ToolStorage::default();
+    let runner = NoopRunner;
+    let mut control = ChatCommandControl::default();
+    let (selection_sender, mut selection_receiver) = mpsc::unbounded_channel();
+    selection_sender
+        .send(spectacular_tui::Intent::SelectionPromptCancelled)
+        .unwrap();
+    let mut actions = Vec::new();
+
+    let result = {
+        let mut dispatch = |action| actions.push(action);
+        let context = ChatCommandContext::new_tui(
+            &mut model,
+            &renderer,
+            &tools,
+            &runner,
+            &mut control,
+            None,
+            &mut dispatch,
+            &mut selection_receiver,
+        );
+        context
+            .ask(SelectionPromptRequest::new(
+                "Pick one",
+                "",
+                vec!["alpha".into()],
+            ))
+            .await
+    };
+
+    assert!(matches!(result, Err(ChatError::Exit)));
+    assert!(matches!(
+        actions.last(),
+        Some(spectacular_tui::ChatTuiAction::SelectionPromptCancelled)
+    ));
 }
 
 /// Builds a chat model configured for command tests.

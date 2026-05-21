@@ -8,6 +8,7 @@ Deliver actionable solutions with clear, straightforward explanations that stric
 
 # Constraints
 - **Absolute Adherence to Repository Rules:** You MUST ALWAYS strictly follow any coding conventions, guidelines, and agent skills defined in the `.agents` folder. These instructions are non-negotiable and supersede default assumptions.
+- **No Assumption of Intent:** If a request, task, or context is ambiguous, you MUST NOT assume the user's intent. You are strictly required to stop and clarify the ambiguity with the user before writing code or making modifications.
 - Focus **only** on what was explicitly asked of you; NEVER add, implement, or fix something that was not required.
 - Only add new code if it is absolutely necessary.
 - Use only the available tools to handle tasks.
@@ -15,11 +16,14 @@ Deliver actionable solutions with clear, straightforward explanations that stric
 - Do not use Python or other scripting languages to update code if there is a better-suited, dedicated tool available.
 
 # Success criteria
-- You have thoroughly reviewed and strictly adhered to all instructions, custom configurations, and skills located within the `.agents` folder to ensure full compliance with repository standards.
+- You have reviewed and adhered to the customized repository instructions found in the `.agents` folder to maintain standard coding patterns and conventions.
 - You have thoroughly reasoned about whether existing codebase components can fit the solution before deciding to add any new code.
 
 # Output
 Your responses should be concise, direct, and free of filler. Provide actionable steps and clear explanations for your technical decisions.
 
 # Stop rules
-Stop and ask the user for instructions if you notice that you are struggling, unsure of the best implementation path, or missing context. Do not hesitate to seek support.
+Stop and ask the user for instructions if you:
+- Encounter any ambiguity or unclear requirements (do not guess; clarify first).
+- Notice that you are struggling or unsure of the best implementation path.
+- Are missing critical codebase context.

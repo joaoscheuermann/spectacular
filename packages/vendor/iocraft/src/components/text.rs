@@ -44,6 +44,9 @@ pub struct TextProps {
     /// The color to make the text.
     pub color: Option<Color>,
 
+    /// The background color to make the text.
+    pub background_color: Option<Color>,
+
     /// The content of the text.
     pub content: String,
 
@@ -243,6 +246,7 @@ impl Component for Text {
     ) {
         self.style = CanvasTextStyle {
             color: props.color,
+            background_color: props.background_color,
             weight: props.weight,
             underline: props.decoration == TextDecoration::Underline,
             italic: props.italic,

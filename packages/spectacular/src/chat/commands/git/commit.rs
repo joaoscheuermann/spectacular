@@ -134,8 +134,8 @@ pub fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatCo
         }
 
         // 4. Show generated message
-        context.renderer.blank_line();
-        let commit_message = match select_commit_message(&context, &commit_message) {
+        context.blank_line();
+        let commit_message = match select_commit_message(&context, &commit_message).await {
             Ok(Some(message)) => message,
             Ok(None) => {
                 let _ = lifecycle.finish(CommandStatus::Cancelled, "commit cancelled");
@@ -175,11 +175,14 @@ pub fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatCo
     })
 }
 
-fn select_commit_message(
+async fn select_commit_message(
     context: &ChatCommandContext<'_>,
     generated_message: &str,
 ) -> Result<Option<String>, ChatError> {
-    match context.ask(commit_message_selection_request(generated_message)) {
+    match context
+        .ask(commit_message_selection_request(generated_message))
+        .await
+    {
         Ok(answer) => commit_message_from_selection(answer, generated_message),
         Err(ChatError::Exit) => Ok(None),
         Err(error) => Err(error),
@@ -266,7 +269,7 @@ impl<'a, 'context> CommitLifecycle<'a, 'context> {
                 working_directory: working_directory(),
             }))
             .map_err(|error| error.to_string())?;
-        self.context.renderer.command_start("Git commit", &command);
+        self.context.command_start("Git commit", &command);
         Ok(())
     }
 
@@ -322,7 +325,7 @@ impl<'a, 'context> CommitLifecycle<'a, 'context> {
                 sequence: self.sequence,
             }))
             .map_err(|error| error.to_string())?;
-        self.context.renderer.command_delta(&content);
+        self.context.command_delta(&content);
         self.persisted_delta_bytes += bytes;
         self.persisted_delta_events += 1;
         Ok(())
@@ -337,7 +340,7 @@ impl<'a, 'context> CommitLifecycle<'a, 'context> {
                 summary: summary.clone(),
             }))
             .map_err(|error| error.to_string())?;
-        self.context.renderer.command_finished(status, &summary);
+        self.context.command_finished(status, &summary);
         Ok(())
     }
 }

@@ -3,6 +3,7 @@ mod command_event;
 mod commands;
 mod config_mutation;
 mod controller;
+mod display;
 mod model;
 mod paste_burst;
 mod prompt;
@@ -11,10 +12,7 @@ mod renderer;
 mod runner;
 mod session;
 mod title;
-#[allow(dead_code)]
-mod tui_adapter;
-mod tui_adapter_display;
-mod tui_runtime;
+mod tui;
 mod worktree;
 
 use crate::chat::renderer::Renderer;
@@ -75,7 +73,7 @@ async fn run_legacy(debug_logger: LlmDebugLogger) -> Result<(), ChatError> {
 
 /// Runs the experimental IOCraft TUI chat loop.
 async fn run_tui(debug_logger: LlmDebugLogger) -> Result<(), ChatError> {
-    tui_runtime::run_iocraft_tui(debug_logger).await
+    tui::run(debug_logger).await
 }
 
 pub(crate) struct ChatBootstrap {

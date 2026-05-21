@@ -1,4 +1,5 @@
 use super::*;
+use crate::chat::RuntimeSelection;
 use spectacular_agent::AgentEvent;
 use spectacular_commands::{Command, CommandControl, CommandRegistry};
 use spectacular_config::ProviderAuthMode;
@@ -13,7 +14,8 @@ use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
 
-mod tui_adapter_display;
+#[path = "tui/display.rs"]
+mod display;
 
 /// Verifies that an agent start event maps to the TUI running boundary.
 #[test]

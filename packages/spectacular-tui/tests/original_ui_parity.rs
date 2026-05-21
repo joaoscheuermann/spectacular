@@ -211,7 +211,7 @@ fn working_spinner_and_completed_summary_match_original_text() {
 
     let output = render(&state);
 
-    assert!(output.contains("⠙ Working (CTRL + C to stop)"));
+    assert!(output.contains("⠙ Working (Esc to cancel)"));
     assert!(!output.contains("Status: running"));
 
     reduce(
@@ -228,11 +228,27 @@ fn working_spinner_and_completed_summary_match_original_text() {
 }
 
 #[test]
-fn idle_ctrl_c_clears_non_empty_prompt_before_requesting_exit() {
+fn input_notice_renders_near_prompt_without_transcript_item() {
+    let mut state = state();
+    reduce(
+        &mut state,
+        ChatTuiAction::InputNoticeReported {
+            message: "Use Ctrl+V to paste".to_owned(),
+        },
+    );
+
+    let output = render(&state);
+
+    assert!(output.contains("  Use Ctrl+V to paste\n>"));
+    assert!(state.session.transcript.is_empty());
+}
+
+#[test]
+fn idle_escape_clears_non_empty_prompt_before_requesting_exit() {
     let mut state = state();
     state.session.prompt = PromptState::from_text("draft");
 
-    let event_effects = effects(&state, key(KeyCode::Char('c'), KeyModifiers::CONTROL));
+    let event_effects = effects(&state, key(KeyCode::Esc, KeyModifiers::empty()));
 
     assert_eq!(
         event_effects,
@@ -248,7 +264,7 @@ fn idle_ctrl_c_clears_non_empty_prompt_before_requesting_exit() {
             EventEffect::RequestExit => panic!("expected prompt clear"),
         },
     );
-    let event_effects = effects(&state, key(KeyCode::Char('c'), KeyModifiers::CONTROL));
+    let event_effects = effects(&state, key(KeyCode::Esc, KeyModifiers::empty()));
 
     assert_eq!(event_effects, vec![EventEffect::RequestExit]);
 }

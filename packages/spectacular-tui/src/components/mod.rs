@@ -1,5 +1,6 @@
 mod app;
 mod footer;
+mod input_notice;
 mod prompt;
 mod transcript;
 mod working;
@@ -9,6 +10,7 @@ pub use footer::{
     footer_left_render_line, footer_render_line, footer_right_render_line, footer_text,
     turn_usage_text, usage_text, Footer, FooterProps,
 };
+pub use input_notice::{input_notice_render_line, InputNotice, InputNoticeProps};
 pub use prompt::{
     prompt_lines, prompt_render_lines, prompt_render_lines_with_width, Prompt, PromptProps,
 };

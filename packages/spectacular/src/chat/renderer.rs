@@ -1,13 +1,15 @@
 mod banner;
 mod directory;
 mod footer;
-mod json_preview;
 mod reasoning;
 mod style;
 mod terminal_output;
 mod token_usage;
-mod tool;
 mod working_line;
+#[cfg(test)]
+mod tool {
+    pub(crate) use crate::chat::display::{format_tool_call_parts, ToolStatus};
+}
 #[cfg(test)]
 mod tests {
     include!(concat!(
@@ -17,6 +19,7 @@ mod tests {
 }
 
 use crate::chat::command_event::{CommandEvent, CommandStatus};
+pub(crate) use crate::chat::display::{ToolCallView, ToolResultView};
 use crate::chat::model::HistoryTableModel;
 use crate::chat::runner::render_agent_event;
 use crate::chat::session::ChatRecord;
@@ -36,11 +39,8 @@ use style::{assistant_style, command_style, error_style, success_style, warning_
 pub(crate) use style::{
     command_output_style, dim_style, paint, selection_style, title_style, user_style,
 };
-pub(crate) use terminal_output::{
-    format_prompt_footer, has_visible_assistant_text, styled_tool_output_lines, ToolOutputLineStyle,
-};
+pub(crate) use terminal_output::{format_prompt_footer, has_visible_assistant_text};
 use terminal_output::{format_tool_call_view, print_tool_output};
-pub use tool::{ToolCallView, ToolResultView, ToolStatus};
 use working_line::WorkingLineState;
 
 use super::RuntimeSelection;

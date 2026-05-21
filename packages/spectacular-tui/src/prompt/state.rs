@@ -290,11 +290,16 @@ impl PromptState {
         self.delete_selection_as_edit()
     }
 
-    /// Copies selected text into the prompt kill buffer and returns it.
-    pub fn copy_selection(&mut self) -> Option<String> {
+    /// Returns selected text without changing prompt-owned kill buffer state.
+    pub fn selected_text(&self) -> Option<String> {
         let text = self.text();
         let range = self.selection_range()?;
-        let value = text[range].to_owned();
+        Some(text[range].to_owned())
+    }
+
+    /// Copies selected text into the prompt kill buffer and returns it.
+    pub fn copy_selection(&mut self) -> Option<String> {
+        let value = self.selected_text()?;
         self.kill_buffer = value.clone();
         Some(value)
     }

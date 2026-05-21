@@ -151,12 +151,25 @@ fn has_scrollbar_marker(canvas: &Canvas, x: usize, y: usize) -> bool {
     })
 }
 
-/// Returns true when a rendered cell uses inverted colors.
-fn has_inverted_cell(canvas: &Canvas, x: usize, y: usize) -> bool {
-    canvas
-        .cell(x, y)
-        .and_then(|cell| cell.text_style())
-        .is_some_and(|style| style.invert)
+/// Returns true when a rendered cell uses the explicit selection colors.
+fn has_selection_colors(canvas: &Canvas, x: usize, y: usize) -> bool {
+    canvas.cell(x, y).is_some_and(|cell| {
+        cell.text_style().is_some_and(|style| {
+            style.color
+                == Some(Color::Rgb {
+                    r: 15,
+                    g: 23,
+                    b: 42,
+                })
+                && style.background_color
+                    == Some(Color::Rgb {
+                        r: 240,
+                        g: 240,
+                        b: 240,
+                    })
+                && !style.invert
+        })
+    })
 }
 
 /// Verifies prompt line breaks render as separate IOCraft terminal rows.
@@ -170,7 +183,7 @@ fn multiline_prompt_renders_explicit_rows_on_canvas() {
 
     assert_eq!(lines[0], "> first");
     assert_eq!(lines[1], "  second ");
-    assert!(has_inverted_cell(&canvas, 8, 1));
+    assert!(has_selection_colors(&canvas, 8, 1));
     assert_eq!(lines[2], "");
     assert!(lines[3].contains("/workspace/spectacular"));
 }
@@ -192,7 +205,7 @@ fn short_transcript_starts_at_top_without_bottom_anchoring() {
     assert_eq!(lines[0], "top transcript row");
     assert_eq!(lines[1], "");
     assert_eq!(lines[2], ">  What we are going to build today?");
-    assert!(has_inverted_cell(&canvas, 2, 2));
+    assert!(has_selection_colors(&canvas, 2, 2));
     assert_eq!(lines[3], "");
     assert!(lines[4].contains("/workspace/spectacular"));
     assert!(lines[5..].iter().all(String::is_empty));
@@ -302,7 +315,7 @@ fn no_wrap_transcript_rows_do_not_create_bottom_gap_at_tail() {
     assert!(lines[1].starts_with("output 3"));
     assert_eq!(lines[2].trim_end_matches(['│', '┃']).trim_end(), "");
     assert_eq!(lines[3], ">  What we are going to build today?");
-    assert!(has_inverted_cell(&canvas, 2, 3));
+    assert!(has_selection_colors(&canvas, 2, 3));
     assert_eq!(lines[4], "");
     assert!(lines[5].contains("/workspace/spectacular"));
 }
@@ -348,8 +361,8 @@ fn transcript_overflow_is_bounded_above_working_prompt_and_footer() {
 
     let output = render_app(&state);
 
-    assert!(output.contains("Working (CTRL + C to stop)"));
-    assert_eq!(occurrences(&output, "Working (CTRL + C to stop)"), 1);
+    assert!(output.contains("Working (Esc to cancel)"));
+    assert_eq!(occurrences(&output, "Working (Esc to cancel)"), 1);
     assert_eq!(occurrences(&output, "> draft prompt"), 1);
     assert!(output.contains("/workspace/spectacular"));
     assert!(output.contains("GPT 5.1 (high)"));
@@ -387,7 +400,7 @@ fn streaming_assistant_updates_remain_bounded_with_fixed_chrome() {
 
     let output = render_app(&state);
 
-    assert_eq!(occurrences(&output, "Working (CTRL + C to stop)"), 1);
+    assert_eq!(occurrences(&output, "Working (Esc to cancel)"), 1);
     assert_eq!(occurrences(&output, "> draft prompt"), 1);
     assert_eq!(occurrences(&output, "/workspace/spectacular"), 1);
     assert!(output.contains("streaming assistant response"));

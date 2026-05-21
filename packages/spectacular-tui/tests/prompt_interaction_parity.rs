@@ -167,15 +167,15 @@ fn prompt_escape_clears_contexts_like_original() {
 }
 
 #[test]
-fn prompt_ctrl_c_idle_clear_then_exit_matches_original() {
+fn prompt_escape_idle_clear_then_exit_matches_original() {
     let mut state = state();
     state.session.prompt = PromptState::from_text("draft");
 
-    press(&mut state, KeyCode::Char('c'), KeyModifiers::CONTROL);
+    press(&mut state, KeyCode::Esc, KeyModifiers::empty());
     assert_eq!(state.session.prompt, PromptState::empty());
 
     assert_eq!(
-        effects(&state, key(KeyCode::Char('c'), KeyModifiers::CONTROL)),
+        effects(&state, key(KeyCode::Esc, KeyModifiers::empty())),
         vec![EventEffect::RequestExit]
     );
 }

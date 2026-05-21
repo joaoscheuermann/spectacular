@@ -15,6 +15,9 @@ pub struct MixedTextContent {
     /// The color to make the text.
     pub color: Option<Color>,
 
+    /// The background color to make the text.
+    pub background_color: Option<Color>,
+
     /// The weight of the text.
     pub weight: Weight,
 
@@ -40,6 +43,12 @@ impl MixedTextContent {
     /// Returns a new [`MixedTextContent`] with the given color.
     pub fn color(mut self, color: Color) -> Self {
         self.color = Some(color);
+        self
+    }
+
+    /// Returns a new [`MixedTextContent`] with the given background color.
+    pub fn background_color(mut self, background_color: Color) -> Self {
+        self.background_color = Some(background_color);
         self
     }
 
@@ -176,6 +185,7 @@ impl Component for MixedText {
                 let content = &self.contents[segment.index];
                 let style = CanvasTextStyle {
                     color: content.color,
+                    background_color: content.background_color,
                     weight: content.weight,
                     underline: content.decoration == TextDecoration::Underline,
                     italic: content.italic,

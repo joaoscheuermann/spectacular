@@ -1,7 +1,9 @@
 use crate::action::{ChatTuiAction, SelectionPromptAnswer};
 use crate::ids::TranscriptItemId;
 use crate::reducer::reduce;
-use crate::runtime::{effects, EventEffect};
+use crate::runtime::{
+    effects_with_clipboard_and_paste, system_clipboard, ClipboardService, EventEffect, PasteBurst,
+};
 use crate::state::State;
 use iocraft::prelude::TerminalEvent;
 use tokio::sync::mpsc;
@@ -22,16 +24,33 @@ pub enum Intent {
 pub struct Shell {
     state: State,
     intent_sender: mpsc::Sender<Intent>,
+    clipboard: Option<Box<dyn ClipboardService>>,
+    paste_burst: PasteBurst,
 }
 
 impl Shell {
     /// Creates a runtime shell and the receiver for emitted user intents.
     pub fn new(state: State) -> (Self, mpsc::Receiver<Intent>) {
+        Self::with_clipboard(state, system_clipboard())
+    }
+
+    /// Creates a runtime shell without opening the platform clipboard.
+    pub(crate) fn new_without_clipboard(state: State) -> (Self, mpsc::Receiver<Intent>) {
+        Self::with_clipboard(state, None)
+    }
+
+    /// Creates a runtime shell with caller-owned clipboard access.
+    fn with_clipboard(
+        state: State,
+        clipboard: Option<Box<dyn ClipboardService>>,
+    ) -> (Self, mpsc::Receiver<Intent>) {
         let (intent_sender, intent_receiver) = mpsc::channel(RUNTIME_INTENT_BUFFER);
         (
             Self {
                 state,
                 intent_sender,
+                clipboard,
+                paste_burst: PasteBurst::default(),
             },
             intent_receiver,
         )
@@ -47,9 +66,34 @@ impl Shell {
         reduce(&mut self.state, action);
     }
 
+    /// Replaces the clipboard service used by local copy/paste handling.
+    pub fn set_clipboard(&mut self, clipboard: Option<Box<dyn ClipboardService>>) {
+        self.clipboard = clipboard;
+    }
+
     /// Converts one terminal event into reducer state and runtime intents.
     pub fn apply_terminal_event(&mut self, event: TerminalEvent) {
-        for effect in effects(&self.state, event) {
+        let effects = {
+            let clipboard = self
+                .clipboard
+                .as_mut()
+                .map(|value| value.as_mut() as &mut dyn ClipboardService);
+            effects_with_clipboard_and_paste(&self.state, event, clipboard, &mut self.paste_burst)
+        };
+        for effect in effects {
+            self.apply_event_effect(effect);
+        }
+    }
+
+    /// Converts one terminal event using caller-owned clipboard and paste-burst state.
+    pub(crate) fn apply_terminal_event_with_clipboard_and_paste(
+        &mut self,
+        event: TerminalEvent,
+        clipboard: Option<&mut dyn ClipboardService>,
+        paste_burst: &mut PasteBurst,
+    ) {
+        let effects = effects_with_clipboard_and_paste(&self.state, event, clipboard, paste_burst);
+        for effect in effects {
             self.apply_event_effect(effect);
         }
     }

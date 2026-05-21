@@ -1,18 +1,16 @@
-use crate::chat::command_event::CommandEvent;
-use crate::chat::tui_adapter_display::{
+use super::display::{
     command_finished_action, command_output_action, command_started_action, ToolDisplayAdapter,
 };
-use crate::chat::RuntimeSelection;
+use crate::chat::command_event::CommandEvent;
+#[cfg(test)]
+pub(crate) use crate::chat::tui::state::{display_metadata_action, runtime_selection_action};
 use spectacular_agent::{AgentEvent, ToolStorage};
 use spectacular_commands::CommandRegistry;
 use spectacular_llms::FinishReason;
 use spectacular_tui::{
     ChatTuiAction, CommandDescriptor, ContextTokenUsage as TuiContextTokenUsage,
-    DisplayMetadata as TuiDisplayMetadata, ProviderUsageMetadata as TuiProviderUsageMetadata,
-    ReasoningLevel as TuiReasoningLevel, RuntimeSelection as TuiRuntimeSelection, SessionId,
-    TranscriptItemId,
+    ProviderUsageMetadata as TuiProviderUsageMetadata, TranscriptItemId,
 };
-use std::path::Path;
 
 /// Converts runtime and agent events into pure TUI reducer actions.
 #[derive(Default)]
@@ -29,6 +27,7 @@ impl TuiEventAdapter {
     }
 
     /// Converts one agent event into zero or more TUI actions without rendering terminal output.
+    #[cfg(test)]
     pub(crate) fn adapt_agent_event(&mut self, event: &AgentEvent) -> Vec<ChatTuiAction> {
         self.adapt_agent_event_with_tools(event, &ToolStorage::default())
     }
@@ -167,11 +166,13 @@ pub(crate) fn transcript_item_id(id: &str) -> TranscriptItemId {
 }
 
 /// Builds the TUI action for a controller-owned agent run start.
+#[cfg(test)]
 pub(crate) fn agent_started_action() -> ChatTuiAction {
     ChatTuiAction::AgentStarted
 }
 
 /// Builds the TUI action for a submitted prompt with caller-owned identity.
+#[cfg(test)]
 pub(crate) fn submit_prompt_action(
     id: impl Into<String>,
     text: impl Into<String>,
@@ -194,57 +195,11 @@ pub(crate) fn commands_loaded_action<C>(registry: &CommandRegistry<C>) -> ChatTu
     )
 }
 
-/// Projects runtime selection into the UI-safe TUI runtime model.
-pub(crate) fn runtime_selection_action(runtime: &RuntimeSelection) -> ChatTuiAction {
-    ChatTuiAction::RuntimeSelectionChanged(TuiRuntimeSelection::new(
-        runtime.provider_type.clone(),
-        runtime.provider.clone(),
-        runtime.model.clone(),
-        tui_reasoning_level(runtime.reasoning),
-        runtime.context_window_tokens.map(|value| value as u64),
-    ))
-}
-
-/// Projects header and footer metadata into UI-safe display state.
-pub(crate) fn display_metadata_action(
-    session_id: &str,
-    runtime: &RuntimeSelection,
-    current_directory: &Path,
-    usage: Option<spectacular_agent::ContextTokenUsage>,
-) -> ChatTuiAction {
-    ChatTuiAction::DisplayMetadataChanged(TuiDisplayMetadata::new(
-        runtime.provider.clone(),
-        runtime.model.clone(),
-        runtime.reasoning.to_string(),
-        current_directory.to_string_lossy(),
-        session_id,
-        usage.map(tui_context_usage),
-    ))
-}
-
 /// Builds the TUI action for switching to another session state root.
+#[cfg(test)]
 pub(crate) fn session_changed_action(session_id: &str) -> ChatTuiAction {
     ChatTuiAction::SessionChanged {
-        id: SessionId::new(session_id),
-    }
-}
-
-/// Converts runtime context token usage into TUI token usage metadata.
-fn tui_context_usage(usage: spectacular_agent::ContextTokenUsage) -> TuiContextTokenUsage {
-    TuiContextTokenUsage::new(usage.input_tokens, usage.context_window_tokens)
-}
-
-/// Maps Spectacular runtime reasoning levels into the TUI display subset.
-fn tui_reasoning_level(reasoning: spectacular_config::ReasoningLevel) -> TuiReasoningLevel {
-    match reasoning {
-        spectacular_config::ReasoningLevel::None => TuiReasoningLevel::None,
-        spectacular_config::ReasoningLevel::Minimal | spectacular_config::ReasoningLevel::Low => {
-            TuiReasoningLevel::Low
-        }
-        spectacular_config::ReasoningLevel::Medium => TuiReasoningLevel::Medium,
-        spectacular_config::ReasoningLevel::High | spectacular_config::ReasoningLevel::Xhigh => {
-            TuiReasoningLevel::High
-        }
+        id: spectacular_tui::SessionId::new(session_id),
     }
 }
 

@@ -19,12 +19,12 @@ pub use action::{
 };
 pub use components::{
     app_lines, app_render_lines, footer_left_render_line, footer_render_line,
-    footer_right_render_line, footer_text, prompt_lines, prompt_render_lines,
-    prompt_render_lines_with_width, transcript_item_layout_rows, transcript_item_lines,
-    transcript_item_render_lines, transcript_layout_item_range, transcript_layout_row_starts,
-    transcript_layout_total_rows, transcript_lines, transcript_render_lines,
-    transcript_total_render_rows, turn_usage_text, usage_text, working_render_line,
-    wrapped_layout_text_rows,
+    footer_right_render_line, footer_text, input_notice_render_line, prompt_lines,
+    prompt_render_lines, prompt_render_lines_with_width, transcript_item_layout_rows,
+    transcript_item_lines, transcript_item_render_lines, transcript_layout_item_range,
+    transcript_layout_row_starts, transcript_layout_total_rows, transcript_lines,
+    transcript_render_lines, transcript_total_render_rows, turn_usage_text, usage_text,
+    working_render_line, wrapped_layout_text_rows,
 };
 pub use fake_streaming::{
     fake_cancellation_plan, fake_failure_plan, fake_streaming_plan, fake_streaming_runtime_finding,
@@ -42,7 +42,11 @@ pub use render::{
     context_pressure_style, context_usage_style, iocraft_content, render_state_to_string,
     semantic_ansi_style, semantic_iocraft_style, RenderLine, RenderSpan, RenderStyle,
 };
-pub use runtime::{effects, timer_tick_effects, EventEffect, Intent, Shell, SPINNER_TICK_INTERVAL};
+pub use runtime::{
+    effects, effects_with_clipboard, merge_controller_state_update, system_clipboard,
+    timer_tick_effects, ClipboardError, ClipboardService, EventEffect, Intent, Root, RootProps,
+    Shell, SystemClipboard, MAX_PASTE_BYTES, SPINNER_TICK_INTERVAL,
+};
 pub use scroll::TranscriptScrollState;
 pub use session::{PromptPasteBurstState, PromptState, SelectionPromptState, Session};
 pub use spinner::SpinnerState;
@@ -58,6 +62,7 @@ pub use transcript::{
 use anstyle::{RgbColor, Style};
 
 const TEXT: RgbColor = RgbColor(229, 231, 235);
+const SELECTED_TEXT: RgbColor = RgbColor(15, 23, 42);
 const DIM: RgbColor = RgbColor(148, 163, 184);
 const COMMAND_OUTPUT: RgbColor = RgbColor(107, 114, 128);
 const GREEN: RgbColor = RgbColor(34, 197, 94);
@@ -67,7 +72,7 @@ const MAGENTA: RgbColor = RgbColor(217, 70, 239);
 const CYAN: RgbColor = RgbColor(34, 211, 238);
 const BLUE: RgbColor = RgbColor(96, 165, 250);
 const ORANGE: RgbColor = RgbColor(251, 191, 36);
-const SELECTION_BACKGROUND: RgbColor = RgbColor(51, 65, 85);
+const SELECTION_BACKGROUND: RgbColor = RgbColor(240, 240, 240);
 
 /// Applies a terminal style and reset sequence around display text.
 pub fn paint(style: Style, value: impl AsRef<str>) -> String {
@@ -155,9 +160,9 @@ pub fn low_reasoning_style() -> Style {
     BLUE.on_default()
 }
 
-/// Returns the inverse selection style for highlighted prompt text.
+/// Returns the selection style for highlighted prompt text.
 pub fn selection_style() -> Style {
-    TEXT.on(SELECTION_BACKGROUND)
+    SELECTED_TEXT.on(SELECTION_BACKGROUND)
 }
 
 /// Returns the green foreground style for added diff text.

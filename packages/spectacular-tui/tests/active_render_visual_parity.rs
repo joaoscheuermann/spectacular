@@ -399,7 +399,7 @@ fn working_line_matches_original_shape() {
 
     let output = render(&state);
 
-    assert!(output.contains("⠙ Working (CTRL + C to stop)"));
+    assert!(output.contains("⠙ Working (Esc to cancel)"));
     assert!(!output.contains('�'));
 }
 

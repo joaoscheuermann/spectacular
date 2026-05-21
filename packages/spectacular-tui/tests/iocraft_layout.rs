@@ -178,7 +178,7 @@ fn running_status_renders_working_line_spinner() {
 
     let output = render(&state);
 
-    assert!(output.contains("Working (CTRL + C to stop)"));
+    assert!(output.contains("Working (Esc to cancel)"));
     assert!(output.contains(state.spinner.current_frame()));
     assert!(!output.contains("Status: running"));
     assert!(!output.contains("activity: running tool grep"));

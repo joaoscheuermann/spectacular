@@ -12,6 +12,7 @@ use crate::chat::prompt::{SelectionPrompt, SelectionPromptAnswer, SelectionPromp
 use crate::chat::renderer::Renderer;
 use crate::chat::runner::ChatTurnRunner;
 use crate::chat::session::ChatRecord;
+use crate::chat::tui::TuiEventAdapter;
 use crate::chat::ChatError;
 pub(crate) use completion::{
     ChatCompletionContext, CompletionCommandSpec, CompletionEnvironment, CompletionFieldSpec,
@@ -21,6 +22,8 @@ use spectacular_agent::{AgentEvent, ToolStorage};
 use spectacular_commands::{
     Command, CommandControl, CommandError, CommandFuture, CommandInvocation, CommandRegistry,
 };
+use spectacular_tui::{ChatTuiAction, Intent};
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::future::Future;
 use std::path::Path;
@@ -87,11 +90,18 @@ impl Copy for ChatCommand {}
 
 pub struct ChatCommandContext<'a> {
     pub model: &'a mut ChatModel,
-    pub renderer: &'a Renderer,
+    renderer: &'a Renderer,
     pub tools: &'a ToolStorage,
     runner: &'a dyn ChatTurnRunner,
     control: &'a mut ChatCommandControl,
     prompt_footer: Option<ChatPromptFooterModel>,
+    tui: Option<TuiCommandBridge<'a>>,
+}
+
+pub(crate) struct TuiCommandBridge<'a> {
+    dispatch: RefCell<&'a mut (dyn FnMut(ChatTuiAction) + Send)>,
+    adapter: RefCell<TuiEventAdapter>,
+    selection_receiver: RefCell<&'a mut tokio::sync::mpsc::UnboundedReceiver<Intent>>,
 }
 
 impl<'a> ChatCommandContext<'a> {
@@ -126,6 +136,33 @@ impl<'a> ChatCommandContext<'a> {
             runner,
             control,
             prompt_footer,
+            tui: None,
+        }
+    }
+
+    /// Creates a command execution context that projects command output into TUI actions.
+    pub(crate) fn new_tui(
+        model: &'a mut ChatModel,
+        renderer: &'a Renderer,
+        tools: &'a ToolStorage,
+        runner: &'a dyn ChatTurnRunner,
+        control: &'a mut ChatCommandControl,
+        prompt_footer: Option<ChatPromptFooterModel>,
+        dispatch: &'a mut (dyn FnMut(ChatTuiAction) + Send),
+        selection_receiver: &'a mut tokio::sync::mpsc::UnboundedReceiver<Intent>,
+    ) -> Self {
+        Self {
+            model,
+            renderer,
+            tools,
+            runner,
+            control,
+            prompt_footer,
+            tui: Some(TuiCommandBridge {
+                dispatch: RefCell::new(dispatch),
+                adapter: RefCell::new(TuiEventAdapter::new()),
+                selection_receiver: RefCell::new(selection_receiver),
+            }),
         }
     }
 
@@ -139,47 +176,146 @@ impl<'a> ChatCommandContext<'a> {
 
     /// Appends an app-owned command lifecycle event to the active session transcript.
     pub fn append_command_event(&self, event: &CommandEvent) -> Result<(), ChatError> {
-        self.model.append_command_event(event)
+        self.model.append_command_event(event)?;
+        if let Some(tui) = &self.tui {
+            tui.dispatch_command_event(event);
+        }
+        Ok(())
     }
 
     /// Renders chat records through the injected renderer and tool storage.
     pub async fn render_records(&self, records: &[ChatRecord]) -> Result<(), ChatError> {
+        if let Some(tui) = &self.tui {
+            tui.render_records(records, self.tools);
+            return Ok(());
+        }
+
         self.renderer.render_records(records, self.tools).await
     }
 
     /// Renders a chat history table through the injected renderer.
     pub fn render_history(&self, table: &HistoryTableModel) {
+        if let Some(tui) = &self.tui {
+            tui.render_history(table);
+            return;
+        }
+
         self.renderer.history_table(table);
     }
 
     /// Clears the terminal screen through the injected renderer.
     pub fn clear_screen(&self) {
+        if let Some(tui) = &self.tui {
+            tui.dispatch(ChatTuiAction::SessionChanged {
+                id: spectacular_tui::SessionId::new(self.model.current_session_id()),
+            });
+            return;
+        }
+
         self.renderer.clear_screen();
     }
 
     /// Renders a session-created notice for a new chat session.
     pub fn session_created(&self, id: &str, directory: &Path) {
+        if let Some(tui) = &self.tui {
+            tui.dispatch(crate::chat::tui::state::session_created_action(
+                id, self.model, directory,
+            ));
+            return;
+        }
+
         self.renderer
             .session_created(id, self.model.runtime(), directory);
     }
 
     /// Renders a session-resumed notice for an existing chat session.
     pub fn session_resumed(&self, id: &str) {
+        if let Some(tui) = &self.tui {
+            tui.dispatch(ChatTuiAction::SessionChanged {
+                id: spectacular_tui::SessionId::new(id),
+            });
+            tui.dispatch(ChatTuiAction::NoticeReported {
+                message: format!("resumed session {id}"),
+            });
+            return;
+        }
+
         self.renderer.resumed(id);
     }
 
     /// Renders a low-emphasis informational command message.
     pub fn notice(&self, message: &str) {
+        if let Some(tui) = &self.tui {
+            tui.dispatch(ChatTuiAction::NoticeReported {
+                message: message.to_owned(),
+            });
+            return;
+        }
+
         self.renderer.dim(message);
     }
 
     /// Renders a successful command message.
     pub fn success(&self, message: &str) {
+        if let Some(tui) = &self.tui {
+            tui.dispatch(ChatTuiAction::SuccessReported {
+                message: message.to_owned(),
+            });
+            return;
+        }
+
         self.renderer.success(message);
     }
 
+    /// Renders a blank line when the active command output supports line-oriented spacing.
+    pub fn blank_line(&self) {
+        if self.tui.is_some() {
+            return;
+        }
+
+        self.renderer.blank_line();
+    }
+
+    /// Renders a command lifecycle start record.
+    pub fn command_start(&self, title: &str, command: &str) {
+        if self.tui.is_some() {
+            return;
+        }
+
+        self.renderer.command_start(title, command);
+    }
+
+    /// Renders a command lifecycle progress record.
+    pub fn command_delta(&self, content: &str) {
+        if self.tui.is_some() {
+            return;
+        }
+
+        self.renderer.command_delta(content);
+    }
+
+    /// Renders a command lifecycle completion record.
+    pub fn command_finished(
+        &self,
+        status: crate::chat::command_event::CommandStatus,
+        summary: &str,
+    ) {
+        if self.tui.is_some() {
+            return;
+        }
+
+        self.renderer.command_finished(status, summary);
+    }
+
     /// Renders an interactive option selection prompt and returns the user's answer.
-    pub fn ask(&self, request: SelectionPromptRequest) -> Result<SelectionPromptAnswer, ChatError> {
+    pub async fn ask(
+        &self,
+        request: SelectionPromptRequest,
+    ) -> Result<SelectionPromptAnswer, ChatError> {
+        if let Some(tui) = &self.tui {
+            return tui.ask(request).await;
+        }
+
         let prompt = SelectionPrompt::new(self.renderer, request);
         if let Some(footer) = &self.prompt_footer {
             return prompt.with_footer(footer.clone()).read_selection();
@@ -194,6 +330,10 @@ impl<'a> ChatCommandContext<'a> {
     where
         F: Future<Output = T>,
     {
+        if self.tui.is_some() {
+            return f.await;
+        }
+
         use std::pin::pin;
 
         let mut future = pin!(f);
@@ -229,6 +369,121 @@ impl<'a> ChatCommandContext<'a> {
         self.runner
             .run(self.model, self.renderer, self.tools, request)
             .await
+    }
+}
+
+impl TuiCommandBridge<'_> {
+    /// Dispatches one reducer action into the TUI controller.
+    fn dispatch(&self, action: ChatTuiAction) {
+        (self.dispatch.borrow_mut())(action);
+    }
+
+    /// Converts and dispatches one persisted command lifecycle event.
+    fn dispatch_command_event(&self, event: &CommandEvent) {
+        let actions = self.adapter.borrow_mut().adapt_command_event(event);
+        for action in actions {
+            self.dispatch(action);
+        }
+    }
+
+    /// Replays records into TUI reducer actions without writing to the terminal.
+    fn render_records(&self, records: &[ChatRecord], tools: &ToolStorage) {
+        let mut adapter = TuiEventAdapter::new();
+        for record in records {
+            let Some(event) = record.event() else {
+                continue;
+            };
+            if let Some(command_event) = event.to_command_event() {
+                for action in adapter.adapt_command_event(&command_event) {
+                    self.dispatch(action);
+                }
+                continue;
+            }
+            let Some(agent_event) = event.to_agent_event() else {
+                continue;
+            };
+            for action in adapter.adapt_agent_event_with_tools(&agent_event, tools) {
+                self.dispatch(action);
+            }
+        }
+    }
+
+    /// Renders a compact session history listing as TUI notices.
+    fn render_history(&self, table: &HistoryTableModel) {
+        self.dispatch(ChatTuiAction::NoticeReported {
+            message: "sessions".to_owned(),
+        });
+        for row in &table.rows {
+            let marker = if row.corrupt { "*" } else { "" };
+            self.dispatch(ChatTuiAction::NoticeReported {
+                message: format!(
+                    "{}  {}  {}  {}{}",
+                    row.id, row.updated, row.title, row.messages, marker
+                ),
+            });
+        }
+        if table.remaining > 0 {
+            self.dispatch(ChatTuiAction::NoticeReported {
+                message: format!("{} more sessions", table.remaining),
+            });
+        }
+    }
+
+    /// Projects a command-owned selection prompt into TUI state and awaits the answer.
+    async fn ask(
+        &self,
+        request: SelectionPromptRequest,
+    ) -> Result<SelectionPromptAnswer, ChatError> {
+        self.dispatch(ChatTuiAction::SelectionPromptChanged(Some(
+            selection_state_from_request(&request),
+        )));
+
+        loop {
+            let intent = {
+                let mut receiver = self.selection_receiver.borrow_mut();
+                receiver.recv().await
+            };
+            match intent {
+                Some(Intent::SelectionPromptSubmitted(answer)) => {
+                    self.dispatch(ChatTuiAction::SelectionPromptSubmitted(answer.clone()));
+                    return Ok(selection_answer_from_tui(answer));
+                }
+                Some(Intent::SelectionPromptCancelled) | None => {
+                    self.dispatch(ChatTuiAction::SelectionPromptCancelled);
+                    return Err(ChatError::Exit);
+                }
+                Some(_) => {}
+            }
+        }
+    }
+}
+
+/// Converts a command-owned selection request into reducer-owned TUI state.
+fn selection_state_from_request(
+    request: &SelectionPromptRequest,
+) -> spectacular_tui::SelectionPromptState {
+    spectacular_tui::SelectionPromptState::new(
+        request.title.clone(),
+        request.description.clone(),
+        request.options.clone(),
+    )
+    .with_inputs(request.allow_custom, request.allow_comment)
+}
+
+/// Converts a TUI selection answer back into the command-owned answer type.
+fn selection_answer_from_tui(
+    answer: spectacular_tui::SelectionPromptAnswer,
+) -> SelectionPromptAnswer {
+    SelectionPromptAnswer {
+        choice: match answer.choice {
+            spectacular_tui::SelectionPromptChoice::Option { index, label } => {
+                crate::chat::prompt::SelectionPromptChoice::Option { index, label }
+            }
+            spectacular_tui::SelectionPromptChoice::Custom(value) => {
+                crate::chat::prompt::SelectionPromptChoice::Custom(value)
+            }
+        },
+        comment: answer.comment,
     }
 }
 
