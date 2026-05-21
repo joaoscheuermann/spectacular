@@ -191,7 +191,19 @@ fn command_display_status(status: CommandStatus) -> CommandDisplayStatus {
 
 /// Builds the original renderer-parity command completion summary row.
 fn command_summary_line(status: CommandStatus, summary: &str) -> DisplayLine {
-    DisplayLine::new(summary, command_summary_style(status))
+    DisplayLine::new(
+        command_summary_text(status, summary),
+        command_summary_style(status),
+    )
+}
+
+/// Applies the same status prefixes used by the legacy renderer helpers.
+fn command_summary_text(status: CommandStatus, summary: &str) -> String {
+    match status {
+        CommandStatus::Success => summary.to_owned(),
+        CommandStatus::Failed | CommandStatus::Error => format!("error: {summary}"),
+        CommandStatus::Cancelled | CommandStatus::TimedOut => format!("warning: {summary}"),
+    }
 }
 
 /// Maps command completion status to original renderer line styles.

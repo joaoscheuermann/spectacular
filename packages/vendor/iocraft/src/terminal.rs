@@ -462,7 +462,12 @@ mod windows_console_input {
         fn SetConsoleMode(h_console_handle: Handle, dw_mode: u32) -> i32;
     }
 
-    /// Disables console text-selection interception so modified arrows reach the app.
+    /// Disables console text-selection interception so modified arrows can reach the app.
+    ///
+    /// This only controls the Windows console input mode. Terminal hosts may still
+    /// reserve their own shortcuts before the process receives a console input
+    /// record. Windows Terminal can do this for `Shift+Up/Down`, which means
+    /// crossterm receives no `Up` or `Down` key event for the app to handle.
     pub(super) fn disable_selection_interception() -> io::Result<Option<u32>> {
         let Some((handle, mode)) = input_mode()? else {
             return Ok(None);

@@ -82,7 +82,27 @@ fn adapter_command_output_preserves_partial_chunk_shape() {
     );
 }
 
-/// Verifies cancelled commands keep cancellation status and original warning styling.
+/// Verifies failed commands keep original error-prefixed summary styling.
+#[test]
+fn adapter_command_failed_uses_original_error_summary_display() {
+    let mut adapter = TuiEventAdapter::new();
+
+    assert_eq!(
+        adapter.adapt_command_event(&CommandEvent::Finished(CommandFinished {
+            command_id: "cmd-1".to_owned(),
+            status: CommandStatus::Failed,
+            summary: "failed".to_owned(),
+        })),
+        vec![ChatTuiAction::CommandDisplayFinished {
+            command_id: "cmd-1".to_owned(),
+            status: CommandDisplayStatus::Failed,
+            exit_code: Some(1),
+            summary_line: Some(line("error: failed", DisplayLineStyle::Error)),
+        }]
+    );
+}
+
+/// Verifies cancelled commands keep cancellation status and original warning-prefixed styling.
 #[test]
 fn adapter_command_cancelled_keeps_cancelled_warning_display() {
     let mut adapter = TuiEventAdapter::new();
@@ -97,7 +117,7 @@ fn adapter_command_cancelled_keeps_cancelled_warning_display() {
             command_id: "cmd-1".to_owned(),
             status: CommandDisplayStatus::Cancelled,
             exit_code: Some(1),
-            summary_line: Some(line("cancelled", DisplayLineStyle::Warning)),
+            summary_line: Some(line("warning: cancelled", DisplayLineStyle::Warning)),
         }]
     );
 }

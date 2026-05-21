@@ -314,9 +314,9 @@ fn interleaved_command_display_output_updates_correct_items() {
     ));
 }
 
-/// Verifies failed command display status renders adapter-provided exit metadata.
+/// Verifies failed command display status renders adapter-provided legacy-styled summary.
 #[test]
-fn command_failed_status_renders_exit_metadata() {
+fn command_failed_status_renders_legacy_styled_summary() {
     let mut state = state();
 
     reduce(
@@ -333,12 +333,15 @@ fn command_failed_status_renders_exit_metadata() {
             command_id: "cmd-1".to_owned(),
             status: CommandDisplayStatus::Failed,
             exit_code: Some(7),
-            summary_line: Some(line("failed with exit 7", DisplayLineStyle::Error)),
+            summary_line: Some(line("error: failed with exit 7", DisplayLineStyle::Error)),
         },
     );
 
     let rendered = rendered_lines(&state);
-    assert!(rendered.contains(&("failed with exit 7".to_owned(), DisplayLineStyle::Error,)));
+    assert!(rendered.contains(&(
+        "error: failed with exit 7".to_owned(),
+        DisplayLineStyle::Error,
+    )));
 }
 
 /// Verifies session snapshots persist display-ready tool payloads and styles.

@@ -47,9 +47,17 @@ This path owns clipboard shortcuts inside the app:
 - `Ctrl+C` copies the focused prompt selection.
 - `Ctrl+X` cuts the focused prompt selection.
 - `Ctrl+V` pastes from the OS clipboard with paste guardrails.
+- `Shift+Left/Right/Up/Down` extends prompt text selection when the terminal
+  passes those key events through to the app.
 - Terminal-native paste shows `Use Ctrl+V to paste`.
 - `Esc` cancels a running request, clears prompt selection/text while idle, or exits when the prompt is empty.
 - `Ctrl+Q` exits explicitly.
+
+Some terminal hosts reserve selection shortcuts before console applications can
+read them. On Windows Terminal, `Shift+Up/Down` may be handled by the terminal
+instead of delivered as key events, while `Shift+Left/Right` still reaches the
+app. In that case Spectacular cannot select vertically from the app side because
+there is no `Up` or `Down` event to handle.
 
 ### Slash Commands
 

@@ -1,9 +1,9 @@
 use futures::{self, StreamExt};
 use iocraft::prelude::*;
 use spectacular_tui::{
-    components::App, reduce, render_state_to_string, ChatTuiAction, CommandDisplayChunk,
-    CommandDisplayStatus, DisplayLine, DisplayLineStyle, DisplayMetadata, PromptState,
-    ReasoningLevel, RuntimeSelection, SessionId, State, TranscriptItemId,
+    components::App, reduce, render_state_to_string, semantic_iocraft_style, ChatTuiAction,
+    CommandDisplayChunk, CommandDisplayStatus, DisplayLine, DisplayLineStyle, DisplayMetadata,
+    PromptState, ReasoningLevel, RenderStyle, RuntimeSelection, SessionId, State, TranscriptItemId,
 };
 
 /// Builds a representative runtime selection for bounded layout tests.
@@ -172,6 +172,15 @@ fn has_selection_colors(canvas: &Canvas, x: usize, y: usize) -> bool {
     })
 }
 
+/// Returns true when a rendered cell uses the semantic style expected for transcript text.
+fn has_render_style(canvas: &Canvas, x: usize, y: usize, render_style: RenderStyle) -> bool {
+    let (color, weight) = semantic_iocraft_style(render_style);
+    canvas.cell(x, y).is_some_and(|cell| {
+        cell.text_style()
+            .is_some_and(|style| style.color == color && style.weight == weight)
+    })
+}
+
 /// Verifies prompt line breaks render as separate IOCraft terminal rows.
 #[test]
 fn multiline_prompt_renders_explicit_rows_on_canvas() {
@@ -269,6 +278,49 @@ fn overflowing_transcript_shows_scrollbar() {
 
     assert!(has_scrollbar_marker(&canvas, 79, 0));
     assert!(has_scrollbar_marker(&canvas, 79, 2));
+}
+
+/// Verifies command transcript rows render through IOCraft with legacy text and semantic styles.
+#[test]
+fn command_transcript_renders_legacy_shape_and_styles_on_canvas() {
+    let mut state = state();
+    reduce(
+        &mut state,
+        ChatTuiAction::CommandDisplayStarted {
+            id: TranscriptItemId::new("command-1"),
+            command_id: "command-1".to_string(),
+            command_line: DisplayLine::new("cargo test", DisplayLineStyle::Command),
+        },
+    );
+    reduce(
+        &mut state,
+        ChatTuiAction::CommandDisplayOutput {
+            command_id: "command-1".to_string(),
+            chunk: CommandDisplayChunk::new("• compiling", DisplayLineStyle::CommandOutput),
+        },
+    );
+    reduce(
+        &mut state,
+        ChatTuiAction::CommandDisplayFinished {
+            command_id: "command-1".to_string(),
+            status: CommandDisplayStatus::Failed,
+            exit_code: Some(7),
+            summary_line: Some(DisplayLine::new(
+                "error: failed with exit 7",
+                DisplayLineStyle::Error,
+            )),
+        },
+    );
+
+    let canvas = render_canvas(&state, 80, 8);
+    let lines = canvas_text_lines(&canvas, 80, 8);
+
+    assert_eq!(lines[0], "cargo test");
+    assert_eq!(lines[1], "• compiling");
+    assert_eq!(lines[2], "error: failed with exit 7");
+    assert!(has_render_style(&canvas, 0, 0, RenderStyle::Command));
+    assert!(has_render_style(&canvas, 0, 1, RenderStyle::CommandOutput));
+    assert!(has_render_style(&canvas, 0, 2, RenderStyle::Error));
 }
 
 /// Verifies tail-follow rendering does not overshift when no-wrap rows exceed viewport width.
