@@ -5,8 +5,8 @@ use crate::chat::display::{
 use serde_json::Value;
 use spectacular_agent::ToolStorage;
 use spectacular_tui::{
-    ChatTuiAction, CommandDisplayChunk, CommandDisplayStatus, DisplayLine, DisplayLineStyle,
-    ToolDisplayStatus, TranscriptItemId,
+    display_spans_from_ansi, ChatTuiAction, CommandDisplayChunk, CommandDisplayStatus, DisplayLine,
+    DisplayLineStyle, ToolDisplayStatus, TranscriptItemId,
 };
 use std::collections::BTreeMap;
 
@@ -43,9 +43,8 @@ impl ToolDisplayAdapter {
                 id: super::adapter::transcript_item_id(tool_call_id),
                 tool_call_id: tool_call_id.to_owned(),
                 name: name.to_owned(),
-                call_line: DisplayLine::new(
-                    strip_ansi_codes(&ToolCallView::from_parts(name, arguments, tools).line),
-                    DisplayLineStyle::Tool,
+                call_line: tool_call_display_line(
+                    &ToolCallView::from_parts(name, arguments, tools).line,
                 ),
                 argument_lines: Vec::new(),
             },
@@ -86,6 +85,20 @@ impl ToolDisplayAdapter {
         self.tool_arguments
             .insert(tool_call_id.to_owned(), arguments);
     }
+}
+
+/// Converts a renderer-compatible tool call line into a semantic display line.
+fn tool_call_display_line(line: &str) -> DisplayLine {
+    if !line.contains("\u{1b}[") {
+        return DisplayLine::new(line, DisplayLineStyle::Tool);
+    }
+
+    let spans = display_spans_from_ansi(line, DisplayLineStyle::Text);
+    if spans.is_empty() {
+        return DisplayLine::new(strip_ansi_codes(line), DisplayLineStyle::Tool);
+    }
+
+    DisplayLine::from_spans(spans)
 }
 
 /// Builds display-ready command start action for the TUI reducer.

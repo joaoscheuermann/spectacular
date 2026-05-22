@@ -4,7 +4,8 @@ use serde_json::{json, Value};
 use spectacular_agent::{AgentEvent, Cancellation, Tool, ToolDisplay, ToolExecution, ToolManifest, ToolStorage};
 use spectacular_tools::edit::EditTool;
 use spectacular_tui::{
-    ChatTuiAction, DisplayLine, DisplayLineStyle, ToolDisplayStatus, TranscriptItemId,
+    ChatTuiAction, DisplayLine, DisplayLineStyle, DisplaySpan, ToolDisplayStatus,
+    TranscriptItemId,
 };
 
 #[path = "display/command.rs"]
@@ -57,6 +58,15 @@ fn display_tools() -> ToolStorage {
 /// Builds one display line for expected adapter payloads.
 fn line(text: impl Into<String>, style: DisplayLineStyle) -> DisplayLine {
     DisplayLine::new(text, style)
+}
+
+/// Builds a styled tool-call display line matching shared terminal helper semantics.
+fn tool_call_line(label: impl Into<String>, input: impl Into<String>) -> DisplayLine {
+    DisplayLine::from_spans(vec![
+        DisplaySpan::new(label, DisplayLineStyle::Tool),
+        DisplaySpan::new(" ", DisplayLineStyle::Text),
+        DisplaySpan::new(input, DisplayLineStyle::Text),
+    ])
 }
 
 /// Verifies a tool result payload is classified as failed by the adapter.
@@ -239,7 +249,7 @@ fn adapter_unknown_tool_uses_original_fallback_preview() {
                 id: TranscriptItemId::new("call-1"),
                 tool_call_id: "call-1".to_owned(),
                 name: "missing_tool".to_owned(),
-                call_line: line("missing_tool path: README.md", DisplayLineStyle::Tool),
+                call_line: tool_call_line("missing_tool", "path: README.md"),
                 argument_lines: Vec::new(),
             },
         ]
@@ -270,10 +280,7 @@ fn adapter_tool_preview_truncates_at_original_limit() {
                 id: TranscriptItemId::new("call-1"),
                 tool_call_id: "call-1".to_owned(),
                 name: "missing_tool".to_owned(),
-                call_line: line(
-                    format!("missing_tool value: {}...", "a".repeat(173)),
-                    DisplayLineStyle::Tool,
-                ),
+                call_line: tool_call_line("missing_tool", format!("value: {}...", "a".repeat(173))),
                 argument_lines: Vec::new(),
             },
         ]

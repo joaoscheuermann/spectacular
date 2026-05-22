@@ -11,7 +11,16 @@ pub fn plain_lines(lines: Vec<RenderLine>) -> Vec<String> {
 
 /// Converts one adapter display line into one semantic render row.
 pub fn display_line_render_line(line: &DisplayLine) -> RenderLine {
-    RenderLine::styled(&line.text, RenderStyle::from(line.style))
+    if line.spans.is_empty() {
+        return RenderLine::styled(&line.text, RenderStyle::from(line.style));
+    }
+
+    RenderLine::from_spans(
+        line.spans
+            .iter()
+            .map(|span| crate::render::RenderSpan::new(&span.text, RenderStyle::from(span.style)))
+            .collect(),
+    )
 }
 
 /// Formats visible lines with one semantic style per row.

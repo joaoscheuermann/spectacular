@@ -261,19 +261,67 @@ impl WorkedSummaryItem {
     }
 }
 
+/// One styled segment in a display-ready line supplied by the runtime adapter.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct DisplaySpan {
+    pub text: String,
+    pub style: DisplayLineStyle,
+}
+
+impl DisplaySpan {
+    /// Creates one display-ready line segment from visible text and semantic style.
+    pub fn new(text: impl Into<String>, style: DisplayLineStyle) -> Self {
+        Self {
+            text: text.into(),
+            style,
+        }
+    }
+}
+
 /// One display-ready line with semantic style supplied by the runtime adapter.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct DisplayLine {
     pub text: String,
     pub style: DisplayLineStyle,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub spans: Vec<DisplaySpan>,
 }
 
 impl DisplayLine {
-    /// Creates a display-ready line from visible text and semantic style.
+    /// Creates a single-style display-ready line from visible text and semantic style.
     pub fn new(text: impl Into<String>, style: DisplayLineStyle) -> Self {
         Self {
             text: text.into(),
             style,
+            spans: Vec::new(),
+        }
+    }
+
+    /// Creates a display-ready line from ordered semantic spans.
+    pub fn from_spans(spans: Vec<DisplaySpan>) -> Self {
+        let mut normalized_spans: Vec<DisplaySpan> = Vec::new();
+        for span in spans {
+            match normalized_spans.last_mut() {
+                Some(previous) if previous.style == span.style => {
+                    previous.text.push_str(&span.text)
+                }
+                _ => normalized_spans.push(span),
+            }
+        }
+
+        let text = normalized_spans
+            .iter()
+            .map(|span| span.text.as_str())
+            .collect::<String>();
+        let style = normalized_spans
+            .first()
+            .map(|span| span.style)
+            .unwrap_or(DisplayLineStyle::Text);
+
+        Self {
+            text,
+            style,
+            spans: normalized_spans,
         }
     }
 }

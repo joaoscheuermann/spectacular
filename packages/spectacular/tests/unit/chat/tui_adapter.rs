@@ -6,7 +6,7 @@ use spectacular_config::ProviderAuthMode;
 use spectacular_llms::{FinishReason, UsageMetadata};
 use spectacular_tui::{
     ChatTuiAction, CommandDescriptor, ContextTokenUsage as TuiContextTokenUsage,
-    DisplayLine, DisplayLineStyle, DisplayMetadata as TuiDisplayMetadata,
+    DisplayLine, DisplayLineStyle, DisplayMetadata as TuiDisplayMetadata, DisplaySpan,
     ProviderUsageMetadata as TuiProviderUsageMetadata, ReasoningLevel as TuiReasoningLevel,
     RuntimeSelection as TuiRuntimeSelection, SessionId, ToolDisplayStatus, TranscriptItemId,
 };
@@ -109,7 +109,10 @@ fn tool_lifecycle_events_map_directly_to_tui_actions() {
                 id: TranscriptItemId::new("call-1"),
                 tool_call_id: "call-1".to_owned(),
                 name: "read".to_owned(),
-                call_line: DisplayLine::new("read", DisplayLineStyle::Tool),
+                call_line: DisplayLine::from_spans(vec![DisplaySpan::new(
+                    "read",
+                    DisplayLineStyle::Tool,
+                )]),
                 argument_lines: Vec::new(),
             },
         ]

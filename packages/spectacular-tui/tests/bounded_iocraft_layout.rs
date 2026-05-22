@@ -3,7 +3,8 @@ use iocraft::prelude::*;
 use spectacular_tui::{
     components::App, reduce, render_state_to_string, semantic_iocraft_style, ChatTuiAction,
     CommandDisplayChunk, CommandDisplayStatus, DisplayLine, DisplayLineStyle, DisplayMetadata,
-    PromptState, ReasoningLevel, RenderStyle, RuntimeSelection, SessionId, State, TranscriptItemId,
+    DisplaySpan, PromptState, ReasoningLevel, RenderStyle, RuntimeSelection, SessionId, State,
+    TranscriptItemId,
 };
 
 /// Builds a representative runtime selection for bounded layout tests.
@@ -278,6 +279,36 @@ fn overflowing_transcript_shows_scrollbar() {
 
     assert!(has_scrollbar_marker(&canvas, 79, 0));
     assert!(has_scrollbar_marker(&canvas, 79, 2));
+}
+
+/// Verifies tool-call rows render mixed IOCraft styles matching legacy terminal helpers.
+#[test]
+fn tool_transcript_call_line_renders_legacy_segment_styles_on_canvas() {
+    let mut state = state();
+    reduce(
+        &mut state,
+        ChatTuiAction::ToolDisplayStarted {
+            id: TranscriptItemId::new("tool-1"),
+            tool_call_id: "call-1".to_string(),
+            name: "write".to_string(),
+            call_line: DisplayLine::from_spans(vec![
+                DisplaySpan::new("Write", DisplayLineStyle::Tool),
+                DisplaySpan::new(" ", DisplayLineStyle::Text),
+                DisplaySpan::new("README.md", DisplayLineStyle::Text),
+                DisplaySpan::new(" ", DisplayLineStyle::Dim),
+                DisplaySpan::new("(10 bytes)", DisplayLineStyle::Dim),
+            ]),
+            argument_lines: Vec::new(),
+        },
+    );
+
+    let canvas = render_canvas(&state, 80, 8);
+    let lines = canvas_text_lines(&canvas, 80, 8);
+
+    assert_eq!(lines[0], "Write README.md (10 bytes)");
+    assert!(has_render_style(&canvas, 0, 0, RenderStyle::Tool));
+    assert!(has_render_style(&canvas, 6, 0, RenderStyle::Text));
+    assert!(has_render_style(&canvas, 16, 0, RenderStyle::Dim));
 }
 
 /// Verifies command transcript rows render through IOCraft with legacy text and semantic styles.

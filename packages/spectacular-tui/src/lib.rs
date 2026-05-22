@@ -39,8 +39,9 @@ pub use prompt::SelectionInputMode;
 pub use reducer::reduce;
 pub use render::format_directory_with_home;
 pub use render::{
-    context_pressure_style, context_usage_style, iocraft_content, render_state_to_string,
-    semantic_ansi_style, semantic_iocraft_style, RenderLine, RenderSpan, RenderStyle,
+    context_pressure_style, context_usage_style, display_spans_from_ansi, iocraft_content,
+    render_state_to_string, semantic_ansi_style, semantic_iocraft_style, RenderLine, RenderSpan,
+    RenderStyle,
 };
 pub use runtime::{
     effects, effects_with_clipboard, merge_controller_state_update, system_clipboard,
@@ -54,9 +55,10 @@ pub use state::{PromptLayoutMetrics, State};
 pub use status::{Activity, Status};
 pub use transcript::{
     AssistantMessageItem, CancellationItem, CommandDisplay, CommandDisplayStatus, CommandItem,
-    CommandStatus, DisplayLine, DisplayLineStyle, ErrorItem, NoticeItem, OpeningBannerItem,
-    ReasoningItem, SuccessItem, ToolCallItem, ToolDisplay, ToolDisplayStatus, ToolStatus,
-    TranscriptItem, TranscriptItemContent, UserPromptItem, WarningItem, WorkedSummaryItem,
+    CommandStatus, DisplayLine, DisplayLineStyle, DisplaySpan, ErrorItem, NoticeItem,
+    OpeningBannerItem, ReasoningItem, SuccessItem, ToolCallItem, ToolDisplay, ToolDisplayStatus,
+    ToolStatus, TranscriptItem, TranscriptItemContent, UserPromptItem, WarningItem,
+    WorkedSummaryItem,
 };
 
 use anstyle::{RgbColor, Style};
