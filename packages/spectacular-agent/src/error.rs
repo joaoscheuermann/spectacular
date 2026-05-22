@@ -177,20 +177,19 @@ impl AgentErrorDetails {
 
         let kind = match error {
             ProviderError::NetworkError { .. } => AgentErrorKind::ProviderNetwork,
+            ProviderError::AuthenticationRequired { .. }
+            | ProviderError::AuthenticationFailed { .. }
+            | ProviderError::InvalidApiKey => AgentErrorKind::Authentication,
             ProviderError::ResponseParsingFailed { .. } => AgentErrorKind::ProviderResponseParse,
             ProviderError::MalformedResponse { .. } => AgentErrorKind::ProviderMalformedResponse,
             ProviderError::StreamError { .. } => AgentErrorKind::ProviderStream,
             ProviderError::ContextLimitExceeded { .. } => AgentErrorKind::ContextLimit,
             ProviderError::CapabilityMismatch { .. } => AgentErrorKind::Capability,
             ProviderError::UnsupportedProvider { .. } => AgentErrorKind::UnknownProvider,
-            ProviderError::InvalidApiKey | ProviderError::UnsupportedValidationMode => {
-                AgentErrorKind::Validation
-            }
+            ProviderError::UnsupportedValidationMode => AgentErrorKind::Validation,
             ProviderError::ModelFetchFailed { .. }
             | ProviderError::NoModelsReturned { .. }
             | ProviderError::ProviderUnavailable { .. }
-            | ProviderError::AuthenticationRequired { .. }
-            | ProviderError::AuthenticationFailed { .. }
             | ProviderError::StreamUnavailable { .. } => AgentErrorKind::ProviderUnavailable,
             ProviderError::CancellationError => return None,
         };
@@ -257,11 +256,40 @@ impl AgentErrorDetails {
     }
 }
 
+impl Display for AgentErrorDetails {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut lines = Vec::new();
+        lines.push(format!("kind: {}", self.kind.as_str()));
+        if let Some(provider) = self.provider.as_deref() {
+            lines.push(format!("provider: {provider}"));
+        }
+        if let Some(stage) = self.stage {
+            lines.push(format!("stage: {}", stage.as_str()));
+        }
+        lines.push(format!("retryable: {}", self.retryable));
+        if let Some(status) = self.http_status {
+            lines.push(format!("http status: {status}"));
+        }
+        if let Some(code) = self.provider_code.as_deref() {
+            lines.push(format!("provider code: {code}"));
+        }
+        if let Some(excerpt) = self.excerpt.as_deref() {
+            lines.push(format!("excerpt: {excerpt}"));
+        }
+        if !self.debug_events.is_empty() {
+            lines.push(format!("debug events: {}", self.debug_events.join(", ")));
+        }
+
+        formatter.write_str(&lines.join("\n"))
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentErrorKind {
     ProviderUnavailable,
     ProviderNetwork,
+    Authentication,
     ProviderResponseParse,
     ProviderMalformedResponse,
     ProviderStream,
@@ -270,6 +298,24 @@ pub enum AgentErrorKind {
     ContentFilter,
     Validation,
     UnknownProvider,
+}
+
+impl AgentErrorKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ProviderUnavailable => "provider_unavailable",
+            Self::ProviderNetwork => "provider_network",
+            Self::Authentication => "authentication",
+            Self::ProviderResponseParse => "provider_response_parse",
+            Self::ProviderMalformedResponse => "provider_malformed_response",
+            Self::ProviderStream => "provider_stream",
+            Self::ContextLimit => "context_limit",
+            Self::Capability => "capability",
+            Self::ContentFilter => "content_filter",
+            Self::Validation => "validation",
+            Self::UnknownProvider => "unknown_provider",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -282,6 +328,20 @@ pub enum AgentErrorStage {
     PayloadParse,
     ProviderStream,
     AgentValidation,
+}
+
+impl AgentErrorStage {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::RequestBuild => "request_build",
+            Self::HttpRequest => "http_request",
+            Self::HttpStatus => "http_status",
+            Self::SseDecode => "sse_decode",
+            Self::PayloadParse => "payload_parse",
+            Self::ProviderStream => "provider_stream",
+            Self::AgentValidation => "agent_validation",
+        }
+    }
 }
 
 impl From<ProviderErrorStage> for AgentErrorStage {
@@ -415,6 +475,7 @@ fn default_stage_for_kind(kind: AgentErrorKind) -> Option<AgentErrorStage> {
     match kind {
         AgentErrorKind::ProviderUnavailable => Some(AgentErrorStage::HttpRequest),
         AgentErrorKind::ProviderNetwork => Some(AgentErrorStage::HttpRequest),
+        AgentErrorKind::Authentication => Some(AgentErrorStage::AgentValidation),
         AgentErrorKind::ProviderResponseParse => Some(AgentErrorStage::PayloadParse),
         AgentErrorKind::ProviderMalformedResponse => Some(AgentErrorStage::PayloadParse),
         AgentErrorKind::ProviderStream => Some(AgentErrorStage::ProviderStream),
@@ -429,6 +490,9 @@ fn default_stage_for_kind(kind: AgentErrorKind) -> Option<AgentErrorStage> {
 fn provider_error_retryable(error: &ProviderError) -> bool {
     match error {
         ProviderError::NetworkError { .. } => true,
+        ProviderError::AuthenticationRequired { .. }
+        | ProviderError::AuthenticationFailed { .. }
+        | ProviderError::InvalidApiKey => false,
         ProviderError::ProviderUnavailable { .. } => error
             .http_status()
             .map(transient_http_status)

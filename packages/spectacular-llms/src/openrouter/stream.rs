@@ -79,12 +79,12 @@ async fn stream_openrouter_response(
         json!({ "status": status }),
     );
     if status == 401 || status == 403 {
-        debug::log_error(
-            debug_logger,
-            "chat_response_invalid_api_key",
-            &ProviderError::InvalidApiKey,
-        );
-        return Err(ProviderError::InvalidApiKey);
+        let diagnostics = non_success_response_diagnostics(debug_logger, response, status).await;
+        return Err(ProviderError::AuthenticationFailed {
+            provider_name: "OpenRouter".to_owned(),
+            reason: format!("credentials rejected with status {status}"),
+            diagnostics: Some(diagnostics),
+        });
     }
     if !(200..300).contains(&status) {
         let diagnostics = non_success_response_diagnostics(debug_logger, response, status).await;
@@ -199,9 +199,7 @@ async fn non_success_response_diagnostics(
     match response.text().await {
         Ok(body) => {
             debug::log_raw_text(debug_logger, "chat_response_error_body", &body);
-            diagnostics
-                .with_excerpt(&body)
-                .with_debug_event("chat_response_error_body")
+            http_status_body_diagnostics(status, &body, "chat_response_error_body")
         }
         Err(error) => {
             debug::log_event(
@@ -212,6 +210,18 @@ async fn non_success_response_diagnostics(
             diagnostics.with_debug_event("chat_response_error_body_read_failed")
         }
     }
+}
+
+fn http_status_body_diagnostics(
+    status: u16,
+    body: &str,
+    debug_event: &str,
+) -> ProviderErrorDiagnostics {
+    ProviderErrorDiagnostics::new(ProviderErrorStage::HttpStatus)
+        .with_http_status(status)
+        .with_provider_code_from_body(body)
+        .with_excerpt(body)
+        .with_debug_event(debug_event)
 }
 
 #[derive(Default)]

@@ -68,8 +68,11 @@ async fn stream_openai_response(
     );
 
     if status == 401 || status == 403 {
-        return Err(ProviderError::AuthenticationRequired {
+        let diagnostics = non_success_response_diagnostics(&debug_logger, response, status).await;
+        return Err(ProviderError::AuthenticationFailed {
             provider_name: "OpenAI".to_owned(),
+            reason: format!("credentials rejected with status {status}"),
+            diagnostics: Some(diagnostics),
         });
     }
     if !(200..300).contains(&status) {
@@ -255,9 +258,7 @@ async fn non_success_response_diagnostics(
     match response.text().await {
         Ok(body) => {
             debug::log_raw_text(debug_logger, "responses_error_body", &body);
-            diagnostics
-                .with_excerpt(&body)
-                .with_debug_event("responses_error_body")
+            http_status_body_diagnostics(status, &body, "responses_error_body")
         }
         Err(error) => {
             debug::log_event(
@@ -268,4 +269,26 @@ async fn non_success_response_diagnostics(
             diagnostics.with_debug_event("responses_error_body_read_failed")
         }
     }
+}
+
+fn http_status_body_diagnostics(
+    status: u16,
+    body: &str,
+    debug_event: &str,
+) -> ProviderErrorDiagnostics {
+    ProviderErrorDiagnostics::new(ProviderErrorStage::HttpStatus)
+        .with_http_status(status)
+        .with_provider_code_from_body(body)
+        .with_excerpt(body)
+        .with_debug_event(debug_event)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    include!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/unit/openai_stream_transport.rs"
+    ));
 }

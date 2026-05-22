@@ -108,11 +108,16 @@ impl TuiEventAdapter {
             AgentEvent::ContextTokenUsage(usage) => vec![ChatTuiAction::ContextUsageUpdated(
                 TuiContextTokenUsage::new(usage.input_tokens, usage.context_window_tokens),
             )],
-            AgentEvent::ValidationError { message } | AgentEvent::Error { message, .. } => {
+            AgentEvent::ValidationError { message } => {
                 vec![ChatTuiAction::AgentFailed {
                     message: message.clone(),
+                    details: None,
                 }]
             }
+            AgentEvent::Error { message, details } => vec![ChatTuiAction::AgentFailed {
+                message: message.clone(),
+                details: details.as_ref().map(ToString::to_string),
+            }],
             AgentEvent::Cancelled { reason } => vec![ChatTuiAction::AgentCancelled {
                 reason: reason.clone(),
             }],
@@ -157,12 +162,15 @@ impl TuiEventAdapter {
             },
             FinishReason::Length => ChatTuiAction::AgentFailed {
                 message: "provider response reached the length limit".to_owned(),
+                details: None,
             },
             FinishReason::ToolCalls => ChatTuiAction::AgentFailed {
                 message: "provider requested tool calls without completing the run".to_owned(),
+                details: None,
             },
             FinishReason::ContentFilter | FinishReason::Error => ChatTuiAction::AgentFailed {
                 message: format!("provider finished with {finish_reason:?}"),
+                details: None,
             },
             FinishReason::Stop => ChatTuiAction::AgentFinished,
         };

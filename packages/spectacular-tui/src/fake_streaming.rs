@@ -405,6 +405,7 @@ pub fn fake_failure_plan() -> FakeStreamingPlan {
             Duration::from_millis(10),
             ChatTuiAction::AgentFailed {
                 message: "fake runtime failure".to_owned(),
+                details: None,
             },
         ),
     ])

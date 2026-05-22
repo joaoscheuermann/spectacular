@@ -156,8 +156,18 @@ impl Renderer {
 
     /// Renders an error message with error styling and spacing.
     pub fn error(&self, message: &str) {
+        self.error_with_details(message, None);
+    }
+
+    /// Renders an error message and compact diagnostic detail lines when present.
+    pub fn error_with_details(&self, message: &str, details: Option<&str>) {
         self.with_interrupted_working_line(|| {
             println!("{}", paint(error_style(), format!("error: {message}")));
+            if let Some(details) = details {
+                for line in details.lines().filter(|line| !line.trim().is_empty()) {
+                    println!("{}", paint(command_output_style(), line));
+                }
+            }
             println!();
         });
     }

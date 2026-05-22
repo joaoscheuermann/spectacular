@@ -37,9 +37,15 @@ pub async fn render_agent_event(
             renderer.working();
         }
 
-        AgentEvent::ValidationError { message } | AgentEvent::Error { message, .. } => {
+        AgentEvent::ValidationError { message } => {
             renderer.clear_working();
             renderer.error(message);
+            renderer.working();
+        }
+        AgentEvent::Error { message, details } => {
+            let details = details.as_ref().map(ToString::to_string);
+            renderer.clear_working();
+            renderer.error_with_details(message, details.as_deref());
             renderer.working();
         }
         AgentEvent::Cancelled { reason } => renderer.cancelled(reason),

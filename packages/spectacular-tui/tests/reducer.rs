@@ -245,6 +245,7 @@ fn agent_failed_and_cancelled_leave_running_state() {
         &mut failed,
         ChatTuiAction::AgentFailed {
             message: "network".to_owned(),
+            details: None,
         },
     );
     assert_eq!(
@@ -256,6 +257,21 @@ fn agent_failed_and_cancelled_leave_running_state() {
     assert!(matches!(
         &failed.session.transcript[0].content,
         TranscriptItemContent::Error(item) if item.message == "network" && item.details.is_none()
+    ));
+
+    let mut failed_with_details = state();
+    reduce(
+        &mut failed_with_details,
+        ChatTuiAction::AgentFailed {
+            message: "provider failed".to_owned(),
+            details: Some("kind: authentication\nhttp status: 401".to_owned()),
+        },
+    );
+    assert!(matches!(
+        &failed_with_details.session.transcript[0].content,
+        TranscriptItemContent::Error(item)
+            if item.message == "provider failed"
+                && item.details.as_deref() == Some("kind: authentication\nhttp status: 401")
     ));
 
     let mut cancelled = state();

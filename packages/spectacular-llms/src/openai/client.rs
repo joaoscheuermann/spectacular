@@ -116,7 +116,14 @@ impl OpenAiHttpClient {
         if !(200..300).contains(&status) {
             return Err(ProviderError::AuthenticationFailed {
                 provider_name: "OpenAI".to_owned(),
-                reason: format!("token endpoint returned status {status}: {body}"),
+                reason: format!("token endpoint returned status {status}"),
+                diagnostics: Some(
+                    ProviderErrorDiagnostics::new(ProviderErrorStage::HttpStatus)
+                        .with_http_status(status)
+                        .with_provider_code_from_body(&body)
+                        .with_excerpt(&body)
+                        .with_debug_event("token_error_body"),
+                ),
             });
         }
 

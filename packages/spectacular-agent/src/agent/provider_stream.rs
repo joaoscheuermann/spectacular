@@ -186,6 +186,9 @@ fn should_retry_provider_error(
 
     match error {
         ProviderError::NetworkError { .. } => true,
+        ProviderError::AuthenticationRequired { .. }
+        | ProviderError::AuthenticationFailed { .. }
+        | ProviderError::InvalidApiKey => false,
         ProviderError::ProviderUnavailable { .. } => error
             .http_status()
             .map(transient_http_status)

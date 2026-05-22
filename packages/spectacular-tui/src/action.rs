@@ -114,6 +114,7 @@ pub enum ChatTuiAction {
     },
     AgentFailed {
         message: String,
+        details: Option<String>,
     },
     AgentCancelled {
         reason: String,

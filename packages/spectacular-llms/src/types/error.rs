@@ -61,6 +61,14 @@ impl ProviderErrorDiagnostics {
         self
     }
 
+    pub fn with_provider_code_from_body(self, body: &str) -> Self {
+        let Some(code) = provider_code_from_json(body) else {
+            return self;
+        };
+
+        self.with_provider_code(code)
+    }
+
     pub fn with_excerpt(mut self, value: impl AsRef<str>) -> Self {
         let excerpt = provider_error_excerpt(value.as_ref());
         if !excerpt.is_empty() {
@@ -84,6 +92,7 @@ pub enum ProviderError {
     InvalidApiKey,
     ModelFetchFailed {
         provider_name: String,
+        diagnostics: Option<ProviderErrorDiagnostics>,
     },
     NoModelsReturned {
         provider_name: String,
@@ -98,6 +107,7 @@ pub enum ProviderError {
     AuthenticationFailed {
         provider_name: String,
         reason: String,
+        diagnostics: Option<ProviderErrorDiagnostics>,
     },
     StreamUnavailable {
         provider_name: String,
@@ -142,7 +152,7 @@ impl Display for ProviderError {
         match self {
             ProviderError::CancellationError => formatter.write_str("provider call was cancelled"),
             ProviderError::InvalidApiKey => formatter.write_str("invalid API key"),
-            ProviderError::ModelFetchFailed { provider_name } => {
+            ProviderError::ModelFetchFailed { provider_name, .. } => {
                 write!(formatter, "failed to fetch models from {provider_name}")
             }
             ProviderError::NoModelsReturned { provider_name } => {
@@ -157,6 +167,7 @@ impl Display for ProviderError {
             ProviderError::AuthenticationFailed {
                 provider_name,
                 reason,
+                ..
             } => write!(formatter, "{provider_name} authentication failed: {reason}"),
             ProviderError::StreamUnavailable { provider_name } => {
                 write!(
@@ -235,7 +246,7 @@ impl Error for ProviderError {}
 impl ProviderError {
     pub fn provider_name(&self) -> Option<&str> {
         match self {
-            Self::ModelFetchFailed { provider_name }
+            Self::ModelFetchFailed { provider_name, .. }
             | Self::NoModelsReturned { provider_name }
             | Self::ProviderUnavailable { provider_name, .. }
             | Self::AuthenticationRequired { provider_name }
@@ -254,17 +265,17 @@ impl ProviderError {
 
     pub fn diagnostics(&self) -> Option<&ProviderErrorDiagnostics> {
         match self {
-            Self::ProviderUnavailable { diagnostics, .. }
+            Self::ModelFetchFailed { diagnostics, .. }
+            | Self::ProviderUnavailable { diagnostics, .. }
             | Self::MalformedResponse { diagnostics, .. }
             | Self::ResponseParsingFailed { diagnostics, .. }
             | Self::StreamError { diagnostics, .. }
-            | Self::NetworkError { diagnostics, .. } => diagnostics.as_ref(),
+            | Self::NetworkError { diagnostics, .. }
+            | Self::AuthenticationFailed { diagnostics, .. } => diagnostics.as_ref(),
             Self::CancellationError
             | Self::InvalidApiKey
-            | Self::ModelFetchFailed { .. }
             | Self::NoModelsReturned { .. }
             | Self::AuthenticationRequired { .. }
-            | Self::AuthenticationFailed { .. }
             | Self::StreamUnavailable { .. }
             | Self::ContextLimitExceeded { .. }
             | Self::CapabilityMismatch { .. }
@@ -332,4 +343,30 @@ fn starts_with_api_key_prefix(chars: &[char], index: usize) -> bool {
 
 fn is_api_key_token_char(character: char) -> bool {
     character.is_ascii_alphanumeric() || matches!(character, '-' | '_')
+}
+
+fn provider_code_from_json(body: &str) -> Option<String> {
+    let value = serde_json::from_str::<serde_json::Value>(body).ok()?;
+    let provider_code = [
+        value.pointer("/error/code"),
+        value.pointer("/error/type"),
+        value.pointer("/code"),
+        value.pointer("/type"),
+    ]
+    .into_iter()
+    .flatten()
+    .find_map(json_provider_code);
+
+    provider_code
+}
+
+fn json_provider_code(value: &serde_json::Value) -> Option<String> {
+    match value {
+        serde_json::Value::Null => None,
+        serde_json::Value::String(value) if value.trim().is_empty() => None,
+        serde_json::Value::String(value) => Some(value.clone()),
+        serde_json::Value::Number(value) => Some(value.to_string()),
+        serde_json::Value::Bool(value) => Some(value.to_string()),
+        serde_json::Value::Array(_) | serde_json::Value::Object(_) => Some(value.to_string()),
+    }
 }

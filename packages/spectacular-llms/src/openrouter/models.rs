@@ -45,11 +45,24 @@ pub(crate) fn fetch_openrouter_models(
     let (status, body) = request_models(api_key)?;
     match status {
         200 => parse_openrouter_models(&body),
-        401 | 403 => Err(ProviderError::InvalidApiKey),
+        401 | 403 => Err(ProviderError::AuthenticationFailed {
+            provider_name: "OpenRouter".to_owned(),
+            reason: format!("credentials rejected with status {status}"),
+            diagnostics: Some(models_error_diagnostics(status, &body)),
+        }),
         _ => Err(ProviderError::ModelFetchFailed {
             provider_name: "OpenRouter".to_owned(),
+            diagnostics: Some(models_error_diagnostics(status, &body)),
         }),
     }
+}
+
+fn models_error_diagnostics(status: u16, body: &str) -> ProviderErrorDiagnostics {
+    ProviderErrorDiagnostics::new(ProviderErrorStage::HttpStatus)
+        .with_http_status(status)
+        .with_provider_code_from_body(body)
+        .with_excerpt(body)
+        .with_debug_event("models_error_body")
 }
 
 /// Parses OpenRouter model metadata from the provider response body.

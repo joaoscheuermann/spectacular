@@ -1,4 +1,6 @@
-use spectacular_agent::{AgentError, AgentErrorKind, AgentErrorReport, AgentErrorStage};
+use spectacular_agent::{
+    AgentError, AgentErrorDetails, AgentErrorKind, AgentErrorReport, AgentErrorStage,
+};
 use spectacular_llms::{ProviderError, ProviderErrorDiagnostics, ProviderErrorStage};
 
 #[test]
@@ -90,6 +92,51 @@ fn error_report_provider_http_status_exposes_structured_details() {
     assert_eq!(details.http_status, Some(503));
     assert_eq!(details.excerpt.as_deref(), Some("temporary outage"));
     assert_eq!(details.debug_events, vec!["fake_error_body"]);
+}
+
+#[test]
+fn error_report_formats_compact_display_diagnostics() {
+    let details = AgentErrorDetails {
+        kind: AgentErrorKind::ProviderUnavailable,
+        provider: Some("Fake".to_owned()),
+        stage: Some(AgentErrorStage::HttpStatus),
+        retryable: true,
+        http_status: Some(503),
+        provider_code: Some("temporarily_unavailable".to_owned()),
+        excerpt: Some("temporary outage".to_owned()),
+        debug_events: vec!["fake_error_body".to_owned(), "stream_error".to_owned()],
+    };
+
+    assert_eq!(
+        details.to_string(),
+        "kind: provider_unavailable\nprovider: Fake\nstage: http_status\nretryable: true\nhttp status: 503\nprovider code: temporarily_unavailable\nexcerpt: temporary outage\ndebug events: fake_error_body, stream_error"
+    );
+}
+
+#[test]
+fn error_report_provider_auth_failure_has_authentication_kind() {
+    let error = AgentError::from(ProviderError::AuthenticationFailed {
+        provider_name: "OpenRouter".to_owned(),
+        reason: "credentials rejected with status 401".to_owned(),
+        diagnostics: Some(
+            ProviderErrorDiagnostics::new(ProviderErrorStage::HttpStatus)
+                .with_http_status(401)
+                .with_provider_code("invalid_api_key")
+                .with_excerpt("invalid key")
+                .with_debug_event("chat_response_error_body"),
+        ),
+    });
+
+    let report = AgentErrorReport::from_error(&error);
+    let details = report.details.unwrap();
+
+    assert_eq!(details.kind, AgentErrorKind::Authentication);
+    assert_eq!(details.provider.as_deref(), Some("OpenRouter"));
+    assert_eq!(details.stage, Some(AgentErrorStage::HttpStatus));
+    assert!(!details.retryable);
+    assert_eq!(details.http_status, Some(401));
+    assert_eq!(details.provider_code.as_deref(), Some("invalid_api_key"));
+    assert_eq!(details.excerpt.as_deref(), Some("invalid key"));
 }
 
 #[test]

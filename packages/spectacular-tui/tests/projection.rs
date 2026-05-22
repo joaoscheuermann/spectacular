@@ -1,6 +1,7 @@
 use spectacular_tui::{
-    DisplayLine, DisplayLineStyle, DisplayMetadata, ReasoningLevel, RuntimeSelection, SessionId,
-    State, Timestamp, TranscriptItem, TranscriptItemContent, TranscriptItemId, UserPromptItem,
+    DisplayLine, DisplayLineStyle, DisplayMetadata, ErrorItem, ReasoningLevel, RuntimeSelection,
+    SessionId, State, Timestamp, TranscriptItem, TranscriptItemContent, TranscriptItemId,
+    UserPromptItem,
 };
 
 /// Builds an initialized state with stable metadata for transcript projection tests.
@@ -74,6 +75,29 @@ fn user_prompt_item_row_count_uses_visible_text_rows() {
     let item = user_prompt_item("hello");
 
     assert_eq!(spectacular_tui::transcript_item_layout_rows(&item, 80), 2);
+}
+
+/// Verifies error details render as compact follow-up rows.
+#[test]
+fn transcript_item_lines_error_includes_detail_rows() {
+    let item = TranscriptItem::new(
+        TranscriptItemId::new("error-1"),
+        Timestamp::new(1),
+        TranscriptItemContent::Error(ErrorItem::new(
+            "OpenAI authentication failed",
+            Some("kind: authentication\nhttp status: 401".to_owned()),
+        )),
+    );
+
+    assert_eq!(
+        spectacular_tui::transcript_item_lines(&item),
+        vec![
+            "error: OpenAI authentication failed",
+            "kind: authentication",
+            "http status: 401",
+            ""
+        ]
+    );
 }
 
 /// Builds a submitted user prompt transcript item.

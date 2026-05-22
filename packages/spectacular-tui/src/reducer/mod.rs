@@ -204,8 +204,8 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
         } => {
             append_worked_summary(state, duration, turn_tokens);
         }
-        ChatTuiAction::AgentFailed { message } => {
-            append_error(state, message.clone(), None);
+        ChatTuiAction::AgentFailed { message, details } => {
+            append_error(state, message.clone(), details);
             state.status = Status::Failed { message };
         }
         ChatTuiAction::AgentCancelled { reason } => {

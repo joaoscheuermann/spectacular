@@ -1,4 +1,19 @@
 #[test]
+fn openrouter_http_status_diagnostics_preserve_status_code_and_redacted_body() {
+    let body = r#"{"error":{"code":401,"message":"bad sk-or-v1-secret_value"}}"#;
+
+    let diagnostics = http_status_body_diagnostics(401, body, "chat_response_error_body");
+
+    assert_eq!(diagnostics.stage, Some(ProviderErrorStage::HttpStatus));
+    assert_eq!(diagnostics.http_status, Some(401));
+    assert_eq!(diagnostics.provider_code.as_deref(), Some("401"));
+    assert_eq!(diagnostics.debug_events, vec!["chat_response_error_body"]);
+    let excerpt = diagnostics.excerpt.unwrap();
+    assert!(excerpt.contains("[redacted]"));
+    assert!(!excerpt.contains("sk-or-v1-secret_value"));
+}
+
+#[test]
 fn openrouter_chat_chunks_emit_tool_calls_only_on_tool_call_finish() {
     let mut accumulator = OpenRouterToolCallAccumulator::default();
 

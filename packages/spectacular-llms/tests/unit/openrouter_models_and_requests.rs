@@ -86,10 +86,58 @@ fn openrouter_provider_returns_conservative_context_window_fallback() {
 /// Verifies that openrouter model fetch rejects unauthorized status.
 #[test]
 fn openrouter_model_fetch_rejects_unauthorized_status() {
-    let error =
-        fetch_openrouter_models("sk-or-v1-invalid", |_| Ok((401, "{}".to_owned()))).unwrap_err();
+    let error = fetch_openrouter_models("sk-or-v1-invalid", |_| {
+        Ok((
+            401,
+            r#"{"error":{"code":401,"message":"invalid key"}}"#.to_owned(),
+        ))
+    })
+    .unwrap_err();
 
-    assert!(matches!(error, ProviderError::InvalidApiKey));
+    let ProviderError::AuthenticationFailed {
+        provider_name,
+        diagnostics: Some(diagnostics),
+        ..
+    } = error
+    else {
+        panic!("expected authentication diagnostics");
+    };
+
+    assert_eq!(provider_name, "OpenRouter");
+    assert_eq!(diagnostics.stage, Some(ProviderErrorStage::HttpStatus));
+    assert_eq!(diagnostics.http_status, Some(401));
+    assert_eq!(diagnostics.provider_code.as_deref(), Some("401"));
+    assert_eq!(diagnostics.excerpt.as_deref(), Some(r#"{"error":{"code":401,"message":"invalid key"}}"#));
+}
+
+/// Verifies that OpenRouter model fetch preserves non-success body diagnostics.
+#[test]
+fn openrouter_model_fetch_non_success_exposes_status_code_and_body() {
+    let error = fetch_openrouter_models("sk-or-v1-valid", |_| {
+        Ok((
+            503,
+            r#"{"error":{"code":503,"message":"upstream unavailable sk-secret_value"}}"#
+                .to_owned(),
+        ))
+    })
+    .unwrap_err();
+
+    let ProviderError::ModelFetchFailed {
+        provider_name,
+        diagnostics: Some(diagnostics),
+    } = error
+    else {
+        panic!("expected model fetch diagnostics");
+    };
+
+    assert_eq!(provider_name, "OpenRouter");
+    assert_eq!(diagnostics.stage, Some(ProviderErrorStage::HttpStatus));
+    assert_eq!(diagnostics.http_status, Some(503));
+    assert_eq!(diagnostics.provider_code.as_deref(), Some("503"));
+    assert_eq!(diagnostics.debug_events, vec!["models_error_body"]);
+    let excerpt = diagnostics.excerpt.unwrap();
+    assert!(excerpt.contains("[redacted]"));
+    assert!(!excerpt.contains("sk-secret_value"));
 }
 
 /// Verifies that openrouter model fetch rejects empty model list.

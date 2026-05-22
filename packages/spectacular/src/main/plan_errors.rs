@@ -60,7 +60,7 @@ fn format_provider_error(error: &ProviderError) -> String {
     match error {
         ProviderError::CancellationError => "Provider call was cancelled.".to_owned(),
         ProviderError::InvalidApiKey => "Invalid API key.".to_owned(),
-        ProviderError::ModelFetchFailed { provider_name } => {
+        ProviderError::ModelFetchFailed { provider_name, .. } => {
             format!("Failed to fetch models from {provider_name}.")
         }
         ProviderError::NoModelsReturned { provider_name } => {
@@ -75,6 +75,7 @@ fn format_provider_error(error: &ProviderError) -> String {
         ProviderError::AuthenticationFailed {
             provider_name,
             reason,
+            ..
         } => format!("{provider_name} authentication failed: {reason}."),
         ProviderError::StreamUnavailable { provider_name } => {
             format!("{provider_name} streaming is not available yet.")

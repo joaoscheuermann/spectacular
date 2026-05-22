@@ -1,6 +1,6 @@
 use super::*;
 use crate::chat::RuntimeSelection;
-use spectacular_agent::AgentEvent;
+use spectacular_agent::{AgentErrorDetails, AgentErrorKind, AgentErrorStage, AgentEvent};
 use spectacular_commands::{Command, CommandControl, CommandRegistry};
 use spectacular_config::ProviderAuthMode;
 use spectacular_llms::{FinishReason, UsageMetadata};
@@ -350,6 +350,30 @@ fn runtime_error_and_cancelled_events_map_to_terminal_actions() {
         adapter.adapt_agent_event(&AgentEvent::error("boom")),
         vec![ChatTuiAction::AgentFailed {
             message: "boom".to_owned(),
+            details: None,
+        }]
+    );
+    let details = AgentErrorDetails {
+        kind: AgentErrorKind::ProviderUnavailable,
+        provider: Some("OpenAI".to_owned()),
+        stage: Some(AgentErrorStage::HttpStatus),
+        retryable: true,
+        http_status: Some(503),
+        provider_code: Some("temporarily_unavailable".to_owned()),
+        excerpt: Some("temporary outage".to_owned()),
+        debug_events: vec!["responses_error_body".to_owned()],
+    };
+    assert_eq!(
+        adapter.adapt_agent_event(&AgentEvent::error_with_details(
+            "OpenAI is unavailable",
+            details
+        )),
+        vec![ChatTuiAction::AgentFailed {
+            message: "OpenAI is unavailable".to_owned(),
+            details: Some(
+                "kind: provider_unavailable\nprovider: OpenAI\nstage: http_status\nretryable: true\nhttp status: 503\nprovider code: temporarily_unavailable\nexcerpt: temporary outage\ndebug events: responses_error_body"
+                    .to_owned()
+            ),
         }]
     );
     assert_eq!(
@@ -364,6 +388,7 @@ fn runtime_error_and_cancelled_events_map_to_terminal_actions() {
         }),
         vec![ChatTuiAction::AgentFailed {
             message: "provider response reached the length limit".to_owned(),
+            details: None,
         }]
     );
     assert_eq!(
@@ -372,6 +397,7 @@ fn runtime_error_and_cancelled_events_map_to_terminal_actions() {
         }),
         vec![ChatTuiAction::AgentFailed {
             message: "provider requested tool calls without completing the run".to_owned(),
+            details: None,
         }]
     );
 }
