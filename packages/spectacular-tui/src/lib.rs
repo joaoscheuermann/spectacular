@@ -20,11 +20,12 @@ pub use action::{
 pub use components::{
     app_lines, app_render_lines, footer_left_render_line, footer_render_line,
     footer_right_render_line, footer_text, input_notice_render_line, prompt_lines,
-    prompt_render_lines, prompt_render_lines_with_width, transcript_item_layout_rows,
-    transcript_item_lines, transcript_item_render_lines, transcript_layout_item_range,
-    transcript_layout_row_starts, transcript_layout_total_rows, transcript_lines,
-    transcript_render_lines, transcript_total_render_rows, turn_usage_text, usage_text,
-    working_render_line, wrapped_layout_text_rows,
+    prompt_render_lines, prompt_render_lines_with_width, selection_prompt_render_lines,
+    transcript_item_layout_rows, transcript_item_lines, transcript_item_render_lines,
+    transcript_layout_item_range, transcript_layout_row_starts, transcript_layout_total_rows,
+    transcript_lines, transcript_render_lines, transcript_total_render_rows, turn_usage_text,
+    usage_text, working_render_line, wrapped_layout_text_rows, SelectionPrompt,
+    SelectionPromptProps,
 };
 pub use fake_streaming::{
     fake_cancellation_plan, fake_failure_plan, fake_streaming_plan, fake_streaming_runtime_finding,

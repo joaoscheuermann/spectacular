@@ -314,6 +314,40 @@ async fn context_tui_selection_cancel_returns_exit() {
     ));
 }
 
+/// Verifies TUI selection requests fail fast when there is no selectable answer.
+#[tokio::test]
+async fn context_tui_selection_prompt_requires_option_or_custom_input() {
+    let mut model = test_model();
+    let renderer = Renderer::default();
+    let tools = ToolStorage::default();
+    let runner = NoopRunner;
+    let mut control = ChatCommandControl::default();
+    let (_selection_sender, mut selection_receiver) = mpsc::unbounded_channel();
+    let mut actions = Vec::new();
+
+    let result = {
+        let mut dispatch = |action| actions.push(action);
+        let context = ChatCommandContext::new_tui(
+            &mut model,
+            &renderer,
+            &tools,
+            &runner,
+            &mut control,
+            None,
+            &mut dispatch,
+            &mut selection_receiver,
+        );
+        context
+            .ask(SelectionPromptRequest::new("Pick one", "", Vec::new()))
+            .await
+    };
+
+    assert!(
+        matches!(result, Err(ChatError::Session(message)) if message == "selection prompt requires an option or custom input")
+    );
+    assert!(actions.is_empty());
+}
+
 /// Builds a chat model configured for command tests.
 fn test_model() -> ChatModel {
     let session = crate::chat::session::SessionManager::new_in(temp_session_dir("adapter"))

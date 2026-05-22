@@ -1,7 +1,7 @@
 use crate::components::{
     footer_render_line, input_notice_render_line, prompt_render_lines,
-    prompt_render_lines_with_width, transcript_render_lines, working_render_line, Footer,
-    InputNotice, Prompt, Transcript, Working,
+    prompt_render_lines_with_width, selection_prompt_render_lines, transcript_render_lines,
+    working_render_line, Footer, InputNotice, Prompt, SelectionPrompt, Transcript, Working,
 };
 use crate::render::{RenderLine, RenderStyle};
 use crate::state::State;
@@ -22,13 +22,13 @@ pub fn App(mut hooks: Hooks, props: &AppProps) -> impl Into<AnyElement<'static>>
     };
 
     let transcript_capacity = transcript_capacity_rows(&state, height, Some(width));
-
     element!(View(flex_direction: FlexDirection::Column, width, height) {
         Transcript(state: state.clone(), capacity: transcript_capacity, width: width)
         #(working_render_line(&state).is_some().then_some(element!(Working(state: state.clone()))))
         View(flex_direction: FlexDirection::Column, width: 100pct, flex_shrink: 0.0) {
             #(input_notice_render_line(&state).is_some().then_some(element!(InputNotice(state: state.clone()))))
-            Prompt(state: state.clone(), width: width)
+            #(state.selection.is_some().then_some(element!(SelectionPrompt(state: state.clone()))))
+            #(state.selection.is_none().then_some(element!(Prompt(state: state.clone(), width: width))))
             Footer(state: state.clone())
         }
     })
@@ -45,7 +45,7 @@ pub fn app_render_lines(state: &State) -> Vec<RenderLine> {
     if let Some(notice) = input_notice_render_line(state) {
         lines.push(notice);
     }
-    lines.extend(prompt_render_lines(state));
+    lines.extend(input_render_lines(state));
     lines.push(RenderLine::styled("", RenderStyle::Text));
     lines.push(footer_render_line(state));
     lines
@@ -68,7 +68,7 @@ fn transcript_capacity_rows(state: &State, height: u16, width: Option<u16>) -> u
     } else {
         0
     };
-    let chrome_rows = prompt_render_lines_with_width(state, width)
+    let chrome_rows = input_render_lines_with_width(state, width)
         .len()
         .saturating_add(working_rows)
         .saturating_add(notice_rows)
@@ -76,6 +76,24 @@ fn transcript_capacity_rows(state: &State, height: u16, width: Option<u16>) -> u
     let chrome_rows = u16::try_from(chrome_rows).unwrap_or(u16::MAX);
 
     height.saturating_sub(chrome_rows)
+}
+
+/// Formats the active input surface, choosing command selection over free-form prompt input.
+fn input_render_lines(state: &State) -> Vec<RenderLine> {
+    if state.selection.is_some() {
+        return selection_prompt_render_lines(state);
+    }
+
+    prompt_render_lines(state)
+}
+
+/// Formats the active input surface with width-aware prompt wrapping.
+fn input_render_lines_with_width(state: &State, width: Option<u16>) -> Vec<RenderLine> {
+    if state.selection.is_some() {
+        return selection_prompt_render_lines(state);
+    }
+
+    prompt_render_lines_with_width(state, width)
 }
 
 /// Props for the full-screen root application component.

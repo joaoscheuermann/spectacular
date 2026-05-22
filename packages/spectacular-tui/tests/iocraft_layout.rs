@@ -1,7 +1,7 @@
 use spectacular_tui::{
     render_state_to_string, Activity, CommandStatus, ContextTokenUsage, DisplayMetadata,
-    OpeningBannerItem, ReasoningLevel, RuntimeSelection, SessionId, State, Status, ToolStatus,
-    TranscriptItem, TranscriptItemContent, TranscriptItemId,
+    OpeningBannerItem, PromptState, ReasoningLevel, RuntimeSelection, SelectionPromptState,
+    SessionId, State, Status, ToolStatus, TranscriptItem, TranscriptItemContent, TranscriptItemId,
 };
 
 /// Builds a representative runtime selection for IOCraft layout tests.
@@ -214,6 +214,50 @@ fn prompt_renders_current_text_without_reserved_regions() {
     assert!(!output.contains("Prompt:"));
     assert!(!output.contains("Completions:"));
     assert!(!output.contains("Guidance:"));
+}
+
+/// Verifies active command-owned ask prompts render as the input surface.
+#[test]
+fn selection_prompt_renders_option_custom_and_comment_state() {
+    let mut state = state();
+    state.selection = Some(
+        SelectionPromptState::new(
+            "Use generated commit message?",
+            "Message: \"feat: add tui asks\"",
+            vec![
+                "Use generated message".to_owned(),
+                "Cancel commit".to_owned(),
+            ],
+        )
+        .with_inputs(true, true),
+    );
+
+    let output = render(&state);
+
+    assert!(output.contains("Use generated commit message?"));
+    assert!(output.contains("Message: \"feat: add tui asks\""));
+    assert!(output.contains("> a. Use generated message"));
+    assert!(output.contains("  b. Cancel commit"));
+    assert!(output.contains("  c. Type your option here"));
+    assert!(output.contains("Press Tab to add a comment on Use generated message."));
+}
+
+/// Verifies command-owned selection prompts replace the normal prompt composer.
+#[test]
+fn selection_prompt_replaces_prompt_composer() {
+    let mut state = state();
+    state.session.prompt = PromptState::from_text("draft prompt");
+    state.selection = Some(SelectionPromptState::new(
+        "Pick one",
+        "",
+        vec!["alpha".to_owned()],
+    ));
+
+    let output = render(&state);
+
+    assert!(output.contains("Pick one"));
+    assert!(output.contains("> a. alpha"));
+    assert!(!output.contains("> draft prompt"));
 }
 
 /// Verifies welcome/banner text is rendered as semantic state instead of terminal printing.

@@ -638,6 +638,22 @@ fn selection_key_effects(
             paste_burst.clear();
             selection_change_effect(selection, SelectionPromptState::select_next)
         }
+        KeyCode::Left => {
+            paste_burst.clear();
+            selection_change_effect(selection, SelectionPromptState::move_left)
+        }
+        KeyCode::Right => {
+            paste_burst.clear();
+            selection_change_effect(selection, SelectionPromptState::move_right)
+        }
+        KeyCode::Home => {
+            paste_burst.clear();
+            selection_change_effect(selection, SelectionPromptState::move_to_start)
+        }
+        KeyCode::End => {
+            paste_burst.clear();
+            selection_change_effect(selection, SelectionPromptState::move_to_end)
+        }
         KeyCode::Backspace => {
             paste_burst.clear();
             selection_change_effect(selection, SelectionPromptState::backspace)

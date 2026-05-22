@@ -434,6 +434,12 @@ impl TuiCommandBridge<'_> {
         &self,
         request: SelectionPromptRequest,
     ) -> Result<SelectionPromptAnswer, ChatError> {
+        if request.options.is_empty() && !request.allow_custom {
+            return Err(ChatError::Session(
+                "selection prompt requires an option or custom input".to_owned(),
+            ));
+        }
+
         self.dispatch(ChatTuiAction::SelectionPromptChanged(Some(
             selection_state_from_request(&request),
         )));

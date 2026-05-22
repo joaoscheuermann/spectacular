@@ -112,6 +112,54 @@ impl SelectionPromptState {
         self.custom_cursor += text.len();
     }
 
+    /// Moves the active editable cursor one grapheme left.
+    pub fn move_left(&mut self) {
+        if self.input_mode == SelectionInputMode::Comment {
+            self.comment_cursor = previous_boundary(&self.comment, self.comment_cursor);
+            return;
+        }
+
+        if self.is_custom_selected() {
+            self.custom_cursor = previous_boundary(&self.custom_input, self.custom_cursor);
+        }
+    }
+
+    /// Moves the active editable cursor one grapheme right.
+    pub fn move_right(&mut self) {
+        if self.input_mode == SelectionInputMode::Comment {
+            self.comment_cursor = next_boundary(&self.comment, self.comment_cursor);
+            return;
+        }
+
+        if self.is_custom_selected() {
+            self.custom_cursor = next_boundary(&self.custom_input, self.custom_cursor);
+        }
+    }
+
+    /// Moves the active editable cursor to the start of its field.
+    pub fn move_to_start(&mut self) {
+        if self.input_mode == SelectionInputMode::Comment {
+            self.comment_cursor = 0;
+            return;
+        }
+
+        if self.is_custom_selected() {
+            self.custom_cursor = 0;
+        }
+    }
+
+    /// Moves the active editable cursor to the end of its field.
+    pub fn move_to_end(&mut self) {
+        if self.input_mode == SelectionInputMode::Comment {
+            self.comment_cursor = self.comment.len();
+            return;
+        }
+
+        if self.is_custom_selected() {
+            self.custom_cursor = self.custom_input.len();
+        }
+    }
+
     /// Deletes one character before the active editable cursor.
     pub fn backspace(&mut self) {
         if self.input_mode == SelectionInputMode::Comment {
@@ -160,6 +208,22 @@ impl SelectionPromptState {
     /// Returns whether the optional custom free-text row is selected.
     pub fn is_custom_selected(&self) -> bool {
         self.allow_custom && self.selected == self.options.len()
+    }
+
+    /// Returns the visible label for the currently selected row.
+    pub fn selected_label(&self) -> String {
+        if self.is_custom_selected() {
+            let value = self.custom_input.trim();
+            if value.is_empty() {
+                return "custom option".to_owned();
+            }
+            return value.to_owned();
+        }
+
+        self.options
+            .get(self.selected)
+            .cloned()
+            .unwrap_or_else(|| "selection".to_owned())
     }
 
     /// Returns the number of selectable rows including optional custom input.
