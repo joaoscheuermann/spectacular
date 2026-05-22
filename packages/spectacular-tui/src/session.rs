@@ -32,6 +32,8 @@ pub struct PromptState {
     #[serde(default)]
     pub selected_completion: usize,
     #[serde(default)]
+    pub dismissed_completion: Option<String>,
+    #[serde(default)]
     pub kill_buffer: String,
     #[serde(default)]
     pub paste_burst: PromptPasteBurstState,
@@ -61,6 +63,8 @@ enum DurablePromptState {
         #[serde(default)]
         selected_completion: usize,
         #[serde(default)]
+        dismissed_completion: Option<String>,
+        #[serde(default)]
         kill_buffer: String,
         #[serde(default)]
         paste_burst: PromptPasteBurstState,
@@ -85,6 +89,8 @@ enum DurablePromptState {
         #[serde(default)]
         selected_completion: usize,
         #[serde(default)]
+        dismissed_completion: Option<String>,
+        #[serde(default)]
         kill_buffer: String,
         #[serde(default)]
         paste_burst: PromptPasteBurstState,
@@ -101,6 +107,7 @@ impl Default for PromptState {
             preferred_column: None,
             selection_anchor: None,
             selected_completion: 0,
+            dismissed_completion: None,
             kill_buffer: String::new(),
             paste_burst: PromptPasteBurstState::default(),
             scroll_top_row: 0,
@@ -122,6 +129,7 @@ impl From<DurablePromptState> for PromptState {
                 preferred_column,
                 selection_anchor,
                 selected_completion,
+                dismissed_completion,
                 kill_buffer,
                 paste_burst,
                 scroll_top_row,
@@ -143,6 +151,7 @@ impl From<DurablePromptState> for PromptState {
                     preferred_column,
                     selection_anchor,
                     selected_completion,
+                    dismissed_completion,
                     kill_buffer,
                     paste_burst,
                     scroll_top_row,
@@ -157,6 +166,7 @@ impl From<DurablePromptState> for PromptState {
                 preferred_column,
                 selection_anchor,
                 selected_completion,
+                dismissed_completion,
                 kill_buffer,
                 paste_burst,
             } => {
@@ -170,6 +180,7 @@ impl From<DurablePromptState> for PromptState {
                     preferred_column,
                     selection_anchor,
                     selected_completion,
+                    dismissed_completion,
                     kill_buffer,
                     paste_burst,
                     ..Self::default()

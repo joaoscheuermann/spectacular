@@ -2052,6 +2052,7 @@ dependencies = [
  "iocraft",
  "serde",
  "serde_json",
+ "spectacular-commands",
  "tokio",
  "unicode-segmentation",
  "unicode-width",

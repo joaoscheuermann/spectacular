@@ -32,8 +32,10 @@ pub use fake_streaming::{
 };
 pub use ids::{SessionId, Timestamp, TranscriptItemId};
 pub use metadata::{
-    CommandDescriptor, ContextTokenUsage, DisplayMetadata, ProviderUsageMetadata, ReasoningLevel,
-    RuntimeSelection, TokenUsageTotal, TurnTokenUsage, WorktreeMetadata,
+    CachedModelValues, CommandDescriptor, CommandFieldDescriptor, CommandSubcommandDescriptor,
+    CommandValueValidation, CompletionValues, ContextTokenUsage, DisplayMetadata,
+    ProviderUsageMetadata, ReasoningLevel, RuntimeSelection, TokenUsageTotal, TurnTokenUsage,
+    WorktreeMetadata,
 };
 pub use prompt::SelectionInputMode;
 pub use reducer::reduce;

@@ -168,7 +168,7 @@ fn key_effects(
             return prompt_change_effect(state, |prompt| prompt.insert_text("\n"));
         }
         paste_burst.clear();
-        return submit_prompt_effects(state);
+        return submit_or_compose_command_effects(state);
     }
     if is_line_break_key(&key) {
         if paste_burst.should_insert_line_break(now) {
@@ -176,6 +176,9 @@ fn key_effects(
             return prompt_change_effect(state, |prompt| prompt.insert_text("\n"));
         }
         paste_burst.clear();
+        if crate::prompt::has_command_context(&state.session.prompt) {
+            return submit_or_compose_command_effects(state);
+        }
         return prompt_change_effect(state, PromptState::insert_newline);
     }
 
@@ -186,7 +189,7 @@ fn key_effects(
     match key.code {
         KeyCode::Tab => {
             paste_burst.clear();
-            accept_slash_completion_effects(state)
+            tab_effects(state)
         }
         KeyCode::Esc => {
             paste_burst.clear();
@@ -279,6 +282,13 @@ fn key_effects(
 
 /// Builds Escape behavior from current status without mutating state directly.
 fn escape_effects(state: &State) -> Vec<EventEffect> {
+    let dismissed = prompt_change_effect(state, |prompt| {
+        crate::prompt::dismiss_command_suggestions(prompt, &state.commands);
+    });
+    if !dismissed.is_empty() {
+        return dismissed;
+    }
+
     if state.status.is_cancellable() {
         return action_effects(ChatTuiAction::CancelRun);
     }
@@ -380,6 +390,7 @@ fn is_multiline_slash_paste(state: &State, value: &str) -> bool {
 
     let text = state.session.prompt.text();
     crate::prompt::slash_command_query(&text, state.session.prompt.cursor).is_some()
+        || crate::prompt::has_command_context(&state.session.prompt)
 }
 
 /// Handles terminal-native paste events using the terminal-provided bytes.
@@ -435,6 +446,21 @@ fn submit_prompt_effects(state: &State) -> Vec<EventEffect> {
     })
 }
 
+/// Accepts suggestions or guides slash-command fields before allowing submission.
+fn submit_or_compose_command_effects(state: &State) -> Vec<EventEffect> {
+    let accepted = accept_command_suggestion_effects(state);
+    if !accepted.is_empty() {
+        return accepted;
+    }
+
+    let (guided, did_guide) = guide_command_field_effects(state);
+    if did_guide {
+        return guided;
+    }
+
+    submit_prompt_effects(state)
+}
+
 /// Applies a local prompt edit and returns a PromptChanged action when state changed.
 fn prompt_change_effect<F>(state: &State, edit: F) -> Vec<EventEffect>
 where
@@ -454,26 +480,66 @@ fn prompt_changed_if_needed(state: &State, prompt: PromptState) -> Vec<EventEffe
     action_effects(ChatTuiAction::PromptChanged(prompt))
 }
 
-/// Accepts the selected slash command completion into prompt text when available.
-fn accept_slash_completion_effects(state: &State) -> Vec<EventEffect> {
-    let suggestions = crate::prompt::slash_suggestions(&state.session.prompt, &state.commands);
-    let Some(command) = suggestions
+/// Accepts the selected command-composer suggestion into prompt text when available.
+fn accept_command_suggestion_effects(state: &State) -> Vec<EventEffect> {
+    let suggestions = crate::prompt::command_suggestions(&state.session.prompt, &state.commands);
+    let Some(suggestion) = suggestions
         .get(state.session.prompt.selected_completion)
-        .or_else(|| suggestions.first())
+        .filter(|suggestion| suggestion.kind != crate::prompt::CommandSuggestionKind::Info)
+        .or_else(|| {
+            suggestions
+                .iter()
+                .find(|suggestion| suggestion.kind != crate::prompt::CommandSuggestionKind::Info)
+        })
+        .cloned()
     else {
         return Vec::new();
     };
 
     prompt_change_effect(state, |prompt| {
-        prompt.accept_command_completion(command);
+        crate::prompt::accept_command_suggestion(prompt, &suggestion, &state.commands);
     })
 }
 
-/// Accepts a slash completion with Space, otherwise inserts a literal space.
-fn space_effects(state: &State) -> Vec<EventEffect> {
-    let accepted = accept_slash_completion_effects(state);
+/// Guides the command composer to the next invalid or required field.
+fn guide_command_field_effects(state: &State) -> (Vec<EventEffect>, bool) {
+    let mut prompt = state.session.prompt.clone();
+    if !crate::prompt::guide_command_field(&mut prompt, &state.commands) {
+        return (Vec::new(), false);
+    }
+
+    (prompt_changed_if_needed(state, prompt), true)
+}
+
+/// Handles Tab as command completion, command field guidance, or a literal tab outside slash mode.
+fn tab_effects(state: &State) -> Vec<EventEffect> {
+    let accepted = accept_command_suggestion_effects(state);
     if !accepted.is_empty() {
         return accepted;
+    }
+
+    let (guided, did_guide) = guide_command_field_effects(state);
+    if did_guide {
+        return guided;
+    }
+
+    if crate::prompt::has_command_context(&state.session.prompt) {
+        return Vec::new();
+    }
+
+    prompt_change_effect(state, |prompt| prompt.insert_text("\t"))
+}
+
+/// Accepts a command completion with Space, otherwise guides or inserts a literal space.
+fn space_effects(state: &State) -> Vec<EventEffect> {
+    let accepted = accept_command_suggestion_effects(state);
+    if !accepted.is_empty() {
+        return accepted;
+    }
+
+    let (guided, did_guide) = guide_command_field_effects(state);
+    if did_guide {
+        return guided;
     }
 
     prompt_change_effect(state, |prompt| prompt.insert_text(" "))
@@ -481,9 +547,7 @@ fn space_effects(state: &State) -> Vec<EventEffect> {
 
 /// Moves through slash completions before falling back to prompt cursor up movement.
 fn prompt_up_effects(state: &State, selecting: bool) -> Vec<EventEffect> {
-    if !selecting
-        && !crate::prompt::slash_suggestions(&state.session.prompt, &state.commands).is_empty()
-    {
+    if !selecting && selectable_command_suggestion_count(state) > 0 {
         return prompt_change_effect(state, PromptState::select_previous_completion);
     }
 
@@ -494,7 +558,7 @@ fn prompt_up_effects(state: &State, selecting: bool) -> Vec<EventEffect> {
 
 /// Moves through slash completions before falling back to prompt cursor down movement.
 fn prompt_down_effects(state: &State, selecting: bool) -> Vec<EventEffect> {
-    let count = crate::prompt::slash_suggestions(&state.session.prompt, &state.commands).len();
+    let count = selectable_command_suggestion_count(state);
     if !selecting && count > 0 {
         return prompt_change_effect(state, |prompt| prompt.select_next_completion(count));
     }
@@ -502,6 +566,14 @@ fn prompt_down_effects(state: &State, selecting: bool) -> Vec<EventEffect> {
     prompt_change_effect(state, |prompt| {
         prompt.move_vertical_with_width(1, selecting, state.prompt_layout.content_width);
     })
+}
+
+/// Returns the count of selectable command-composer suggestions.
+fn selectable_command_suggestion_count(state: &State) -> usize {
+    crate::prompt::command_suggestions(&state.session.prompt, &state.commands)
+        .into_iter()
+        .filter(|suggestion| suggestion.kind != crate::prompt::CommandSuggestionKind::Info)
+        .count()
 }
 
 /// Handles one key event while a modal selection prompt is active.

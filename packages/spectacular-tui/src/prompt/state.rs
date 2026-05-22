@@ -45,6 +45,7 @@ impl PromptState {
         self.preferred_column = None;
         self.selection_anchor = None;
         self.selected_completion = 0;
+        self.dismissed_completion = None;
         self.paste_burst.buffer.clear();
         self.scroll_top_row = 0;
         self.redo_stack.clear();
@@ -397,6 +398,15 @@ impl PromptState {
         self.selected_completion = (self.selected_completion + 1).min(count.saturating_sub(1));
     }
 
+    /// Replaces prompt text as one undoable edit while preserving the caller-updated cursor.
+    pub(crate) fn replace_text_as_edit(&mut self, text: String) {
+        self.prepare_edit(false);
+        self.set_text(text);
+        self.cursor = clamp_boundary(&self.text(), self.cursor);
+        self.finish_edit();
+        self.record_history_boundary();
+    }
+
     /// Accepts a display-ready slash command suggestion into the leading command token.
     pub fn accept_command_completion(&mut self, command: &CommandDescriptor) {
         let text = self.text();
@@ -544,6 +554,7 @@ impl PromptState {
         self.preferred_column = None;
         self.selection_anchor = None;
         self.selected_completion = 0;
+        self.dismissed_completion = None;
         self.scroll_top_row = self
             .scroll_top_row
             .min(self.text().lines().count().saturating_sub(1));
@@ -569,6 +580,7 @@ impl PromptState {
         self.preferred_column = None;
         self.selection_anchor = None;
         self.selected_completion = 0;
+        self.dismissed_completion = None;
         self.scroll_top_row = 0;
     }
 
@@ -594,21 +606,20 @@ pub fn slash_suggestions<'a>(
     prompt: &PromptState,
     commands: &'a [CommandDescriptor],
 ) -> Vec<&'a CommandDescriptor> {
-    let text = prompt.text();
-    let Some(query) = slash_command_query(&text, prompt.cursor) else {
-        return Vec::new();
-    };
-
-    commands
-        .iter()
-        .filter(|command| command.name.starts_with(query))
+    crate::prompt::command_suggestions(prompt, commands)
+        .into_iter()
+        .filter(|suggestion| suggestion.kind == crate::prompt::CommandSuggestionKind::Command)
+        .filter_map(|suggestion| {
+            commands
+                .iter()
+                .find(|command| command.name == suggestion.replacement)
+        })
         .collect()
 }
 
 /// Returns the current slash command query when the cursor is in the leading token.
 pub fn slash_command_query(text: &str, cursor: usize) -> Option<&str> {
-    let range = slash_token_range(text, cursor)?;
-    text.get(range)?.strip_prefix('/')
+    super::composer::command_name_query(text, cursor)
 }
 
 /// Normalizes pasted text to the prompt's internal newline representation.
@@ -669,12 +680,11 @@ fn current_line_indentation(text: &str, cursor: usize) -> String {
 
 /// Returns the byte range for the leading slash token when cursor is inside it.
 fn slash_token_range(text: &str, cursor: usize) -> Option<Range<usize>> {
-    let trimmed_start = text.len() - text.trim_start().len();
-    if !text[trimmed_start..].starts_with('/') {
+    if !text.starts_with('/') {
         return None;
     }
 
-    let token_start = trimmed_start;
+    let token_start = 0;
     let token_end = text[token_start..]
         .find(char::is_whitespace)
         .map(|index| token_start + index)

@@ -65,7 +65,9 @@ where
             shell.apply_action(ChatTuiAction::NoticeReported { message: warning });
         }
         let commands = commands::registry()?;
-        shell.apply_action(super::adapter::commands_loaded_action(commands.metadata()));
+        shell.apply_action(super::adapter::commands_loaded_with_completions_action(
+            &commands, &model,
+        ));
         Ok(Self {
             shell,
             model,
@@ -276,8 +278,18 @@ where
         if control.exit_requested() {
             self.shell.apply_action(ChatTuiAction::ExitRequested);
         }
+        self.refresh_command_completions();
         self.publish_state(state_sender);
         Ok(control.exit_requested())
+    }
+
+    /// Refreshes reducer-safe command completion metadata after command-owned config changes.
+    fn refresh_command_completions(&mut self) {
+        self.shell
+            .apply_action(super::adapter::commands_loaded_with_completions_action(
+                &self.commands,
+                &self.model,
+            ));
     }
 
     /// Refreshes display-safe worktree metadata from the controller-owned workspace.

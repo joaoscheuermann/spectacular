@@ -9,6 +9,16 @@
     }
 
     #[test]
+    fn indented_slash_query_is_hidden() {
+        assert_eq!(suggestion_query(" /his", 5), None);
+    }
+
+    #[test]
+    fn later_line_slash_query_is_hidden() {
+        assert_eq!(suggestion_query("hello\n/his", 10), None);
+    }
+
+    #[test]
     fn suggestions_hide_after_arguments_start() {
         assert_eq!(suggestion_query("/history 2", 10), None);
     }
@@ -74,6 +84,24 @@
         let suggestions = state.suggestions(&registry, &completions);
 
         assert_eq!(suggestions[0].replacement, "history");
+    }
+
+    #[test]
+    fn prompt_state_hides_indented_slash_suggestions() {
+        let registry = test_registry();
+        let completions = PromptCompletionCatalog::default();
+        let state = state_with(" /his");
+
+        assert!(state.suggestions(&registry, &completions).is_empty());
+    }
+
+    #[test]
+    fn prompt_state_hides_later_line_slash_suggestions() {
+        let registry = test_registry();
+        let completions = PromptCompletionCatalog::default();
+        let state = state_with("hello\n/his");
+
+        assert!(state.suggestions(&registry, &completions).is_empty());
     }
 
     #[test]

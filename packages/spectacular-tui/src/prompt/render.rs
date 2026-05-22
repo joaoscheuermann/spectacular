@@ -1,5 +1,6 @@
 use crate::metadata::CommandDescriptor;
 use crate::prompt::layout::{row_for_cursor, visual_rows, VisualRow};
+use crate::prompt::{CommandGuidanceLine, CommandSuggestion, CommandSuggestionKind};
 use crate::render::{RenderLine, RenderSpan, RenderStyle};
 use crate::session::PromptState;
 use std::ops::Range;
@@ -19,8 +20,19 @@ pub(crate) fn render_lines(
     width: Option<u16>,
 ) -> Vec<RenderLine> {
     let mut lines = prompt_text_lines(prompt, width);
-    lines.extend(slash_suggestion_lines(prompt, commands));
-    lines.extend(slash_usage_lines(prompt, commands));
+    let suggestions = crate::prompt::command_suggestions(prompt, commands);
+    let mut guidance = command_guidance_lines(prompt, commands);
+    if guidance.is_empty() {
+        guidance = slash_usage_lines(prompt, commands, &suggestions);
+    }
+    let has_guidance = !guidance.is_empty();
+    let has_suggestions = !suggestions.is_empty();
+
+    lines.extend(guidance);
+    if has_guidance && has_suggestions {
+        lines.push(RenderLine::styled("", RenderStyle::Dim));
+    }
+    lines.extend(slash_suggestion_lines(prompt, &suggestions));
     lines
 }
 
@@ -175,21 +187,49 @@ fn content_width(width: Option<u16>) -> usize {
 }
 
 /// Formats slash command suggestions under the active prompt.
-fn slash_suggestion_lines(prompt: &PromptState, commands: &[CommandDescriptor]) -> Vec<RenderLine> {
-    slash_suggestions(prompt, commands)
+fn slash_suggestion_lines(
+    prompt: &PromptState,
+    suggestions: &[CommandSuggestion],
+) -> Vec<RenderLine> {
+    suggestions
         .into_iter()
         .enumerate()
-        .map(|(index, command)| slash_suggestion_line(command, index, prompt.selected_completion))
+        .map(|(index, suggestion)| {
+            slash_suggestion_line(suggestion, index, prompt.selected_completion)
+        })
         .collect()
 }
 
+/// Formats structured command-composer guidance rows.
+fn command_guidance_lines(prompt: &PromptState, commands: &[CommandDescriptor]) -> Vec<RenderLine> {
+    crate::prompt::command_guidance(prompt, commands)
+        .into_iter()
+        .map(command_guidance_line)
+        .collect()
+}
+
+/// Formats one command-composer guidance row.
+fn command_guidance_line(line: CommandGuidanceLine) -> RenderLine {
+    match line {
+        CommandGuidanceLine::Missing(fields) => RenderLine::styled(
+            format!("missing: {}.", fields.join(", ")),
+            RenderStyle::Secret,
+        ),
+        CommandGuidanceLine::Info(value) => RenderLine::styled(value, RenderStyle::Secret),
+        CommandGuidanceLine::Detail(value) => RenderLine::styled(value, RenderStyle::Dim),
+    }
+}
+
 /// Formats selected slash command usage guidance when available.
-fn slash_usage_lines(prompt: &PromptState, commands: &[CommandDescriptor]) -> Vec<RenderLine> {
-    let suggestions = slash_suggestions(prompt, commands);
+fn slash_usage_lines(
+    prompt: &PromptState,
+    commands: &[CommandDescriptor],
+    suggestions: &[CommandSuggestion],
+) -> Vec<RenderLine> {
     let command = suggestions
         .get(prompt.selected_completion)
         .or_else(|| suggestions.first())
-        .copied()
+        .and_then(|suggestion| command_for_suggestion(suggestion, commands))
         .or_else(|| active_slash_command(prompt, commands));
     let Some(command) = command else {
         return Vec::new();
@@ -201,12 +241,18 @@ fn slash_usage_lines(prompt: &PromptState, commands: &[CommandDescriptor]) -> Ve
     vec![RenderLine::styled(&command.usage, RenderStyle::Dim)]
 }
 
-/// Returns display-ready slash command suggestions for the active prompt.
-fn slash_suggestions<'a>(
-    prompt: &PromptState,
+/// Returns the command descriptor represented by a top-level command suggestion.
+fn command_for_suggestion<'a>(
+    suggestion: &CommandSuggestion,
     commands: &'a [CommandDescriptor],
-) -> Vec<&'a CommandDescriptor> {
-    crate::prompt::slash_suggestions(prompt, commands)
+) -> Option<&'a CommandDescriptor> {
+    if suggestion.kind != CommandSuggestionKind::Command {
+        return None;
+    }
+
+    commands
+        .iter()
+        .find(|command| command.name == suggestion.replacement)
 }
 
 /// Returns the accepted leading slash command when the prompt has command arguments.
@@ -215,8 +261,7 @@ fn active_slash_command<'a>(
     commands: &'a [CommandDescriptor],
 ) -> Option<&'a CommandDescriptor> {
     let prompt_text = prompt.text();
-    let text = prompt_text.trim_start();
-    let command_text = text.strip_prefix('/')?;
+    let command_text = prompt_text.strip_prefix('/')?;
     let command_name = command_text.split_whitespace().next()?;
     let arguments_start = command_name.len();
     let arguments = command_text.get(arguments_start..)?;
@@ -228,12 +273,18 @@ fn active_slash_command<'a>(
 }
 
 /// Formats one slash suggestion row using original padding and selection styles.
-fn slash_suggestion_line(command: &CommandDescriptor, index: usize, selected: usize) -> RenderLine {
-    let style = if index == selected {
+fn slash_suggestion_line(
+    suggestion: &CommandSuggestion,
+    index: usize,
+    selected: usize,
+) -> RenderLine {
+    let style = if index == selected && suggestion.kind != CommandSuggestionKind::Info {
         RenderStyle::User
     } else {
         RenderStyle::Dim
     };
-    let label = format!("/{}", command.name);
-    RenderLine::styled(format!("  {label:<18} {}", command.summary), style)
+    RenderLine::styled(
+        format!("  {:<18} {}", suggestion.label, suggestion.summary),
+        style,
+    )
 }

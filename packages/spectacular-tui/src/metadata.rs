@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// Runtime policy input selected by configuration or session commands.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -182,6 +183,8 @@ pub struct CommandDescriptor {
     pub summary: String,
     #[serde(default)]
     pub usage: String,
+    #[serde(default)]
+    pub subcommands: Vec<CommandSubcommandDescriptor>,
 }
 
 impl CommandDescriptor {
@@ -200,6 +203,115 @@ impl CommandDescriptor {
             name: name.into(),
             summary: summary.into(),
             usage: usage.into(),
+            subcommands: Vec::new(),
         }
+    }
+
+    /// Returns this descriptor with structured completion metadata attached.
+    pub fn with_subcommands(
+        mut self,
+        subcommands: impl IntoIterator<Item = CommandSubcommandDescriptor>,
+    ) -> Self {
+        self.subcommands = subcommands.into_iter().collect();
+        self
+    }
+}
+
+/// UI-safe subcommand completion metadata for a slash command.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct CommandSubcommandDescriptor {
+    pub name: String,
+    pub summary: String,
+    #[serde(default)]
+    pub fields: Vec<CommandFieldDescriptor>,
+}
+
+impl CommandSubcommandDescriptor {
+    /// Creates a subcommand descriptor with structured field metadata.
+    pub fn new(
+        name: impl Into<String>,
+        summary: impl Into<String>,
+        fields: impl IntoIterator<Item = CommandFieldDescriptor>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            summary: summary.into(),
+            fields: fields.into_iter().collect(),
+        }
+    }
+}
+
+/// UI-safe field completion metadata for a slash subcommand.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct CommandFieldDescriptor {
+    pub name: String,
+    pub summary: String,
+    pub required: bool,
+    #[serde(default)]
+    pub values: CompletionValues,
+    pub validation: CommandValueValidation,
+}
+
+impl CommandFieldDescriptor {
+    /// Creates a field descriptor for command composition.
+    pub fn new(
+        name: impl Into<String>,
+        summary: impl Into<String>,
+        required: bool,
+        values: CompletionValues,
+        validation: CommandValueValidation,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            summary: summary.into(),
+            required,
+            values,
+            validation,
+        }
+    }
+}
+
+/// Describes how command field values are resolved by the reducer-safe composer.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+pub enum CompletionValues {
+    #[default]
+    None,
+    Static(Vec<String>),
+    ConfiguredProviders(Vec<String>),
+    SavedModels(Vec<String>),
+    CachedModelIds(CachedModelValues),
+    Unavailable(String),
+}
+
+/// Snapshot of cached model values needed for provider-scoped model completion.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+pub struct CachedModelValues {
+    pub model_ids_by_provider: BTreeMap<String, Vec<String>>,
+    pub saved_model_providers: BTreeMap<String, String>,
+}
+
+impl CachedModelValues {
+    /// Creates cached model completion values from provider and saved-model maps.
+    pub fn new(
+        model_ids_by_provider: BTreeMap<String, Vec<String>>,
+        saved_model_providers: BTreeMap<String, String>,
+    ) -> Self {
+        Self {
+            model_ids_by_provider,
+            saved_model_providers,
+        }
+    }
+}
+
+/// Defines whether a field value must match one of the resolved completion values.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum CommandValueValidation {
+    None,
+    OneOfValues,
+}
+
+impl Default for CommandValueValidation {
+    fn default() -> Self {
+        Self::None
     }
 }

@@ -5,14 +5,16 @@ use spectacular_commands::{Command, CommandControl, CommandRegistry};
 use spectacular_config::ProviderAuthMode;
 use spectacular_llms::{FinishReason, UsageMetadata};
 use spectacular_tui::{
-    ChatTuiAction, CommandDescriptor, ContextTokenUsage as TuiContextTokenUsage,
-    DisplayLine, DisplayLineStyle, DisplayMetadata as TuiDisplayMetadata, DisplaySpan,
+    ChatTuiAction, CommandDescriptor, CommandValueValidation as TuiCommandValueValidation,
+    CompletionValues, ContextTokenUsage as TuiContextTokenUsage, DisplayLine, DisplayLineStyle,
+    DisplayMetadata as TuiDisplayMetadata, DisplaySpan,
     ProviderUsageMetadata as TuiProviderUsageMetadata, ReasoningLevel as TuiReasoningLevel,
     RuntimeSelection as TuiRuntimeSelection, SessionId, ToolDisplayStatus, TranscriptItemId,
 };
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[path = "tui/display.rs"]
 mod display;
@@ -160,6 +162,78 @@ fn command_registry_loading_maps_to_commands_loaded() {
             "Run test command",
             "/test"
         )])
+    );
+}
+
+/// Verifies structured completion metadata is projected into TUI command descriptors.
+#[test]
+fn command_registry_loading_maps_structured_completions_to_tui_descriptors() {
+    let adapter = crate::chat::commands::registry().unwrap();
+    let model = tui_test_model();
+
+    let action = commands_loaded_with_completions_action(&adapter, &model);
+
+    let ChatTuiAction::CommandsLoaded(commands) = action else {
+        panic!("expected command load action");
+    };
+    let provider = commands
+        .iter()
+        .find(|command| command.name == "provider")
+        .expect("provider command should be projected");
+    assert_eq!(
+        provider
+            .subcommands
+            .iter()
+            .map(|subcommand| subcommand.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["add", "remove", "auth"]
+    );
+    let provider_add = provider
+        .subcommands
+        .iter()
+        .find(|subcommand| subcommand.name == "add")
+        .expect("provider add should be projected");
+    let provider_field = &provider_add.fields[0];
+    assert_eq!(provider_field.name, "provider");
+    assert_eq!(
+        provider_field.validation,
+        TuiCommandValueValidation::OneOfValues
+    );
+    let CompletionValues::Static(provider_types) = &provider_field.values else {
+        panic!("provider add should use static provider types");
+    };
+    assert!(provider_types.iter().any(|value| value == "openrouter"));
+    assert!(provider_types.iter().any(|value| value == "openai"));
+
+    let model = commands
+        .iter()
+        .find(|command| command.name == "model")
+        .expect("model command should be projected");
+    let model_add = model
+        .subcommands
+        .iter()
+        .find(|subcommand| subcommand.name == "add")
+        .expect("model add should be projected");
+    let id_field = model_add
+        .fields
+        .iter()
+        .find(|field| field.name == "id")
+        .expect("id field should be projected");
+    assert!(matches!(
+        &id_field.values,
+        CompletionValues::CachedModelIds(_)
+    ));
+
+    let git = commands
+        .iter()
+        .find(|command| command.name == "git")
+        .expect("git command should be projected");
+    assert_eq!(
+        git.subcommands
+            .iter()
+            .map(|subcommand| subcommand.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["status", "commit"]
     );
 }
 
@@ -312,4 +386,29 @@ fn noop_command<'a>(
     >,
 > {
     Box::pin(async { Ok(CommandControl::Continue) })
+}
+
+/// Builds a chat model for TUI adapter projection tests.
+fn tui_test_model() -> crate::chat::model::ChatModel {
+    let suffix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let session = crate::chat::session::SessionManager::new_in(
+        std::env::temp_dir().join(format!("spectacular-tui-adapter-{suffix}")),
+    )
+    .expect("session manager should be created");
+    crate::chat::model::ChatModel::new(
+        session,
+        RuntimeSelection {
+            provider_type: "openrouter".to_owned(),
+            provider_auth: Some(ProviderAuthMode::ApiKey),
+            provider: "openrouter".to_owned(),
+            api_key: "sk-test".to_owned(),
+            model_key: "coding".to_owned(),
+            model: "openai/gpt-5.5".to_owned(),
+            reasoning: spectacular_config::ReasoningLevel::Medium,
+            context_window_tokens: None,
+        },
+    )
 }
