@@ -155,7 +155,7 @@ fn content_filter_finish_records_safety_guardrail_error() {
     assert!(matches!(error, AgentError::ContentFiltered));
     assert!(matches!(
         agent.events().last(),
-        Some(AgentEvent::Error { message }) if message.contains("safety guardrails")
+        Some(AgentEvent::Error { message, .. }) if message.contains("safety guardrails")
     ));
     assert!(!agent.events().iter().any(|event| matches!(
         event,
@@ -183,7 +183,7 @@ fn error_finish_records_provider_finish_error() {
     assert!(matches!(error, AgentError::ProviderFinishError { .. }));
     assert!(matches!(
         agent.events().last(),
-        Some(AgentEvent::Error { message }) if message.contains("finish_reason=error")
+        Some(AgentEvent::Error { message, .. }) if message.contains("finish_reason=error")
     ));
 }
 

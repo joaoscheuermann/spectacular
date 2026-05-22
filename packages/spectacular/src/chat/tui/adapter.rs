@@ -108,7 +108,7 @@ impl TuiEventAdapter {
             AgentEvent::ContextTokenUsage(usage) => vec![ChatTuiAction::ContextUsageUpdated(
                 TuiContextTokenUsage::new(usage.input_tokens, usage.context_window_tokens),
             )],
-            AgentEvent::ValidationError { message } | AgentEvent::Error { message } => {
+            AgentEvent::ValidationError { message } | AgentEvent::Error { message, .. } => {
                 vec![ChatTuiAction::AgentFailed {
                     message: message.clone(),
                 }]

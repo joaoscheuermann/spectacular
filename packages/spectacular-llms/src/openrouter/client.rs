@@ -1,5 +1,5 @@
 use super::dto::OpenRouterChatRequest;
-use crate::ProviderError;
+use crate::{ProviderError, ProviderErrorDiagnostics, ProviderErrorStage};
 use std::future::Future;
 
 const OPENROUTER_API_KEY_URL: &str = "https://openrouter.ai/api/v1/key";
@@ -29,6 +29,9 @@ impl OpenRouterHttpClient {
                 .map_err(|error| ProviderError::NetworkError {
                     provider_name: "OpenRouter".to_owned(),
                     reason: error.to_string(),
+                    diagnostics: Some(ProviderErrorDiagnostics::new(
+                        ProviderErrorStage::HttpRequest,
+                    )),
                 })?;
 
             Ok(response.status().as_u16())
@@ -46,6 +49,9 @@ impl OpenRouterHttpClient {
                 .map_err(|error| ProviderError::NetworkError {
                     provider_name: "OpenRouter".to_owned(),
                     reason: error.to_string(),
+                    diagnostics: Some(ProviderErrorDiagnostics::new(
+                        ProviderErrorStage::HttpRequest,
+                    )),
                 })?;
             let status = response.status().as_u16();
             let body = response
@@ -54,6 +60,9 @@ impl OpenRouterHttpClient {
                 .map_err(|error| ProviderError::NetworkError {
                     provider_name: "OpenRouter".to_owned(),
                     reason: error.to_string(),
+                    diagnostics: Some(ProviderErrorDiagnostics::new(
+                        ProviderErrorStage::HttpRequest,
+                    )),
                 })?;
 
             Ok((status, body))
@@ -75,6 +84,9 @@ impl OpenRouterHttpClient {
             .map_err(|error| ProviderError::NetworkError {
                 provider_name: "OpenRouter".to_owned(),
                 reason: error.to_string(),
+                diagnostics: Some(ProviderErrorDiagnostics::new(
+                    ProviderErrorStage::HttpRequest,
+                )),
             })
     }
 }
@@ -91,6 +103,9 @@ where
             .map_err(|error| ProviderError::NetworkError {
                 provider_name: "OpenRouter".to_owned(),
                 reason: error.to_string(),
+                diagnostics: Some(ProviderErrorDiagnostics::new(
+                    ProviderErrorStage::HttpRequest,
+                )),
             })?;
 
         runtime.block_on(future)
@@ -99,5 +114,8 @@ where
     .map_err(|_| ProviderError::NetworkError {
         provider_name: "OpenRouter".to_owned(),
         reason: "OpenRouter HTTP worker panicked".to_owned(),
+        diagnostics: Some(ProviderErrorDiagnostics::new(
+            ProviderErrorStage::HttpRequest,
+        )),
     })?
 }

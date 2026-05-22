@@ -66,7 +66,7 @@ fn format_provider_error(error: &ProviderError) -> String {
         ProviderError::NoModelsReturned { provider_name } => {
             format!("{provider_name} returned no models.")
         }
-        ProviderError::ProviderUnavailable { provider_name } => {
+        ProviderError::ProviderUnavailable { provider_name, .. } => {
             format!("{provider_name} is unavailable. Try again later.")
         }
         ProviderError::AuthenticationRequired { provider_name } => {
@@ -82,15 +82,18 @@ fn format_provider_error(error: &ProviderError) -> String {
         ProviderError::MalformedResponse {
             provider_name,
             reason,
+            ..
         } => format!("{provider_name} returned a malformed response: {reason}."),
         ProviderError::ResponseParsingFailed {
             provider_name,
             reason,
+            ..
         } => format!("Failed to parse {provider_name} response: {reason}."),
         ProviderError::StreamError {
             provider_name,
             code,
             message,
+            ..
         } => match code {
             Some(code) => {
                 format!("{provider_name} stream returned error `{code}`: {message}.")
@@ -100,6 +103,7 @@ fn format_provider_error(error: &ProviderError) -> String {
         ProviderError::NetworkError {
             provider_name,
             reason,
+            ..
         } => format!("{provider_name} network request failed: {reason}."),
         ProviderError::ContextLimitExceeded {
             provider_name,

@@ -1,6 +1,6 @@
 use crate::{
-    ProviderError, ProviderMessage, ProviderMessageRole, ProviderRequest, ProviderToolCall,
-    ToolManifest, UsageMetadata,
+    ProviderError, ProviderErrorDiagnostics, ProviderErrorStage, ProviderMessage,
+    ProviderMessageRole, ProviderRequest, ProviderToolCall, ToolManifest, UsageMetadata,
 };
 use serde::{Deserialize, Serialize};
 
@@ -43,6 +43,9 @@ impl OpenAiResponsesRequest {
             .ok_or_else(|| ProviderError::MalformedResponse {
                 provider_name: "OpenAI".to_owned(),
                 reason: "missing model for Responses request".to_owned(),
+                diagnostics: Some(ProviderErrorDiagnostics::new(
+                    ProviderErrorStage::RequestBuild,
+                )),
             })?;
         let model_request = OpenAiModelRequest::from_configured_model(model);
         let instructions = instructions_from_messages(&messages);
@@ -209,6 +212,7 @@ impl OpenAiOutputItem {
             return Err(ProviderError::MalformedResponse {
                 provider_name: "OpenAI".to_owned(),
                 reason: "output item was not a function call".to_owned(),
+                diagnostics: None,
             });
         }
         let call_id = self
@@ -218,6 +222,7 @@ impl OpenAiOutputItem {
             .ok_or_else(|| ProviderError::MalformedResponse {
                 provider_name: "OpenAI".to_owned(),
                 reason: "function call omitted call_id".to_owned(),
+                diagnostics: None,
             })?;
         let name = self
             .name
@@ -225,6 +230,7 @@ impl OpenAiOutputItem {
             .ok_or_else(|| ProviderError::MalformedResponse {
                 provider_name: "OpenAI".to_owned(),
                 reason: "function call omitted name".to_owned(),
+                diagnostics: None,
             })?;
         let arguments = self.arguments.unwrap_or_default();
 

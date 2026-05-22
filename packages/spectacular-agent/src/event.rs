@@ -1,3 +1,4 @@
+use crate::error::AgentErrorDetails;
 use crate::usage::ContextTokenUsage;
 use spectacular_llms::{FinishReason, ReasoningMetadata, UsageMetadata};
 use std::fmt::{self, Display};
@@ -73,6 +74,7 @@ pub enum AgentEvent {
     },
     Error {
         message: String,
+        details: Option<AgentErrorDetails>,
     },
     Cancelled {
         reason: String,
@@ -202,6 +204,18 @@ impl AgentEvent {
     pub fn error(message: impl Into<String>) -> Self {
         Self::Error {
             message: message.into(),
+            details: None,
+        }
+    }
+
+    /// Creates a terminal run error event with structured diagnostics.
+    pub fn error_with_details(
+        message: impl Into<String>,
+        details: impl Into<AgentErrorDetails>,
+    ) -> Self {
+        Self::Error {
+            message: message.into(),
+            details: Some(details.into()),
         }
     }
 
@@ -310,7 +324,7 @@ impl Display for AgentEvent {
             AgentEvent::ValidationError { message } => {
                 write!(formatter, "ValidationError({message})")
             }
-            AgentEvent::Error { message } => write!(formatter, "Error({message})"),
+            AgentEvent::Error { message, .. } => write!(formatter, "Error({message})"),
             AgentEvent::Cancelled { reason } => write!(formatter, "Cancelled(reason={reason:?})"),
             AgentEvent::Finished { finish_reason } => {
                 write!(formatter, "Finished(reason={finish_reason:?})")

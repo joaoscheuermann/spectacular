@@ -1,7 +1,7 @@
 use super::run_control::RunControl;
 use super::Agent;
 use crate::context::TokenCounter;
-use crate::error::AgentError;
+use crate::error::{AgentError, AgentErrorReport};
 use crate::event::AgentEvent;
 use spectacular_llms::{Cancellation, LlmProvider};
 use std::sync::Arc;
@@ -72,7 +72,15 @@ where
             return Err(AgentError::CancellationError);
         }
 
-        self.record(AgentEvent::error(error.to_string())).await?;
+        let report = AgentErrorReport::from_error_with_provider_output(
+            &error,
+            self.provider_output_started(),
+        );
+        let event = report
+            .details
+            .map(|details| AgentEvent::error_with_details(report.message.clone(), details))
+            .unwrap_or_else(|| AgentEvent::error(report.message));
+        self.record(event).await?;
         Err(error)
     }
 
@@ -113,5 +121,28 @@ where
     /// Returns the number of events currently persisted for the run owner.
     pub(super) fn event_count(&self) -> usize {
         self.agent.store.lock().unwrap().events().len()
+    }
+
+    fn provider_output_started(&self) -> bool {
+        self.agent
+            .store
+            .lock()
+            .unwrap()
+            .events()
+            .iter()
+            .any(|event| {
+                matches!(
+                    event,
+                    AgentEvent::MessageStart { .. }
+                        | AgentEvent::MessageDelta { .. }
+                        | AgentEvent::MessageFinish { .. }
+                        | AgentEvent::ReasoningStart { .. }
+                        | AgentEvent::ReasoningDelta { .. }
+                        | AgentEvent::ReasoningFinish { .. }
+                        | AgentEvent::ToolCallStart { .. }
+                        | AgentEvent::ToolCallDelta { .. }
+                        | AgentEvent::ToolCallFinish { .. }
+                )
+            })
     }
 }

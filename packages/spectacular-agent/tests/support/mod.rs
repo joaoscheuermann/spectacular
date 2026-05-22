@@ -60,6 +60,7 @@ pub(crate) fn finished_length_without_usage() -> ProviderFinished {
 pub(crate) fn provider_unavailable() -> ProviderError {
     ProviderError::ProviderUnavailable {
         provider_name: "Fake".to_owned(),
+        diagnostics: None,
     }
 }
 
@@ -273,6 +274,7 @@ impl LlmProvider for FailingProvider {
             Err(ProviderError::NetworkError {
                 provider_name: "Fake".to_owned(),
                 reason: "disconnect".to_owned(),
+                diagnostics: None,
             })
         })
     }
@@ -316,6 +318,7 @@ impl LlmProvider for StreamErrorProvider {
                 Err(ProviderError::ResponseParsingFailed {
                     provider_name: "Fake".to_owned(),
                     reason: "bad chunk".to_owned(),
+                    diagnostics: None,
                 }),
             ]);
             Ok(stream)

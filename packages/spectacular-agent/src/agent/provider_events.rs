@@ -115,6 +115,8 @@ where
         if tool_calls.is_empty() {
             return Err(AgentError::MalformedProviderResponse {
                 reason: "tool-call finish did not include tool calls".to_owned(),
+                provider: None,
+                diagnostics: None,
             });
         }
 
@@ -127,6 +129,8 @@ where
                     "tool call has empty id or name: id={:?}, name={:?}",
                     tool_call.id, tool_call.name
                 ),
+                provider: None,
+                diagnostics: None,
             });
         }
 
@@ -141,6 +145,8 @@ where
         if !tool_calls.is_empty() {
             return Err(AgentError::MalformedProviderResponse {
                 reason: "non-tool finish included tool calls".to_owned(),
+                provider: None,
+                diagnostics: None,
             });
         }
 
@@ -157,6 +163,8 @@ where
             return recorder
                 .record_error(AgentError::MalformedProviderResponse {
                     reason: "non-tool finish included tool calls".to_owned(),
+                    provider: None,
+                    diagnostics: None,
                 })
                 .await;
         }
@@ -165,6 +173,8 @@ where
             return recorder
                 .record_error(AgentError::MalformedProviderResponse {
                     reason: "provider omitted required usage metadata".to_owned(),
+                    provider: None,
+                    diagnostics: None,
                 })
                 .await;
         }

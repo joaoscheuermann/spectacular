@@ -1,6 +1,9 @@
 use super::*;
 use serde_json::json;
-use spectacular_agent::{provider_messages_from_store, ContextSummary, Store};
+use spectacular_agent::{
+    provider_messages_from_store, AgentErrorDetails, AgentErrorKind, AgentErrorStage,
+    ContextSummary, Store,
+};
 
 /// Verifies that recognized JSONL event deserializes.
 #[test]
@@ -158,6 +161,69 @@ fn content_filter_finish_reason_round_trips() {
             finish_reason: FinishReason::ContentFilter
         })
     ));
+}
+
+/// Verifies that legacy string-only error records still replay.
+#[test]
+fn legacy_error_record_without_details_deserializes() {
+    let event = ChatEvent::from_value(json!({
+        "type": "error",
+        "message": "provider failed",
+        "created_at": "2026-04-29T14:01:00Z"
+    }))
+    .unwrap();
+
+    assert_eq!(
+        event.to_agent_event(),
+        Some(AgentEvent::error("provider failed"))
+    );
+}
+
+/// Verifies that structured error diagnostics round trip through JSONL.
+#[test]
+fn error_details_round_trip_through_jsonl_agent_event() {
+    let details = AgentErrorDetails {
+        kind: AgentErrorKind::ProviderUnavailable,
+        provider: Some("OpenAI".to_owned()),
+        stage: Some(AgentErrorStage::HttpStatus),
+        retryable: true,
+        http_status: Some(503),
+        provider_code: Some("temporarily_unavailable".to_owned()),
+        excerpt: Some("temporary outage".to_owned()),
+        debug_events: vec!["responses_error_body".to_owned()],
+    };
+    let event = ChatEvent::from_agent_event(
+        &AgentEvent::error_with_details("OpenAI is unavailable", details.clone()),
+        "2026-04-29T14:01:00Z".to_owned(),
+    )
+    .unwrap();
+    let value = serde_json::to_value(event).unwrap();
+
+    assert_eq!(
+        value,
+        json!({
+            "type": "error",
+            "message": "OpenAI is unavailable",
+            "details": {
+                "kind": "provider_unavailable",
+                "provider": "OpenAI",
+                "stage": "http_status",
+                "retryable": true,
+                "http_status": 503,
+                "provider_code": "temporarily_unavailable",
+                "excerpt": "temporary outage",
+                "debug_events": ["responses_error_body"]
+            },
+            "created_at": "2026-04-29T14:01:00Z"
+        })
+    );
+    assert_eq!(
+        ChatEvent::from_value(value)
+            .unwrap()
+            .to_agent_event()
+            .unwrap(),
+        AgentEvent::error_with_details("OpenAI is unavailable", details)
+    );
 }
 
 /// Verifies that structured tool events round trip through JSONL to agent events.

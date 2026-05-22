@@ -420,7 +420,7 @@ async fn generate_commit_message(
         match event {
             AgentEvent::MessageDelta { content, .. } => message.push_str(&content),
             AgentEvent::Finished { .. } => break,
-            AgentEvent::Error { message: err } => {
+            AgentEvent::Error { message: err, .. } => {
                 return Err(CommitMessageGenerationError::Failed(format!(
                     "agent error: {}",
                     err

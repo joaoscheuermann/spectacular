@@ -1,6 +1,6 @@
 use crate::{
-    ProviderError, ProviderMessage, ProviderMessageRole, ProviderRequest, ProviderToolCall,
-    ToolManifest, UsageMetadata,
+    ProviderError, ProviderErrorDiagnostics, ProviderErrorStage, ProviderMessage,
+    ProviderMessageRole, ProviderRequest, ProviderToolCall, ToolManifest, UsageMetadata,
 };
 use serde::{Deserialize, Serialize};
 
@@ -32,6 +32,9 @@ impl OpenRouterChatRequest {
             .ok_or_else(|| ProviderError::MalformedResponse {
                 provider_name: "OpenRouter".to_owned(),
                 reason: "missing model for chat completion".to_owned(),
+                diagnostics: Some(ProviderErrorDiagnostics::new(
+                    ProviderErrorStage::RequestBuild,
+                )),
             })?;
         let tools = tools
             .into_iter()
@@ -218,6 +221,7 @@ impl OpenRouterChatMessageToolCall {
             return Err(ProviderError::MalformedResponse {
                 provider_name: "OpenRouter".to_owned(),
                 reason: format!("unsupported tool-call type `{}`", self.kind),
+                diagnostics: None,
             });
         }
 
@@ -225,6 +229,7 @@ impl OpenRouterChatMessageToolCall {
             return Err(ProviderError::MalformedResponse {
                 provider_name: "OpenRouter".to_owned(),
                 reason: format!("tool-call index {index} omitted id"),
+                diagnostics: None,
             });
         }
 
@@ -232,6 +237,7 @@ impl OpenRouterChatMessageToolCall {
             return Err(ProviderError::MalformedResponse {
                 provider_name: "OpenRouter".to_owned(),
                 reason: format!("tool-call index {index} omitted function name"),
+                diagnostics: None,
             });
         }
 

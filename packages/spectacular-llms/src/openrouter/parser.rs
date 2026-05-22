@@ -1,7 +1,7 @@
 use super::dto::{OpenRouterChatChunk, OpenRouterChatDeltaToolCall, OpenRouterStreamError};
 use crate::{
-    FinishReason, MessageDelta, ProviderError, ProviderFinished, ProviderStreamEvent,
-    ProviderToolCall, ReasoningDelta,
+    FinishReason, MessageDelta, ProviderError, ProviderErrorDiagnostics, ProviderErrorStage,
+    ProviderFinished, ProviderStreamEvent, ProviderToolCall, ReasoningDelta,
 };
 use std::collections::BTreeMap;
 
@@ -21,6 +21,11 @@ pub(crate) fn parse_openrouter_chat_chunk_with_accumulator(
         serde_json::from_str(payload).map_err(|error| ProviderError::ResponseParsingFailed {
             provider_name: "OpenRouter".to_owned(),
             reason: error.to_string(),
+            diagnostics: Some(payload_diagnostics(
+                ProviderErrorStage::PayloadParse,
+                payload,
+                &["sse_payload", "payload_parse_error"],
+            )),
         })?;
     let mut events = Vec::new();
     let usage = chunk.usage;
@@ -33,9 +38,12 @@ pub(crate) fn parse_openrouter_chat_chunk_with_accumulator(
         let Some(usage) = usage else {
             return Err(ProviderError::MalformedResponse {
                 provider_name: "OpenRouter".to_owned(),
-                reason: format!(
-                    "stream chunk omitted choices; OpenRouter response chunk JSON: {payload}"
-                ),
+                reason: "stream chunk omitted choices".to_owned(),
+                diagnostics: Some(payload_diagnostics(
+                    ProviderErrorStage::PayloadParse,
+                    payload,
+                    &["sse_payload", "payload_parse_error"],
+                )),
             });
         };
 
@@ -128,6 +136,7 @@ impl OpenRouterToolCallAccumulator {
             return Err(ProviderError::MalformedResponse {
                 provider_name: "OpenRouter".to_owned(),
                 reason: "tool-call finish did not include tool-call chunks".to_owned(),
+                diagnostics: None,
             });
         }
 
@@ -144,6 +153,7 @@ impl OpenRouterToolCallAccumulator {
                 return Err(ProviderError::MalformedResponse {
                     provider_name: "OpenRouter".to_owned(),
                     reason: format!("unsupported tool-call type `{kind}`"),
+                    diagnostics: None,
                 });
             }
         }
@@ -180,6 +190,7 @@ impl OpenRouterAccumulatedToolCall {
             return Err(ProviderError::MalformedResponse {
                 provider_name: "OpenRouter".to_owned(),
                 reason: format!("tool-call index {index} omitted id"),
+                diagnostics: None,
             });
         };
 
@@ -187,6 +198,7 @@ impl OpenRouterAccumulatedToolCall {
             return Err(ProviderError::MalformedResponse {
                 provider_name: "OpenRouter".to_owned(),
                 reason: format!("tool-call index {index} omitted function name"),
+                diagnostics: None,
             });
         }
 
@@ -194,6 +206,7 @@ impl OpenRouterAccumulatedToolCall {
             return Err(ProviderError::MalformedResponse {
                 provider_name: "OpenRouter".to_owned(),
                 reason: format!("tool-call index {index} omitted function arguments"),
+                diagnostics: None,
             });
         }
 
@@ -242,6 +255,7 @@ fn append_tool_call_id(
     Err(ProviderError::MalformedResponse {
         provider_name: "OpenRouter".to_owned(),
         reason: format!("tool-call index {index} changed id from `{existing_id}` to `{id}`"),
+        diagnostics: None,
     })
 }
 
@@ -263,6 +277,11 @@ fn finish_tool_calls(
             return Err(ProviderError::MalformedResponse {
                 provider_name: "OpenRouter".to_owned(),
                 reason: openrouter_empty_tool_call_finish_reason(native_finish_reason, payload),
+                diagnostics: Some(payload_diagnostics(
+                    ProviderErrorStage::PayloadParse,
+                    payload,
+                    &["sse_payload", "payload_parse_error"],
+                )),
             });
         }
         return Ok(accumulated);
@@ -271,9 +290,12 @@ fn finish_tool_calls(
     if accumulator.has_pending() || !complete_tool_calls.is_empty() {
         return Err(ProviderError::MalformedResponse {
             provider_name: "OpenRouter".to_owned(),
-            reason: format!(
-                "tool-call chunks ended without tool-call finish; OpenRouter response chunk JSON: {payload}"
-            ),
+            reason: "tool-call chunks ended without tool-call finish".to_owned(),
+            diagnostics: Some(payload_diagnostics(
+                ProviderErrorStage::PayloadParse,
+                payload,
+                &["sse_payload", "payload_parse_error"],
+            )),
         });
     }
 
@@ -292,16 +314,33 @@ fn parse_openrouter_finish_reason(reason: &str) -> FinishReason {
 }
 
 fn openrouter_stream_error(error: OpenRouterStreamError, payload: &str) -> ProviderError {
+    let code = error
+        .code
+        .as_ref()
+        .and_then(openrouter_error_code_to_string);
+    let diagnostics = code.as_ref().map_or_else(
+        || {
+            payload_diagnostics(
+                ProviderErrorStage::ProviderStream,
+                payload,
+                &["sse_payload"],
+            )
+        },
+        |code| {
+            payload_diagnostics(
+                ProviderErrorStage::ProviderStream,
+                payload,
+                &["sse_payload"],
+            )
+            .with_provider_code(code)
+        },
+    );
+
     ProviderError::StreamError {
         provider_name: "OpenRouter".to_owned(),
-        code: error
-            .code
-            .as_ref()
-            .and_then(openrouter_error_code_to_string),
-        message: format!(
-            "{}; OpenRouter response chunk JSON: {payload}",
-            error.message
-        ),
+        code,
+        message: error.message,
+        diagnostics: Some(diagnostics),
     }
 }
 
@@ -317,7 +356,7 @@ fn openrouter_error_code_to_string(code: &serde_json::Value) -> Option<String> {
 
 fn openrouter_empty_tool_call_finish_reason(
     native_finish_reason: Option<&str>,
-    payload: &str,
+    _payload: &str,
 ) -> String {
     let native_finish_reason = native_finish_reason
         .filter(|reason| !reason.trim().is_empty())
@@ -328,7 +367,17 @@ fn openrouter_empty_tool_call_finish_reason(
          (no delta.tool_calls and no message.tool_calls). \
          native_finish_reason={native_finish_reason}. \
          This usually means the selected model/provider route stopped without emitting a native function call, \
-         even though tools were present. Try a different tool-capable model/provider route or disable tools for this model. \
-         OpenRouter response chunk JSON: {payload}"
+         even though tools were present. Try a different tool-capable model/provider route or disable tools for this model."
+    )
+}
+
+fn payload_diagnostics(
+    stage: ProviderErrorStage,
+    payload: &str,
+    debug_events: &[&str],
+) -> ProviderErrorDiagnostics {
+    debug_events.iter().fold(
+        ProviderErrorDiagnostics::new(stage).with_excerpt(payload),
+        |diagnostics, event| diagnostics.with_debug_event(*event),
     )
 }

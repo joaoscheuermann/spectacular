@@ -6,8 +6,8 @@ use super::parser::parse_openai_response_event;
 use super::sse::OpenAiSseParser;
 use super::OpenAiProviderAuth;
 use crate::{
-    Cancellation, LlmDebugLogger, ProviderError, ProviderFinished, ProviderRequest, ProviderStream,
-    ProviderStreamEvent,
+    Cancellation, LlmDebugLogger, ProviderError, ProviderErrorDiagnostics, ProviderErrorStage,
+    ProviderFinished, ProviderRequest, ProviderStream, ProviderStreamEvent,
 };
 use serde_json::json;
 use tokio::sync::mpsc;
@@ -73,9 +73,10 @@ async fn stream_openai_response(
         });
     }
     if !(200..300).contains(&status) {
-        log_non_success_response_body(&debug_logger, response).await;
+        let diagnostics = non_success_response_diagnostics(&debug_logger, response, status).await;
         return Err(ProviderError::ProviderUnavailable {
             provider_name: "OpenAI".to_owned(),
+            diagnostics: Some(diagnostics),
         });
     }
 
@@ -98,7 +99,7 @@ async fn stream_openai_response(
                 return Ok(());
             }
 
-            let should_stop = send_payload_events(&payload, &sender).await?;
+            let should_stop = send_payload_events(&payload, &debug_logger, &sender).await?;
             if should_stop {
                 return Ok(());
             }
@@ -203,6 +204,10 @@ async fn next_response_chunk(
             let error = ProviderError::NetworkError {
                 provider_name: "OpenAI".to_owned(),
                 reason: error.to_string(),
+                diagnostics: Some(
+                    ProviderErrorDiagnostics::new(ProviderErrorStage::ProviderStream)
+                        .with_debug_event("stream_chunk_network_error"),
+                ),
             };
             debug::log_error(debug_logger, "stream_chunk_network_error", &error);
             error
@@ -213,9 +218,12 @@ async fn next_response_chunk(
 /// Sends parsed provider events and reports whether a terminal event was seen.
 async fn send_payload_events(
     payload: &str,
+    debug_logger: &LlmDebugLogger,
     sender: &mpsc::Sender<Result<ProviderStreamEvent, ProviderError>>,
 ) -> Result<bool, ProviderError> {
-    let events = parse_openai_response_event(payload)?;
+    let events = parse_openai_response_event(payload).inspect_err(|error| {
+        debug::log_error(debug_logger, "payload_parse_error", error);
+    })?;
     let mut finished = false;
     for event in events {
         finished |= matches!(event, ProviderStreamEvent::Finished(_));
@@ -236,14 +244,28 @@ async fn send_openai_event(
         .map_err(|_| ProviderError::CancellationError)
 }
 
-/// Logs a non-success response body when the provider returns an HTTP error.
-async fn log_non_success_response_body(debug_logger: &LlmDebugLogger, response: reqwest::Response) {
+/// Logs and summarizes a non-success response body for HTTP status diagnostics.
+async fn non_success_response_diagnostics(
+    debug_logger: &LlmDebugLogger,
+    response: reqwest::Response,
+    status: u16,
+) -> ProviderErrorDiagnostics {
+    let diagnostics =
+        ProviderErrorDiagnostics::new(ProviderErrorStage::HttpStatus).with_http_status(status);
     match response.text().await {
-        Ok(body) => debug::log_raw_text(debug_logger, "responses_error_body", &body),
-        Err(error) => debug::log_event(
-            debug_logger,
-            "responses_error_body_read_failed",
-            json!({ "message": error.to_string() }),
-        ),
+        Ok(body) => {
+            debug::log_raw_text(debug_logger, "responses_error_body", &body);
+            diagnostics
+                .with_excerpt(&body)
+                .with_debug_event("responses_error_body")
+        }
+        Err(error) => {
+            debug::log_event(
+                debug_logger,
+                "responses_error_body_read_failed",
+                json!({ "message": error.to_string() }),
+            );
+            diagnostics.with_debug_event("responses_error_body_read_failed")
+        }
     }
 }

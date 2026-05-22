@@ -184,8 +184,16 @@ fn should_retry_provider_error(
         return false;
     }
 
-    matches!(
-        error,
-        ProviderError::NetworkError { .. } | ProviderError::ProviderUnavailable { .. }
-    )
+    match error {
+        ProviderError::NetworkError { .. } => true,
+        ProviderError::ProviderUnavailable { .. } => error
+            .http_status()
+            .map(transient_http_status)
+            .unwrap_or(true),
+        _ => error.http_status().is_some_and(transient_http_status),
+    }
+}
+
+fn transient_http_status(status: u16) -> bool {
+    matches!(status, 408 | 409 | 425 | 429 | 500 | 502 | 503 | 504)
 }

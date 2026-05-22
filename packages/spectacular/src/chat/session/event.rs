@@ -11,7 +11,7 @@ use crate::chat::command_event::{
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use spectacular_agent::{AgentEvent, AgentTranscriptItemId, ContextSummary};
+use spectacular_agent::{AgentErrorDetails, AgentEvent, AgentTranscriptItemId, ContextSummary};
 use spectacular_llms::{FinishReason, ProviderMessageRole};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -138,7 +138,12 @@ pub enum ChatEvent {
     #[serde(rename = "validation_error")]
     ValidationError { message: String, created_at: String },
     #[serde(rename = "error")]
-    Error { message: String, created_at: String },
+    Error {
+        message: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        details: Option<AgentErrorDetails>,
+        created_at: String,
+    },
     #[serde(rename = "cancelled")]
     Cancelled { reason: String, created_at: String },
     #[serde(rename = "finished")]
@@ -229,8 +234,9 @@ impl ChatEvent {
                 message: message.clone(),
                 created_at,
             }),
-            AgentEvent::Error { message } => Some(Self::Error {
+            AgentEvent::Error { message, details } => Some(Self::Error {
                 message: message.clone(),
+                details: details.clone(),
                 created_at,
             }),
             AgentEvent::Cancelled { reason } => Some(Self::Cancelled {
@@ -371,7 +377,12 @@ impl ChatEvent {
             | Self::CommandDelta { .. }
             | Self::CommandFinished { .. } => None,
             Self::ValidationError { message, .. } => Some(AgentEvent::validation_error(message)),
-            Self::Error { message, .. } => Some(AgentEvent::error(message)),
+            Self::Error {
+                message, details, ..
+            } => Some(match details.clone() {
+                Some(details) => AgentEvent::error_with_details(message.clone(), details),
+                None => AgentEvent::error(message),
+            }),
             Self::Cancelled { reason, .. } => Some(AgentEvent::cancelled(reason)),
             Self::Finished { reason, .. } => Some(AgentEvent::Finished {
                 finish_reason: finish_reason_from_str(reason),

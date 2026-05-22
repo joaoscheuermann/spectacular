@@ -4,8 +4,8 @@ use super::dto::OpenRouterChatRequest;
 use super::parser::{parse_openrouter_chat_chunk_with_accumulator, OpenRouterToolCallAccumulator};
 use super::sse::OpenRouterSseParser;
 use crate::{
-    Cancellation, FinishReason, LlmDebugLogger, ProviderError, ProviderFinished, ProviderRequest,
-    ProviderStream, ProviderStreamEvent,
+    Cancellation, FinishReason, LlmDebugLogger, ProviderError, ProviderErrorDiagnostics,
+    ProviderErrorStage, ProviderFinished, ProviderRequest, ProviderStream, ProviderStreamEvent,
 };
 use serde_json::json;
 use tokio::sync::mpsc;
@@ -87,9 +87,10 @@ async fn stream_openrouter_response(
         return Err(ProviderError::InvalidApiKey);
     }
     if !(200..300).contains(&status) {
-        log_non_success_response_body(debug_logger, response).await;
+        let diagnostics = non_success_response_diagnostics(debug_logger, response, status).await;
         return Err(ProviderError::ProviderUnavailable {
             provider_name: "OpenRouter".to_owned(),
+            diagnostics: Some(diagnostics),
         });
     }
 
@@ -110,6 +111,9 @@ async fn stream_openrouter_response(
                     return Err(ProviderError::MalformedResponse {
                         provider_name: "OpenRouter".to_owned(),
                         reason: "stream ended before tool-call finish".to_owned(),
+                        diagnostics: Some(ProviderErrorDiagnostics::new(
+                            ProviderErrorStage::ProviderStream,
+                        )),
                     });
                 }
                 if !saw_finished {
@@ -136,6 +140,9 @@ async fn stream_openrouter_response(
         return Err(ProviderError::MalformedResponse {
             provider_name: "OpenRouter".to_owned(),
             reason: "stream ended before tool-call finish".to_owned(),
+            diagnostics: Some(ProviderErrorDiagnostics::new(
+                ProviderErrorStage::ProviderStream,
+            )),
         });
     }
 
@@ -161,6 +168,10 @@ async fn next_response_chunk(
             let error = ProviderError::NetworkError {
                 provider_name: "OpenRouter".to_owned(),
                 reason: error.to_string(),
+                diagnostics: Some(
+                    ProviderErrorDiagnostics::new(ProviderErrorStage::ProviderStream)
+                        .with_debug_event("stream_chunk_network_error"),
+                ),
             };
             debug::log_error(debug_logger, "stream_chunk_network_error", &error);
             error
@@ -178,14 +189,28 @@ fn parse_sse_payloads(
     })
 }
 
-async fn log_non_success_response_body(debug_logger: &LlmDebugLogger, response: reqwest::Response) {
+async fn non_success_response_diagnostics(
+    debug_logger: &LlmDebugLogger,
+    response: reqwest::Response,
+    status: u16,
+) -> ProviderErrorDiagnostics {
+    let diagnostics =
+        ProviderErrorDiagnostics::new(ProviderErrorStage::HttpStatus).with_http_status(status);
     match response.text().await {
-        Ok(body) => debug::log_raw_text(debug_logger, "chat_response_error_body", &body),
-        Err(error) => debug::log_event(
-            debug_logger,
-            "chat_response_error_body_read_failed",
-            json!({ "message": error.to_string() }),
-        ),
+        Ok(body) => {
+            debug::log_raw_text(debug_logger, "chat_response_error_body", &body);
+            diagnostics
+                .with_excerpt(&body)
+                .with_debug_event("chat_response_error_body")
+        }
+        Err(error) => {
+            debug::log_event(
+                debug_logger,
+                "chat_response_error_body_read_failed",
+                json!({ "message": error.to_string() }),
+            );
+            diagnostics.with_debug_event("chat_response_error_body_read_failed")
+        }
     }
 }
 
@@ -222,8 +247,12 @@ async fn send_openrouter_payload_events(
             if state.pending_finish.is_some() {
                 return Err(ProviderError::MalformedResponse {
                     provider_name: "OpenRouter".to_owned(),
-                    reason: format!(
-                        "OpenRouter emitted content after a terminal finish; OpenRouter response chunk JSON: {payload}"
+                    reason: "OpenRouter emitted content after a terminal finish".to_owned(),
+                    diagnostics: Some(
+                        ProviderErrorDiagnostics::new(ProviderErrorStage::PayloadParse)
+                            .with_excerpt(payload)
+                            .with_debug_event("sse_payload")
+                            .with_debug_event("payload_parse_error"),
                     ),
                 });
             }

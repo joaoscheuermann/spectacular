@@ -353,6 +353,8 @@ where
                             reason: format!(
                                 "context remains above compaction threshold after {summary_passes_for_request} summary pass(es)"
                             ),
+                            provider: None,
+                            diagnostics: None,
                         };
                         return recorder.record_error(agent_error).await;
                     }
@@ -518,5 +520,7 @@ fn user_prompt_event(prompt_event_id: Option<&str>, prompt: String) -> AgentEven
 fn context_assembly_error(error: ContextAssemblyError) -> AgentError {
     AgentError::ContextLimitError {
         reason: error.to_string(),
+        provider: None,
+        diagnostics: None,
     }
 }

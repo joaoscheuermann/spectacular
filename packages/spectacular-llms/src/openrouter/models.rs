@@ -1,5 +1,5 @@
 use super::dto::OpenRouterModelsResponse;
-use crate::{Model, ProviderError};
+use crate::{Model, ProviderError, ProviderErrorDiagnostics, ProviderErrorStage};
 
 const OPENROUTER_DEFAULT_CONTEXT_WINDOW_TOKENS: usize = 32_768;
 
@@ -27,6 +27,7 @@ pub(crate) fn validate_openrouter_api_key(
         401 | 403 => Err(ProviderError::InvalidApiKey),
         _ => Err(ProviderError::ProviderUnavailable {
             provider_name: "OpenRouter".to_owned(),
+            diagnostics: None,
         }),
     }
 }
@@ -57,11 +58,17 @@ fn parse_openrouter_models(body: &str) -> Result<Vec<Model>, ProviderError> {
         serde_json::from_str(body).map_err(|error| ProviderError::ResponseParsingFailed {
             provider_name: "OpenRouter".to_owned(),
             reason: error.to_string(),
+            diagnostics: Some(
+                ProviderErrorDiagnostics::new(ProviderErrorStage::PayloadParse).with_excerpt(body),
+            ),
         })?;
     let response: OpenRouterModelsResponse =
         serde_json::from_value(value).map_err(|error| ProviderError::MalformedResponse {
             provider_name: "OpenRouter".to_owned(),
             reason: error.to_string(),
+            diagnostics: Some(
+                ProviderErrorDiagnostics::new(ProviderErrorStage::PayloadParse).with_excerpt(body),
+            ),
         })?;
     let models = response
         .data

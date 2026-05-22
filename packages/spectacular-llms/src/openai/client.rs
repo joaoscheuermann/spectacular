@@ -1,7 +1,7 @@
 use super::auth::OpenAiAuthRecord;
 use super::constants::CLIENT_ID;
 use super::dto::OpenAiResponsesRequest;
-use crate::ProviderError;
+use crate::{ProviderError, ProviderErrorDiagnostics, ProviderErrorStage};
 use serde::Deserialize;
 
 const TOKEN_URL: &str = "https://auth.openai.com/oauth/token";
@@ -122,7 +122,10 @@ impl OpenAiHttpClient {
 
         serde_json::from_str(&body).map_err(|error| ProviderError::ResponseParsingFailed {
             provider_name: "OpenAI".to_owned(),
-            reason: format!("token endpoint returned invalid JSON: {error}; body: {body}"),
+            reason: format!("token endpoint returned invalid JSON: {error}"),
+            diagnostics: Some(
+                ProviderErrorDiagnostics::new(ProviderErrorStage::PayloadParse).with_excerpt(&body),
+            ),
         })
     }
 }
@@ -132,6 +135,9 @@ fn openai_network_error(error: reqwest::Error) -> ProviderError {
     ProviderError::NetworkError {
         provider_name: "OpenAI".to_owned(),
         reason: error.to_string(),
+        diagnostics: Some(ProviderErrorDiagnostics::new(
+            ProviderErrorStage::HttpRequest,
+        )),
     }
 }
 

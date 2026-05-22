@@ -37,7 +37,7 @@ pub async fn render_agent_event(
             renderer.working();
         }
 
-        AgentEvent::ValidationError { message } | AgentEvent::Error { message } => {
+        AgentEvent::ValidationError { message } | AgentEvent::Error { message, .. } => {
             renderer.clear_working();
             renderer.error(message);
             renderer.working();
