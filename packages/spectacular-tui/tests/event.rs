@@ -155,7 +155,7 @@ fn view_action_from_effects(effects: Vec<EventEffect>) -> ViewAction {
     }
 }
 
-/// Verifies typed characters are translated into reducer-owned prompt state updates.
+// Verifies typed characters are translated into reducer-owned prompt state updates.
 
 #[path = "event/event_clipboard.rs"]
 mod event_clipboard;

@@ -6,6 +6,7 @@ use crate::selection::{
     SelectionPoint,
 };
 use crate::state::State;
+use std::collections::HashMap;
 use std::ops::Range;
 use unicode_width::UnicodeWidthChar;
 
@@ -58,9 +59,20 @@ pub fn style_line_for_source_with_projection(
         return line;
     }
 
+    let plan = SelectionStylingPlan::new(selection, projection);
+    style_line_for_source_with_plan(&plan, line, source, column_offset, append_virtual_selection)
+}
+
+/// Applies rendered-selection styling using a precomputed source-range plan.
+pub fn style_line_for_source_with_plan(
+    plan: &SelectionStylingPlan,
+    line: RenderLine,
+    source: SelectableSource,
+    column_offset: usize,
+    append_virtual_selection: bool,
+) -> RenderLine {
     style_line_for_source_at_columns_inner(
-        selection,
-        projection,
+        plan,
         line,
         source,
         column_offset,
@@ -85,16 +97,17 @@ pub(super) fn selected_text_from_projection(
 }
 
 fn style_line_for_source_at_columns_inner(
-    selection: &RenderedSelectionState,
-    projection: &SelectableProjection,
+    plan: &SelectionStylingPlan,
     line: RenderLine,
     source: SelectableSource,
     column_offset: usize,
     append_virtual_selection: bool,
 ) -> RenderLine {
     let line_width = line_width(&line);
-    let ranges = selected_source_ranges(selection, projection, &source)
-        .into_iter()
+    let ranges = plan
+        .ranges_for(&source)
+        .iter()
+        .cloned()
         .filter_map(|range| {
             local_selection_range(range, column_offset, line_width, append_virtual_selection)
         })
@@ -104,6 +117,43 @@ fn style_line_for_source_at_columns_inner(
     }
 
     apply_column_ranges(line, &ranges, append_virtual_selection)
+}
+
+/// Precomputed selected source-column ranges for one visible projection.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct SelectionStylingPlan {
+    ranges_by_source: HashMap<SelectableSource, Vec<Range<usize>>>,
+}
+
+impl SelectionStylingPlan {
+    /// Builds a source-range lookup once for the current render context.
+    pub fn new(selection: &RenderedSelectionState, projection: &SelectableProjection) -> Self {
+        if !selection.has_selection() {
+            return Self::default();
+        }
+
+        let mut ranges_by_source: HashMap<SelectableSource, Vec<Range<usize>>> = HashMap::new();
+        for selected in selected_rows(selection, projection) {
+            let source = selected.row.source.clone();
+            ranges_by_source
+                .entry(source)
+                .or_default()
+                .extend(selected_source_ranges_for_row(selected));
+        }
+        for ranges in ranges_by_source.values_mut() {
+            ranges.retain(|range| range.start < range.end);
+            ranges.sort_by_key(|range| (range.start, range.end));
+        }
+
+        Self { ranges_by_source }
+    }
+
+    fn ranges_for(&self, source: &SelectableSource) -> &[Range<usize>] {
+        self.ranges_by_source
+            .get(source)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
 }
 
 fn local_selection_range(
@@ -143,21 +193,6 @@ fn selected_text_from_rows(selected_rows: Vec<SelectedRow<'_>>) -> String {
     }
 
     output_lines.join("\n")
-}
-
-fn selected_source_ranges(
-    selection: &RenderedSelectionState,
-    projection: &SelectableProjection,
-    source: &SelectableSource,
-) -> Vec<Range<usize>> {
-    let mut ranges = selected_rows(selection, projection)
-        .into_iter()
-        .filter(|row| &row.row.source == source)
-        .flat_map(selected_source_ranges_for_row)
-        .filter(|range| range.start < range.end)
-        .collect::<Vec<_>>();
-    ranges.sort_by_key(|range| (range.start, range.end));
-    ranges
 }
 
 fn selected_rows<'a>(

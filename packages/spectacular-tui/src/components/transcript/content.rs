@@ -1,6 +1,6 @@
 use super::TranscriptRenderContext;
 use crate::render::{RenderHighlight, RenderLine, RenderStyle};
-use crate::selection::{style_line_for_source_with_projection, SelectableSource};
+use crate::selection::{style_line_for_source_with_plan, SelectableSource};
 use crate::transcript::DisplayLine;
 use iocraft::prelude::TextWrap;
 use unicode_width::UnicodeWidthStr;
@@ -38,9 +38,8 @@ pub fn selectable_line(
         return line;
     };
 
-    style_line_for_source_with_projection(
-        &context.selection,
-        &context.projection,
+    style_line_for_source_with_plan(
+        &context.selection_plan,
         line,
         SelectableSource::Transcript {
             item_id: item_id.to_owned(),

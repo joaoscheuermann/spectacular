@@ -8,7 +8,7 @@ use crate::action::ChatTuiAction;
 use crate::runtime::{system_clipboard, ClipboardService, PasteBurst};
 use crate::session::PromptState;
 use crate::state::State;
-use crate::view::ViewAction;
+use crate::view::{transcript_layout_snapshot, ViewAction, ViewState};
 use iocraft::prelude::{KeyEventKind, TerminalEvent};
 use std::time::{Duration, Instant};
 
@@ -66,6 +66,41 @@ pub(crate) fn effects_with_clipboard_and_paste(
         TerminalEvent::Key(key) => key::effects(state, key, clipboard, paste_burst, Instant::now()),
         TerminalEvent::Paste(value) => paste::terminal_effects(state, &value, paste_burst),
         TerminalEvent::FullscreenMouse(mouse) => mouse::effects(state, mouse),
+        TerminalEvent::Resize(width, height) => resize_effects(width, height),
+        _ => Vec::new(),
+    }
+}
+
+/// Converts one terminal event using cached view-local transcript layout where available.
+pub(crate) fn effects_with_clipboard_paste_and_view(
+    state: &State,
+    view: &mut ViewState,
+    event: TerminalEvent,
+    clipboard: Option<&mut dyn ClipboardService>,
+    paste_burst: &mut PasteBurst,
+) -> Vec<EventEffect> {
+    match event {
+        TerminalEvent::Key(key_event) => {
+            if !is_key_release(key_event.kind)
+                && key::is_ctrl_char(&key_event, 'c')
+                && state.app_selection.has_selection()
+            {
+                paste_burst.clear();
+                let layout = transcript_layout_snapshot(state, view);
+                return paste::copy_rendered_selection_effects_with_layout(
+                    state,
+                    &layout.layout,
+                    clipboard,
+                );
+            }
+
+            key::effects(state, key_event, clipboard, paste_burst, Instant::now())
+        }
+        TerminalEvent::Paste(value) => paste::terminal_effects(state, &value, paste_burst),
+        TerminalEvent::FullscreenMouse(mouse) => {
+            let layout = transcript_layout_snapshot(state, view);
+            mouse::effects_with_layout(state, &layout.layout, mouse)
+        }
         TerminalEvent::Resize(width, height) => resize_effects(width, height),
         _ => Vec::new(),
     }

@@ -1,3 +1,5 @@
+use crossterm::event::MouseButton;
+use iocraft::prelude::{FullscreenMouseEvent, MouseEventKind, TerminalEvent};
 use spectacular_tui::{
     reduce, render_state_to_string, AssistantMessageItem, ChatTuiAction, DisplayMetadata,
     ReasoningLevel, RuntimeSelection, SelectableProjection, SelectableSurface, SessionId, State,
@@ -5,9 +7,10 @@ use spectacular_tui::{
 };
 use std::time::{Duration, Instant};
 
-const LARGE_TRANSCRIPT_ITEMS: usize = 5_000;
+const LARGE_TRANSCRIPT_ITEMS: usize = 20_000;
 const VISIBLE_TRANSCRIPT_ROWS: u16 = 20;
 const RENDER_BUDGET: Duration = Duration::from_secs(2);
+const STREAMING_DRAG_BUDGET: Duration = Duration::from_secs(3);
 
 /// Builds a representative runtime selection for scroll and scale tests.
 fn runtime() -> RuntimeSelection {
@@ -35,6 +38,11 @@ fn state() -> State {
 /// Builds a stable transcript item ID for scale fixtures.
 fn item_id(index: usize) -> TranscriptItemId {
     TranscriptItemId::new(format!("item-{index}"))
+}
+
+/// Builds a fullscreen mouse terminal event.
+fn mouse(kind: MouseEventKind, column: u16, row: u16) -> TerminalEvent {
+    TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(kind, column, row))
 }
 
 /// Builds a semantic transcript item with stable identity, timestamp, and visible text.
@@ -89,7 +97,12 @@ fn scrolling_up_disables_follow_tail_and_clamps_to_valid_range() {
         spectacular_tui::ViewAction::ScrollTranscript(i32::MAX),
     );
 
-    assert_eq!(state.scroll.offset, 9_980);
+    assert_eq!(
+        state.scroll.offset,
+        u32::try_from(LARGE_TRANSCRIPT_ITEMS.saturating_mul(2))
+            .unwrap()
+            .saturating_sub(u32::from(VISIBLE_TRANSCRIPT_ROWS))
+    );
     assert!(!state.scroll.follow_tail);
 
     spectacular_tui::apply_view_action_to_state(
@@ -97,7 +110,12 @@ fn scrolling_up_disables_follow_tail_and_clamps_to_valid_range() {
         spectacular_tui::ViewAction::ScrollTranscript(10),
     );
 
-    assert_eq!(state.scroll.offset, 9_980);
+    assert_eq!(
+        state.scroll.offset,
+        u32::try_from(LARGE_TRANSCRIPT_ITEMS.saturating_mul(2))
+            .unwrap()
+            .saturating_sub(u32::from(VISIBLE_TRANSCRIPT_ROWS))
+    );
     assert!(!state.scroll.follow_tail);
 }
 
@@ -134,8 +152,9 @@ fn new_transcript_content_preserves_review_viewport_when_not_following_tail() {
 
     assert_eq!(state.scroll.offset, 12);
     assert!(!state.scroll.follow_tail);
-    assert!(before.contains("large transcript item 4985"));
-    assert!(after.contains("large transcript item 4985"));
+    let reviewed_item = format!("large transcript item {}", LARGE_TRANSCRIPT_ITEMS - 15);
+    assert!(before.contains(&reviewed_item));
+    assert!(after.contains(&reviewed_item));
     assert!(!after.contains("streamed tail content"));
 }
 
@@ -212,7 +231,10 @@ fn large_transcript_render_uses_bounded_visible_window() {
     let (output, elapsed) = timed_render(&state);
 
     assert!(elapsed < RENDER_BUDGET, "large render took {elapsed:?}");
-    assert!(output.contains("large transcript item 4999"));
+    assert!(output.contains(&format!(
+        "large transcript item {}",
+        LARGE_TRANSCRIPT_ITEMS - 1
+    )));
     assert!(!output.contains("large transcript item 0"));
 }
 
@@ -224,7 +246,10 @@ fn runtime_app_render_uses_bounded_visible_window() {
 
     let output = render_state_to_string(&state, Some(120));
 
-    assert!(output.contains("large transcript item 4999"));
+    assert!(output.contains(&format!(
+        "large transcript item {}",
+        LARGE_TRANSCRIPT_ITEMS - 1
+    )));
     assert!(!output.contains("large transcript item 0"));
 }
 
@@ -242,9 +267,10 @@ fn large_transcript_selection_projection_stays_windowed() {
         .collect::<Vec<_>>();
 
     assert!(transcript_rows.len() <= usize::from(VISIBLE_TRANSCRIPT_ROWS));
-    assert!(transcript_rows
-        .iter()
-        .any(|row| row.text.contains("large transcript item 4999")));
+    assert!(transcript_rows.iter().any(|row| row.text.contains(&format!(
+        "large transcript item {}",
+        LARGE_TRANSCRIPT_ITEMS - 1
+    ))));
     assert!(!transcript_rows
         .iter()
         .any(|row| row.text.contains("large transcript item 0")));
@@ -326,4 +352,63 @@ fn spinner_ticks_during_large_streaming_keep_rendering_responsive() {
 
     let elapsed = started.elapsed();
     assert!(elapsed < RENDER_BUDGET, "spinner redraws took {elapsed:?}");
+}
+
+/// Verifies streaming tail updates and rendered-selection drag stay responsive at 20k items.
+#[test]
+fn shell_apply_terminal_event_when_streaming_drag_interleaves_with_large_transcript_keeps_rendering_responsive(
+) {
+    let mut state = state();
+    populate_large_transcript(&mut state);
+    reduce(
+        &mut state,
+        ChatTuiAction::Resize {
+            width: 120,
+            height: 30,
+        },
+    );
+    let active_id = TranscriptItemId::new("assistant-active");
+
+    let selectable_row = SelectableProjection::for_state(&state)
+        .rows()
+        .iter()
+        .find(|row| row.surface == SelectableSurface::Transcript && !row.text.is_empty())
+        .expect("visible transcript row")
+        .screen_row as u16;
+
+    let (mut shell, _intents) = spectacular_tui::Shell::new(state);
+    shell.apply_action(ChatTuiAction::MessageStarted {
+        id: active_id.clone(),
+    });
+    shell.apply_terminal_event(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        0,
+        selectable_row,
+    ));
+
+    let started = Instant::now();
+    for tick in 0..120 {
+        shell.apply_action(ChatTuiAction::MessageDelta {
+            id: active_id.clone(),
+            text: format!(" chunk-{tick}"),
+        });
+        shell.apply_terminal_event(mouse(
+            MouseEventKind::Drag(MouseButton::Left),
+            u16::try_from(4 + (tick % 12)).unwrap(),
+            selectable_row,
+        ));
+        let _ = render_state_to_string(shell.state(), Some(120));
+    }
+    shell.apply_terminal_event(mouse(
+        MouseEventKind::Up(MouseButton::Left),
+        16,
+        selectable_row,
+    ));
+
+    let elapsed = started.elapsed();
+    assert!(
+        elapsed < STREAMING_DRAG_BUDGET,
+        "streaming drag took {elapsed:?}"
+    );
+    assert!(spectacular_tui::selected_text(shell.state()).is_some());
 }

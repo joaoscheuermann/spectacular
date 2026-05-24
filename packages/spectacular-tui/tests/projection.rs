@@ -62,7 +62,7 @@ fn command_item(index: usize, row_count: usize) -> TranscriptItem {
     )
 }
 
-/// Verifies submitted user prompts render without the active-prompt marker.
+// Verifies submitted user prompts render without the active-prompt marker.
 
 fn user_prompt_item(text: &str) -> TranscriptItem {
     TranscriptItem::new(
@@ -89,7 +89,7 @@ fn state_with_copied_selection_feedback(width: u16) -> State {
     state
 }
 
-/// Verifies no-wrap transcript items count semantic rows, not terminal columns.
+// Verifies no-wrap transcript items count semantic rows, not terminal columns.
 
 #[path = "projection/projection_footer.rs"]
 mod projection_footer;

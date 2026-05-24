@@ -304,14 +304,9 @@ impl CachedModelValues {
 }
 
 /// Defines whether a field value must match one of the resolved completion values.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub enum CommandValueValidation {
+    #[default]
     None,
     OneOfValues,
-}
-
-impl Default for CommandValueValidation {
-    fn default() -> Self {
-        Self::None
-    }
 }

@@ -1,11 +1,14 @@
 use crate::components::App;
 use crate::reducer::reduce;
-use crate::runtime::{system_clipboard, ClipboardService, Intent, PasteBurst, Shell};
+use crate::runtime::{
+    apply_event_effects, effects_with_clipboard_paste_and_view,
+    record_controller_transcript_update, system_clipboard, ClipboardService, Intent, PasteBurst,
+};
 use crate::session::PromptState;
 use crate::state::State as TuiState;
 use crate::view::{
     apply_view_action, materialize_state, preserve_review_position_for_growth,
-    total_transcript_rows, ViewAction, ViewState,
+    total_transcript_rows_with_view, ViewAction, ViewState,
 };
 use iocraft::prelude::*;
 use std::sync::{Arc, Mutex};
@@ -56,8 +59,7 @@ pub fn Root(mut hooks: Hooks, props: &RootProps) -> impl Into<AnyElement<'static
         state_receiver,
     );
     drive_selection_auto_scroll(&mut hooks, local_state, local_view, current_prompt);
-    emit_terminal_intents(
-        &mut hooks,
+    let event_frame = TerminalEventFrame {
         local_state,
         local_view,
         current_prompt,
@@ -66,10 +68,13 @@ pub fn Root(mut hooks: Hooks, props: &RootProps) -> impl Into<AnyElement<'static
         paste_burst,
         terminal_width,
         terminal_height,
+    };
+    let event_ports = TerminalEventPorts {
         intent_sender,
         cancellation_sender,
         selection_sender,
-    );
+    };
+    emit_terminal_intents(&mut hooks, event_frame, event_ports);
 
     let state = state_with_current_prompt_and_view(
         &local_state.read(),
@@ -126,6 +131,23 @@ pub struct RootProps {
     pub state_receiver: Option<Arc<Mutex<mpsc::UnboundedReceiver<TuiState>>>>,
 }
 
+struct TerminalEventFrame {
+    local_state: iocraft::prelude::State<TuiState>,
+    local_view: iocraft::prelude::State<ViewState>,
+    current_prompt: iocraft::prelude::State<PromptState>,
+    exit_requested: iocraft::prelude::State<bool>,
+    clipboard: Ref<Mutex<Option<Box<dyn ClipboardService>>>>,
+    paste_burst: Ref<Mutex<PasteBurst>>,
+    terminal_width: u16,
+    terminal_height: u16,
+}
+
+struct TerminalEventPorts {
+    intent_sender: mpsc::UnboundedSender<Intent>,
+    cancellation_sender: mpsc::UnboundedSender<()>,
+    selection_sender: mpsc::UnboundedSender<Intent>,
+}
+
 /// Polls controller-published state snapshots and refreshes local IOCraft state.
 fn synchronize_runtime_state(
     hooks: &mut Hooks,
@@ -179,19 +201,17 @@ fn apply_state_updates(
     }
 }
 
-/// Returns render state with the prompt value owned by the interactive prompt component.
-fn state_with_current_prompt(state: &TuiState, prompt: &PromptState) -> TuiState {
-    let mut state = state.clone();
-    state.session.prompt = prompt.clone();
-    state
-}
-
 fn state_with_current_prompt_and_view(
     state: &TuiState,
     prompt: &PromptState,
     view: &ViewState,
 ) -> TuiState {
-    materialize_state(&state_with_current_prompt(state, prompt), view)
+    let mut state = state.clone();
+    state.session.prompt = prompt.clone();
+    state.scroll = view.scroll.clone();
+    state.app_selection = view.app_selection.clone();
+    state.selection_colors = view.selection_colors;
+    state
 }
 
 /// Merges a controller snapshot while keeping same-session prompt input local to the TUI.
@@ -227,38 +247,35 @@ pub fn merge_controller_state_and_view_update(
         return (controller_state, view, Some(reset_prompt));
     }
 
-    let old_rows = total_transcript_rows(&materialize_state(local_state, local_view));
     controller_state.session.prompt = current_prompt.clone();
     controller_state.input_notice = local_state.input_notice.clone();
     controller_state.exit_requested |= local_state.exit_requested;
     let mut view = local_view.clone();
-    let new_rows = total_transcript_rows(&materialize_state(&controller_state, &view));
+    let old_rows = total_transcript_rows_with_view(local_state, &mut view);
+    record_controller_transcript_update(&mut view, local_state, &controller_state);
+    let new_rows = total_transcript_rows_with_view(&controller_state, &mut view);
     preserve_review_position_for_growth(&mut view, old_rows, new_rows);
     (controller_state, view, None)
 }
 
 /// Registers terminal input handling that emits runtime intents without performing side effects.
-fn emit_terminal_intents(
-    hooks: &mut Hooks,
-    local_state: iocraft::prelude::State<TuiState>,
-    local_view: iocraft::prelude::State<ViewState>,
-    current_prompt: iocraft::prelude::State<PromptState>,
-    exit_requested: iocraft::prelude::State<bool>,
-    clipboard: Ref<Mutex<Option<Box<dyn ClipboardService>>>>,
-    paste_burst: Ref<Mutex<PasteBurst>>,
-    terminal_width: u16,
-    terminal_height: u16,
-    intent_sender: mpsc::UnboundedSender<Intent>,
-    cancellation_sender: mpsc::UnboundedSender<()>,
-    selection_sender: mpsc::UnboundedSender<Intent>,
-) {
+fn emit_terminal_intents(hooks: &mut Hooks, frame: TerminalEventFrame, ports: TerminalEventPorts) {
+    let TerminalEventFrame {
+        mut local_state,
+        mut local_view,
+        mut current_prompt,
+        mut exit_requested,
+        clipboard,
+        paste_burst,
+        terminal_width,
+        terminal_height,
+    } = frame;
+    let TerminalEventPorts {
+        intent_sender,
+        cancellation_sender,
+        selection_sender,
+    } = ports;
     hooks.use_terminal_events({
-        let mut local_state = local_state;
-        let mut local_view = local_view;
-        let mut current_prompt = current_prompt;
-        let mut exit_requested = exit_requested;
-        let clipboard = clipboard;
-        let paste_burst = paste_burst;
         move |event| {
             let mut view = local_view.read().clone();
             let mut state = state_with_current_prompt_and_view(
@@ -284,8 +301,7 @@ fn emit_terminal_intents(
                 );
                 state = materialize_state(&state, &view);
             }
-            let (mut shell, mut intents) = Shell::new_without_clipboard(state);
-            {
+            let effects = {
                 let clipboard_ref = clipboard.read();
                 let mut clipboard = clipboard_ref
                     .lock()
@@ -297,13 +313,16 @@ fn emit_terminal_intents(
                 let mut paste_burst = paste_burst_ref
                     .lock()
                     .expect("TUI paste-burst lock poisoned");
-                shell.apply_terminal_event_with_clipboard_and_paste(
+                effects_with_clipboard_paste_and_view(
+                    &state,
+                    &mut view,
                     event,
                     clipboard,
                     &mut paste_burst,
-                );
-            }
-            while let Ok(intent) = intents.try_recv() {
+                )
+            };
+            let intents = apply_event_effects(&mut state, &mut view, effects);
+            for intent in intents {
                 match intent {
                     Intent::RequestExit => {
                         exit_requested.set(true);
@@ -320,8 +339,7 @@ fn emit_terminal_intents(
                     }
                 }
             }
-            let state = shell.state().clone();
-            let view = shell.view().clone();
+            let state = materialize_state(&state, &view);
             current_prompt.set(state.session.prompt.clone());
             local_state.set(state);
             local_view.set(view);

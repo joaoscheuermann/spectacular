@@ -1,6 +1,6 @@
 use crate::ids::TranscriptItemId;
 use crate::reducer::append_transcript_item;
-use crate::reducer::lookup::{find_command, find_tool_call};
+use crate::reducer::lookup::{find_command_index, find_tool_call_index};
 use crate::state::State;
 use crate::transcript::{
     CommandDisplay, CommandDisplayStatus, CommandItem, CommandStatus, DisplayLine, ToolCallItem,
@@ -16,7 +16,12 @@ pub(crate) fn append_display_tool_call(
     call_line: DisplayLine,
     argument_lines: Vec<DisplayLine>,
 ) {
-    if let Some(tool_call) = find_tool_call(state, &tool_call_id) {
+    if let Some(index) = find_tool_call_index(state, &tool_call_id) {
+        let TranscriptItemContent::ToolCall(tool_call) =
+            &mut state.session.transcript[index].content
+        else {
+            return;
+        };
         tool_call.name = name;
         let display = tool_call.display.get_or_insert_with(ToolDisplay::default);
         display.call_line = Some(call_line);
@@ -40,7 +45,11 @@ pub(crate) fn finish_display_tool_call(
     status: ToolDisplayStatus,
     output_lines: Vec<DisplayLine>,
 ) {
-    let Some(tool_call) = find_tool_call(state, tool_call_id) else {
+    let Some(index) = find_tool_call_index(state, tool_call_id) else {
+        return;
+    };
+    let TranscriptItemContent::ToolCall(tool_call) = &mut state.session.transcript[index].content
+    else {
         return;
     };
 
@@ -64,7 +73,11 @@ pub(crate) fn append_display_command(
     command_id: String,
     command_line: DisplayLine,
 ) {
-    if let Some(command) = find_command(state, &command_id) {
+    if let Some(index) = find_command_index(state, &command_id) {
+        let TranscriptItemContent::Command(command) = &mut state.session.transcript[index].content
+        else {
+            return;
+        };
         command.command = command_line.text.clone();
         let display = command.display.get_or_insert_with(CommandDisplay::default);
         display.command_line = Some(command_line);
@@ -86,7 +99,11 @@ pub(crate) fn append_display_command_output(
     command_id: &str,
     line: DisplayLine,
 ) {
-    let Some(command) = find_command(state, command_id) else {
+    let Some(index) = find_command_index(state, command_id) else {
+        return;
+    };
+    let TranscriptItemContent::Command(command) = &mut state.session.transcript[index].content
+    else {
         return;
     };
 
@@ -102,7 +119,11 @@ pub(crate) fn finish_display_command(
     exit_code: Option<i32>,
     summary_line: Option<DisplayLine>,
 ) {
-    let Some(command) = find_command(state, command_id) else {
+    let Some(index) = find_command_index(state, command_id) else {
+        return;
+    };
+    let TranscriptItemContent::Command(command) = &mut state.session.transcript[index].content
+    else {
         return;
     };
 

@@ -29,7 +29,7 @@ fn state() -> State {
     )
 }
 
-/// Verifies initial state has empty collections, supplied metadata, idle status, first spinner frame, and tail following scroll.
+// Verifies initial state has empty collections, supplied metadata, idle status, first spinner frame, and tail following scroll.
 
 #[path = "reducer/reducer_state_prompt_selection.rs"]
 mod reducer_state_prompt_selection;

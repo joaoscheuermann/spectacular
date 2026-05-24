@@ -3,6 +3,7 @@ use crate::render::TuiSelectionColors;
 use crate::scroll::TranscriptScrollState;
 use crate::selection::{RenderedSelectionState, ViewportEdge};
 use crate::state::State;
+use crate::transcript::{TranscriptLayoutCache, TranscriptLayoutSnapshot};
 
 /// Local, non-durable view state owned by the terminal view layer.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -10,6 +11,7 @@ pub struct ViewState {
     pub scroll: TranscriptScrollState,
     pub app_selection: RenderedSelectionState,
     pub selection_colors: TuiSelectionColors,
+    transcript_layout: TranscriptLayoutCache,
 }
 
 impl ViewState {
@@ -19,6 +21,7 @@ impl ViewState {
             scroll: state.scroll.clone(),
             app_selection: state.app_selection.clone(),
             selection_colors: state.selection_colors,
+            transcript_layout: TranscriptLayoutCache::default(),
         }
     }
 
@@ -26,6 +29,12 @@ impl ViewState {
     pub fn reset_for_session(&mut self) {
         self.scroll = TranscriptScrollState::follow_tail();
         self.app_selection = RenderedSelectionState::default();
+        self.transcript_layout.reset_for_session();
+    }
+
+    /// Records the earliest semantic transcript index whose layout may have changed.
+    pub(crate) fn note_transcript_change(&mut self, start_index: usize) {
+        self.transcript_layout.note_change(start_index);
     }
 }
 
@@ -35,6 +44,7 @@ impl Default for ViewState {
             scroll: TranscriptScrollState::follow_tail(),
             app_selection: RenderedSelectionState::default(),
             selection_colors: TuiSelectionColors::from_env(),
+            transcript_layout: TranscriptLayoutCache::default(),
         }
     }
 }
@@ -54,7 +64,7 @@ pub enum ViewAction {
 pub fn apply_view_action(view: &mut ViewState, state: &State, action: ViewAction) {
     match action {
         ViewAction::ScrollTranscript(delta) => {
-            let total_rows = total_transcript_rows(state);
+            let total_rows = total_transcript_rows_with_view(state, view);
             view.scroll.scroll_by(
                 delta,
                 max_scroll_offset(total_rows, view.scroll.visible_rows),
@@ -122,14 +132,31 @@ pub fn total_transcript_rows(state: &State) -> usize {
     transcript_layout_total_rows(state, transcript_content_width(state))
 }
 
+/// Returns cached transcript layout metadata for the current view width.
+pub(crate) fn transcript_layout_snapshot(
+    state: &State,
+    view: &mut ViewState,
+) -> TranscriptLayoutSnapshot {
+    view.transcript_layout
+        .snapshot_for_state(state, transcript_content_width(state))
+}
+
+/// Returns cached total rendered transcript rows for runtime view paths.
+pub(crate) fn total_transcript_rows_with_view(state: &State, view: &mut ViewState) -> usize {
+    transcript_layout_snapshot(state, view).layout.total_rows
+}
+
 fn auto_scroll_selection(state: &State, view: &mut ViewState, edge: ViewportEdge) {
     let mut frame = materialize_state(state, view);
-    crate::selection::auto_scroll_selection(&mut frame, edge);
-    *view = ViewState::from_state(&frame);
+    let layout = transcript_layout_snapshot(&frame, view);
+    crate::selection::auto_scroll_selection_with_layout(&mut frame, edge, &layout.layout);
+    view.scroll = frame.scroll;
+    view.app_selection = frame.app_selection;
+    view.selection_colors = frame.selection_colors;
 }
 
 fn clamp_scroll_to_transcript(view: &mut ViewState, state: &State) {
-    let total_rows = total_transcript_rows(state);
+    let total_rows = total_transcript_rows_with_view(state, view);
     view.scroll.offset = view
         .scroll
         .offset

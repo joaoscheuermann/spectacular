@@ -224,7 +224,7 @@ fn has_render_style(canvas: &Canvas, x: usize, y: usize, render_style: RenderSty
     })
 }
 
-/// Verifies prompt line breaks render as separate IOCraft terminal rows.
+// Verifies prompt line breaks render as separate IOCraft terminal rows.
 
 #[path = "bounded_iocraft_layout/bounded_prompt_selection.rs"]
 mod bounded_prompt_selection;

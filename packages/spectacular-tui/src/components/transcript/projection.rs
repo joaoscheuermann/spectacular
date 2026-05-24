@@ -13,9 +13,11 @@ use super::user::user_prompt_render_lines;
 use super::warning::warning_render_lines;
 use crate::render::{RenderLine, RenderStyle};
 use crate::state::State;
-use crate::transcript::{CommandStatus, TranscriptItem, TranscriptItemContent};
+use crate::transcript::{
+    transcript_item_row_count_for_width, wrapped_layout_text_rows as layout_text_rows,
+    TranscriptItem, TranscriptItemContent, TranscriptLayout,
+};
 use std::ops::Range;
-use unicode_width::UnicodeWidthChar;
 
 /// Formats the semantic transcript region for legacy text assertions.
 pub fn transcript_render_lines(state: &State) -> Vec<RenderLine> {
@@ -42,302 +44,6 @@ pub fn transcript_total_render_rows(state: &State) -> usize {
         .iter()
         .map(transcript_item_row_count)
         .sum()
-}
-
-/// Row-aware transcript layout used by the live IOCraft virtualized transcript.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub(crate) struct TranscriptLayout {
-    pub(crate) total_rows: usize,
-    pub(crate) items: Vec<TranscriptItemLayout>,
-}
-
-impl TranscriptLayout {
-    /// Builds cumulative row metadata for transcript items at a known content width.
-    pub(crate) fn for_state(state: &State, width: usize) -> Self {
-        let mut next_start_row = 0usize;
-        let items = state
-            .session
-            .transcript
-            .iter()
-            .enumerate()
-            .map(|(item_index, item)| {
-                let row_count = transcript_item_row_count_for_width(item, width);
-                let layout = TranscriptItemLayout {
-                    item_index,
-                    start_row: next_start_row,
-                    row_count,
-                };
-                next_start_row = next_start_row.saturating_add(row_count);
-                layout
-            })
-            .collect();
-
-        Self {
-            total_rows: next_start_row,
-            items,
-        }
-    }
-
-    /// Returns the item indices intersecting a half-open virtual row window.
-    pub(crate) fn item_range(&self, rows: Range<usize>) -> Range<usize> {
-        if rows.start >= rows.end || self.items.is_empty() {
-            return 0..0;
-        }
-
-        let start = self
-            .items
-            .partition_point(|item| item.end_row() <= rows.start);
-        let end = self.items.partition_point(|item| item.start_row < rows.end);
-
-        start..end.max(start)
-    }
-
-    /// Returns the virtual row where an item starts, or zero for an empty range.
-    pub(crate) fn item_start_row(&self, item_index: usize) -> usize {
-        self.items
-            .get(item_index)
-            .map(|item| item.start_row)
-            .unwrap_or_default()
-    }
-}
-
-/// Incremental transcript layout cache keyed by terminal content width and item fingerprints.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub(crate) struct TranscriptLayoutCache {
-    width: Option<usize>,
-    fingerprints: Vec<TranscriptItemFingerprint>,
-    layout: TranscriptLayout,
-}
-
-impl TranscriptLayoutCache {
-    /// Returns row layout metadata, recomputing only the changed suffix when possible.
-    pub(crate) fn layout_for_state(&mut self, state: &State, width: usize) -> TranscriptLayout {
-        let fingerprints = transcript_fingerprints(state);
-        if self.width != Some(width) {
-            self.rebuild(state, width, fingerprints);
-            return self.layout.clone();
-        }
-
-        let prefix = common_prefix_len(&self.fingerprints, &fingerprints);
-        if prefix == fingerprints.len() && prefix == self.fingerprints.len() {
-            return self.layout.clone();
-        }
-
-        self.recompute_suffix(state, width, fingerprints, prefix);
-        self.layout.clone()
-    }
-
-    fn rebuild(
-        &mut self,
-        state: &State,
-        width: usize,
-        fingerprints: Vec<TranscriptItemFingerprint>,
-    ) {
-        self.width = Some(width);
-        self.fingerprints = fingerprints;
-        self.layout = TranscriptLayout::for_state(state, width);
-    }
-
-    fn recompute_suffix(
-        &mut self,
-        state: &State,
-        width: usize,
-        fingerprints: Vec<TranscriptItemFingerprint>,
-        prefix: usize,
-    ) {
-        let mut items = self.layout.items[..prefix.min(self.layout.items.len())].to_vec();
-        let mut next_start_row = items
-            .last()
-            .map(TranscriptItemLayout::end_row)
-            .unwrap_or_default();
-
-        for (item_index, item) in state.session.transcript.iter().enumerate().skip(prefix) {
-            let row_count = transcript_item_row_count_for_width(item, width);
-            items.push(TranscriptItemLayout {
-                item_index,
-                start_row: next_start_row,
-                row_count,
-            });
-            next_start_row = next_start_row.saturating_add(row_count);
-        }
-
-        self.width = Some(width);
-        self.fingerprints = fingerprints;
-        self.layout = TranscriptLayout {
-            total_rows: next_start_row,
-            items,
-        };
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct TranscriptItemFingerprint {
-    id: String,
-    signature: TranscriptItemSignature,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct TranscriptItemSignature {
-    kind: u8,
-    primary_len: usize,
-    secondary_len: usize,
-    line_count: usize,
-    flags: u64,
-}
-
-fn transcript_fingerprints(state: &State) -> Vec<TranscriptItemFingerprint> {
-    state
-        .session
-        .transcript
-        .iter()
-        .map(|item| TranscriptItemFingerprint {
-            id: item.id.as_str().to_owned(),
-            signature: transcript_item_signature(item),
-        })
-        .collect()
-}
-
-fn common_prefix_len(
-    old: &[TranscriptItemFingerprint],
-    new: &[TranscriptItemFingerprint],
-) -> usize {
-    old.iter()
-        .zip(new)
-        .take_while(|(left, right)| left == right)
-        .count()
-}
-
-fn transcript_item_signature(item: &TranscriptItem) -> TranscriptItemSignature {
-    match &item.content {
-        TranscriptItemContent::OpeningBanner(_) => signature(0, 0, 0, 8, 0),
-        TranscriptItemContent::UserPrompt(prompt) => text_signature(1, &prompt.text, 0),
-        TranscriptItemContent::AssistantMessage(message) => text_signature(2, &message.text, 0),
-        TranscriptItemContent::Reasoning(reasoning) => {
-            text_signature(3, &reasoning.text, u64::from(reasoning.collapsed))
-        }
-        TranscriptItemContent::ToolCall(tool) => {
-            if let Some(display) = &tool.display {
-                return signature(
-                    4,
-                    display.argument_lines.len(),
-                    display.output_lines.len(),
-                    usize::from(display.call_line.is_some())
-                        + display.argument_lines.len()
-                        + display.output_lines.len(),
-                    tool.status as u64,
-                );
-            }
-
-            signature(
-                4,
-                tool.name.len()
-                    + tool
-                        .arguments_preview
-                        .as_deref()
-                        .map(str::len)
-                        .unwrap_or_default(),
-                tool.output_preview
-                    .as_deref()
-                    .map(str::len)
-                    .unwrap_or_default(),
-                tool.output_preview
-                    .as_deref()
-                    .map(visible_text_row_count)
-                    .unwrap_or_default(),
-                tool.status as u64,
-            )
-        }
-        TranscriptItemContent::Command(command) => {
-            if let Some(display) = &command.display {
-                return signature(
-                    5,
-                    display.output_lines.len(),
-                    usize::from(display.summary_line.is_some()),
-                    usize::from(display.command_line.is_some())
-                        + display.output_lines.len()
-                        + usize::from(display.summary_line.is_some()),
-                    command_status_flag(command.status, command.exit_code),
-                );
-            }
-
-            signature(
-                5,
-                command.command.len(),
-                command.output.len(),
-                visible_text_row_count(&command.output),
-                command_status_flag(command.status, command.exit_code),
-            )
-        }
-        TranscriptItemContent::Error(error) => signature(
-            6,
-            error.message.len(),
-            error.details.as_deref().map(str::len).unwrap_or_default(),
-            error
-                .details
-                .as_deref()
-                .map(visible_text_row_count)
-                .unwrap_or_default(),
-            0,
-        ),
-        TranscriptItemContent::Warning(warning) => text_signature(7, &warning.message, 0),
-        TranscriptItemContent::Success(success) => text_signature(8, &success.message, 0),
-        TranscriptItemContent::Notice(notice) => text_signature(9, &notice.message, 0),
-        TranscriptItemContent::Cancellation(cancellation) => {
-            text_signature(10, &cancellation.reason, 0)
-        }
-        TranscriptItemContent::WorkedSummary(summary) => signature(
-            11,
-            summary.duration.len(),
-            0,
-            1,
-            summary.turn_tokens.unwrap_or_default(),
-        ),
-    }
-}
-
-fn text_signature(kind: u8, text: &str, flags: u64) -> TranscriptItemSignature {
-    signature(kind, text.len(), 0, visible_text_row_count(text), flags)
-}
-
-fn signature(
-    kind: u8,
-    primary_len: usize,
-    secondary_len: usize,
-    line_count: usize,
-    flags: u64,
-) -> TranscriptItemSignature {
-    TranscriptItemSignature {
-        kind,
-        primary_len,
-        secondary_len,
-        line_count,
-        flags,
-    }
-}
-
-fn command_status_flag(status: CommandStatus, exit_code: Option<i32>) -> u64 {
-    let status = match status {
-        CommandStatus::Running => 0,
-        CommandStatus::Finished => 1,
-        CommandStatus::Failed => 2,
-    };
-    let exit_code = exit_code.unwrap_or_default() as u64;
-    status | (exit_code << 8)
-}
-
-/// Cumulative row metadata for one semantic transcript item.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct TranscriptItemLayout {
-    pub(crate) item_index: usize,
-    pub(crate) start_row: usize,
-    pub(crate) row_count: usize,
-}
-
-impl TranscriptItemLayout {
-    /// Returns the first row after this item in the virtual transcript coordinate space.
-    fn end_row(&self) -> usize {
-        self.start_row.saturating_add(self.row_count)
-    }
 }
 
 /// Returns the width-aware total row count used by live transcript layout.
@@ -370,7 +76,7 @@ pub fn transcript_item_layout_rows(item: &TranscriptItem, width: usize) -> usize
 
 /// Returns the row count from the local IOCraft-style text wrapping model.
 pub fn wrapped_layout_text_rows(text: &str, width: usize) -> usize {
-    wrapped_text_row_count(text, width)
+    layout_text_rows(text, width)
 }
 
 /// Formats the transcript region as plain visible text for compatibility tests.
@@ -383,6 +89,11 @@ pub fn transcript_item_render_lines(item: &TranscriptItem) -> Vec<RenderLine> {
     let mut lines = transcript_item_content_render_lines(item);
     lines.push(RenderLine::styled("", RenderStyle::Text));
     lines
+}
+
+/// Formats one transcript item as plain visible text for compatibility tests.
+pub fn transcript_item_lines(item: &TranscriptItem) -> Vec<String> {
+    plain_lines(transcript_item_render_lines(item))
 }
 
 /// Formats one transcript item into its content rows without layout margins.
@@ -411,11 +122,6 @@ fn transcript_item_content_render_lines(item: &TranscriptItem) -> Vec<RenderLine
     }
 }
 
-/// Formats one transcript item as plain visible text for compatibility tests.
-pub fn transcript_item_lines(item: &TranscriptItem) -> Vec<String> {
-    plain_lines(transcript_item_render_lines(item))
-}
-
 /// Counts rendered rows for one transcript item without materializing every row when possible.
 fn transcript_item_row_count(item: &TranscriptItem) -> usize {
     match &item.content {
@@ -439,129 +145,6 @@ fn transcript_item_row_count(item: &TranscriptItem) -> usize {
         | TranscriptItemContent::Notice(_)
         | TranscriptItemContent::Cancellation(_)
         | TranscriptItemContent::WorkedSummary(_) => 2,
-    }
-}
-
-/// Estimates rendered rows for one transcript item after IOCraft text wrapping.
-fn transcript_item_row_count_for_width(item: &TranscriptItem, width: usize) -> usize {
-    if transcript_item_uses_no_wrap(item) {
-        return transcript_item_row_count(item);
-    }
-
-    transcript_item_content_render_lines(item)
-        .iter()
-        .map(|line| wrapped_render_line_row_count(line, width))
-        .sum::<usize>()
-        .saturating_add(1)
-}
-
-/// Returns true when the IOCraft component renders each semantic row without wrapping.
-fn transcript_item_uses_no_wrap(item: &TranscriptItem) -> bool {
-    matches!(
-        item.content,
-        TranscriptItemContent::OpeningBanner(_)
-            | TranscriptItemContent::ToolCall(_)
-            | TranscriptItemContent::Command(_)
-    )
-}
-
-/// Estimates wrapped terminal rows for one semantic render line.
-fn wrapped_render_line_row_count(line: &RenderLine, width: usize) -> usize {
-    if width == 0 {
-        return 1;
-    }
-
-    let text = line.plain_text();
-    wrapped_text_row_count(&text, width)
-}
-
-/// Counts rows for IOCraft-style wrapping using break opportunities after whitespace.
-fn wrapped_text_row_count(text: &str, width: usize) -> usize {
-    if text.is_empty() || width == 0 {
-        return 1;
-    }
-
-    let mut rows = 1usize;
-    let mut current_width = 0usize;
-    for token in wrapping_tokens(text) {
-        if current_width + token.non_trailing_width <= width {
-            current_width = current_width.saturating_add(token.total_width);
-            continue;
-        }
-
-        if current_width > 0 {
-            rows = rows.saturating_add(1);
-        }
-
-        let (token_rows, token_width) = forced_wrap_width(token.non_trailing_width, width);
-        rows = rows.saturating_add(token_rows.saturating_sub(1));
-        current_width = token_width.saturating_add(token.trailing_width);
-    }
-
-    rows
-}
-
-/// Splits text into word-plus-trailing-whitespace units for local row estimation.
-fn wrapping_tokens(text: &str) -> Vec<WrappingToken> {
-    let mut tokens = Vec::new();
-    let mut non_trailing_width = 0usize;
-    let mut trailing_width = 0usize;
-
-    for character in text.chars() {
-        let width = character.width().unwrap_or(0);
-        if character.is_whitespace() {
-            trailing_width = trailing_width.saturating_add(width);
-            continue;
-        }
-
-        if trailing_width > 0 && non_trailing_width > 0 {
-            tokens.push(WrappingToken::new(non_trailing_width, trailing_width));
-            non_trailing_width = 0;
-            trailing_width = 0;
-        }
-
-        non_trailing_width = non_trailing_width.saturating_add(trailing_width);
-        trailing_width = 0;
-        non_trailing_width = non_trailing_width.saturating_add(width);
-    }
-
-    if non_trailing_width > 0 || trailing_width > 0 {
-        tokens.push(WrappingToken::new(non_trailing_width, trailing_width));
-    }
-
-    tokens
-}
-
-/// Returns rows and final-row width after force-wrapping an unbreakable token.
-fn forced_wrap_width(width: usize, row_width: usize) -> (usize, usize) {
-    if width == 0 {
-        return (1, 0);
-    }
-
-    let rows = width.saturating_add(row_width.saturating_sub(1)) / row_width;
-    let remainder = width % row_width;
-    (
-        rows.max(1),
-        if remainder == 0 { row_width } else { remainder },
-    )
-}
-
-/// One local wrapping unit with whitespace that may be trimmed from fit decisions.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct WrappingToken {
-    non_trailing_width: usize,
-    trailing_width: usize,
-    total_width: usize,
-}
-
-impl WrappingToken {
-    /// Creates a wrapping token from non-trailing and trailing display widths.
-    fn new(non_trailing_width: usize, trailing_width: usize) -> Self {
-        Self {
-            non_trailing_width,
-            trailing_width,
-            total_width: non_trailing_width.saturating_add(trailing_width),
-        }
     }
 }
 

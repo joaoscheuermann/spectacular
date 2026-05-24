@@ -3,9 +3,10 @@ use super::{
     EventEffect,
 };
 use crate::runtime::{ClipboardService, PasteBurst};
-use crate::selection::{selected_text, COPIED_SELECTION_NOTICE};
+use crate::selection::{selected_text, selected_text_with_layout, COPIED_SELECTION_NOTICE};
 use crate::session::SelectionPromptState;
 use crate::state::State;
+use crate::transcript::TranscriptLayout;
 use crate::view::ViewAction;
 
 const CLIPBOARD_UNAVAILABLE_NOTICE: &str = "Clipboard is unavailable";
@@ -45,6 +46,28 @@ pub(super) fn copy_rendered_selection_effects(
     clipboard: Option<&mut dyn ClipboardService>,
 ) -> Vec<EventEffect> {
     let Some(value) = selected_text(state) else {
+        return Vec::new();
+    };
+    let Some(clipboard) = clipboard else {
+        return input_notice_effect(CLIPBOARD_UNAVAILABLE_NOTICE);
+    };
+
+    if clipboard.set_text(&value).is_err() {
+        return input_notice_effect(CLIPBOARD_WRITE_FAILED_NOTICE);
+    }
+
+    view_action_effects(ViewAction::RenderedSelectionFeedbackReported {
+        message: COPIED_SELECTION_NOTICE.to_owned(),
+    })
+}
+
+/// Copies selected rendered app text using cached transcript layout metadata.
+pub(super) fn copy_rendered_selection_effects_with_layout(
+    state: &State,
+    layout: &TranscriptLayout,
+    clipboard: Option<&mut dyn ClipboardService>,
+) -> Vec<EventEffect> {
+    let Some(value) = selected_text_with_layout(state, layout) else {
         return Vec::new();
     };
     let Some(clipboard) = clipboard else {

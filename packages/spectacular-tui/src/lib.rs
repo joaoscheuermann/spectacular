@@ -59,7 +59,7 @@ pub use scroll::TranscriptScrollState;
 pub use selection::{
     selected_text, style_line_for_source, style_line_for_source_at_columns, RenderedSelectionState,
     SelectableProjection, SelectableRow, SelectableSource, SelectableSurface, SelectionPoint,
-    SelectionRowKey, ViewportEdge, COPIED_SELECTION_NOTICE,
+    SelectionRowKey, SelectionStylingPlan, ViewportEdge, COPIED_SELECTION_NOTICE,
 };
 pub use session::{PromptPasteBurstState, PromptState, SelectionPromptState, Session};
 pub use spinner::SpinnerState;

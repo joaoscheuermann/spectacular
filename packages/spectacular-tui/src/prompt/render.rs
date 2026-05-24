@@ -205,7 +205,7 @@ fn slash_suggestion_lines(
     suggestions: &[CommandSuggestion],
 ) -> Vec<RenderLine> {
     suggestions
-        .into_iter()
+        .iter()
         .enumerate()
         .map(|(index, suggestion)| {
             slash_suggestion_line(suggestion, index, prompt.selected_completion)

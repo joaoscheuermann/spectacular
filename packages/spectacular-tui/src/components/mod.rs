@@ -18,7 +18,6 @@ pub use prompt::{
     prompt_lines, prompt_render_lines, prompt_render_lines_with_width, Prompt, PromptProps,
 };
 pub use selection::{selection_prompt_render_lines, SelectionPrompt, SelectionPromptProps};
-pub(crate) use transcript::TranscriptLayout;
 pub use transcript::{
     plain_lines, transcript_item_layout_rows, transcript_item_lines, transcript_item_render_lines,
     transcript_layout_item_range, transcript_layout_row_starts, transcript_layout_total_rows,

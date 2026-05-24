@@ -55,9 +55,9 @@ struct ValueSuggestionRequest<'a> {
 }
 
 /// Builds command-composer suggestions for command, subcommand, field, or value tokens.
-pub fn command_suggestions<'a>(
+pub fn command_suggestions(
     prompt: &PromptState,
-    commands: &'a [CommandDescriptor],
+    commands: &[CommandDescriptor],
 ) -> Vec<CommandSuggestion> {
     if command_completion_context_key(prompt) == prompt.dismissed_completion {
         return Vec::new();

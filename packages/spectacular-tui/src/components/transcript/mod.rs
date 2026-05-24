@@ -27,7 +27,6 @@ pub use projection::{
     transcript_lines, transcript_render_lines, transcript_total_render_rows,
     wrapped_layout_text_rows,
 };
-pub(crate) use projection::{TranscriptLayout, TranscriptLayoutCache};
 pub use reasoning::{Reasoning, ReasoningProps};
 pub use scroll::{Scroll, ScrollProps};
 pub use success::{Success, SuccessProps};
@@ -37,7 +36,9 @@ pub use user::{User, UserProps};
 pub use warning::{Warning, WarningProps};
 
 use crate::state::State;
-use crate::transcript::{TranscriptItem, TranscriptItemContent};
+use crate::transcript::{
+    TranscriptItem, TranscriptItemContent, TranscriptLayout, TranscriptLayoutCache,
+};
 use iocraft::prelude::*;
 use scroll::{scroll_offset_from_top, TranscriptViewportState};
 use std::sync::{Arc, Mutex};
@@ -56,8 +57,9 @@ pub fn Transcript(mut hooks: Hooks, props: &TranscriptProps) -> impl Into<AnyEle
         let mut cache = cache_ref
             .lock()
             .expect("transcript layout cache lock poisoned");
-        cache.layout_for_state(&state, content_width)
+        cache.snapshot_for_state(&state, content_width)
     };
+    let layout = layout.layout;
     let height = transcript_height(layout.total_rows, capacity);
     let normalized = TranscriptViewportState::from_scroll(&state.scroll, layout.total_rows)
         .with_render_context(layout.total_rows, height);
@@ -190,10 +192,9 @@ fn transcript_item_element(
 /// Render-only transcript context shared by visible transcript item components.
 #[derive(Clone, Debug)]
 pub struct TranscriptRenderContext {
-    pub(crate) selection: crate::selection::RenderedSelectionState,
     pub(crate) selection_colors: crate::render::TuiSelectionColors,
     pub(crate) content_width: usize,
-    pub(crate) projection: Arc<crate::selection::SelectableProjection>,
+    pub(crate) selection_plan: Arc<crate::selection::SelectionStylingPlan>,
 }
 
 impl TranscriptRenderContext {
@@ -204,19 +205,24 @@ impl TranscriptRenderContext {
         visible_window: std::ops::Range<usize>,
     ) -> Self {
         let screen_width = content_width.saturating_add(1);
+        let projection = Arc::new(
+            crate::selection::SelectableProjection::for_transcript_window(
+                state,
+                content_width,
+                screen_width,
+                layout,
+                visible_window,
+            ),
+        );
+        let selection_plan = Arc::new(crate::selection::SelectionStylingPlan::new(
+            &state.app_selection,
+            &projection,
+        ));
+
         Self {
-            selection: state.app_selection.clone(),
             selection_colors: state.selection_colors,
             content_width,
-            projection: Arc::new(
-                crate::selection::SelectableProjection::for_transcript_window(
-                    state,
-                    content_width,
-                    screen_width,
-                    layout,
-                    visible_window,
-                ),
-            ),
+            selection_plan,
         }
     }
 }

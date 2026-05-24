@@ -8,7 +8,7 @@ use crate::reducer::display::{
     finish_display_command, finish_display_tool_call,
 };
 use crate::reducer::lookup::{
-    find_command, find_content_by_id, find_tool_call, transcript_contains_id,
+    find_command_index, find_content_index_by_id, find_tool_call_index, transcript_contains_id,
 };
 use crate::session::Session;
 use crate::state::{default_display_context_usage, PromptLayoutMetrics, State};
@@ -262,7 +262,11 @@ fn ensure_prompt_cursor_visible(
 
 /// Inserts a user prompt unless the transcript already contains the prompt occurrence ID.
 fn upsert_user_prompt(state: &mut State, id: TranscriptItemId, text: String) {
-    if let Some(TranscriptItemContent::UserPrompt(item)) = find_content_by_id(state, &id) {
+    if let Some(index) = find_content_index_by_id(state, &id) {
+        let TranscriptItemContent::UserPrompt(item) = &mut state.session.transcript[index].content
+        else {
+            return;
+        };
         item.text = text;
         return;
     }
@@ -302,7 +306,12 @@ pub(crate) fn append_transcript_item(
 
 /// Appends assistant text directly to the semantic transcript item.
 fn append_assistant_delta_directly(state: &mut State, id: &TranscriptItemId, text: &str) {
-    let Some(TranscriptItemContent::AssistantMessage(item)) = find_content_by_id(state, id) else {
+    let Some(index) = find_content_index_by_id(state, id) else {
+        return;
+    };
+    let TranscriptItemContent::AssistantMessage(item) =
+        &mut state.session.transcript[index].content
+    else {
         return;
     };
 
@@ -311,7 +320,11 @@ fn append_assistant_delta_directly(state: &mut State, id: &TranscriptItemId, tex
 
 /// Appends text to reasoning content matching the supplied transcript item ID.
 fn append_reasoning_delta(state: &mut State, id: &TranscriptItemId, text: &str) {
-    let Some(TranscriptItemContent::Reasoning(item)) = find_content_by_id(state, id) else {
+    let Some(index) = find_content_index_by_id(state, id) else {
+        return;
+    };
+    let TranscriptItemContent::Reasoning(item) = &mut state.session.transcript[index].content
+    else {
         return;
     };
 
@@ -320,7 +333,11 @@ fn append_reasoning_delta(state: &mut State, id: &TranscriptItemId, text: &str) 
 
 /// Appends incremental output preview text to a tool call by lifecycle ID.
 fn append_tool_delta(state: &mut State, tool_call_id: &str, text: &str) {
-    let Some(tool_call) = find_tool_call(state, tool_call_id) else {
+    let Some(index) = find_tool_call_index(state, tool_call_id) else {
+        return;
+    };
+    let TranscriptItemContent::ToolCall(tool_call) = &mut state.session.transcript[index].content
+    else {
         return;
     };
 
@@ -330,7 +347,11 @@ fn append_tool_delta(state: &mut State, tool_call_id: &str, text: &str) {
 
 /// Marks a tool call finished while preserving its start-time identity metadata.
 fn finish_tool_call(state: &mut State, tool_call_id: &str, _name: String, output: String) {
-    let Some(tool_call) = find_tool_call(state, tool_call_id) else {
+    let Some(index) = find_tool_call_index(state, tool_call_id) else {
+        return;
+    };
+    let TranscriptItemContent::ToolCall(tool_call) = &mut state.session.transcript[index].content
+    else {
         return;
     };
 
@@ -340,7 +361,11 @@ fn finish_tool_call(state: &mut State, tool_call_id: &str, _name: String, output
 
 /// Marks a tool call failed and appends the error to its output preview.
 fn fail_tool_call(state: &mut State, tool_call_id: &str, error: String) {
-    let Some(tool_call) = find_tool_call(state, tool_call_id) else {
+    let Some(index) = find_tool_call_index(state, tool_call_id) else {
+        return;
+    };
+    let TranscriptItemContent::ToolCall(tool_call) = &mut state.session.transcript[index].content
+    else {
         return;
     };
 
@@ -351,7 +376,11 @@ fn fail_tool_call(state: &mut State, tool_call_id: &str, error: String) {
 
 /// Appends command output to the matching command transcript item.
 fn append_command_output(state: &mut State, command_id: &str, text: &str) {
-    let Some(command) = find_command(state, command_id) else {
+    let Some(index) = find_command_index(state, command_id) else {
+        return;
+    };
+    let TranscriptItemContent::Command(command) = &mut state.session.transcript[index].content
+    else {
         return;
     };
 
@@ -360,7 +389,11 @@ fn append_command_output(state: &mut State, command_id: &str, text: &str) {
 
 /// Marks a command complete and records its exit code.
 fn finish_command(state: &mut State, command_id: &str, exit_code: Option<i32>) {
-    let Some(command) = find_command(state, command_id) else {
+    let Some(index) = find_command_index(state, command_id) else {
+        return;
+    };
+    let TranscriptItemContent::Command(command) = &mut state.session.transcript[index].content
+    else {
         return;
     };
 
