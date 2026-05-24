@@ -13,7 +13,7 @@ use super::user::user_prompt_render_lines;
 use super::warning::warning_render_lines;
 use crate::render::{RenderLine, RenderStyle};
 use crate::state::State;
-use crate::transcript::{TranscriptItem, TranscriptItemContent};
+use crate::transcript::{CommandStatus, TranscriptItem, TranscriptItemContent};
 use std::ops::Range;
 use unicode_width::UnicodeWidthChar;
 
@@ -99,6 +99,230 @@ impl TranscriptLayout {
             .map(|item| item.start_row)
             .unwrap_or_default()
     }
+}
+
+/// Incremental transcript layout cache keyed by terminal content width and item fingerprints.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) struct TranscriptLayoutCache {
+    width: Option<usize>,
+    fingerprints: Vec<TranscriptItemFingerprint>,
+    layout: TranscriptLayout,
+}
+
+impl TranscriptLayoutCache {
+    /// Returns row layout metadata, recomputing only the changed suffix when possible.
+    pub(crate) fn layout_for_state(&mut self, state: &State, width: usize) -> TranscriptLayout {
+        let fingerprints = transcript_fingerprints(state);
+        if self.width != Some(width) {
+            self.rebuild(state, width, fingerprints);
+            return self.layout.clone();
+        }
+
+        let prefix = common_prefix_len(&self.fingerprints, &fingerprints);
+        if prefix == fingerprints.len() && prefix == self.fingerprints.len() {
+            return self.layout.clone();
+        }
+
+        self.recompute_suffix(state, width, fingerprints, prefix);
+        self.layout.clone()
+    }
+
+    fn rebuild(
+        &mut self,
+        state: &State,
+        width: usize,
+        fingerprints: Vec<TranscriptItemFingerprint>,
+    ) {
+        self.width = Some(width);
+        self.fingerprints = fingerprints;
+        self.layout = TranscriptLayout::for_state(state, width);
+    }
+
+    fn recompute_suffix(
+        &mut self,
+        state: &State,
+        width: usize,
+        fingerprints: Vec<TranscriptItemFingerprint>,
+        prefix: usize,
+    ) {
+        let mut items = self.layout.items[..prefix.min(self.layout.items.len())].to_vec();
+        let mut next_start_row = items
+            .last()
+            .map(TranscriptItemLayout::end_row)
+            .unwrap_or_default();
+
+        for (item_index, item) in state.session.transcript.iter().enumerate().skip(prefix) {
+            let row_count = transcript_item_row_count_for_width(item, width);
+            items.push(TranscriptItemLayout {
+                item_index,
+                start_row: next_start_row,
+                row_count,
+            });
+            next_start_row = next_start_row.saturating_add(row_count);
+        }
+
+        self.width = Some(width);
+        self.fingerprints = fingerprints;
+        self.layout = TranscriptLayout {
+            total_rows: next_start_row,
+            items,
+        };
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct TranscriptItemFingerprint {
+    id: String,
+    signature: TranscriptItemSignature,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct TranscriptItemSignature {
+    kind: u8,
+    primary_len: usize,
+    secondary_len: usize,
+    line_count: usize,
+    flags: u64,
+}
+
+fn transcript_fingerprints(state: &State) -> Vec<TranscriptItemFingerprint> {
+    state
+        .session
+        .transcript
+        .iter()
+        .map(|item| TranscriptItemFingerprint {
+            id: item.id.as_str().to_owned(),
+            signature: transcript_item_signature(item),
+        })
+        .collect()
+}
+
+fn common_prefix_len(
+    old: &[TranscriptItemFingerprint],
+    new: &[TranscriptItemFingerprint],
+) -> usize {
+    old.iter()
+        .zip(new)
+        .take_while(|(left, right)| left == right)
+        .count()
+}
+
+fn transcript_item_signature(item: &TranscriptItem) -> TranscriptItemSignature {
+    match &item.content {
+        TranscriptItemContent::OpeningBanner(_) => signature(0, 0, 0, 8, 0),
+        TranscriptItemContent::UserPrompt(prompt) => text_signature(1, &prompt.text, 0),
+        TranscriptItemContent::AssistantMessage(message) => text_signature(2, &message.text, 0),
+        TranscriptItemContent::Reasoning(reasoning) => {
+            text_signature(3, &reasoning.text, u64::from(reasoning.collapsed))
+        }
+        TranscriptItemContent::ToolCall(tool) => {
+            if let Some(display) = &tool.display {
+                return signature(
+                    4,
+                    display.argument_lines.len(),
+                    display.output_lines.len(),
+                    usize::from(display.call_line.is_some())
+                        + display.argument_lines.len()
+                        + display.output_lines.len(),
+                    tool.status as u64,
+                );
+            }
+
+            signature(
+                4,
+                tool.name.len()
+                    + tool
+                        .arguments_preview
+                        .as_deref()
+                        .map(str::len)
+                        .unwrap_or_default(),
+                tool.output_preview
+                    .as_deref()
+                    .map(str::len)
+                    .unwrap_or_default(),
+                tool.output_preview
+                    .as_deref()
+                    .map(visible_text_row_count)
+                    .unwrap_or_default(),
+                tool.status as u64,
+            )
+        }
+        TranscriptItemContent::Command(command) => {
+            if let Some(display) = &command.display {
+                return signature(
+                    5,
+                    display.output_lines.len(),
+                    usize::from(display.summary_line.is_some()),
+                    usize::from(display.command_line.is_some())
+                        + display.output_lines.len()
+                        + usize::from(display.summary_line.is_some()),
+                    command_status_flag(command.status, command.exit_code),
+                );
+            }
+
+            signature(
+                5,
+                command.command.len(),
+                command.output.len(),
+                visible_text_row_count(&command.output),
+                command_status_flag(command.status, command.exit_code),
+            )
+        }
+        TranscriptItemContent::Error(error) => signature(
+            6,
+            error.message.len(),
+            error.details.as_deref().map(str::len).unwrap_or_default(),
+            error
+                .details
+                .as_deref()
+                .map(visible_text_row_count)
+                .unwrap_or_default(),
+            0,
+        ),
+        TranscriptItemContent::Warning(warning) => text_signature(7, &warning.message, 0),
+        TranscriptItemContent::Success(success) => text_signature(8, &success.message, 0),
+        TranscriptItemContent::Notice(notice) => text_signature(9, &notice.message, 0),
+        TranscriptItemContent::Cancellation(cancellation) => {
+            text_signature(10, &cancellation.reason, 0)
+        }
+        TranscriptItemContent::WorkedSummary(summary) => signature(
+            11,
+            summary.duration.len(),
+            0,
+            1,
+            summary.turn_tokens.unwrap_or_default(),
+        ),
+    }
+}
+
+fn text_signature(kind: u8, text: &str, flags: u64) -> TranscriptItemSignature {
+    signature(kind, text.len(), 0, visible_text_row_count(text), flags)
+}
+
+fn signature(
+    kind: u8,
+    primary_len: usize,
+    secondary_len: usize,
+    line_count: usize,
+    flags: u64,
+) -> TranscriptItemSignature {
+    TranscriptItemSignature {
+        kind,
+        primary_len,
+        secondary_len,
+        line_count,
+        flags,
+    }
+}
+
+fn command_status_flag(status: CommandStatus, exit_code: Option<i32>) -> u64 {
+    let status = match status {
+        CommandStatus::Running => 0,
+        CommandStatus::Finished => 1,
+        CommandStatus::Failed => 2,
+    };
+    let exit_code = exit_code.unwrap_or_default() as u64;
+    status | (exit_code << 8)
 }
 
 /// Cumulative row metadata for one semantic transcript item.

@@ -1,5 +1,6 @@
 mod command;
 mod key;
+mod mouse;
 mod paste;
 mod selection;
 
@@ -7,6 +8,7 @@ use crate::action::ChatTuiAction;
 use crate::runtime::{system_clipboard, ClipboardService, PasteBurst};
 use crate::session::PromptState;
 use crate::state::State;
+use crate::view::ViewAction;
 use iocraft::prelude::{KeyEventKind, TerminalEvent};
 use std::time::{Duration, Instant};
 
@@ -17,6 +19,7 @@ pub const MAX_PASTE_BYTES: usize = 1_000_000;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum EventEffect {
     Action(Box<ChatTuiAction>),
+    ViewAction(Box<ViewAction>),
     RequestExit,
 }
 
@@ -36,6 +39,8 @@ pub fn effects(state: &State, event: TerminalEvent) -> Vec<EventEffect> {
             key::effects(state, key, clipboard, &mut paste_burst, Instant::now())
         }
         TerminalEvent::Paste(value) => paste::terminal_effects(state, &value, &mut paste_burst),
+        TerminalEvent::FullscreenMouse(mouse) => mouse::effects(state, mouse),
+        TerminalEvent::Resize(width, height) => resize_effects(width, height),
         _ => Vec::new(),
     }
 }
@@ -60,6 +65,8 @@ pub(crate) fn effects_with_clipboard_and_paste(
     match event {
         TerminalEvent::Key(key) => key::effects(state, key, clipboard, paste_burst, Instant::now()),
         TerminalEvent::Paste(value) => paste::terminal_effects(state, &value, paste_burst),
+        TerminalEvent::FullscreenMouse(mouse) => mouse::effects(state, mouse),
+        TerminalEvent::Resize(width, height) => resize_effects(width, height),
         _ => Vec::new(),
     }
 }
@@ -72,6 +79,18 @@ pub fn timer_tick_effects() -> Vec<EventEffect> {
 /// Wraps a reducer action into an event effect without inflating enum size.
 pub(super) fn action_effects(action: ChatTuiAction) -> Vec<EventEffect> {
     vec![EventEffect::Action(Box::new(action))]
+}
+
+/// Wraps a view-local action into an event effect.
+pub(super) fn view_action_effects(action: ViewAction) -> Vec<EventEffect> {
+    vec![EventEffect::ViewAction(Box::new(action))]
+}
+
+fn resize_effects(width: u16, height: u16) -> Vec<EventEffect> {
+    vec![
+        EventEffect::Action(Box::new(ChatTuiAction::Resize { width, height })),
+        EventEffect::ViewAction(Box::new(ViewAction::Resize { width, height })),
+    ]
 }
 
 /// Builds a reducer-owned, prompt-local input notice effect.

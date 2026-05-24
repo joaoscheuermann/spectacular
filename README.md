@@ -59,6 +59,20 @@ instead of delivered as key events, while `Shift+Left/Right` still reaches the
 app. In that case Spectacular cannot select vertically from the app side because
 there is no `Up` or `Down` event to handle.
 
+The fullscreen TUI uses a solid white cursor. Text selections use a 70% white
+background approximation (`#B3B3B3`), since terminal colors do not carry alpha.
+By default, selected text uses the RGB complement of the selection background
+(`#4C4C4C` for `#B3B3B3`). Selection colors can be customized at startup with
+environment variables:
+
+- `SPECTACULAR_TUI_SELECTION_TEXT_COLOR`
+- `SPECTACULAR_TUI_SELECTION_BACKGROUND_COLOR`
+
+Both accept RGB hex values as `#RRGGBB` or `RRGGBB`, case-insensitive. Invalid
+values fall back independently. If the selected-text color variable is unset or
+invalid, selected text uses the RGB complement of the resolved selection
+background.
+
 ### Slash Commands
 
 Slash commands are strict. Empty commands, uppercase command names, unknown

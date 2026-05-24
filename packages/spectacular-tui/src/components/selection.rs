@@ -1,4 +1,5 @@
-use crate::render::{iocraft_content, RenderLine, RenderSpan, RenderStyle};
+use crate::render::{iocraft_content_with_selection_colors, RenderLine, RenderSpan, RenderStyle};
+use crate::selection::{style_line_for_source, SelectableSource};
 use crate::session::SelectionPromptState;
 use crate::state::State;
 use iocraft::prelude::*;
@@ -9,8 +10,14 @@ pub fn SelectionPrompt(props: &SelectionPromptProps) -> impl Into<AnyElement<'st
     let state = props.state.clone().expect("SelectionPrompt requires state");
     let elements = selection_prompt_render_lines(&state)
         .into_iter()
-        .map(|line| {
-            let contents = iocraft_content(&line);
+        .enumerate()
+        .map(|(index, line)| {
+            let line = style_line_for_source(
+                &state,
+                line,
+                SelectableSource::SelectionPrompt { line: index },
+            );
+            let contents = iocraft_content_with_selection_colors(&line, state.selection_colors);
             element!(MixedText(wrap: TextWrap::NoWrap, contents))
         });
 

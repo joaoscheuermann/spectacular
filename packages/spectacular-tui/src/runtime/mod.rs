@@ -11,5 +11,7 @@ pub use event::{
     SPINNER_TICK_INTERVAL,
 };
 pub(crate) use paste_burst::PasteBurst;
-pub use root::{merge_controller_state_update, Root, RootProps};
+pub use root::{
+    merge_controller_state_and_view_update, merge_controller_state_update, Root, RootProps,
+};
 pub use shell::{Intent, Shell};

@@ -1,6 +1,6 @@
 mod composer;
 mod grapheme;
-mod layout;
+pub(crate) mod layout;
 mod render;
 mod selection;
 mod state;

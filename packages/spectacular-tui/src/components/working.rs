@@ -1,5 +1,6 @@
-use crate::render::{iocraft_content, RenderLine, RenderStyle};
+use crate::render::{iocraft_content_with_selection_colors, RenderLine, RenderStyle};
 use crate::runtime::SPINNER_TICK_INTERVAL;
+use crate::selection::{style_line_for_source, SelectableSource};
 use crate::spinner::SpinnerState;
 use crate::state::State;
 use crate::status::Status;
@@ -25,7 +26,8 @@ pub fn Working(mut hooks: Hooks, props: &WorkingProps) -> impl Into<AnyElement<'
         return element!(View(width: 100pct)).into_any();
     };
 
-    let contents = iocraft_content(&line);
+    let line = style_line_for_source(&state, line, SelectableSource::Working);
+    let contents = iocraft_content_with_selection_colors(&line, state.selection_colors);
     element!(View(width: 100pct, margin_bottom: 1) {
         MixedText(wrap: TextWrap::NoWrap, contents)
     })

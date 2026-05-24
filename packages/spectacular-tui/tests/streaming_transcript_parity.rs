@@ -338,6 +338,13 @@ fn scroll_follow_mode_tracks_bottom_on_new_output() {
             height: 3,
         },
     );
+    spectacular_tui::apply_view_action_to_state(
+        &mut state,
+        spectacular_tui::ViewAction::Resize {
+            width: 100,
+            height: 3,
+        },
+    );
     reduce(
         &mut state,
         ChatTuiAction::MessageStarted {
@@ -370,6 +377,13 @@ fn scroll_manual_mode_does_not_snap_on_new_output() {
             height: 2,
         },
     );
+    spectacular_tui::apply_view_action_to_state(
+        &mut state,
+        spectacular_tui::ViewAction::Resize {
+            width: 100,
+            height: 2,
+        },
+    );
     for message in ["older 1", "older 2", "older 3"] {
         reduce(
             &mut state,
@@ -378,7 +392,12 @@ fn scroll_manual_mode_does_not_snap_on_new_output() {
             },
         );
     }
-    reduce(&mut state, ChatTuiAction::ScrollTranscript(1));
+    spectacular_tui::apply_view_action_to_state(
+        &mut state,
+        spectacular_tui::ViewAction::ScrollTranscript(1),
+    );
+    let old_rows = spectacular_tui::total_transcript_rows(&state);
+    let mut view = spectacular_tui::ViewState::from_state(&state);
     reduce(
         &mut state,
         ChatTuiAction::MessageStarted {
@@ -392,6 +411,9 @@ fn scroll_manual_mode_does_not_snap_on_new_output() {
             text: "tail".to_owned(),
         },
     );
+    let new_rows = spectacular_tui::total_transcript_rows(&state);
+    spectacular_tui::preserve_review_position_for_growth(&mut view, old_rows, new_rows);
+    state = spectacular_tui::materialize_state(&state, &view);
 
     assert_eq!(state.scroll.offset, 3);
     assert!(!state.scroll.follow_tail);

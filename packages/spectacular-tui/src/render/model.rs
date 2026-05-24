@@ -3,16 +3,101 @@ use crate::transcript::{DisplayLineStyle, DisplaySpan};
 use anstyle::Style;
 use iocraft::prelude::{Color, MixedTextContent, Weight};
 
-const SELECTED_TEXT: Color = Color::Rgb {
-    r: 15,
-    g: 23,
-    b: 42,
-};
-const SELECTION_BACKGROUND: Color = Color::Rgb {
-    r: 240,
-    g: 240,
-    b: 240,
-};
+/// Environment variable for overriding IOCraft TUI selected-text foreground color.
+pub const TUI_SELECTION_TEXT_COLOR_ENV: &str = "SPECTACULAR_TUI_SELECTION_TEXT_COLOR";
+/// Environment variable for overriding IOCraft TUI selected-text background color.
+pub const TUI_SELECTION_BACKGROUND_COLOR_ENV: &str = "SPECTACULAR_TUI_SELECTION_BACKGROUND_COLOR";
+
+/// RGB color used by IOCraft TUI rendering.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TuiRgb {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+}
+
+impl TuiRgb {
+    /// Creates an RGB color from component values.
+    pub const fn new(r: u8, g: u8, b: u8) -> Self {
+        Self { r, g, b }
+    }
+
+    /// Parses a hex RGB color in `#RRGGBB` or `RRGGBB` form.
+    pub fn from_hex(value: &str) -> Option<Self> {
+        let value = value.trim();
+        let hex = value.strip_prefix('#').unwrap_or(value);
+        if hex.len() != 6 || !hex.chars().all(|character| character.is_ascii_hexdigit()) {
+            return None;
+        }
+
+        Some(Self {
+            r: u8::from_str_radix(&hex[0..2], 16).ok()?,
+            g: u8::from_str_radix(&hex[2..4], 16).ok()?,
+            b: u8::from_str_radix(&hex[4..6], 16).ok()?,
+        })
+    }
+
+    /// Converts this color into IOCraft's color representation.
+    pub fn iocraft_color(self) -> Color {
+        Color::Rgb {
+            r: self.r,
+            g: self.g,
+            b: self.b,
+        }
+    }
+}
+
+/// Resolved IOCraft TUI selection colors.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TuiSelectionColors {
+    pub text: Option<TuiRgb>,
+    pub background: TuiRgb,
+    pub cursor: TuiRgb,
+}
+
+impl TuiSelectionColors {
+    /// Creates resolved selection colors from process environment variables.
+    pub fn from_env() -> Self {
+        let text = std::env::var(TUI_SELECTION_TEXT_COLOR_ENV).ok();
+        let background = std::env::var(TUI_SELECTION_BACKGROUND_COLOR_ENV).ok();
+
+        Self::from_env_values(text.as_deref(), background.as_deref())
+    }
+
+    /// Creates resolved selection colors from optional env-var values.
+    pub fn from_env_values(text: Option<&str>, background: Option<&str>) -> Self {
+        let mut colors = Self::default();
+        if let Some(text) = text.and_then(TuiRgb::from_hex) {
+            colors.text = Some(text);
+        }
+        if let Some(background) = background.and_then(TuiRgb::from_hex) {
+            colors.background = background;
+        }
+
+        colors
+    }
+
+    /// Returns the selected foreground color after applying explicit overrides.
+    pub fn selected_text(self) -> TuiRgb {
+        self.text.unwrap_or_else(|| {
+            TuiRgb::new(
+                255 - self.background.r,
+                255 - self.background.g,
+                255 - self.background.b,
+            )
+        })
+    }
+}
+
+impl Default for TuiSelectionColors {
+    fn default() -> Self {
+        Self {
+            text: None,
+            background: TuiRgb::new(179, 179, 179),
+            cursor: TuiRgb::new(255, 255, 255),
+        }
+    }
+}
 
 /// Semantic style categories used by active TUI render lines.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -38,11 +123,19 @@ pub enum RenderStyle {
     Secret,
 }
 
+/// Extra rendering attributes applied on top of a semantic span style.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RenderHighlight {
+    Selection,
+    Cursor,
+}
+
 /// One styled text segment in a terminal-flow render line.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RenderSpan {
     pub text: String,
     pub style: RenderStyle,
+    pub highlight: Option<RenderHighlight>,
 }
 
 impl RenderSpan {
@@ -51,7 +144,24 @@ impl RenderSpan {
         Self {
             text: text.into(),
             style,
+            highlight: None,
         }
+    }
+
+    /// Returns this render span with an extra highlight attribute.
+    pub fn with_highlight(mut self, highlight: RenderHighlight) -> Self {
+        self.highlight = Some(highlight);
+        self
+    }
+
+    /// Returns this render span marked as selected text.
+    pub fn selected(self) -> Self {
+        self.with_highlight(RenderHighlight::Selection)
+    }
+
+    /// Returns this render span marked as the active cursor cell.
+    pub fn cursor(self) -> Self {
+        self.with_highlight(RenderHighlight::Cursor)
     }
 }
 
@@ -219,6 +329,14 @@ pub fn semantic_ansi_style(style: RenderStyle) -> Style {
 
 /// Maps semantic render styles to IOCraft color and weight attributes.
 pub fn semantic_iocraft_style(style: RenderStyle) -> (Option<Color>, Weight) {
+    semantic_iocraft_style_with_selection_colors(style, TuiSelectionColors::default())
+}
+
+/// Maps semantic render styles to IOCraft attributes using caller-supplied selection colors.
+pub fn semantic_iocraft_style_with_selection_colors(
+    style: RenderStyle,
+    selection_colors: TuiSelectionColors,
+) -> (Option<Color>, Weight) {
     match style {
         RenderStyle::Text | RenderStyle::Assistant | RenderStyle::Model => (
             Some(Color::Rgb {
@@ -308,7 +426,10 @@ pub fn semantic_iocraft_style(style: RenderStyle) -> (Option<Color>, Weight) {
             }),
             Weight::Bold,
         ),
-        RenderStyle::Selection => (Some(SELECTED_TEXT), Weight::Bold),
+        RenderStyle::Selection => (
+            Some(selection_colors.selected_text().iocraft_color()),
+            Weight::Bold,
+        ),
         RenderStyle::Secret => (
             Some(Color::Rgb {
                 r: 251,
@@ -322,16 +443,35 @@ pub fn semantic_iocraft_style(style: RenderStyle) -> (Option<Color>, Weight) {
 
 /// Converts a semantic row into IOCraft mixed-text spans.
 pub fn iocraft_content(line: &RenderLine) -> Vec<MixedTextContent> {
+    iocraft_content_with_selection_colors(line, TuiSelectionColors::default())
+}
+
+/// Converts a semantic row into IOCraft mixed-text spans with custom selection colors.
+pub fn iocraft_content_with_selection_colors(
+    line: &RenderLine,
+    selection_colors: TuiSelectionColors,
+) -> Vec<MixedTextContent> {
     line.spans
         .iter()
         .map(|span| {
-            let (color, weight) = semantic_iocraft_style(span.style);
+            let (color, weight) =
+                semantic_iocraft_style_with_selection_colors(span.style, selection_colors);
             let mut content = MixedTextContent::new(&span.text).weight(weight);
             if let Some(color) = color {
                 content = content.color(color);
             }
-            if span.style == RenderStyle::Selection {
-                content = content.background_color(SELECTION_BACKGROUND);
+            match span.highlight {
+                Some(RenderHighlight::Selection) => {
+                    content = content.color(selection_colors.selected_text().iocraft_color());
+                    content = content.background_color(selection_colors.background.iocraft_color());
+                }
+                Some(RenderHighlight::Cursor) => {
+                    content = content.background_color(selection_colors.cursor.iocraft_color());
+                }
+                None if span.style == RenderStyle::Selection => {
+                    content = content.background_color(selection_colors.background.iocraft_color());
+                }
+                None => {}
             }
             content
         })

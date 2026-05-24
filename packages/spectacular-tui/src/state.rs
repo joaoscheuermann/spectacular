@@ -1,6 +1,8 @@
 use crate::ids::SessionId;
 use crate::metadata::{CommandDescriptor, ContextTokenUsage, DisplayMetadata, RuntimeSelection};
+use crate::render::TuiSelectionColors;
 use crate::scroll::TranscriptScrollState;
+use crate::selection::RenderedSelectionState;
 use crate::session::{SelectionPromptState, Session};
 use crate::spinner::SpinnerState;
 use crate::status::Status;
@@ -48,8 +50,10 @@ pub struct State {
     pub input_notice: Option<String>,
     pub spinner: SpinnerState,
     pub selection: Option<SelectionPromptState>,
+    pub app_selection: RenderedSelectionState,
     pub scroll: TranscriptScrollState,
     pub prompt_layout: PromptLayoutMetrics,
+    pub selection_colors: TuiSelectionColors,
 }
 
 impl State {
@@ -70,8 +74,10 @@ impl State {
             input_notice: None,
             spinner: SpinnerState::new(),
             selection: None,
+            app_selection: RenderedSelectionState::default(),
             scroll: TranscriptScrollState::follow_tail(),
             prompt_layout: PromptLayoutMetrics::default(),
+            selection_colors: TuiSelectionColors::from_env(),
         }
     }
 
@@ -97,8 +103,10 @@ impl State {
             input_notice: None,
             spinner: SpinnerState::new(),
             selection: None,
+            app_selection: RenderedSelectionState::default(),
             scroll: TranscriptScrollState::follow_tail(),
             prompt_layout: PromptLayoutMetrics::default(),
+            selection_colors: TuiSelectionColors::from_env(),
         }
     }
 }

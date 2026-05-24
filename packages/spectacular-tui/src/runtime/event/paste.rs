@@ -1,7 +1,12 @@
-use super::{input_notice_effect, prompt_change_effect, prompt_changed_if_needed, EventEffect};
+use super::{
+    input_notice_effect, prompt_change_effect, prompt_changed_if_needed, view_action_effects,
+    EventEffect,
+};
 use crate::runtime::{ClipboardService, PasteBurst};
+use crate::selection::{selected_text, COPIED_SELECTION_NOTICE};
 use crate::session::SelectionPromptState;
 use crate::state::State;
+use crate::view::ViewAction;
 
 const CLIPBOARD_UNAVAILABLE_NOTICE: &str = "Clipboard is unavailable";
 const CLIPBOARD_READ_FAILED_NOTICE: &str = "Clipboard read failed";
@@ -14,6 +19,10 @@ pub(super) fn copy_effects(
     state: &State,
     clipboard: Option<&mut dyn ClipboardService>,
 ) -> Vec<EventEffect> {
+    if state.app_selection.has_selection() {
+        return copy_rendered_selection_effects(state, clipboard);
+    }
+
     let Some(value) = state.session.prompt.selected_text() else {
         return Vec::new();
     };
@@ -28,6 +37,27 @@ pub(super) fn copy_effects(
     let mut prompt = state.session.prompt.clone();
     let _ = prompt.copy_selection();
     prompt_changed_if_needed(state, prompt)
+}
+
+/// Copies selected rendered app text to the native clipboard.
+pub(super) fn copy_rendered_selection_effects(
+    state: &State,
+    clipboard: Option<&mut dyn ClipboardService>,
+) -> Vec<EventEffect> {
+    let Some(value) = selected_text(state) else {
+        return Vec::new();
+    };
+    let Some(clipboard) = clipboard else {
+        return input_notice_effect(CLIPBOARD_UNAVAILABLE_NOTICE);
+    };
+
+    if clipboard.set_text(&value).is_err() {
+        return input_notice_effect(CLIPBOARD_WRITE_FAILED_NOTICE);
+    }
+
+    view_action_effects(ViewAction::RenderedSelectionFeedbackReported {
+        message: COPIED_SELECTION_NOTICE.to_owned(),
+    })
 }
 
 /// Cuts selected prompt text to the native clipboard.

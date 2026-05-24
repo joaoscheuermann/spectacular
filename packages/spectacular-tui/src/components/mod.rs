@@ -6,9 +6,11 @@ mod selection;
 mod transcript;
 mod working;
 
+pub(crate) use app::transcript_capacity_rows;
 pub use app::{app_lines, app_render_lines, App, AppProps};
 pub use footer::{
-    footer_left_render_line, footer_render_line, footer_right_render_line, footer_text,
+    footer_center_render_line, footer_left_render_line, footer_render_line,
+    footer_render_line_with_width, footer_right_render_line, footer_text, footer_text_with_width,
     turn_usage_text, usage_text, Footer, FooterProps,
 };
 pub use input_notice::{input_notice_render_line, InputNotice, InputNoticeProps};
@@ -16,6 +18,7 @@ pub use prompt::{
     prompt_lines, prompt_render_lines, prompt_render_lines_with_width, Prompt, PromptProps,
 };
 pub use selection::{selection_prompt_render_lines, SelectionPrompt, SelectionPromptProps};
+pub(crate) use transcript::TranscriptLayout;
 pub use transcript::{
     plain_lines, transcript_item_layout_rows, transcript_item_lines, transcript_item_render_lines,
     transcript_layout_item_range, transcript_layout_row_starts, transcript_layout_total_rows,

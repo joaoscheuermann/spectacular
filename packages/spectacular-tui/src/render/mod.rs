@@ -8,7 +8,10 @@ pub(crate) use directory::format_directory;
 pub use directory::format_directory_with_home;
 pub use model::{
     context_pressure_style, context_usage_style, display_spans_from_ansi, iocraft_content,
-    semantic_ansi_style, semantic_iocraft_style, RenderLine, RenderSpan, RenderStyle,
+    iocraft_content_with_selection_colors, semantic_ansi_style, semantic_iocraft_style,
+    semantic_iocraft_style_with_selection_colors, RenderHighlight, RenderLine, RenderSpan,
+    RenderStyle, TuiRgb, TuiSelectionColors, TUI_SELECTION_BACKGROUND_COLOR_ENV,
+    TUI_SELECTION_TEXT_COLOR_ENV,
 };
 
 /// Renders the bounded semantic application projection to plain text for tests and previews.

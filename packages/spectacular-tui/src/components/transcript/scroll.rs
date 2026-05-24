@@ -83,24 +83,6 @@ impl TranscriptViewportState {
         }
     }
 
-    /// Applies a relative scroll delta after first preserving review position across row growth.
-    pub(crate) fn scroll_by(&mut self, delta: i32, total_rows: usize, visible_rows: u16) {
-        *self = self.with_render_context(total_rows, visible_rows);
-        if delta > 0 {
-            self.offset = self
-                .offset
-                .saturating_add(delta.unsigned_abs())
-                .min(max_scroll_offset(total_rows, visible_rows));
-            self.follow_tail = self.offset == 0;
-            return;
-        }
-
-        if delta < 0 {
-            self.offset = self.offset.saturating_sub(delta.unsigned_abs());
-            self.follow_tail = self.offset == 0;
-        }
-    }
-
     /// Computes the scroll offset to render for the current row count and viewport height.
     fn render_offset(self, total_rows: usize, visible_rows: u16) -> u32 {
         if self.follow_tail {
@@ -288,39 +270,4 @@ fn max_scroll_offset(total_rows: usize, visible_rows: u16) -> u32 {
     u32::try_from(total_rows)
         .unwrap_or(u32::MAX)
         .saturating_sub(u32::from(visible_rows))
-}
-
-/// Converts terminal input handled by the viewport into row deltas.
-pub(crate) fn transcript_scroll_delta(
-    event: TerminalEvent,
-    visible_rows: u16,
-    selection_active: bool,
-) -> Option<i32> {
-    match event {
-        TerminalEvent::Key(KeyEvent {
-            code: KeyCode::PageUp,
-            kind,
-            ..
-        }) if kind != KeyEventKind::Release && !selection_active => {
-            Some(page_scroll_delta(visible_rows))
-        }
-        TerminalEvent::Key(KeyEvent {
-            code: KeyCode::PageDown,
-            kind,
-            ..
-        }) if kind != KeyEventKind::Release && !selection_active => {
-            Some(-page_scroll_delta(visible_rows))
-        }
-        TerminalEvent::FullscreenMouse(mouse) => match mouse.kind {
-            MouseEventKind::ScrollUp => Some(3),
-            MouseEventKind::ScrollDown => Some(-3),
-            _ => None,
-        },
-        _ => None,
-    }
-}
-
-/// Returns a page-sized scroll delta from current layout rows.
-fn page_scroll_delta(visible_rows: u16) -> i32 {
-    i32::from(visible_rows).max(1)
 }

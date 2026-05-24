@@ -1,7 +1,7 @@
 use spectacular_tui::{
     reduce, render_state_to_string, AssistantMessageItem, ChatTuiAction, DisplayMetadata,
-    ReasoningLevel, RuntimeSelection, SessionId, State, TranscriptItem, TranscriptItemContent,
-    TranscriptItemId, UserPromptItem,
+    ReasoningLevel, RuntimeSelection, SelectableProjection, SelectableSurface, SessionId, State,
+    TranscriptItem, TranscriptItemContent, TranscriptItemId, UserPromptItem,
 };
 use std::time::{Duration, Instant};
 
@@ -76,17 +76,26 @@ fn scrolling_up_disables_follow_tail_and_clamps_to_valid_range() {
     let mut state = state();
     populate_large_transcript(&mut state);
 
-    reduce(&mut state, ChatTuiAction::ScrollTranscript(10));
+    spectacular_tui::apply_view_action_to_state(
+        &mut state,
+        spectacular_tui::ViewAction::ScrollTranscript(10),
+    );
 
     assert_eq!(state.scroll.offset, 10);
     assert!(!state.scroll.follow_tail);
 
-    reduce(&mut state, ChatTuiAction::ScrollTranscript(i32::MAX));
+    spectacular_tui::apply_view_action_to_state(
+        &mut state,
+        spectacular_tui::ViewAction::ScrollTranscript(i32::MAX),
+    );
 
     assert_eq!(state.scroll.offset, 9_980);
     assert!(!state.scroll.follow_tail);
 
-    reduce(&mut state, ChatTuiAction::ScrollTranscript(10));
+    spectacular_tui::apply_view_action_to_state(
+        &mut state,
+        spectacular_tui::ViewAction::ScrollTranscript(10),
+    );
 
     assert_eq!(state.scroll.offset, 9_980);
     assert!(!state.scroll.follow_tail);
@@ -97,8 +106,13 @@ fn scrolling_up_disables_follow_tail_and_clamps_to_valid_range() {
 fn new_transcript_content_preserves_review_viewport_when_not_following_tail() {
     let mut state = state();
     populate_large_transcript(&mut state);
-    reduce(&mut state, ChatTuiAction::ScrollTranscript(10));
+    spectacular_tui::apply_view_action_to_state(
+        &mut state,
+        spectacular_tui::ViewAction::ScrollTranscript(10),
+    );
     let before = render_state_to_string(&state, Some(120));
+    let old_rows = spectacular_tui::total_transcript_rows(&state);
+    let mut view = spectacular_tui::ViewState::from_state(&state);
 
     reduce(
         &mut state,
@@ -113,6 +127,9 @@ fn new_transcript_content_preserves_review_viewport_when_not_following_tail() {
             text: "streamed tail content".to_string(),
         },
     );
+    let new_rows = spectacular_tui::total_transcript_rows(&state);
+    spectacular_tui::preserve_review_position_for_growth(&mut view, old_rows, new_rows);
+    state = spectacular_tui::materialize_state(&state, &view);
     let after = render_state_to_string(&state, Some(120));
 
     assert_eq!(state.scroll.offset, 12);
@@ -127,9 +144,15 @@ fn new_transcript_content_preserves_review_viewport_when_not_following_tail() {
 fn returning_to_bottom_reenables_follow_tail() {
     let mut state = state();
     populate_large_transcript(&mut state);
-    reduce(&mut state, ChatTuiAction::ScrollTranscript(10));
+    spectacular_tui::apply_view_action_to_state(
+        &mut state,
+        spectacular_tui::ViewAction::ScrollTranscript(10),
+    );
 
-    reduce(&mut state, ChatTuiAction::ScrollTranscript(-10));
+    spectacular_tui::apply_view_action_to_state(
+        &mut state,
+        spectacular_tui::ViewAction::ScrollTranscript(-10),
+    );
     reduce(
         &mut state,
         ChatTuiAction::MessageStarted {
@@ -150,12 +173,15 @@ fn returning_to_bottom_reenables_follow_tail() {
     assert!(output.contains("streamed tail content"));
 }
 
-/// Verifies resize actions do not mutate reducer scroll position.
+/// Verifies resize actions refresh view-owned transcript viewport height.
 #[test]
-fn resize_action_does_not_own_transcript_viewport_state() {
+fn resize_action_refreshes_transcript_viewport_height() {
     let mut state = state();
     populate_large_transcript(&mut state);
-    reduce(&mut state, ChatTuiAction::ScrollTranscript(10));
+    spectacular_tui::apply_view_action_to_state(
+        &mut state,
+        spectacular_tui::ViewAction::ScrollTranscript(10),
+    );
 
     reduce(
         &mut state,
@@ -164,11 +190,15 @@ fn resize_action_does_not_own_transcript_viewport_state() {
             height: 100,
         },
     );
-
-    assert_eq!(
-        state.scroll.visible_rows,
-        u32::from(VISIBLE_TRANSCRIPT_ROWS)
+    spectacular_tui::apply_view_action_to_state(
+        &mut state,
+        spectacular_tui::ViewAction::Resize {
+            width: 100,
+            height: 100,
+        },
     );
+
+    assert_eq!(state.scroll.visible_rows, 97);
     assert_eq!(state.scroll.offset, 10);
     assert!(!state.scroll.follow_tail);
 }
@@ -198,11 +228,49 @@ fn runtime_app_render_uses_bounded_visible_window() {
     assert!(!output.contains("large transcript item 0"));
 }
 
+/// Verifies rendered-selection projection materializes only the visible transcript window.
+#[test]
+fn large_transcript_selection_projection_stays_windowed() {
+    let mut state = state();
+    populate_large_transcript(&mut state);
+
+    let projection = SelectableProjection::for_state(&state);
+    let transcript_rows = projection
+        .rows()
+        .iter()
+        .filter(|row| row.surface == SelectableSurface::Transcript)
+        .collect::<Vec<_>>();
+
+    assert!(transcript_rows.len() <= usize::from(VISIBLE_TRANSCRIPT_ROWS));
+    assert!(transcript_rows
+        .iter()
+        .any(|row| row.text.contains("large transcript item 4999")));
+    assert!(!transcript_rows
+        .iter()
+        .any(|row| row.text.contains("large transcript item 0")));
+
+    let row = u16::try_from(
+        transcript_rows
+            .iter()
+            .find(|row| row.text.starts_with("large transcript item"))
+            .unwrap()
+            .screen_row,
+    )
+    .unwrap();
+    state.app_selection = spectacular_tui::selection::start_selection_at(&state, 0, row).unwrap();
+    state.app_selection = spectacular_tui::selection::drag_selection_to(&state, 4, row).unwrap();
+
+    let selected = spectacular_tui::selected_text(&state).unwrap();
+    assert_eq!(selected, "larg");
+}
+
 /// Verifies streaming deltas update the correct active item in a large transcript.
 #[test]
 fn streaming_deltas_update_correct_active_item_in_large_transcript() {
     let mut state = state();
     populate_large_transcript(&mut state);
+    state.scroll.offset = 10;
+    state.scroll.follow_tail = false;
     let active_id = TranscriptItemId::new("assistant-active");
     state.session.transcript.push(TranscriptItem::new(
         active_id.clone(),
@@ -227,6 +295,8 @@ fn streaming_deltas_update_correct_active_item_in_large_transcript() {
         &state.session.transcript[0].content,
         TranscriptItemContent::UserPrompt(item) if item.text == "large transcript item 0"
     ));
+    assert_eq!(state.scroll.offset, 10);
+    assert!(!state.scroll.follow_tail);
 }
 
 /// Verifies spinner ticks during large transcript streaming stay within the documented budget.

@@ -1,5 +1,5 @@
 use crate::components::{
-    footer_render_line, input_notice_render_line, prompt_render_lines,
+    footer_render_line_with_width, input_notice_render_line, prompt_render_lines,
     prompt_render_lines_with_width, selection_prompt_render_lines, transcript_render_lines,
     working_render_line, Footer, InputNotice, Prompt, SelectionPrompt, Transcript, Working,
 };
@@ -15,13 +15,15 @@ pub fn App(mut hooks: Hooks, props: &AppProps) -> impl Into<AnyElement<'static>>
     let width = props.width.unwrap_or(terminal_width);
     let height = props.height.or_else(|| non_zero_size(terminal_height));
 
-    let state = props.state.clone().expect("App requires state");
+    let mut state = props.state.clone().expect("App requires state");
 
     let Some(height) = height else {
         return element!(View(width)).into_any();
     };
 
+    state.prompt_layout = crate::state::PromptLayoutMetrics::from_terminal_size(width, height);
     let transcript_capacity = transcript_capacity_rows(&state, height, Some(width));
+    state.scroll.visible_rows = u32::from(transcript_capacity);
     element!(View(flex_direction: FlexDirection::Column, width, height) {
         Transcript(state: state.clone(), capacity: transcript_capacity, width: width)
         #(working_render_line(&state).is_some().then_some(element!(Working(state: state.clone()))))
@@ -29,7 +31,7 @@ pub fn App(mut hooks: Hooks, props: &AppProps) -> impl Into<AnyElement<'static>>
             #(input_notice_render_line(&state).is_some().then_some(element!(InputNotice(state: state.clone()))))
             #(state.selection.is_some().then_some(element!(SelectionPrompt(state: state.clone()))))
             #(state.selection.is_none().then_some(element!(Prompt(state: state.clone(), width: width))))
-            Footer(state: state.clone())
+            Footer(state: state.clone(), width: width)
         }
     })
     .into_any()
@@ -47,7 +49,10 @@ pub fn app_render_lines(state: &State) -> Vec<RenderLine> {
     }
     lines.extend(input_render_lines(state));
     lines.push(RenderLine::styled("", RenderStyle::Text));
-    lines.push(footer_render_line(state));
+    lines.push(footer_render_line_with_width(
+        state,
+        footer_width_from_state(state),
+    ));
     lines
 }
 
@@ -57,7 +62,7 @@ pub fn app_lines(state: &State) -> Vec<String> {
 }
 
 /// Returns rows available to transcript content after fixed chrome is accounted for.
-fn transcript_capacity_rows(state: &State, height: u16, width: Option<u16>) -> u16 {
+pub(crate) fn transcript_capacity_rows(state: &State, height: u16, width: Option<u16>) -> u16 {
     let working_rows = if working_render_line(state).is_some() {
         2
     } else {
@@ -111,4 +116,10 @@ fn non_zero_size(size: u16) -> Option<u16> {
     }
 
     Some(size)
+}
+
+fn footer_width_from_state(state: &State) -> u16 {
+    u16::try_from(state.prompt_layout.content_width.saturating_add(2))
+        .unwrap_or(u16::MAX)
+        .max(1)
 }

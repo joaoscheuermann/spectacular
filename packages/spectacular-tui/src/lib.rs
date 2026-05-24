@@ -8,24 +8,26 @@ pub mod reducer;
 pub mod render;
 pub mod runtime;
 pub mod scroll;
+pub mod selection;
 pub mod session;
 pub mod spinner;
 pub mod state;
 pub mod status;
 pub mod transcript;
+pub mod view;
 
 pub use action::{
     ChatTuiAction, CommandDisplayChunk, SelectionPromptAnswer, SelectionPromptChoice,
 };
 pub use components::{
-    app_lines, app_render_lines, footer_left_render_line, footer_render_line,
-    footer_right_render_line, footer_text, input_notice_render_line, prompt_lines,
-    prompt_render_lines, prompt_render_lines_with_width, selection_prompt_render_lines,
-    transcript_item_layout_rows, transcript_item_lines, transcript_item_render_lines,
-    transcript_layout_item_range, transcript_layout_row_starts, transcript_layout_total_rows,
-    transcript_lines, transcript_render_lines, transcript_total_render_rows, turn_usage_text,
-    usage_text, working_render_line, wrapped_layout_text_rows, SelectionPrompt,
-    SelectionPromptProps,
+    app_lines, app_render_lines, footer_center_render_line, footer_left_render_line,
+    footer_render_line, footer_render_line_with_width, footer_right_render_line, footer_text,
+    footer_text_with_width, input_notice_render_line, prompt_lines, prompt_render_lines,
+    prompt_render_lines_with_width, selection_prompt_render_lines, transcript_item_layout_rows,
+    transcript_item_lines, transcript_item_render_lines, transcript_layout_item_range,
+    transcript_layout_row_starts, transcript_layout_total_rows, transcript_lines,
+    transcript_render_lines, transcript_total_render_rows, turn_usage_text, usage_text,
+    working_render_line, wrapped_layout_text_rows, SelectionPrompt, SelectionPromptProps,
 };
 pub use fake_streaming::{
     fake_cancellation_plan, fake_failure_plan, fake_streaming_plan, fake_streaming_runtime_finding,
@@ -43,8 +45,10 @@ pub use reducer::reduce;
 pub use render::format_directory_with_home;
 pub use render::{
     context_pressure_style, context_usage_style, display_spans_from_ansi, iocraft_content,
-    render_state_to_string, semantic_ansi_style, semantic_iocraft_style, RenderLine, RenderSpan,
-    RenderStyle,
+    iocraft_content_with_selection_colors, render_state_to_string, semantic_ansi_style,
+    semantic_iocraft_style, semantic_iocraft_style_with_selection_colors, RenderHighlight,
+    RenderLine, RenderSpan, RenderStyle, TuiRgb, TuiSelectionColors,
+    TUI_SELECTION_BACKGROUND_COLOR_ENV, TUI_SELECTION_TEXT_COLOR_ENV,
 };
 pub use runtime::{
     effects, effects_with_clipboard, merge_controller_state_update, system_clipboard,
@@ -52,6 +56,11 @@ pub use runtime::{
     Shell, SystemClipboard, MAX_PASTE_BYTES, SPINNER_TICK_INTERVAL,
 };
 pub use scroll::TranscriptScrollState;
+pub use selection::{
+    selected_text, style_line_for_source, style_line_for_source_at_columns, RenderedSelectionState,
+    SelectableProjection, SelectableRow, SelectableSource, SelectableSurface, SelectionPoint,
+    SelectionRowKey, ViewportEdge, COPIED_SELECTION_NOTICE,
+};
 pub use session::{PromptPasteBurstState, PromptState, SelectionPromptState, Session};
 pub use spinner::SpinnerState;
 pub use state::{PromptLayoutMetrics, State};
@@ -62,6 +71,10 @@ pub use transcript::{
     OpeningBannerItem, ReasoningItem, SuccessItem, ToolCallItem, ToolDisplay, ToolDisplayStatus,
     ToolStatus, TranscriptItem, TranscriptItemContent, UserPromptItem, WarningItem,
     WorkedSummaryItem,
+};
+pub use view::{
+    apply_view_action, apply_view_action_to_state, clear_selection, materialize_state,
+    preserve_review_position_for_growth, total_transcript_rows, ViewAction, ViewState,
 };
 
 use anstyle::{RgbColor, Style};

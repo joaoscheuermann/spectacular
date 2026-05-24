@@ -261,6 +261,7 @@ fn idle_escape_clears_non_empty_prompt_before_requesting_exit() {
         &mut state,
         match event_effects.into_iter().next().unwrap() {
             EventEffect::Action(action) => *action,
+            EventEffect::ViewAction(_) => panic!("expected prompt clear"),
             EventEffect::RequestExit => panic!("expected prompt clear"),
         },
     );

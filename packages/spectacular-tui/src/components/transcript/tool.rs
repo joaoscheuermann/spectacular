@@ -1,5 +1,8 @@
-use super::content::{display_line_render_line, styled_visible_lines, visible_text_row_count};
-use crate::render::{iocraft_content, RenderLine, RenderStyle};
+use super::content::{
+    display_line_render_line, selectable_line, styled_visible_lines, visible_text_row_count,
+};
+use super::TranscriptRenderContext;
+use crate::render::{iocraft_content_with_selection_colors, RenderLine, RenderStyle};
 use crate::transcript::{ToolCallItem, TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;
 
@@ -7,13 +10,22 @@ use iocraft::prelude::*;
 #[component]
 pub fn Tool(props: &ToolProps) -> impl Into<AnyElement<'static>> {
     let item = props.item.clone().expect("Tool requires item");
+    let context = props.context.as_ref();
+    let selection_colors = context
+        .map(|context| context.selection_colors)
+        .unwrap_or_default();
+    let item_id = item.id.as_str().to_owned();
     let TranscriptItemContent::ToolCall(tool) = item.content else {
         panic!("Tool requires tool-call content");
     };
-    let elements = tool_render_lines(&tool).into_iter().map(|line| {
-        let contents = iocraft_content(&line);
-        element!(MixedText(wrap: TextWrap::NoWrap, contents))
-    });
+    let elements = tool_render_lines(&tool)
+        .into_iter()
+        .enumerate()
+        .map(|(index, line)| {
+            let line = selectable_line(context, &item_id, index, line);
+            let contents = iocraft_content_with_selection_colors(&line, selection_colors);
+            element!(MixedText(wrap: TextWrap::NoWrap, contents))
+        });
 
     element!(View(flex_direction: FlexDirection::Column, margin_bottom: 1) { #(elements) })
 }
@@ -22,6 +34,7 @@ pub fn Tool(props: &ToolProps) -> impl Into<AnyElement<'static>> {
 #[derive(Default, Props)]
 pub struct ToolProps {
     pub item: Option<TranscriptItem>,
+    pub context: Option<TranscriptRenderContext>,
 }
 
 /// Formats a tool-call transcript item as original-shaped semantic rows.

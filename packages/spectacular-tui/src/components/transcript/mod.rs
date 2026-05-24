@@ -27,6 +27,7 @@ pub use projection::{
     transcript_lines, transcript_render_lines, transcript_total_render_rows,
     wrapped_layout_text_rows,
 };
+pub(crate) use projection::{TranscriptLayout, TranscriptLayoutCache};
 pub use reasoning::{Reasoning, ReasoningProps};
 pub use scroll::{Scroll, ScrollProps};
 pub use success::{Success, SuccessProps};
@@ -38,8 +39,8 @@ pub use warning::{Warning, WarningProps};
 use crate::state::State;
 use crate::transcript::{TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;
-use projection::TranscriptLayout;
-use scroll::{scroll_offset_from_top, transcript_scroll_delta, TranscriptViewportState};
+use scroll::{scroll_offset_from_top, TranscriptViewportState};
+use std::sync::{Arc, Mutex};
 
 /// Renders the transcript as scrollable IOCraft item components.
 #[component]
@@ -49,48 +50,28 @@ pub fn Transcript(mut hooks: Hooks, props: &TranscriptProps) -> impl Into<AnyEle
     let (terminal_width, _) = hooks.use_terminal_size();
     let width = props.width.unwrap_or(terminal_width);
     let content_width = transcript_content_width(width);
-    let layout = TranscriptLayout::for_state(&state, content_width);
+    let layout_cache = hooks.use_ref(|| Mutex::new(TranscriptLayoutCache::default()));
+    let layout = {
+        let cache_ref = layout_cache.read();
+        let mut cache = cache_ref
+            .lock()
+            .expect("transcript layout cache lock poisoned");
+        cache.layout_for_state(&state, content_width)
+    };
     let height = transcript_height(layout.total_rows, capacity);
-    let scroll = state.scroll.clone();
-    let selection_active = state.selection.is_some();
-    let mut viewport =
-        hooks.use_state(|| TranscriptViewportState::from_scroll(&scroll, layout.total_rows));
-    let normalized = viewport
-        .get()
+    let normalized = TranscriptViewportState::from_scroll(&state.scroll, layout.total_rows)
         .with_render_context(layout.total_rows, height);
-
-    hooks.use_terminal_events({
-        let mut viewport = viewport;
-        move |event| {
-            let Some(delta) = transcript_scroll_delta(event, height, selection_active) else {
-                return;
-            };
-
-            let mut next = viewport
-                .get()
-                .with_render_context(layout.total_rows, height);
-            next.scroll_by(delta, layout.total_rows, height);
-            viewport.set(next);
-        }
-    });
-
-    hooks.use_effect(
-        move || {
-            viewport.set(normalized);
-        },
-        (
-            normalized.offset,
-            normalized.follow_tail,
-            layout.total_rows,
-            height,
-        ),
-    );
 
     let scroll_offset = scroll_offset_from_top(layout.total_rows, height, normalized.offset);
     let window = transcript_virtual_window(layout.total_rows, height, scroll_offset);
     let item_range = layout.item_range(window);
     let slice_start_row = layout.item_start_row(item_range.start);
-    let items = transcript_item_elements(&state, item_range);
+    let visible_window = scroll_offset
+        ..scroll_offset
+            .saturating_add(usize::from(height))
+            .min(layout.total_rows);
+    let context = TranscriptRenderContext::new(&state, content_width, &layout, visible_window);
+    let items = transcript_item_elements(context, &state, item_range);
 
     element!(Scroll(
         key: state.session.id.as_str().to_owned(),
@@ -143,6 +124,7 @@ fn transcript_virtual_window(
 
 /// Builds keyed child component elements for the visible semantic transcript item range.
 fn transcript_item_elements(
+    context: TranscriptRenderContext,
     state: &State,
     item_range: std::ops::Range<usize>,
 ) -> Vec<AnyElement<'static>> {
@@ -152,35 +134,89 @@ fn transcript_item_elements(
         .iter()
         .skip(item_range.start)
         .take(item_range.end.saturating_sub(item_range.start))
-        .map(transcript_item_element)
+        .map(|item| transcript_item_element(&context, item))
         .collect()
 }
 
 /// Selects the sibling component that owns rendering for one transcript item.
-fn transcript_item_element(item: &TranscriptItem) -> AnyElement<'static> {
+fn transcript_item_element(
+    context: &TranscriptRenderContext,
+    item: &TranscriptItem,
+) -> AnyElement<'static> {
     let key = item.id.as_str().to_owned();
     let item = item.clone();
+    let context = context.clone();
 
     match &item.content {
         TranscriptItemContent::OpeningBanner(_) => {
-            element!(Banner(key: key, item: item)).into_any()
+            element!(Banner(key: key, item: item, context: context)).into_any()
         }
-        TranscriptItemContent::UserPrompt(_) => element!(User(key: key, item: item)).into_any(),
+        TranscriptItemContent::UserPrompt(_) => {
+            element!(User(key: key, item: item, context: context)).into_any()
+        }
         TranscriptItemContent::AssistantMessage(_) => {
-            element!(Assistant(key: key, item: item)).into_any()
+            element!(Assistant(key: key, item: item, context: context)).into_any()
         }
-        TranscriptItemContent::Reasoning(_) => element!(Reasoning(key: key, item: item)).into_any(),
-        TranscriptItemContent::ToolCall(_) => element!(Tool(key: key, item: item)).into_any(),
-        TranscriptItemContent::Command(_) => element!(Command(key: key, item: item)).into_any(),
-        TranscriptItemContent::Error(_) => element!(Error(key: key, item: item)).into_any(),
-        TranscriptItemContent::Warning(_) => element!(Warning(key: key, item: item)).into_any(),
-        TranscriptItemContent::Success(_) => element!(Success(key: key, item: item)).into_any(),
-        TranscriptItemContent::Notice(_) => element!(Notice(key: key, item: item)).into_any(),
+        TranscriptItemContent::Reasoning(_) => {
+            element!(Reasoning(key: key, item: item, context: context)).into_any()
+        }
+        TranscriptItemContent::ToolCall(_) => {
+            element!(Tool(key: key, item: item, context: context)).into_any()
+        }
+        TranscriptItemContent::Command(_) => {
+            element!(Command(key: key, item: item, context: context)).into_any()
+        }
+        TranscriptItemContent::Error(_) => {
+            element!(Error(key: key, item: item, context: context)).into_any()
+        }
+        TranscriptItemContent::Warning(_) => {
+            element!(Warning(key: key, item: item, context: context)).into_any()
+        }
+        TranscriptItemContent::Success(_) => {
+            element!(Success(key: key, item: item, context: context)).into_any()
+        }
+        TranscriptItemContent::Notice(_) => {
+            element!(Notice(key: key, item: item, context: context)).into_any()
+        }
         TranscriptItemContent::Cancellation(_) => {
-            element!(Cancellation(key: key, item: item)).into_any()
+            element!(Cancellation(key: key, item: item, context: context)).into_any()
         }
         TranscriptItemContent::WorkedSummary(_) => {
-            element!(Summary(key: key, item: item)).into_any()
+            element!(Summary(key: key, item: item, context: context)).into_any()
+        }
+    }
+}
+
+/// Render-only transcript context shared by visible transcript item components.
+#[derive(Clone, Debug)]
+pub struct TranscriptRenderContext {
+    pub(crate) selection: crate::selection::RenderedSelectionState,
+    pub(crate) selection_colors: crate::render::TuiSelectionColors,
+    pub(crate) content_width: usize,
+    pub(crate) projection: Arc<crate::selection::SelectableProjection>,
+}
+
+impl TranscriptRenderContext {
+    fn new(
+        state: &State,
+        content_width: usize,
+        layout: &TranscriptLayout,
+        visible_window: std::ops::Range<usize>,
+    ) -> Self {
+        let screen_width = content_width.saturating_add(1);
+        Self {
+            selection: state.app_selection.clone(),
+            selection_colors: state.selection_colors,
+            content_width,
+            projection: Arc::new(
+                crate::selection::SelectableProjection::for_transcript_window(
+                    state,
+                    content_width,
+                    screen_width,
+                    layout,
+                    visible_window,
+                ),
+            ),
         }
     }
 }

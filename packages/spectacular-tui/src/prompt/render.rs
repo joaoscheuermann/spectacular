@@ -65,7 +65,7 @@ fn prompt_text_lines(prompt: &PromptState, width: Option<u16>) -> Vec<RenderLine
 fn empty_prompt_line() -> RenderLine {
     RenderLine::from_spans(vec![
         RenderSpan::new(PROMPT_MARKER, RenderStyle::User),
-        RenderSpan::new(CURSOR_CELL, RenderStyle::Selection),
+        RenderSpan::new(CURSOR_CELL, RenderStyle::Text).cursor(),
         RenderSpan::new(PLACEHOLDER, RenderStyle::Dim),
     ])
 }
@@ -97,22 +97,31 @@ fn push_text_with_selection_and_cursor(
 
     for pair in boundaries.windows(2) {
         let range = pair[0]..pair[1];
-        let style = segment_style(&range, selection.as_ref(), cursor_range.as_ref());
-        push_segment(spans, text, range, style);
+        let highlight = segment_highlight(&range, selection.as_ref(), cursor_range.as_ref());
+        push_segment(spans, text, range, highlight);
     }
 
     if cursor == Some(row.end) {
-        spans.push(RenderSpan::new(CURSOR_CELL, RenderStyle::Selection));
+        spans.push(RenderSpan::new(CURSOR_CELL, RenderStyle::Text).cursor());
     }
 }
 
-/// Appends a non-empty text segment with the supplied semantic style.
-fn push_segment(spans: &mut Vec<RenderSpan>, text: &str, range: Range<usize>, style: RenderStyle) {
+/// Appends a non-empty text segment with the supplied highlight.
+fn push_segment(
+    spans: &mut Vec<RenderSpan>,
+    text: &str,
+    range: Range<usize>,
+    highlight: Option<crate::render::RenderHighlight>,
+) {
     if range.is_empty() {
         return;
     }
 
-    spans.push(RenderSpan::new(&text[range], style));
+    let mut span = RenderSpan::new(&text[range], RenderStyle::Text);
+    if let Some(highlight) = highlight {
+        span = span.with_highlight(highlight);
+    }
+    spans.push(span);
 }
 
 /// Returns the byte range for the character occupying the cursor cell.
@@ -144,17 +153,21 @@ fn segment_boundaries(
     boundaries
 }
 
-/// Returns the style for a row segment after selection and cursor splitting.
-fn segment_style(
+/// Returns the highlight for a row segment after selection and cursor splitting.
+fn segment_highlight(
     range: &Range<usize>,
     selection: Option<&Range<usize>>,
     cursor: Option<&Range<usize>>,
-) -> RenderStyle {
-    if overlaps(range, cursor) || overlaps(range, selection) {
-        return RenderStyle::Selection;
+) -> Option<crate::render::RenderHighlight> {
+    if overlaps(range, cursor) {
+        return Some(crate::render::RenderHighlight::Cursor);
     }
 
-    RenderStyle::Text
+    if overlaps(range, selection) {
+        return Some(crate::render::RenderHighlight::Selection);
+    }
+
+    None
 }
 
 /// Returns whether a segment overlaps an optional styled range.

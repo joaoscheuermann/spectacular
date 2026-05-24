@@ -312,13 +312,21 @@ fn appended_content_honors_scroll_follow_tail_state() {
     assert!(following.scroll.follow_tail);
 
     let mut reviewing = state();
-    reduce(&mut reviewing, ChatTuiAction::ScrollTranscript(4));
+    spectacular_tui::apply_view_action_to_state(
+        &mut reviewing,
+        spectacular_tui::ViewAction::ScrollTranscript(4),
+    );
+    let old_rows = spectacular_tui::total_transcript_rows(&reviewing);
+    let mut view = spectacular_tui::ViewState::from_state(&reviewing);
     reduce(
         &mut reviewing,
         ChatTuiAction::MessageStarted {
             id: item_id("assistant-1"),
         },
     );
+    let new_rows = spectacular_tui::total_transcript_rows(&reviewing);
+    spectacular_tui::preserve_review_position_for_growth(&mut view, old_rows, new_rows);
+    reviewing = spectacular_tui::materialize_state(&reviewing, &view);
 
     assert_eq!(reviewing.scroll.offset, 5);
     assert!(!reviewing.scroll.follow_tail);

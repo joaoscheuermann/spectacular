@@ -1,5 +1,7 @@
+use super::content::selectable_line;
+use super::TranscriptRenderContext;
 use crate::render::format_directory;
-use crate::render::{iocraft_content, RenderLine, RenderSpan, RenderStyle};
+use crate::render::{iocraft_content_with_selection_colors, RenderLine, RenderSpan, RenderStyle};
 use crate::transcript::{OpeningBannerItem, TranscriptItem, TranscriptItemContent};
 use iocraft::prelude::*;
 use std::path::Path;
@@ -11,13 +13,20 @@ const OPENING_BANNER_MIN_WIDTH: usize = 52;
 #[component]
 pub fn Banner(props: &BannerProps) -> impl Into<AnyElement<'static>> {
     let item = props.item.clone().expect("Banner requires item");
+    let context = props.context.as_ref();
+    let selection_colors = context
+        .map(|context| context.selection_colors)
+        .unwrap_or_default();
+    let item_id = item.id.as_str().to_owned();
     let TranscriptItemContent::OpeningBanner(banner) = item.content else {
         panic!("Banner requires opening-banner content");
     };
     let elements = opening_banner_render_lines(&banner)
         .into_iter()
-        .map(|line| {
-            let contents = iocraft_content(&line);
+        .enumerate()
+        .map(|(index, line)| {
+            let line = selectable_line(context, &item_id, index, line);
+            let contents = iocraft_content_with_selection_colors(&line, selection_colors);
             element!(MixedText(wrap: TextWrap::NoWrap, contents))
         });
 
@@ -107,4 +116,5 @@ impl OpeningBannerRow {
 #[derive(Default, Props)]
 pub struct BannerProps {
     pub item: Option<TranscriptItem>,
+    pub context: Option<TranscriptRenderContext>,
 }

@@ -1,7 +1,7 @@
 use anstyle::RgbColor;
 use spectacular_tui::{
     diff_added_style, diff_removed_style, display_spans_from_ansi, paint, tool_arg_tool_arg_line,
-    tool_line, DisplayLineStyle, DisplaySpan,
+    tool_line, DisplayLineStyle, DisplaySpan, TuiRgb, TuiSelectionColors,
 };
 
 /// Verifies that diff additions color text without painting the full row background.
@@ -26,6 +26,56 @@ fn diff_removed_style_uses_red_text_on_default_background() {
         paint(RgbColor(248, 113, 113).on_default(), "removed line")
     );
     assert!(!rendered.contains("48;2"));
+}
+
+/// Verifies missing TUI selection color values preserve the current defaults.
+#[test]
+fn tui_selection_colors_from_env_values_missing_values_use_defaults() {
+    let colors = TuiSelectionColors::from_env_values(None, None);
+
+    assert_eq!(colors, TuiSelectionColors::default());
+    assert_eq!(colors.text, None);
+    assert_eq!(colors.background, TuiRgb::new(179, 179, 179));
+    assert_eq!(colors.selected_text(), TuiRgb::new(76, 76, 76));
+    assert_eq!(colors.cursor, TuiRgb::new(255, 255, 255));
+}
+
+/// Verifies TUI selection color parsing accepts hash-prefixed uppercase RGB values.
+#[test]
+fn tui_selection_colors_from_env_values_hash_hex_applies_text_color() {
+    let colors = TuiSelectionColors::from_env_values(Some("#A1B2C3"), None);
+
+    assert_eq!(colors.text, Some(TuiRgb::new(161, 178, 195)));
+    assert_eq!(colors.selected_text(), TuiRgb::new(161, 178, 195));
+    assert_eq!(colors.background, TuiSelectionColors::default().background);
+    assert_eq!(colors.cursor, TuiRgb::new(255, 255, 255));
+}
+
+/// Verifies TUI selection color parsing accepts bare lowercase RGB values.
+#[test]
+fn tui_selection_colors_from_env_values_lowercase_bare_hex_applies_background_color() {
+    let colors = TuiSelectionColors::from_env_values(None, Some("0a1b2c"));
+
+    assert_eq!(colors.text, TuiSelectionColors::default().text);
+    assert_eq!(colors.background, TuiRgb::new(10, 27, 44));
+    assert_eq!(colors.selected_text(), TuiRgb::new(245, 228, 211));
+}
+
+/// Verifies invalid TUI selection color values fall back independently.
+#[test]
+fn tui_selection_colors_from_env_values_invalid_hex_falls_back_independently() {
+    let colors = TuiSelectionColors::from_env_values(Some("not-hex"), Some("#12345g"));
+
+    assert_eq!(colors, TuiSelectionColors::default());
+}
+
+/// Verifies one valid TUI selection color override still applies when the other value is invalid.
+#[test]
+fn tui_selection_colors_from_env_values_partial_override_keeps_valid_color() {
+    let colors = TuiSelectionColors::from_env_values(Some("#010203"), Some("#notok"));
+
+    assert_eq!(colors.text, Some(TuiRgb::new(1, 2, 3)));
+    assert_eq!(colors.background, TuiSelectionColors::default().background);
 }
 
 /// Verifies ANSI tool-line styles convert to semantic display spans for active TUI rendering.

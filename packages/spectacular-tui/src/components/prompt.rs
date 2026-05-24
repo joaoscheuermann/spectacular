@@ -1,4 +1,5 @@
-use crate::render::{iocraft_content, RenderLine};
+use crate::render::{iocraft_content_with_selection_colors, RenderLine};
+use crate::selection::{style_line_for_source, SelectableSource};
 use crate::state::State;
 use iocraft::prelude::*;
 
@@ -8,8 +9,11 @@ pub fn Prompt(props: &PromptProps) -> impl Into<AnyElement<'static>> {
     let state = props.state.clone().expect("Prompt requires state");
     let elements = prompt_render_lines_with_width(&state, props.width)
         .into_iter()
-        .map(|line| {
-            let contents = iocraft_content(&line);
+        .enumerate()
+        .map(|(index, line)| {
+            let line =
+                style_line_for_source(&state, line, SelectableSource::Prompt { line: index });
+            let contents = iocraft_content_with_selection_colors(&line, state.selection_colors);
             element!(MixedText(wrap: TextWrap::NoWrap, contents))
         });
 

@@ -1,11 +1,14 @@
 use super::command;
 use super::paste;
 use super::selection;
-use super::{action_effects, is_key_release, prompt_change_effect, EventEffect};
+use super::{
+    action_effects, is_key_release, prompt_change_effect, view_action_effects, EventEffect,
+};
 use crate::action::ChatTuiAction;
 use crate::runtime::{ClipboardService, PasteBurst};
 use crate::session::PromptState;
 use crate::state::State;
+use crate::view::ViewAction;
 use iocraft::prelude::{KeyCode, KeyEvent, KeyModifiers};
 use std::time::Instant;
 
@@ -13,6 +16,9 @@ use std::time::Instant;
 pub(super) fn needs_system_clipboard(state: &State, key: &KeyEvent) -> bool {
     if is_key_release(key.kind) {
         return false;
+    }
+    if is_ctrl_char(key, 'c') && state.app_selection.has_selection() {
+        return true;
     }
     if state.selection.is_some() {
         return is_ctrl_char(key, 'v');
@@ -37,6 +43,15 @@ pub(super) fn effects(
 ) -> Vec<EventEffect> {
     if is_key_release(key.kind) {
         return Vec::new();
+    }
+
+    if is_ctrl_char(&key, 'c') && state.app_selection.has_selection() {
+        paste_burst.clear();
+        return paste::copy_rendered_selection_effects(state, clipboard);
+    }
+    if key.code == KeyCode::Esc && state.app_selection.has_selection() {
+        paste_burst.clear();
+        return view_action_effects(ViewAction::RenderedSelectionCleared);
     }
 
     if state.selection.is_some() {
@@ -116,6 +131,14 @@ pub(super) fn effects(
         KeyCode::Tab => {
             paste_burst.clear();
             command::tab_effects(state)
+        }
+        KeyCode::PageUp => {
+            paste_burst.clear();
+            view_action_effects(ViewAction::ScrollTranscript(page_scroll_delta(state)))
+        }
+        KeyCode::PageDown => {
+            paste_burst.clear();
+            view_action_effects(ViewAction::ScrollTranscript(-page_scroll_delta(state)))
         }
         KeyCode::Esc => {
             paste_burst.clear();
@@ -271,6 +294,12 @@ fn is_shift_arrow(key: &KeyEvent) -> bool {
             key.code,
             KeyCode::Left | KeyCode::Right | KeyCode::Up | KeyCode::Down
         )
+}
+
+fn page_scroll_delta(state: &State) -> i32 {
+    i32::try_from(state.scroll.visible_rows)
+        .unwrap_or(i32::MAX)
+        .max(1)
 }
 
 /// Returns true when a key event is a specific Ctrl+character chord.

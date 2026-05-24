@@ -5,6 +5,10 @@ use crate::runtime::{
     effects_with_clipboard_and_paste, system_clipboard, ClipboardService, EventEffect, PasteBurst,
 };
 use crate::state::State;
+use crate::view::{
+    apply_view_action, clear_selection, materialize_state, preserve_review_position_for_growth,
+    total_transcript_rows, ViewState,
+};
 use iocraft::prelude::TerminalEvent;
 use tokio::sync::mpsc;
 
@@ -23,6 +27,7 @@ pub enum Intent {
 /// Framework-independent controller for TUI state and runtime intents.
 pub struct Shell {
     state: State,
+    view: ViewState,
     intent_sender: mpsc::Sender<Intent>,
     clipboard: Option<Box<dyn ClipboardService>>,
     paste_burst: PasteBurst,
@@ -47,6 +52,7 @@ impl Shell {
         let (intent_sender, intent_receiver) = mpsc::channel(RUNTIME_INTENT_BUFFER);
         (
             Self {
+                view: ViewState::from_state(&state),
                 state,
                 intent_sender,
                 clipboard,
@@ -61,9 +67,18 @@ impl Shell {
         &self.state
     }
 
+    /// Returns the current local view state.
+    pub fn view(&self) -> &ViewState {
+        &self.view
+    }
+
     /// Applies a controller-originated action to the TUI reducer.
     pub fn apply_action(&mut self, action: ChatTuiAction) {
+        let old_rows = total_transcript_rows(&materialize_state(&self.state, &self.view));
         reduce(&mut self.state, action);
+        let new_rows = total_transcript_rows(&materialize_state(&self.state, &self.view));
+        preserve_review_position_for_growth(&mut self.view, old_rows, new_rows);
+        self.sync_view_mirror();
     }
 
     /// Replaces the clipboard service used by local copy/paste handling.
@@ -78,7 +93,8 @@ impl Shell {
                 .clipboard
                 .as_mut()
                 .map(|value| value.as_mut() as &mut dyn ClipboardService);
-            effects_with_clipboard_and_paste(&self.state, event, clipboard, &mut self.paste_burst)
+            let frame = materialize_state(&self.state, &self.view);
+            effects_with_clipboard_and_paste(&frame, event, clipboard, &mut self.paste_burst)
         };
         for effect in effects {
             self.apply_event_effect(effect);
@@ -92,7 +108,8 @@ impl Shell {
         clipboard: Option<&mut dyn ClipboardService>,
         paste_burst: &mut PasteBurst,
     ) {
-        let effects = effects_with_clipboard_and_paste(&self.state, event, clipboard, paste_burst);
+        let frame = materialize_state(&self.state, &self.view);
+        let effects = effects_with_clipboard_and_paste(&frame, event, clipboard, paste_burst);
         for effect in effects {
             self.apply_event_effect(effect);
         }
@@ -102,6 +119,7 @@ impl Shell {
     fn apply_event_effect(&mut self, effect: EventEffect) {
         match effect {
             EventEffect::Action(action) => self.apply_user_action(*action),
+            EventEffect::ViewAction(action) => self.apply_view_action(*action),
             EventEffect::RequestExit => self.emit_intent(Intent::RequestExit),
         }
     }
@@ -109,16 +127,54 @@ impl Shell {
     /// Applies a user action and emits the matching runtime intent when needed.
     fn apply_user_action(&mut self, action: ChatTuiAction) {
         let intent = intent_for_action(&action);
+        let should_clear_selection = clears_rendered_selection(&action);
+        let should_reset_view = resets_view(&action);
+        let old_rows = total_transcript_rows(&materialize_state(&self.state, &self.view));
         reduce(&mut self.state, action);
+        let new_rows = total_transcript_rows(&materialize_state(&self.state, &self.view));
+        preserve_review_position_for_growth(&mut self.view, old_rows, new_rows);
+        if should_reset_view {
+            self.view.reset_for_session();
+        } else if should_clear_selection {
+            clear_selection(&mut self.view);
+        }
+        self.sync_view_mirror();
         if let Some(intent) = intent {
             self.emit_intent(intent);
         }
+    }
+
+    fn apply_view_action(&mut self, action: crate::view::ViewAction) {
+        apply_view_action(&mut self.view, &self.state, action);
+        self.sync_view_mirror();
+    }
+
+    fn sync_view_mirror(&mut self) {
+        self.state = materialize_state(&self.state, &self.view);
     }
 
     /// Emits an intent without blocking render/event handling.
     fn emit_intent(&self, intent: Intent) {
         let _ = self.intent_sender.try_send(intent);
     }
+}
+
+fn clears_rendered_selection(action: &ChatTuiAction) -> bool {
+    matches!(
+        action,
+        ChatTuiAction::PromptChanged(_)
+            | ChatTuiAction::SubmitPrompt { .. }
+            | ChatTuiAction::SelectionPromptChanged(_)
+            | ChatTuiAction::SelectionPromptSubmitted(_)
+            | ChatTuiAction::SelectionPromptCancelled
+    )
+}
+
+fn resets_view(action: &ChatTuiAction) -> bool {
+    matches!(
+        action,
+        ChatTuiAction::SessionChanged { .. } | ChatTuiAction::SessionCreated { .. }
+    )
 }
 
 /// Converts reducer-visible user actions into controller runtime intents.

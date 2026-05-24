@@ -1,4 +1,5 @@
-use crate::render::{iocraft_content, RenderLine, RenderStyle};
+use crate::render::{iocraft_content_with_selection_colors, RenderLine, RenderStyle};
+use crate::selection::{style_line_for_source, SelectableSource};
 use crate::state::State;
 use iocraft::prelude::*;
 
@@ -10,7 +11,8 @@ pub fn InputNotice(props: &InputNoticeProps) -> impl Into<AnyElement<'static>> {
         return element!(View(width: 100pct)).into_any();
     };
 
-    let contents = iocraft_content(&line);
+    let line = style_line_for_source(&state, line, SelectableSource::InputNotice);
+    let contents = iocraft_content_with_selection_colors(&line, state.selection_colors);
     element!(View(width: 100pct) {
         MixedText(wrap: TextWrap::NoWrap, contents)
     })
