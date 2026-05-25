@@ -19,8 +19,6 @@ mod config_ops;
 mod entry;
 #[path = "main/output.rs"]
 mod output;
-#[path = "main/plan_errors.rs"]
-mod plan_errors;
 
 #[cfg(test)]
 use clap::Parser;
@@ -32,11 +30,11 @@ use cli_types::{
 #[cfg(test)]
 use config_ops::{config_operation, handle_config_with_io, ConfigIo};
 #[cfg(test)]
-use plan_errors::{handle_plan_with_loader, user_facing_error, AppError};
+use entry::AppError;
+#[cfg(test)]
+use output::user_facing_error;
 #[cfg(test)]
 use spectacular_config::{ConfigError, ReasoningLevel, SpectacularConfig, TaskModelSlot};
-#[cfg(test)]
-use spectacular_plan::PlanError;
 
 fn main() -> ExitCode {
     entry::run()

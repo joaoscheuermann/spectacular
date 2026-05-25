@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 
 #[test]
-fn top_level_help_lists_config_and_plan_without_chat() {
+fn top_level_help_lists_config_without_chat_or_plan() {
     let mut command = Cli::command();
     let mut buffer = Vec::new();
 
@@ -17,7 +17,7 @@ fn top_level_help_lists_config_and_plan_without_chat() {
 
     assert!(!help.contains("chat"));
     assert!(help.contains("config"));
-    assert!(help.contains("plan"));
+    assert!(!help.contains("plan"));
 }
 
 #[test]
@@ -381,32 +381,10 @@ fn task_set_saves_model_reference() {
 }
 
 #[test]
-fn plan_reports_missing_config_before_placeholder_output() {
-    let output = handle_plan_with_loader("Create a login flow", || {
-        Err(ConfigError::MissingConfigFile {
-            path: "config.json".into(),
-        })
-    })
-    .unwrap_err();
-
-    assert!(matches!(
-        output,
-        AppError::Plan(PlanError::Config(ConfigError::MissingConfigFile { .. }))
-    ));
-}
-
-#[test]
-fn plan_with_complete_config_prints_placeholder_output() {
-    let output = handle_plan_with_loader("Create a login flow", || Ok(complete_config())).unwrap();
-
-    assert_eq!(output, "Hello World");
-}
-
-#[test]
 fn incomplete_config_errors_tell_user_to_run_new_config_commands() {
-    let error = AppError::Plan(PlanError::Config(ConfigError::MissingTaskModel {
+    let error = AppError::Config(ConfigError::MissingTaskModel {
         slot: TaskModelSlot::Coding,
-    }));
+    });
 
     assert!(user_facing_error(&error).contains("spectacular config task set"));
 }

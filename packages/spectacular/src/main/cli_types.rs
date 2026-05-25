@@ -12,11 +12,6 @@ pub(super) struct Cli {
 pub(super) enum Command {
     /// Inspect or update Spectacular configuration.
     Config(ConfigArgs),
-    /// Run the first SDD planning step.
-    Plan {
-        /// Prompt to plan from.
-        prompt: String,
-    },
 }
 
 #[derive(Debug, Args)]

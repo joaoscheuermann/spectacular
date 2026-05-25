@@ -2,13 +2,47 @@ use super::{
     chat,
     cli_types::{Cli, Command, ConfigArgs},
     config_ops::{handle_config_with_io, ConfigIo},
-    plan_errors::handle_plan,
-    plan_errors::user_facing_error,
-    plan_errors::AppError,
+    output::user_facing_error,
 };
 use clap::Parser;
-use spectacular_llms::LlmDebugLogger;
+use spectacular_config::ConfigError;
+use spectacular_llms::{LlmDebugLogger, ProviderError};
 use std::process::ExitCode;
+
+#[derive(Debug)]
+pub(super) enum AppError {
+    Chat(chat::ChatError),
+    Config(ConfigError),
+    DebugLog { source: std::io::Error },
+    InvalidConfigCommand(String),
+    Provider { source: Box<ProviderError> },
+}
+
+impl From<ConfigError> for AppError {
+    fn from(error: ConfigError) -> Self {
+        Self::Config(error)
+    }
+}
+
+impl From<chat::ChatError> for AppError {
+    fn from(error: chat::ChatError) -> Self {
+        Self::Chat(error)
+    }
+}
+
+impl From<spectacular_commands::CommandError> for AppError {
+    fn from(error: spectacular_commands::CommandError) -> Self {
+        Self::InvalidConfigCommand(error.to_string())
+    }
+}
+
+impl From<ProviderError> for AppError {
+    fn from(source: ProviderError) -> Self {
+        Self::Provider {
+            source: Box::new(source),
+        }
+    }
+}
 
 #[tokio::main]
 pub(super) async fn run() -> ExitCode {
@@ -46,7 +80,6 @@ async fn handle(cli: Cli, debug_logger: LlmDebugLogger) -> Result<Option<String>
             Err(error) => Err(error.into()),
         },
         Some(Command::Config(args)) => handle_config(args).map(Some),
-        Some(Command::Plan { prompt }) => handle_plan(&prompt).map(Some),
     }
 }
 

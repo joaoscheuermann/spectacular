@@ -160,14 +160,6 @@ Optional title model:
 npx nx run spectacular:run --args='config --provider openrouter --task labeling --model openrouter/title-model --reasoning none'
 ```
 
-### Planning Command
-
-`spectacular plan <prompt>` exists, but it is not a real planning workflow yet.
-It validates a non-empty prompt and complete config, then returns:
-
-```text
-Hello World
-```
 
 ## Quick Start
 
@@ -245,7 +237,6 @@ Spectacular is an Nx workspace backed by a Rust Cargo workspace.
 | `spectacular-tools` | Built-in file, terminal, web, search, edit, and write tools. |
 | `spectacular-commands` | Slash-command parsing, metadata, fuzzy search, and errors. |
 | `spectacular-config` | Config schema, persistence, validation, and migration. |
-| `spectacular-plan` | Placeholder planning command. |
 
 Common commands:
 

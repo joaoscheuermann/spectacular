@@ -3,13 +3,13 @@ use super::{
         ConfigArgs, ConfigCommand, ConfigModelCommand, ConfigOperation, ConfigProviderCommand,
         ConfigTaskCommand,
     },
+    entry::AppError,
     output::{
         format_config_report, format_confirmation_required_output,
         format_model_remove_confirmation_output, format_model_removed_output,
         format_model_saved_output, format_provider_added_output, format_provider_removed_output,
         format_task_saved_output,
     },
-    plan_errors::AppError,
 };
 use spectacular_commands::NamedArgs;
 use spectacular_config::{

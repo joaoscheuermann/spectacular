@@ -7,7 +7,6 @@ members = [
     "packages/spectacular-commands",
     "packages/spectacular-llms",
     "packages/spectacular-config",
-    "packages/spectacular-plan",
     "packages/spectacular-tools",
     "packages/spectacular-tui",
 ]
