@@ -16,6 +16,7 @@ pub use event::{
 };
 pub(crate) use paste_burst::PasteBurst;
 pub use root::{
-    merge_controller_state_and_view_update, merge_controller_state_update, Root, RootProps,
+    merge_controller_state_and_view_update, merge_controller_state_update, root_element, Root,
+    RootProps,
 };
 pub use shell::{Intent, Shell};

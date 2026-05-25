@@ -1,8 +1,8 @@
-use super::content::selectable_line;
+use super::content::{transcript_item_frame, TranscriptRowWrap};
 use super::TranscriptRenderContext;
 use crate::render::format_directory;
-use crate::render::{iocraft_content_with_selection_colors, RenderLine, RenderSpan, RenderStyle};
-use crate::transcript::{OpeningBannerItem, TranscriptItem, TranscriptItemContent};
+use crate::render::{RenderLine, RenderSpan, RenderStyle};
+use crate::transcript::OpeningBannerItem;
 use iocraft::prelude::*;
 use std::path::Path;
 use unicode_width::UnicodeWidthStr;
@@ -12,30 +12,41 @@ const OPENING_BANNER_MIN_WIDTH: usize = 52;
 /// Renders an opening-banner transcript item.
 #[component]
 pub fn Banner(props: &BannerProps) -> impl Into<AnyElement<'static>> {
-    let item = props.item.clone().expect("Banner requires item");
-    let context = props.context.as_ref();
-    let selection_colors = context
-        .map(|context| context.selection_colors)
-        .unwrap_or_default();
-    let item_id = item.id.as_str().to_owned();
-    let TranscriptItemContent::OpeningBanner(banner) = item.content else {
-        panic!("Banner requires opening-banner content");
-    };
-    let elements = opening_banner_render_lines(&banner)
-        .into_iter()
-        .enumerate()
-        .map(|(index, line)| {
-            let line = selectable_line(context, &item_id, index, line);
-            let contents = iocraft_content_with_selection_colors(&line, selection_colors);
-            element!(MixedText(wrap: TextWrap::NoWrap, contents))
-        });
+    let rows = opening_banner_render_lines_from_fields(
+        &props.version,
+        &props.model,
+        &props.reasoning,
+        &props.directory,
+        &props.session_id,
+    );
 
-    element!(View(flex_direction: FlexDirection::Column, margin_bottom: 1) { #(elements) })
+    transcript_item_frame(
+        props.source_id.clone(),
+        rows,
+        props.context.clone(),
+        TranscriptRowWrap::NoWrap,
+    )
 }
 
 /// Formats the opening banner as fixed-width box-drawing rows.
-pub fn opening_banner_render_lines(banner: &OpeningBannerItem) -> Vec<RenderLine> {
-    let rows = opening_banner_rows(banner);
+pub(super) fn opening_banner_render_lines(banner: &OpeningBannerItem) -> Vec<RenderLine> {
+    opening_banner_render_lines_from_fields(
+        &banner.version,
+        &banner.model,
+        &banner.reasoning,
+        &banner.directory,
+        &banner.session_id,
+    )
+}
+
+fn opening_banner_render_lines_from_fields(
+    version: &str,
+    model: &str,
+    reasoning: &str,
+    directory: &str,
+    session_id: &str,
+) -> Vec<RenderLine> {
+    let rows = opening_banner_rows(version, model, reasoning, directory, session_id);
     let content_width = rows
         .iter()
         .map(|row| UnicodeWidthStr::width(row.text.as_str()))
@@ -60,28 +71,22 @@ pub fn opening_banner_render_lines(banner: &OpeningBannerItem) -> Vec<RenderLine
 }
 
 /// Builds display-ready opening banner rows with semantic content styles.
-fn opening_banner_rows(banner: &OpeningBannerItem) -> Vec<OpeningBannerRow> {
+fn opening_banner_rows(
+    version: &str,
+    model: &str,
+    reasoning: &str,
+    directory: &str,
+    session_id: &str,
+) -> Vec<OpeningBannerRow> {
     vec![
-        OpeningBannerRow::new(
-            format!("Spectacular (v{})", banner.version),
-            RenderStyle::Title,
-        ),
+        OpeningBannerRow::new(format!("Spectacular (v{version})"), RenderStyle::Title),
         OpeningBannerRow::new(String::new(), RenderStyle::Text),
+        OpeningBannerRow::new(format!("model:     {model} {reasoning}"), RenderStyle::Text),
         OpeningBannerRow::new(
-            format!("model:     {} {}", banner.model, banner.reasoning),
+            format!("directory: {}", format_directory(Path::new(directory))),
             RenderStyle::Text,
         ),
-        OpeningBannerRow::new(
-            format!(
-                "directory: {}",
-                format_directory(Path::new(&banner.directory))
-            ),
-            RenderStyle::Text,
-        ),
-        OpeningBannerRow::new(
-            format!("session:   {}", banner.session_id),
-            RenderStyle::Text,
-        ),
+        OpeningBannerRow::new(format!("session:   {session_id}"), RenderStyle::Text),
     ]
 }
 
@@ -113,8 +118,13 @@ impl OpeningBannerRow {
 }
 
 /// Props for the opening-banner component.
-#[derive(Default, Props)]
+#[derive(Props)]
 pub struct BannerProps {
-    pub item: Option<TranscriptItem>,
-    pub context: Option<TranscriptRenderContext>,
+    pub source_id: String,
+    pub version: String,
+    pub model: String,
+    pub reasoning: String,
+    pub directory: String,
+    pub session_id: String,
+    pub context: TranscriptRenderContext,
 }

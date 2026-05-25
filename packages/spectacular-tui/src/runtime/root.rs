@@ -1,4 +1,3 @@
-use crate::components::App;
 use crate::reducer::reduce;
 use crate::runtime::{
     apply_event_effects, effects_with_clipboard_paste_and_view,
@@ -17,31 +16,11 @@ use tokio::sync::mpsc;
 /// Interactive IOCraft root that owns terminal hooks and renders the visual app.
 #[component]
 pub fn Root(mut hooks: Hooks, props: &RootProps) -> impl Into<AnyElement<'static>> {
-    let initial_state = props
-        .initial_state
-        .as_ref()
-        .expect("Root requires initial state")
-        .clone();
-    let intent_sender = props
-        .intent_sender
-        .as_ref()
-        .expect("Root requires intent sender")
-        .clone();
-    let cancellation_sender = props
-        .cancellation_sender
-        .as_ref()
-        .expect("Root requires cancellation sender")
-        .clone();
-    let selection_sender = props
-        .selection_sender
-        .as_ref()
-        .expect("Root requires selection sender")
-        .clone();
-    let state_receiver = props
-        .state_receiver
-        .as_ref()
-        .expect("Root requires state receiver")
-        .clone();
+    let initial_state = props.initial_state.clone();
+    let intent_sender = props.intent_sender.clone();
+    let cancellation_sender = props.cancellation_sender.clone();
+    let selection_sender = props.selection_sender.clone();
+    let state_receiver = props.state_receiver.clone();
     let mut system = hooks.use_context_mut::<SystemContext>();
     let current_prompt = hooks.use_state(|| initial_state.session.prompt.clone());
     let local_view = hooks.use_state(|| ViewState::from_state(&initial_state));
@@ -85,7 +64,7 @@ pub fn Root(mut hooks: Hooks, props: &RootProps) -> impl Into<AnyElement<'static
         system.exit();
     }
 
-    element!(App(state))
+    crate::components::app_element(state, None, None)
 }
 
 /// Continues transcript selection autoscroll while the pointer is held past a viewport edge.
@@ -122,13 +101,33 @@ fn drive_selection_auto_scroll(
 }
 
 /// Props for the interactive IOCraft root component.
-#[derive(Default, Props)]
+#[derive(Props)]
 pub struct RootProps {
-    pub initial_state: Option<TuiState>,
-    pub intent_sender: Option<mpsc::UnboundedSender<Intent>>,
-    pub cancellation_sender: Option<mpsc::UnboundedSender<()>>,
-    pub selection_sender: Option<mpsc::UnboundedSender<Intent>>,
-    pub state_receiver: Option<Arc<Mutex<mpsc::UnboundedReceiver<TuiState>>>>,
+    pub initial_state: TuiState,
+    pub intent_sender: mpsc::UnboundedSender<Intent>,
+    pub cancellation_sender: mpsc::UnboundedSender<()>,
+    pub selection_sender: mpsc::UnboundedSender<Intent>,
+    pub state_receiver: Arc<Mutex<mpsc::UnboundedReceiver<TuiState>>>,
+}
+
+/// Builds a type-safe Root element with all runtime ports supplied.
+pub fn root_element(
+    initial_state: TuiState,
+    intent_sender: mpsc::UnboundedSender<Intent>,
+    cancellation_sender: mpsc::UnboundedSender<()>,
+    selection_sender: mpsc::UnboundedSender<Intent>,
+    state_receiver: Arc<Mutex<mpsc::UnboundedReceiver<TuiState>>>,
+) -> Element<'static, Root> {
+    Element {
+        key: ElementKey::new("spectacular-tui-root"),
+        props: RootProps {
+            initial_state,
+            intent_sender,
+            cancellation_sender,
+            selection_sender,
+            state_receiver,
+        },
+    }
 }
 
 struct TerminalEventFrame {

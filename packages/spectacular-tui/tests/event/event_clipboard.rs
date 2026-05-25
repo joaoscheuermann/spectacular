@@ -3,7 +3,8 @@ use super::*;
 /// Verifies Ctrl+V pastes clipboard text through prompt paste normalization.
 #[test]
 
-fn ctrl_v_with_clipboard_text_inserts_normalized_prompt_text() {
+fn effects_with_clipboard_and_paste_when_ctrl_v_with_clipboard_text_inserts_normalized_prompt_text()
+{
     let state = state();
 
     let mut clipboard = FakeClipboard::with_text("one\r\ntwo");
@@ -29,7 +30,8 @@ fn ctrl_v_with_clipboard_text_inserts_normalized_prompt_text() {
 
 #[test]
 
-fn ctrl_v_with_control_characters_filters_unsupported_controls() {
+fn effects_with_clipboard_and_paste_when_ctrl_v_with_control_characters_filters_unsupported_controls(
+) {
     let state = state();
 
     let mut clipboard = FakeClipboard::with_text("a\u{0000}b\tc\u{001b}d");
@@ -53,7 +55,8 @@ fn ctrl_v_with_control_characters_filters_unsupported_controls() {
 
 #[test]
 
-fn ctrl_v_with_crlf_clipboard_text_normalizes_to_line_feeds() {
+fn effects_with_clipboard_and_paste_when_ctrl_v_with_crlf_clipboard_text_normalizes_to_line_feeds()
+{
     let state = state();
 
     let mut clipboard = FakeClipboard::with_text("one\r\ntwo\rthree\u{0007}");
@@ -77,7 +80,8 @@ fn ctrl_v_with_crlf_clipboard_text_normalizes_to_line_feeds() {
 
 #[test]
 
-fn ctrl_v_with_oversized_clipboard_text_reports_input_notice() {
+fn effects_with_clipboard_and_paste_when_ctrl_v_with_oversized_clipboard_text_reports_input_notice()
+{
     let state = state();
 
     let mut clipboard = FakeClipboard::with_text(&"a".repeat(MAX_PASTE_BYTES + 1));
@@ -100,7 +104,8 @@ fn ctrl_v_with_oversized_clipboard_text_reports_input_notice() {
 
 #[test]
 
-fn ctrl_v_with_multiline_text_in_slash_command_reports_input_notice() {
+fn effects_with_clipboard_and_paste_when_ctrl_v_with_multiline_text_in_slash_command_reports_input_notice(
+) {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("/config");
@@ -125,7 +130,7 @@ fn ctrl_v_with_multiline_text_in_slash_command_reports_input_notice() {
 
 #[test]
 
-fn ctrl_v_without_clipboard_reports_input_notice() {
+fn effects_with_clipboard_and_paste_when_ctrl_v_without_clipboard_reports_input_notice() {
     let state = state();
 
     let action = action_from_effects(effects_with_clipboard(
@@ -146,7 +151,7 @@ fn ctrl_v_without_clipboard_reports_input_notice() {
 
 #[test]
 
-fn ctrl_v_with_clipboard_read_failure_reports_input_notice() {
+fn effects_with_clipboard_and_paste_when_ctrl_v_with_clipboard_read_failure_reports_input_notice() {
     let state = state();
 
     let mut clipboard = FakeClipboard::failing_read();
@@ -169,7 +174,8 @@ fn ctrl_v_with_clipboard_read_failure_reports_input_notice() {
 
 #[test]
 
-fn ctrl_c_with_clipboard_write_failure_reports_input_notice() {
+fn effects_with_clipboard_and_paste_when_ctrl_c_with_clipboard_write_failure_reports_input_notice()
+{
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("copy me");
@@ -198,7 +204,7 @@ fn ctrl_c_with_clipboard_write_failure_reports_input_notice() {
 
 #[test]
 
-fn terminal_paste_event_inserts_normalized_prompt_text() {
+fn effects_with_clipboard_and_paste_when_terminal_paste_event_inserts_normalized_prompt_text() {
     let state = state();
 
     let mut clipboard = FakeClipboard::with_text("clipboard text");
@@ -226,7 +232,8 @@ fn terminal_paste_event_inserts_normalized_prompt_text() {
 
 #[test]
 
-fn terminal_paste_event_in_selection_prompt_inserts_single_line_text() {
+fn effects_with_clipboard_and_paste_when_terminal_paste_event_in_selection_prompt_inserts_single_line_text(
+) {
     let mut state = state();
 
     state.selection = Some(
@@ -256,7 +263,8 @@ fn terminal_paste_event_in_selection_prompt_inserts_single_line_text() {
 
 #[test]
 
-fn ctrl_x_with_prompt_selection_cuts_selection_to_clipboard() {
+fn effects_with_clipboard_and_paste_when_ctrl_x_with_prompt_selection_cuts_selection_to_clipboard()
+{
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("cut me");
@@ -286,7 +294,7 @@ fn ctrl_x_with_prompt_selection_cuts_selection_to_clipboard() {
 
 #[test]
 
-fn ctrl_q_while_idle_requests_exit() {
+fn effects_with_clipboard_and_paste_when_ctrl_q_while_idle_requests_exit() {
     let state = state();
 
     let event_effects = effects(&state, key(KeyCode::Char('q'), KeyModifiers::CONTROL));
@@ -298,7 +306,7 @@ fn ctrl_q_while_idle_requests_exit() {
 
 #[test]
 
-fn ctrl_q_while_selection_prompt_active_requests_exit() {
+fn effects_with_clipboard_and_paste_when_ctrl_q_while_selection_prompt_active_requests_exit() {
     let mut state = state();
 
     state.selection = Some(SelectionPromptState::new(
@@ -316,7 +324,7 @@ fn ctrl_q_while_selection_prompt_active_requests_exit() {
 
 #[test]
 
-fn ctrl_c_while_selection_prompt_active_does_not_exit() {
+fn effects_with_clipboard_and_paste_when_ctrl_c_while_selection_prompt_active_does_not_exit() {
     let mut state = state();
 
     state.selection = Some(SelectionPromptState::new(
@@ -334,7 +342,8 @@ fn ctrl_c_while_selection_prompt_active_does_not_exit() {
 
 #[test]
 
-fn ctrl_v_while_selection_prompt_active_inserts_single_line_clipboard_text() {
+fn effects_with_clipboard_and_paste_when_ctrl_v_while_selection_prompt_active_inserts_single_line_clipboard_text(
+) {
     let mut state = state();
 
     state.selection = Some(
@@ -364,7 +373,8 @@ fn ctrl_v_while_selection_prompt_active_inserts_single_line_clipboard_text() {
 
 #[test]
 
-fn ctrl_v_while_selection_prompt_comment_mode_active_inserts_comment_text() {
+fn effects_with_clipboard_and_paste_when_ctrl_v_while_selection_prompt_comment_mode_active_inserts_comment_text(
+) {
     let mut selection =
         SelectionPromptState::new("Pick one", "", vec!["alpha".to_owned()]).with_inputs(true, true);
 
@@ -397,7 +407,8 @@ fn ctrl_v_while_selection_prompt_comment_mode_active_inserts_comment_text() {
 
 #[test]
 
-fn selection_prompt_newline_char_keys_insert_space_without_submission() {
+fn effects_with_clipboard_and_paste_when_selection_prompt_newline_char_keys_insert_space_without_submission(
+) {
     for (code, modifiers) in [
         (KeyCode::Char('\n'), KeyModifiers::empty()),
         (KeyCode::Char('\n'), KeyModifiers::CONTROL),

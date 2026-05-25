@@ -32,7 +32,7 @@ fn item_id(value: &str) -> TranscriptItemId {
 
 /// Verifies assistant lifecycle actions preserve run status until the agent finishes.
 #[test]
-fn assistant_lifecycle_preserves_run_status_until_agent_finished() {
+fn reduce_when_assistant_lifecycle_preserves_run_status_until_agent_finished() {
     let mut state = state();
     let id = item_id("assistant-1");
     let running = Status::Running {
@@ -74,7 +74,7 @@ fn assistant_lifecycle_preserves_run_status_until_agent_finished() {
 
 /// Verifies reasoning lifecycle actions preserve run status until the agent finishes.
 #[test]
-fn reasoning_lifecycle_preserves_run_status_until_agent_finished() {
+fn reduce_when_reasoning_lifecycle_preserves_run_status_until_agent_finished() {
     let mut state = state();
     let id = item_id("reasoning-1");
     let running = Status::Running {
@@ -119,7 +119,7 @@ fn reasoning_lifecycle_preserves_run_status_until_agent_finished() {
 
 /// Verifies tool lifecycle actions update one semantic item without changing run status.
 #[test]
-fn tool_lifecycle_updates_one_item_and_preserves_run_status() {
+fn reduce_when_tool_lifecycle_updates_one_item_and_preserves_run_status() {
     let mut state = state();
     let id = item_id("tool-item-1");
     let running = Status::Running {
@@ -176,7 +176,7 @@ fn tool_lifecycle_updates_one_item_and_preserves_run_status() {
 
 /// Verifies command lifecycle actions preserve run status until the agent finishes.
 #[test]
-fn command_lifecycle_preserves_run_status_until_agent_finished() {
+fn reduce_when_command_lifecycle_preserves_run_status_until_agent_finished() {
     let mut state = state();
     let id = item_id("command-item-1");
     let running = Status::Running {
@@ -230,7 +230,7 @@ fn command_lifecycle_preserves_run_status_until_agent_finished() {
 
 /// Verifies failed command exits are represented on the existing command item.
 #[test]
-fn command_failed_exit_marks_existing_item_failed() {
+fn reduce_when_command_failed_exit_marks_existing_item_failed() {
     let mut state = state();
 
     reduce(
@@ -258,7 +258,7 @@ fn command_failed_exit_marks_existing_item_failed() {
 
 /// Verifies error, cancellation, and notice actions append semantic transcript items.
 #[test]
-fn error_cancellation_and_notice_append_semantic_items() {
+fn reduce_when_error_cancellation_and_notice_append_semantic_items() {
     let mut state = state();
     reduce(
         &mut state,
@@ -299,7 +299,7 @@ fn error_cancellation_and_notice_append_semantic_items() {
 
 /// Verifies appending transcript content does not yank a non-following viewport.
 #[test]
-fn appended_content_honors_scroll_follow_tail_state() {
+fn reduce_when_appended_content_honors_scroll_follow_tail_state() {
     let mut following = state();
     reduce(
         &mut following,
@@ -334,7 +334,7 @@ fn appended_content_honors_scroll_follow_tail_state() {
 
 /// Verifies unknown lifecycle deltas and finishes are ignored deterministically.
 #[test]
-fn unknown_lifecycle_ids_are_ignored() {
+fn reduce_when_unknown_lifecycle_ids_are_ignored() {
     let mut state = state();
     state.session.prompt = PromptState::from_text("kept");
 

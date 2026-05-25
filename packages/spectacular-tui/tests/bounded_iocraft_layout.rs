@@ -1,10 +1,10 @@
 use futures::{self, StreamExt};
 use iocraft::prelude::*;
 use spectacular_tui::{
-    components::App, effects, reduce, render_state_to_string, semantic_iocraft_style,
-    ChatTuiAction, CommandDisplayChunk, CommandDisplayStatus, DisplayLine, DisplayLineStyle,
-    DisplayMetadata, DisplaySpan, EventEffect, PromptState, ReasoningLevel, RenderStyle,
-    RuntimeSelection, SessionId, State, TranscriptItemId, TuiRgb, TuiSelectionColors,
+    app_element, effects, reduce, render_state_to_string, semantic_iocraft_style, ChatTuiAction,
+    CommandDisplayChunk, CommandDisplayStatus, DisplayLine, DisplayLineStyle, DisplayMetadata,
+    DisplaySpan, EventEffect, PromptState, ReasoningLevel, RenderStyle, RuntimeSelection,
+    SessionId, State, TranscriptItemId, TuiRgb, TuiSelectionColors,
 };
 
 /// Builds a representative runtime selection for bounded layout tests.
@@ -64,7 +64,7 @@ fn render_app_canvas_with_events(
     height: u16,
     _events: Vec<TerminalEvent>,
 ) -> Canvas {
-    let mut app = element!(App(state: state.clone(), width: Some(width), height: Some(height)));
+    let mut app = app_element(state.clone(), Some(width), Some(height));
     app.render(Some(usize::from(width)))
 }
 
@@ -149,11 +149,8 @@ fn TestHarness(mut hooks: Hooks, props: &TestHarnessProps) -> impl Into<AnyEleme
         system.exit();
     }
 
-    element!(App(
-        state: state.read().clone(),
-        width: Some(width),
-        height: Some(height)
-    ))
+    let state = state.read().clone();
+    app_element(state, Some(width), Some(height))
 }
 
 /// Props for the App test harness.

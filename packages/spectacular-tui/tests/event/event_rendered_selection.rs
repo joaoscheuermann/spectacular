@@ -3,7 +3,7 @@ use super::*;
 /// Verifies Ctrl+C copies selected prompt text through the injected clipboard.
 #[test]
 
-fn ctrl_c_with_prompt_selection_copies_selection_to_clipboard() {
+fn apply_terminal_event_when_ctrl_c_with_prompt_selection_copies_selection_to_clipboard() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("copy me");
@@ -43,7 +43,7 @@ fn ctrl_c_with_prompt_selection_copies_selection_to_clipboard() {
 
 #[test]
 
-fn mouse_drag_selects_rendered_prompt_text() {
+fn apply_terminal_event_when_mouse_drag_selects_rendered_prompt_text() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("select me");
@@ -81,7 +81,7 @@ fn mouse_drag_selects_rendered_prompt_text() {
 
 #[test]
 
-fn ctrl_c_with_rendered_selection_takes_priority_over_prompt_selection() {
+fn apply_terminal_event_when_ctrl_c_with_rendered_selection_takes_priority_over_prompt_selection() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("prompt buffer");
@@ -134,7 +134,8 @@ fn ctrl_c_with_rendered_selection_takes_priority_over_prompt_selection() {
 
 #[test]
 
-fn ctrl_c_with_rendered_selection_clipboard_write_failure_reports_input_notice() {
+fn apply_terminal_event_when_ctrl_c_with_rendered_selection_clipboard_write_failure_reports_input_notice(
+) {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("copy me");
@@ -185,7 +186,7 @@ fn ctrl_c_with_rendered_selection_clipboard_write_failure_reports_input_notice()
 
 #[test]
 
-fn escape_with_rendered_selection_clears_selection() {
+fn apply_terminal_event_when_escape_with_rendered_selection_clears_selection() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("clear me");
@@ -214,7 +215,7 @@ fn escape_with_rendered_selection_clears_selection() {
 
 #[test]
 
-fn mouse_drag_beyond_transcript_viewport_requests_auto_scroll() {
+fn apply_terminal_event_when_mouse_drag_beyond_transcript_viewport_requests_auto_scroll() {
     let mut state = state();
 
     for index in 0..6 {

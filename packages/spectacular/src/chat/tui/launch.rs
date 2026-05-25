@@ -3,7 +3,7 @@ use super::runner::TurnRunner;
 use crate::chat::{ChatBootstrap, ChatError};
 use iocraft::prelude::*;
 use spectacular_llms::LlmDebugLogger;
-use spectacular_tui::{Intent, Root, State};
+use spectacular_tui::{root_element, Intent, State};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -35,13 +35,13 @@ where
     );
     let render_task = tokio::task::spawn_blocking(move || {
         runtime.block_on(async move {
-            element!(Root(
+            root_element(
                 initial_state,
                 intent_sender,
                 cancellation_sender,
                 selection_sender,
-                state_receiver
-            ))
+                state_receiver,
+            )
             .fullscreen()
             .ignore_ctrl_c()
             .await

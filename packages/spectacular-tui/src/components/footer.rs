@@ -9,6 +9,7 @@ use crate::selection::{style_line_for_source_at_columns, SelectableSource};
 use crate::state::State;
 use iocraft::prelude::*;
 use std::path::Path;
+use std::sync::Arc;
 use unicode_width::UnicodeWidthStr;
 
 const DEFAULT_FOOTER_WIDTH: u16 = 120;
@@ -17,7 +18,7 @@ const FOOTER_CENTER_SIDE_PADDING: usize = 1;
 /// Renders the footer metadata row.
 #[component]
 pub fn Footer(props: &FooterProps) -> impl Into<AnyElement<'static>> {
-    let state = props.state.clone().expect("Footer requires state");
+    let state = props.state.as_ref();
     let width = props
         .width
         .unwrap_or_else(|| footer_width_from_state(&state));
@@ -76,11 +77,12 @@ pub fn footer_render_line_with_width(state: &State, width: u16) -> RenderLine {
     let Some(layout) = footer_center_layout(state, width) else {
         return footer_render_line(state);
     };
+    let Some(center) = footer_center_render_line(state) else {
+        return footer_render_line(state);
+    };
 
     let left = footer_left_render_line(state);
     let left_width = line_width(&left);
-    let center = footer_center_render_line(state)
-        .expect("footer center layout requires rendered-selection feedback");
     let center_width = line_width(&center);
     let right = footer_right_render_line(state);
 
@@ -302,8 +304,8 @@ fn line_width(line: &RenderLine) -> usize {
 }
 
 /// Props for the footer component.
-#[derive(Default, Props)]
+#[derive(Props)]
 pub struct FooterProps {
-    pub state: Option<State>,
+    pub state: Arc<State>,
     pub width: Option<u16>,
 }

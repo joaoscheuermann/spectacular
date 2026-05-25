@@ -3,7 +3,7 @@ use super::*;
 /// Verifies overflowing transcript content renders a scrollbar next to the transcript pane.
 #[test]
 
-fn overflowing_transcript_shows_scrollbar() {
+fn render_app_canvas_when_overflowing_transcript_shows_scrollbar() {
     let mut state = state();
 
     for index in 0..8 {
@@ -28,7 +28,7 @@ fn overflowing_transcript_shows_scrollbar() {
 
 #[test]
 
-fn tool_transcript_call_line_renders_legacy_segment_styles_on_canvas() {
+fn render_app_canvas_when_tool_transcript_call_line_renders_legacy_segment_styles_on_canvas() {
     let mut state = state();
 
     reduce(
@@ -69,7 +69,7 @@ fn tool_transcript_call_line_renders_legacy_segment_styles_on_canvas() {
 
 #[test]
 
-fn command_transcript_renders_legacy_shape_and_styles_on_canvas() {
+fn render_app_canvas_when_command_transcript_renders_legacy_shape_and_styles_on_canvas() {
     let mut state = state();
 
     reduce(
@@ -129,7 +129,7 @@ fn command_transcript_renders_legacy_shape_and_styles_on_canvas() {
 
 #[test]
 
-fn no_wrap_transcript_rows_do_not_create_bottom_gap_at_tail() {
+fn render_app_canvas_when_no_wrap_transcript_rows_do_not_create_bottom_gap_at_tail() {
     let mut state = state();
 
     reduce(
@@ -201,7 +201,7 @@ fn no_wrap_transcript_rows_do_not_create_bottom_gap_at_tail() {
 
 #[test]
 
-fn full_width_transcript_rows_do_not_push_scrollbar_out_of_view() {
+fn render_app_canvas_when_full_width_transcript_rows_do_not_push_scrollbar_out_of_view() {
     let mut state = state();
 
     for index in 0..8 {
@@ -230,7 +230,7 @@ fn full_width_transcript_rows_do_not_push_scrollbar_out_of_view() {
 
 #[test]
 
-fn transcript_overflow_is_bounded_above_working_prompt_and_footer() {
+fn render_app_canvas_when_transcript_overflow_is_bounded_above_working_prompt_and_footer() {
     let mut state = state();
 
     for index in 0..20 {
@@ -269,7 +269,7 @@ fn transcript_overflow_is_bounded_above_working_prompt_and_footer() {
 
 #[test]
 
-fn streaming_assistant_updates_remain_bounded_with_fixed_chrome() {
+fn render_app_canvas_when_streaming_assistant_updates_remain_bounded_with_fixed_chrome() {
     let mut state = state();
 
     reduce(
@@ -316,7 +316,8 @@ fn streaming_assistant_updates_remain_bounded_with_fixed_chrome() {
 
 /// Verifies transcript highlighting is anchored to the selected row, not screen coordinates.
 #[test]
-fn rendered_selection_transcript_highlight_disappears_and_returns_across_scroll() {
+fn render_app_canvas_when_rendered_selection_transcript_highlight_disappears_and_returns_across_scroll(
+) {
     let mut state = state();
 
     for index in 0..8 {

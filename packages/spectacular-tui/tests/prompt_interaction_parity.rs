@@ -1,4 +1,5 @@
 use iocraft::prelude::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers, TerminalEvent};
+use spectacular_tui::components::{prompt_lines, prompt_render_lines};
 use spectacular_tui::{
     effects, reduce, CachedModelValues, ChatTuiAction, CommandDescriptor, CommandFieldDescriptor,
     CommandSubcommandDescriptor, CommandValueValidation, CompletionValues, DisplayMetadata,

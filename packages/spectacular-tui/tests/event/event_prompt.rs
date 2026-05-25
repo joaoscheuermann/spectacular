@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 
-fn typing_text_updates_prompt_state_through_prompt_changed() {
+fn apply_terminal_event_when_typing_text_updates_prompt_state_through_prompt_changed() {
     let mut state = state();
 
     let action = single_action(&state, key(KeyCode::Char('h'), KeyModifiers::empty()));
@@ -22,7 +22,7 @@ fn typing_text_updates_prompt_state_through_prompt_changed() {
 
 #[test]
 
-fn prompt_text_accessor_uses_logical_lines_as_source_of_truth() {
+fn apply_terminal_event_when_prompt_text_accessor_uses_logical_lines_as_source_of_truth() {
     let mut prompt = PromptState::from_text("line one");
 
     prompt.text = "stale text".to_owned();
@@ -36,7 +36,7 @@ fn prompt_text_accessor_uses_logical_lines_as_source_of_truth() {
 
 #[test]
 
-fn prompt_editing_supports_multiline_cursor_selection_and_paste_state() {
+fn apply_terminal_event_when_prompt_editing_supports_multiline_cursor_selection_and_paste_state() {
     let mut prompt = PromptState::from_text("hello");
 
     prompt.move_left(false);
@@ -72,7 +72,7 @@ fn prompt_editing_supports_multiline_cursor_selection_and_paste_state() {
 
 #[test]
 
-fn multiline_enter_and_shift_navigation_update_prompt_state() {
+fn apply_terminal_event_when_multiline_enter_and_shift_navigation_update_prompt_state() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("one");
@@ -96,7 +96,7 @@ fn multiline_enter_and_shift_navigation_update_prompt_state() {
 
 #[test]
 
-fn shift_up_and_down_extend_multiline_prompt_selection() {
+fn apply_terminal_event_when_shift_up_and_down_extend_multiline_prompt_selection() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("one\ntwo\nthree");
@@ -125,7 +125,7 @@ fn shift_up_and_down_extend_multiline_prompt_selection() {
 
 #[test]
 
-fn enter_with_text_inserts_newline_without_transcript_change() {
+fn apply_terminal_event_when_enter_with_text_inserts_newline_without_transcript_change() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("run this");
@@ -143,7 +143,7 @@ fn enter_with_text_inserts_newline_without_transcript_change() {
 
 #[test]
 
-fn prompt_up_uses_current_layout_width_for_wrapped_rows() {
+fn apply_terminal_event_when_prompt_up_uses_current_layout_width_for_wrapped_rows() {
     let mut state = state();
 
     state.prompt_layout = PromptLayoutMetrics {
@@ -165,7 +165,7 @@ fn prompt_up_uses_current_layout_width_for_wrapped_rows() {
 
 #[test]
 
-fn prompt_changed_scrolls_prompt_viewport_to_cursor() {
+fn apply_terminal_event_when_prompt_changed_scrolls_prompt_viewport_to_cursor() {
     let mut state = state();
 
     state.prompt_layout = PromptLayoutMetrics {
@@ -186,7 +186,7 @@ fn prompt_changed_scrolls_prompt_viewport_to_cursor() {
 
 #[test]
 
-fn resize_updates_prompt_layout_metrics() {
+fn apply_terminal_event_when_resize_updates_prompt_layout_metrics() {
     let mut state = state();
 
     reduce(
@@ -212,7 +212,7 @@ fn resize_updates_prompt_layout_metrics() {
 
 #[test]
 
-fn ctrl_enter_submits_prompt_appends_user_transcript_and_clears_prompt() {
+fn apply_terminal_event_when_ctrl_enter_submits_prompt_appends_user_transcript_and_clears_prompt() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("run this");
@@ -243,7 +243,7 @@ fn ctrl_enter_submits_prompt_appends_user_transcript_and_clears_prompt() {
 
 #[test]
 
-fn control_newline_char_inserts_newline_without_submission() {
+fn apply_terminal_event_when_control_newline_char_inserts_newline_without_submission() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("run this");
@@ -261,7 +261,8 @@ fn control_newline_char_inserts_newline_without_submission() {
 
 #[test]
 
-fn control_carriage_return_char_inserts_normalized_newline_without_submission() {
+fn apply_terminal_event_when_control_carriage_return_char_inserts_normalized_newline_without_submission(
+) {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("run this");
@@ -279,7 +280,8 @@ fn control_carriage_return_char_inserts_normalized_newline_without_submission() 
 
 #[test]
 
-fn newline_char_key_stream_preserves_multiline_prompt_without_submission() {
+fn apply_terminal_event_when_newline_char_key_stream_preserves_multiline_prompt_without_submission()
+{
     let mut state = state();
 
     for code in [KeyCode::Char('a'), KeyCode::Char('\n'), KeyCode::Char('b')] {
@@ -297,7 +299,8 @@ fn newline_char_key_stream_preserves_multiline_prompt_without_submission() {
 
 #[test]
 
-fn control_newline_char_key_stream_preserves_multiline_prompt_without_submission() {
+fn apply_terminal_event_when_control_newline_char_key_stream_preserves_multiline_prompt_without_submission(
+) {
     let mut state = state();
 
     for (code, modifiers) in [
@@ -319,7 +322,7 @@ fn control_newline_char_key_stream_preserves_multiline_prompt_without_submission
 
 #[test]
 
-fn escape_while_running_and_cancellable_dispatches_cancel() {
+fn apply_terminal_event_when_escape_while_running_and_cancellable_dispatches_cancel() {
     let mut state = state();
 
     reduce(&mut state, ChatTuiAction::AgentStarted);
@@ -335,7 +338,7 @@ fn escape_while_running_and_cancellable_dispatches_cancel() {
 
 #[test]
 
-fn ctrl_c_while_idle_without_selection_does_not_exit() {
+fn apply_terminal_event_when_ctrl_c_while_idle_without_selection_does_not_exit() {
     let state = state();
 
     let mut clipboard = FakeClipboard::default();

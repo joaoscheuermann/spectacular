@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 
-fn slash_suggestions_match_original_padding_and_selection() {
+fn slash_completion_when_slash_suggestions_match_original_padding_and_selection() {
     let mut state = state();
 
     state.commands = vec![
@@ -14,7 +14,7 @@ fn slash_suggestions_match_original_padding_and_selection() {
 
     state.session.prompt.selected_completion = 1;
 
-    let lines = spectacular_tui::prompt_render_lines(&state);
+    let lines = prompt_render_lines(&state);
 
     assert_eq!(
         lines[1].plain_text(),
@@ -33,14 +33,14 @@ fn slash_suggestions_match_original_padding_and_selection() {
 
 #[test]
 
-fn slash_suggestions_with_indented_slash_do_not_render() {
+fn slash_completion_when_slash_suggestions_with_indented_slash_do_not_render() {
     let mut state = state();
 
     state.commands = vec![CommandDescriptor::new("config", "Manage configuration")];
 
     state.session.prompt = PromptState::from_text(" /con");
 
-    let lines = spectacular_tui::prompt_render_lines(&state);
+    let lines = prompt_render_lines(&state);
 
     assert_eq!(lines.len(), 1);
 
@@ -49,14 +49,14 @@ fn slash_suggestions_with_indented_slash_do_not_render() {
 
 #[test]
 
-fn slash_suggestions_with_later_line_slash_do_not_render() {
+fn slash_completion_when_slash_suggestions_with_later_line_slash_do_not_render() {
     let mut state = state();
 
     state.commands = vec![CommandDescriptor::new("config", "Manage configuration")];
 
     state.session.prompt = PromptState::from_text("hello\n/con");
 
-    let lines = spectacular_tui::prompt_render_lines(&state);
+    let lines = prompt_render_lines(&state);
 
     assert_eq!(lines.len(), 2);
 
@@ -67,7 +67,7 @@ fn slash_suggestions_with_later_line_slash_do_not_render() {
 
 #[test]
 
-fn slash_usage_with_indented_command_does_not_render() {
+fn slash_completion_when_slash_usage_with_indented_command_does_not_render() {
     let mut state = state();
 
     state.commands = vec![CommandDescriptor::with_usage(
@@ -78,7 +78,7 @@ fn slash_usage_with_indented_command_does_not_render() {
 
     state.session.prompt = PromptState::from_text(" /config list");
 
-    let lines = spectacular_tui::prompt_render_lines(&state);
+    let lines = prompt_render_lines(&state);
 
     assert_eq!(lines.len(), 1);
 
@@ -87,7 +87,7 @@ fn slash_usage_with_indented_command_does_not_render() {
 
 #[test]
 
-fn slash_tab_enter_space_acceptance_matches_original() {
+fn slash_completion_when_slash_tab_enter_space_acceptance_matches_original() {
     let mut state = state();
 
     state.commands = vec![CommandDescriptor::with_usage(
@@ -102,14 +102,14 @@ fn slash_tab_enter_space_acceptance_matches_original() {
 
     assert_eq!(state.session.prompt.text, "/config ");
 
-    let output = spectacular_tui::prompt_lines(&state).join("\n");
+    let output = prompt_lines(&state).join("\n");
 
     assert!(output.contains("/config list"));
 }
 
 #[test]
 
-fn slash_command_suggestions_fuzzy_rank_limit_and_uppercase_match_legacy() {
+fn slash_completion_when_slash_command_suggestions_fuzzy_rank_limit_and_uppercase_match_legacy() {
     let mut state = state();
 
     state.commands = vec![
@@ -127,7 +127,7 @@ fn slash_command_suggestions_fuzzy_rank_limit_and_uppercase_match_legacy() {
 
     state.session.prompt = PromptState::from_text("/confg");
 
-    let lines = spectacular_tui::prompt_render_lines(&state);
+    let lines = prompt_render_lines(&state);
 
     assert_eq!(
         lines[1].plain_text(),
@@ -136,13 +136,13 @@ fn slash_command_suggestions_fuzzy_rank_limit_and_uppercase_match_legacy() {
 
     state.session.prompt = PromptState::from_text("/CON");
 
-    let lines = spectacular_tui::prompt_render_lines(&state);
+    let lines = prompt_render_lines(&state);
 
     assert_eq!(lines.len(), 1);
 
     state.session.prompt = PromptState::from_text("/");
 
-    let lines = spectacular_tui::prompt_render_lines(&state);
+    let lines = prompt_render_lines(&state);
 
     assert_eq!(lines.len(), 9);
 
@@ -157,14 +157,14 @@ fn slash_command_suggestions_fuzzy_rank_limit_and_uppercase_match_legacy() {
 
 #[test]
 
-fn slash_subcommand_field_and_value_suggestions_match_legacy() {
+fn slash_completion_when_slash_subcommand_field_and_value_suggestions_match_legacy() {
     let mut state = state();
 
     state.commands = vec![model_command()];
 
     state.session.prompt = PromptState::from_text("/model ");
 
-    let output = spectacular_tui::prompt_lines(&state).join("\n");
+    let output = prompt_lines(&state).join("\n");
 
     assert!(output.contains("  add                Add model"));
 
@@ -174,13 +174,13 @@ fn slash_subcommand_field_and_value_suggestions_match_legacy() {
 
     state.session.prompt = PromptState::from_text("/model add pro");
 
-    let output = spectacular_tui::prompt_lines(&state).join("\n");
+    let output = prompt_lines(&state).join("\n");
 
     assert!(output.contains("  provider:          provider - configured provider name, required"));
 
     state.session.prompt = PromptState::from_text("/model add provider:work id:g");
 
-    let output = spectacular_tui::prompt_lines(&state).join("\n");
+    let output = prompt_lines(&state).join("\n");
 
     assert!(output.contains("  google/gemini      id value"));
 
@@ -189,14 +189,14 @@ fn slash_subcommand_field_and_value_suggestions_match_legacy() {
 
 #[test]
 
-fn slash_guidance_missing_invalid_optional_and_ready_match_legacy() {
+fn slash_completion_when_slash_guidance_missing_invalid_optional_and_ready_match_legacy() {
     let mut state = state();
 
     state.commands = vec![model_command()];
 
     state.session.prompt = PromptState::from_text("/model add ");
 
-    let output = spectacular_tui::prompt_lines(&state).join("\n");
+    let output = prompt_lines(&state).join("\n");
 
     assert!(output.contains("missing: provider, id, reasoning."));
 
@@ -205,7 +205,7 @@ fn slash_guidance_missing_invalid_optional_and_ready_match_legacy() {
     state.session.prompt =
         PromptState::from_text("/model add provider:work id:google/gemini reasoning:ultra");
 
-    let output = spectacular_tui::prompt_lines(&state).join("\n");
+    let output = prompt_lines(&state).join("\n");
 
     assert!(output.contains("invalid: reasoning:ultra"));
 
@@ -214,7 +214,7 @@ fn slash_guidance_missing_invalid_optional_and_ready_match_legacy() {
     state.session.prompt =
         PromptState::from_text("/model add provider:work id:google/gemini reasoning:high ");
 
-    let output = spectacular_tui::prompt_lines(&state).join("\n");
+    let output = prompt_lines(&state).join("\n");
 
     assert!(output.contains("optional: name"));
 
@@ -222,14 +222,14 @@ fn slash_guidance_missing_invalid_optional_and_ready_match_legacy() {
         "/model add provider:work id:google/gemini reasoning:high name:coding ",
     );
 
-    let output = spectacular_tui::prompt_lines(&state).join("\n");
+    let output = prompt_lines(&state).join("\n");
 
     assert!(output.contains("ready: Enter to run"));
 }
 
 #[test]
 
-fn slash_value_suggestions_more_row_is_info_and_not_selectable() {
+fn slash_completion_when_slash_value_suggestions_more_row_is_info_and_not_selectable() {
     let mut state = state();
 
     state.commands = vec![model_command()];
@@ -238,7 +238,7 @@ fn slash_value_suggestions_more_row_is_info_and_not_selectable() {
 
     state.session.prompt.selected_completion = 8;
 
-    let lines = spectacular_tui::prompt_render_lines(&state);
+    let lines = prompt_render_lines(&state);
 
     assert!(lines
         .iter()
@@ -263,7 +263,7 @@ fn slash_value_suggestions_more_row_is_info_and_not_selectable() {
 
 #[test]
 
-fn slash_space_accepts_value_and_guides_next_field_match_legacy() {
+fn slash_completion_when_slash_space_accepts_value_and_guides_next_field_match_legacy() {
     let mut state = state();
 
     state.commands = vec![model_command()];
@@ -279,7 +279,7 @@ fn slash_space_accepts_value_and_guides_next_field_match_legacy() {
 
 #[test]
 
-fn slash_tab_guides_missing_field_and_submit_blocks_incomplete_command() {
+fn slash_completion_when_slash_tab_guides_missing_field_and_submit_blocks_incomplete_command() {
     let mut state = state();
 
     state.commands = vec![model_command()];
@@ -302,7 +302,7 @@ fn slash_tab_guides_missing_field_and_submit_blocks_incomplete_command() {
 
 #[test]
 
-fn slash_enter_accepts_subcommand_and_complete_command_submits() {
+fn slash_completion_when_slash_enter_accepts_subcommand_and_complete_command_submits() {
     let mut state = state();
 
     state.commands = vec![model_command()];
@@ -326,7 +326,7 @@ fn slash_enter_accepts_subcommand_and_complete_command_submits() {
 
 #[test]
 
-fn slash_escape_dismisses_current_suggestions_then_falls_through() {
+fn slash_completion_when_slash_escape_dismisses_current_suggestions_then_falls_through() {
     let mut state = state();
 
     state.commands = vec![model_command()];
@@ -335,7 +335,7 @@ fn slash_escape_dismisses_current_suggestions_then_falls_through() {
 
     press(&mut state, KeyCode::Esc, KeyModifiers::empty());
 
-    let output = spectacular_tui::prompt_lines(&state).join("\n");
+    let output = prompt_lines(&state).join("\n");
 
     assert!(!output.contains("  add                Add model"));
 
@@ -348,7 +348,7 @@ fn slash_escape_dismisses_current_suggestions_then_falls_through() {
 
 #[test]
 
-fn slash_completion_reuses_existing_whitespace_match_legacy() {
+fn slash_completion_when_slash_completion_reuses_existing_whitespace_match_legacy() {
     let mut state = state();
 
     state.commands = vec![model_command()];

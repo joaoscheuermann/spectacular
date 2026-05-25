@@ -3,7 +3,7 @@ use super::*;
 /// Verifies release events remain ignored instead of replaying key actions.
 #[test]
 
-fn key_release_event_does_not_emit_effects() {
+fn apply_terminal_event_when_key_release_event_does_not_emit_effects() {
     let state = state();
 
     let mut event = KeyEvent::new(KeyEventKind::Release, KeyCode::Char('q'));
@@ -17,7 +17,7 @@ fn key_release_event_does_not_emit_effects() {
 
 #[test]
 
-fn timer_tick_dispatches_spinner_tick_without_terminal_output() {
+fn apply_terminal_event_when_timer_tick_dispatches_spinner_tick_without_terminal_output() {
     assert_eq!(SPINNER_TICK_INTERVAL, Duration::from_millis(90));
 
     assert_eq!(
@@ -30,7 +30,7 @@ fn timer_tick_dispatches_spinner_tick_without_terminal_output() {
 
 #[test]
 
-fn assistant_delta_is_visible_without_reveal_timer_effects() {
+fn apply_terminal_event_when_assistant_delta_is_visible_without_reveal_timer_effects() {
     let mut state = state();
 
     reduce(
@@ -64,7 +64,7 @@ fn assistant_delta_is_visible_without_reveal_timer_effects() {
 
 #[test]
 
-fn transcript_scroll_input_emits_view_scroll_actions() {
+fn apply_terminal_event_when_transcript_scroll_input_emits_view_scroll_actions() {
     let state = state();
 
     assert_eq!(
@@ -92,7 +92,7 @@ fn transcript_scroll_input_emits_view_scroll_actions() {
 
 #[test]
 
-fn slash_command_prompt_ui_uses_state_commands_for_suggestions() {
+fn apply_terminal_event_when_slash_command_prompt_ui_uses_state_commands_for_suggestions() {
     let mut state = state();
 
     state.commands = vec![

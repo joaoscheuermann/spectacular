@@ -1,12 +1,86 @@
 use super::TranscriptRenderContext;
-use crate::render::{RenderHighlight, RenderLine, RenderStyle};
+use crate::render::{
+    iocraft_content_with_selection_colors, RenderHighlight, RenderLine, RenderStyle,
+};
 use crate::selection::{style_line_for_source_with_plan, SelectableSource};
 use crate::transcript::DisplayLine;
-use iocraft::prelude::TextWrap;
+use iocraft::prelude::*;
 use unicode_width::UnicodeWidthStr;
 
 /// Separator used by completed work summaries.
 pub const TRANSCRIPT_SEPARATOR: &str = " \u{00b7} ";
+
+/// Builds the shared frame element for one transcript item.
+pub(super) fn transcript_item_frame(
+    source_id: String,
+    rows: Vec<RenderLine>,
+    context: TranscriptRenderContext,
+    wrap: TranscriptRowWrap,
+) -> AnyElement<'static> {
+    let key = source_id.clone();
+
+    Element::<TranscriptItemFrame> {
+        key: ElementKey::new(key),
+        props: TranscriptItemFrameProps {
+            source_id,
+            rows,
+            context,
+            wrap,
+        },
+    }
+    .into_any()
+}
+
+/// Renders semantic transcript rows with shared selection styling and item spacing.
+#[component]
+pub(super) fn TranscriptItemFrame(
+    props: &TranscriptItemFrameProps,
+) -> impl Into<AnyElement<'static>> {
+    let context = &props.context;
+    let selection_colors = context.selection_colors;
+    let source_id = &props.source_id;
+    let wrap_mode = props.wrap;
+    let elements = props
+        .rows
+        .iter()
+        .cloned()
+        .enumerate()
+        .map(move |(index, line)| {
+            let line = selectable_line(context, source_id, index, line);
+            let wrap = wrap_mode.text_wrap(context, &line);
+            let contents = iocraft_content_with_selection_colors(&line, selection_colors);
+            element!(MixedText(wrap: wrap, contents))
+        });
+
+    element!(View(flex_direction: FlexDirection::Column, margin_bottom: 1) { #(elements) })
+}
+
+/// Props for the shared transcript item row frame.
+#[derive(Props)]
+pub(super) struct TranscriptItemFrameProps {
+    pub source_id: String,
+    pub rows: Vec<RenderLine>,
+    pub context: TranscriptRenderContext,
+    pub wrap: TranscriptRowWrap,
+}
+
+/// Wrapping policy for semantic transcript rows after selection styling.
+#[derive(Clone, Copy)]
+pub(super) enum TranscriptRowWrap {
+    /// Wrap ordinary message rows, except selected trailing spaces that still fit.
+    Auto,
+    /// Preserve fixed-shape rows such as banners and command/tool output.
+    NoWrap,
+}
+
+impl TranscriptRowWrap {
+    fn text_wrap(self, context: &TranscriptRenderContext, line: &RenderLine) -> TextWrap {
+        match self {
+            Self::Auto => selectable_text_wrap(context, line),
+            Self::NoWrap => TextWrap::NoWrap,
+        }
+    }
+}
 
 /// Flattens semantic rows into plain visible text rows.
 pub fn plain_lines(lines: Vec<RenderLine>) -> Vec<String> {
@@ -29,15 +103,11 @@ pub fn display_line_render_line(line: &DisplayLine) -> RenderLine {
 
 /// Applies app-wide rendered selection styling to a transcript-owned semantic row.
 pub fn selectable_line(
-    context: Option<&TranscriptRenderContext>,
+    context: &TranscriptRenderContext,
     item_id: &str,
     line_index: usize,
     line: RenderLine,
 ) -> RenderLine {
-    let Some(context) = context else {
-        return line;
-    };
-
     style_line_for_source_with_plan(
         &context.selection_plan,
         line,
@@ -51,10 +121,7 @@ pub fn selectable_line(
 }
 
 /// Chooses wrapping for a transcript row after rendered-selection styling is applied.
-pub fn selectable_text_wrap(
-    context: Option<&TranscriptRenderContext>,
-    line: &RenderLine,
-) -> TextWrap {
+pub fn selectable_text_wrap(context: &TranscriptRenderContext, line: &RenderLine) -> TextWrap {
     if has_trailing_selected_spaces(line) && line_width(line) <= transcript_content_width(context) {
         return TextWrap::NoWrap;
     }
@@ -85,11 +152,8 @@ fn has_trailing_selected_spaces(line: &RenderLine) -> bool {
     })
 }
 
-fn transcript_content_width(context: Option<&TranscriptRenderContext>) -> usize {
-    context
-        .map(|context| context.content_width)
-        .unwrap_or(usize::MAX)
-        .max(1)
+fn transcript_content_width(context: &TranscriptRenderContext) -> usize {
+    context.content_width.max(1)
 }
 
 fn line_width(line: &RenderLine) -> usize {
@@ -105,15 +169,6 @@ fn visible_lines(text: &str) -> Vec<String> {
     text.lines().map(ToOwned::to_owned).collect()
 }
 
-/// Counts visible rows without allocating row strings.
-pub fn visible_text_row_count(text: &str) -> usize {
-    if text.is_empty() {
-        return 0;
-    }
-
-    text.lines().count()
-}
-
 /// Splits text into visible rows only when it contains non-whitespace content.
 fn visible_trimmed_lines(text: &str) -> Vec<String> {
     if text.trim().is_empty() {
@@ -121,13 +176,4 @@ fn visible_trimmed_lines(text: &str) -> Vec<String> {
     }
 
     visible_lines(text)
-}
-
-/// Counts trimmed visible rows without allocating row strings.
-pub fn trimmed_visible_text_row_count(text: &str) -> usize {
-    if text.trim().is_empty() {
-        return 0;
-    }
-
-    visible_text_row_count(text)
 }

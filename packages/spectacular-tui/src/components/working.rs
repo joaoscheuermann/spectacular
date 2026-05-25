@@ -5,6 +5,7 @@ use crate::spinner::SpinnerState;
 use crate::state::State;
 use crate::status::Status;
 use iocraft::prelude::*;
+use std::sync::Arc;
 
 /// Renders the active working indicator row when a request is in flight.
 #[component]
@@ -20,7 +21,7 @@ pub fn Working(mut hooks: Hooks, props: &WorkingProps) -> impl Into<AnyElement<'
         }
     });
 
-    let state = props.state.clone().expect("Working requires state");
+    let state = props.state.as_ref();
 
     let Some(line) = working_render_line_with_frame(&state, frame) else {
         return element!(View(width: 100pct)).into_any();
@@ -35,6 +36,9 @@ pub fn Working(mut hooks: Hooks, props: &WorkingProps) -> impl Into<AnyElement<'
 }
 
 /// Formats the current working status line as a semantic row when active.
+///
+/// This is a flattened compatibility adapter; live rendering should use the
+/// `Working` component.
 pub fn working_render_line(state: &State) -> Option<RenderLine> {
     working_render_line_with_frame(state, state.spinner.current_frame())
 }
@@ -51,7 +55,7 @@ fn working_render_line_with_frame(state: &State, frame: &str) -> Option<RenderLi
 }
 
 /// Props for the working component.
-#[derive(Default, Props)]
+#[derive(Props)]
 pub struct WorkingProps {
-    pub state: Option<State>,
+    pub state: Arc<State>,
 }

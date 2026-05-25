@@ -3,7 +3,7 @@ use super::*;
 /// Verifies context usage updates both session usage and display metadata usage.
 #[test]
 
-fn context_usage_updated_updates_session_and_display_usage() {
+fn reduce_when_context_usage_updated_updates_session_and_display_usage() {
     let mut state = state();
 
     let usage = ContextTokenUsage::new(100, Some(1000));
@@ -19,7 +19,7 @@ fn context_usage_updated_updates_session_and_display_usage() {
 
 #[test]
 
-fn provider_usage_reported_accumulates_turn_and_total_usage() {
+fn reduce_when_provider_usage_reported_accumulates_turn_and_total_usage() {
     let mut state = state();
 
     reduce(
@@ -59,7 +59,7 @@ fn provider_usage_reported_accumulates_turn_and_total_usage() {
 
 #[test]
 
-fn scroll_transcript_updates_offset_and_follow_tail() {
+fn reduce_when_scroll_transcript_updates_offset_and_follow_tail() {
     let mut state = state();
 
     spectacular_tui::apply_view_action_to_state(
@@ -94,7 +94,7 @@ fn scroll_transcript_updates_offset_and_follow_tail() {
 
 #[test]
 
-fn scroll_transcript_handles_large_deltas_without_overflow() {
+fn reduce_when_scroll_transcript_handles_large_deltas_without_overflow() {
     let mut state = state();
 
     spectacular_tui::apply_view_action_to_state(

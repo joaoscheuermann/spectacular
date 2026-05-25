@@ -106,7 +106,7 @@ fn session_snapshot() -> Session {
 
 /// Verifies semantic session snapshots round-trip without losing durable lifecycle data.
 #[test]
-fn session_snapshot_serializes_and_deserializes_durable_transcript_data() {
+fn session_snapshot_when_session_snapshot_serializes_and_deserializes_durable_transcript_data() {
     let session = session_snapshot();
 
     let value = serde_json::to_value(&session).unwrap();
@@ -150,7 +150,7 @@ fn session_snapshot_serializes_and_deserializes_durable_transcript_data() {
 
 /// Verifies legacy snapshots using the old usage field restore context usage.
 #[test]
-fn legacy_usage_field_deserializes_as_context_usage() {
+fn session_snapshot_when_legacy_usage_field_deserializes_as_context_usage() {
     let value = serde_json::json!({
         "id": "legacy-session",
         "transcript": [],
@@ -173,7 +173,7 @@ fn legacy_usage_field_deserializes_as_context_usage() {
 
 /// Verifies replay reconstructs live state from durable session data and fresh metadata.
 #[test]
-fn state_reconstruction_initializes_transient_fields_from_defaults() {
+fn session_snapshot_when_state_reconstruction_initializes_transient_fields_from_defaults() {
     let session = session_snapshot();
     let commands = vec![CommandDescriptor::new("help", "Show help")];
     let runtime = runtime();
@@ -203,7 +203,7 @@ fn state_reconstruction_initializes_transient_fields_from_defaults() {
 
 /// Verifies current prompt snapshots reconcile lines and legacy text to one prompt buffer.
 #[test]
-fn current_prompt_snapshot_rehydrates_from_lines_as_source_of_truth() {
+fn session_snapshot_when_current_prompt_snapshot_rehydrates_from_lines_as_source_of_truth() {
     let prompt: PromptState = serde_json::from_value(serde_json::json!({
         "lines": ["line", "state"],
         "text": "stale text",
@@ -218,7 +218,7 @@ fn current_prompt_snapshot_rehydrates_from_lines_as_source_of_truth() {
 
 /// Verifies legacy prompt snapshots rebuild lines and text from the durable text field.
 #[test]
-fn legacy_prompt_snapshot_rehydrates_from_text() {
+fn session_snapshot_when_legacy_prompt_snapshot_rehydrates_from_text() {
     let prompt: PromptState = serde_json::from_value(serde_json::json!({
         "text": "line\r\nstate",
         "cursor": 11
@@ -232,7 +232,7 @@ fn legacy_prompt_snapshot_rehydrates_from_text() {
 
 /// Verifies replay keeps prior ANSI output as semantic data instead of replaying terminal writes.
 #[test]
-fn state_reconstruction_does_not_replay_terminal_output() {
+fn session_snapshot_when_state_reconstruction_does_not_replay_terminal_output() {
     let mut session = session_snapshot();
     session.transcript.push(transcript_item(
         "command-ansi",

@@ -2,12 +2,13 @@ use crate::render::{iocraft_content_with_selection_colors, RenderLine, RenderSty
 use crate::selection::{style_line_for_source, SelectableSource};
 use crate::state::State;
 use iocraft::prelude::*;
+use std::sync::Arc;
 
 /// Renders transient input feedback near the active prompt.
 #[component]
 pub fn InputNotice(props: &InputNoticeProps) -> impl Into<AnyElement<'static>> {
-    let state = props.state.clone().expect("InputNotice requires state");
-    let Some(line) = input_notice_render_line(&state) else {
+    let state = props.state.as_ref();
+    let Some(line) = input_notice_line(&state) else {
         return element!(View(width: 100pct)).into_any();
     };
 
@@ -20,7 +21,14 @@ pub fn InputNotice(props: &InputNoticeProps) -> impl Into<AnyElement<'static>> {
 }
 
 /// Formats prompt-local input feedback when present.
-pub fn input_notice_render_line(state: &State) -> Option<RenderLine> {
+///
+/// This is a flattened compatibility adapter; live rendering should use the
+/// `InputNotice` component.
+pub(crate) fn input_notice_render_line(state: &State) -> Option<RenderLine> {
+    input_notice_line(state)
+}
+
+fn input_notice_line(state: &State) -> Option<RenderLine> {
     state
         .input_notice
         .as_ref()
@@ -28,7 +36,7 @@ pub fn input_notice_render_line(state: &State) -> Option<RenderLine> {
 }
 
 /// Props for the input notice component.
-#[derive(Default, Props)]
+#[derive(Props)]
 pub struct InputNoticeProps {
-    pub state: Option<State>,
+    pub state: Arc<State>,
 }

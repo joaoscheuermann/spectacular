@@ -1,479 +1,61 @@
 pub(crate) mod display;
 pub(crate) mod lookup;
 
+mod prompt;
+mod status;
+mod transcript;
+
 use crate::action::ChatTuiAction;
-use crate::ids::TranscriptItemId;
-use crate::reducer::display::{
-    append_display_command, append_display_command_output, append_display_tool_call,
-    finish_display_command, finish_display_tool_call,
-};
-use crate::reducer::lookup::{
-    find_command_index, find_content_index_by_id, find_tool_call_index, transcript_contains_id,
-};
-use crate::session::Session;
-use crate::state::{default_display_context_usage, PromptLayoutMetrics, State};
-use crate::status::{Activity, Status};
-use crate::transcript::{
-    AssistantMessageItem, CancellationItem, CommandItem, CommandStatus, ErrorItem, NoticeItem,
-    OpeningBannerItem, ReasoningItem, SuccessItem, ToolCallItem, ToolStatus, TranscriptItem,
-    TranscriptItemContent, UserPromptItem, WarningItem, WorkedSummaryItem,
-};
+use crate::state::State;
 
 /// Applies one TUI action to state without performing IO or runtime side effects.
 pub fn reduce(state: &mut State, action: ChatTuiAction) {
     match action {
-        ChatTuiAction::ExitRequested => {
-            state.exit_requested = true;
-        }
-        ChatTuiAction::PromptChanged(mut prompt) => {
-            state.input_notice = None;
-            ensure_prompt_cursor_visible(&mut prompt, state.prompt_layout);
-            state.session.prompt = prompt;
-        }
-        ChatTuiAction::SubmitPrompt { id, text } => {
-            state.input_notice = None;
-            upsert_user_prompt(state, id, text);
-            state.session.prompt = crate::session::PromptState::empty();
-        }
-        ChatTuiAction::CancelRun => {
-            if state.status.is_cancellable() {
-                state.status = Status::Cancelling;
-            }
-        }
-        ChatTuiAction::SelectionPromptChanged(selection) => {
-            state.input_notice = None;
-            state.selection = selection;
-        }
-        ChatTuiAction::SelectionPromptSubmitted(_) | ChatTuiAction::SelectionPromptCancelled => {
-            state.input_notice = None;
-            state.selection = None;
-        }
-        ChatTuiAction::CommandsLoaded(commands) => {
-            state.commands = commands;
-        }
-        ChatTuiAction::SessionChanged { id } => {
-            state.session = Session::new(id);
-        }
-        ChatTuiAction::SessionCreated { id, banner } => {
-            state.session = Session::new(id);
-            append_opening_banner(state, banner);
-        }
-        ChatTuiAction::AgentStarted => {
-            state.session.turn_usage = None;
-            state.display.turn_usage = None;
-            state.session.context_usage = None;
-            state.status = Status::Running {
-                activity: Activity::WaitingForModel,
-                cancellable: true,
-            };
-        }
-        ChatTuiAction::MessageStarted { id } => {
-            append_transcript_item(
-                state,
-                id.clone(),
-                TranscriptItemContent::AssistantMessage(AssistantMessageItem::new("")),
-            );
-        }
-        ChatTuiAction::MessageDelta { id, text } => {
-            append_assistant_delta_directly(state, &id, &text);
-        }
-        ChatTuiAction::MessageFinished { id: _ } => {}
-        ChatTuiAction::ReasoningStarted { id } => {
-            append_transcript_item(
-                state,
-                id.clone(),
-                TranscriptItemContent::Reasoning(ReasoningItem::new("", false)),
-            );
-        }
-        ChatTuiAction::ReasoningDelta { id, text } => {
-            append_reasoning_delta(state, &id, &text);
-        }
-        ChatTuiAction::ReasoningFinished { id: _ } => {}
-        ChatTuiAction::ToolCallStarted {
-            id,
-            tool_call_id,
-            name,
-            arguments,
-        } => {
-            let arguments_preview = optional_preview(arguments);
-            append_transcript_item(
-                state,
-                id.clone(),
-                TranscriptItemContent::ToolCall(ToolCallItem::running(
-                    tool_call_id,
-                    name.clone(),
-                    arguments_preview,
-                )),
-            );
-        }
-        ChatTuiAction::ToolCallDelta { tool_call_id, text } => {
-            append_tool_delta(state, &tool_call_id, &text);
-        }
-        ChatTuiAction::ToolCallFinished {
-            tool_call_id,
-            name,
-            output,
-        } => {
-            finish_tool_call(state, &tool_call_id, name, output);
-        }
-        ChatTuiAction::ToolCallFailed {
-            tool_call_id,
-            error,
-        } => {
-            fail_tool_call(state, &tool_call_id, error);
-        }
-        ChatTuiAction::ToolDisplayStarted {
-            id,
-            tool_call_id,
-            name,
-            call_line,
-            argument_lines,
-        } => {
-            append_display_tool_call(
-                state,
-                id.clone(),
-                tool_call_id,
-                name.clone(),
-                call_line,
-                argument_lines,
-            );
-        }
-        ChatTuiAction::ToolDisplayFinished {
-            tool_call_id,
-            status,
-            output_lines,
-        } => {
-            finish_display_tool_call(state, &tool_call_id, status, output_lines);
-        }
-        ChatTuiAction::CommandStarted {
-            id,
-            command_id,
-            command,
-        } => {
-            append_transcript_item(
-                state,
-                id.clone(),
-                TranscriptItemContent::Command(CommandItem::running(command_id, command)),
-            );
-        }
-        ChatTuiAction::CommandOutput { command_id, text } => {
-            append_command_output(state, &command_id, &text);
-        }
-        ChatTuiAction::CommandFinished {
-            command_id,
-            exit_code,
-        } => {
-            finish_command(state, &command_id, exit_code);
-        }
-        ChatTuiAction::CommandDisplayStarted {
-            id,
-            command_id,
-            command_line,
-        } => {
-            append_display_command(state, id.clone(), command_id, command_line);
-        }
-        ChatTuiAction::CommandDisplayOutput { command_id, chunk } => {
-            append_display_command_output(state, &command_id, chunk.line);
-        }
-        ChatTuiAction::CommandDisplayFinished {
-            command_id,
-            status,
-            exit_code,
-            summary_line,
-        } => {
-            finish_display_command(state, &command_id, status, exit_code, summary_line);
-        }
-        ChatTuiAction::AgentFinished => {
-            state.status = Status::Idle;
-        }
-        ChatTuiAction::WorkedSummaryReported {
-            duration,
-            turn_tokens,
-        } => {
-            append_worked_summary(state, duration, turn_tokens);
-        }
-        ChatTuiAction::AgentFailed { message, details } => {
-            append_error(state, message.clone(), details);
-            state.status = Status::Failed { message };
-        }
-        ChatTuiAction::AgentCancelled { reason } => {
-            append_cancellation(state, reason);
-            state.status = Status::Idle;
-        }
-        ChatTuiAction::ErrorReported { message, details } => {
-            append_error(state, message, details);
-        }
-        ChatTuiAction::WarningReported { message } => {
-            append_warning(state, message);
-        }
-        ChatTuiAction::SuccessReported { message } => {
-            append_success(state, message);
-        }
-        ChatTuiAction::NoticeReported { message } => {
-            append_notice(state, message);
-        }
-        ChatTuiAction::InputNoticeReported { message } => {
-            state.input_notice = Some(message);
-        }
-        ChatTuiAction::InputNoticeCleared => {
-            state.input_notice = None;
-        }
-        ChatTuiAction::RuntimeSelectionChanged(runtime) => {
-            state.runtime = runtime;
-            default_display_context_usage(&state.runtime, &mut state.display);
-        }
-        ChatTuiAction::DisplayMetadataChanged(mut display) => {
-            default_display_context_usage(&state.runtime, &mut display);
-            state.display = display;
-        }
-        ChatTuiAction::WorktreeMetadataChanged(worktree) => {
-            state.display.worktree = worktree;
-        }
-        ChatTuiAction::ContextUsageUpdated(usage) => {
-            state.session.context_usage = Some(usage);
-            state.display.context_usage = Some(usage);
-        }
-        ChatTuiAction::ProviderUsageReported(reported) => {
-            let turn_usage = state.session.turn_usage.get_or_insert_default();
-            turn_usage.record_provider_usage(reported);
-            state.display.turn_usage = state.session.turn_usage;
-
-            let total_usage = state.session.total_usage.get_or_insert_default();
-            total_usage.record_provider_usage(reported);
-            state.display.total_usage = state.session.total_usage;
-        }
-        ChatTuiAction::SpinnerTick => {
-            state.spinner.tick();
-        }
-        ChatTuiAction::Resize { width, height } => {
-            state.prompt_layout = PromptLayoutMetrics::from_terminal_size(width, height);
-            ensure_prompt_cursor_visible(&mut state.session.prompt, state.prompt_layout);
-        }
+        ChatTuiAction::PromptChanged(_)
+        | ChatTuiAction::SubmitPrompt { .. }
+        | ChatTuiAction::SelectionPromptChanged(_)
+        | ChatTuiAction::SelectionPromptSubmitted(_)
+        | ChatTuiAction::SelectionPromptCancelled
+        | ChatTuiAction::CommandsLoaded(_)
+        | ChatTuiAction::SessionChanged { .. }
+        | ChatTuiAction::SessionCreated { .. }
+        | ChatTuiAction::Resize { .. } => prompt::reduce(state, action),
+        ChatTuiAction::MessageStarted { .. }
+        | ChatTuiAction::MessageDelta { .. }
+        | ChatTuiAction::MessageFinished { .. }
+        | ChatTuiAction::ReasoningStarted { .. }
+        | ChatTuiAction::ReasoningDelta { .. }
+        | ChatTuiAction::ReasoningFinished { .. }
+        | ChatTuiAction::WorkedSummaryReported { .. }
+        | ChatTuiAction::ErrorReported { .. }
+        | ChatTuiAction::WarningReported { .. }
+        | ChatTuiAction::SuccessReported { .. }
+        | ChatTuiAction::NoticeReported { .. } => transcript::reduce(state, action),
+        ChatTuiAction::ToolCallStarted { .. }
+        | ChatTuiAction::ToolCallDelta { .. }
+        | ChatTuiAction::ToolCallFinished { .. }
+        | ChatTuiAction::ToolCallFailed { .. }
+        | ChatTuiAction::ToolDisplayStarted { .. }
+        | ChatTuiAction::ToolDisplayFinished { .. }
+        | ChatTuiAction::CommandStarted { .. }
+        | ChatTuiAction::CommandOutput { .. }
+        | ChatTuiAction::CommandFinished { .. }
+        | ChatTuiAction::CommandDisplayStarted { .. }
+        | ChatTuiAction::CommandDisplayOutput { .. }
+        | ChatTuiAction::CommandDisplayFinished { .. } => display::reduce(state, action),
+        ChatTuiAction::ExitRequested
+        | ChatTuiAction::CancelRun
+        | ChatTuiAction::AgentStarted
+        | ChatTuiAction::AgentFinished
+        | ChatTuiAction::AgentFailed { .. }
+        | ChatTuiAction::AgentCancelled { .. }
+        | ChatTuiAction::InputNoticeReported { .. }
+        | ChatTuiAction::InputNoticeCleared
+        | ChatTuiAction::RuntimeSelectionChanged(_)
+        | ChatTuiAction::DisplayMetadataChanged(_)
+        | ChatTuiAction::WorktreeMetadataChanged(_)
+        | ChatTuiAction::ContextUsageUpdated(_)
+        | ChatTuiAction::ProviderUsageReported(_)
+        | ChatTuiAction::SpinnerTick => status::reduce(state, action),
     }
-}
-
-/// Keeps the prompt cursor visible within the current textarea viewport.
-fn ensure_prompt_cursor_visible(
-    prompt: &mut crate::session::PromptState,
-    metrics: PromptLayoutMetrics,
-) {
-    prompt.ensure_cursor_visible(metrics.content_width, metrics.viewport_height);
-}
-
-/// Inserts a user prompt unless the transcript already contains the prompt occurrence ID.
-fn upsert_user_prompt(state: &mut State, id: TranscriptItemId, text: String) {
-    if let Some(index) = find_content_index_by_id(state, &id) {
-        let TranscriptItemContent::UserPrompt(item) = &mut state.session.transcript[index].content
-        else {
-            return;
-        };
-        item.text = text;
-        return;
-    }
-
-    if transcript_contains_id(state, &id) {
-        return;
-    }
-
-    append_transcript_item(
-        state,
-        id,
-        TranscriptItemContent::UserPrompt(UserPromptItem::new(text)),
-    );
-}
-
-/// Appends the session opening banner as the first transcript item.
-fn append_opening_banner(state: &mut State, banner: OpeningBannerItem) {
-    append_transcript_item(
-        state,
-        TranscriptItemId::new(format!("opening-banner-{}", state.session.id.as_str())),
-        TranscriptItemContent::OpeningBanner(banner),
-    );
-}
-
-/// Appends a semantic transcript item with the next session timestamp.
-pub(crate) fn append_transcript_item(
-    state: &mut State,
-    id: TranscriptItemId,
-    content: TranscriptItemContent,
-) {
-    let timestamp = state.session.allocate_timestamp();
-    state
-        .session
-        .transcript
-        .push(TranscriptItem::new(id, timestamp, content));
-}
-
-/// Appends assistant text directly to the semantic transcript item.
-fn append_assistant_delta_directly(state: &mut State, id: &TranscriptItemId, text: &str) {
-    let Some(index) = find_content_index_by_id(state, id) else {
-        return;
-    };
-    let TranscriptItemContent::AssistantMessage(item) =
-        &mut state.session.transcript[index].content
-    else {
-        return;
-    };
-
-    item.text.push_str(text);
-}
-
-/// Appends text to reasoning content matching the supplied transcript item ID.
-fn append_reasoning_delta(state: &mut State, id: &TranscriptItemId, text: &str) {
-    let Some(index) = find_content_index_by_id(state, id) else {
-        return;
-    };
-    let TranscriptItemContent::Reasoning(item) = &mut state.session.transcript[index].content
-    else {
-        return;
-    };
-
-    item.text.push_str(text);
-}
-
-/// Appends incremental output preview text to a tool call by lifecycle ID.
-fn append_tool_delta(state: &mut State, tool_call_id: &str, text: &str) {
-    let Some(index) = find_tool_call_index(state, tool_call_id) else {
-        return;
-    };
-    let TranscriptItemContent::ToolCall(tool_call) = &mut state.session.transcript[index].content
-    else {
-        return;
-    };
-
-    let output = tool_call.output_preview.get_or_insert_with(String::new);
-    output.push_str(text);
-}
-
-/// Marks a tool call finished while preserving its start-time identity metadata.
-fn finish_tool_call(state: &mut State, tool_call_id: &str, _name: String, output: String) {
-    let Some(index) = find_tool_call_index(state, tool_call_id) else {
-        return;
-    };
-    let TranscriptItemContent::ToolCall(tool_call) = &mut state.session.transcript[index].content
-    else {
-        return;
-    };
-
-    tool_call.status = ToolStatus::Finished;
-    tool_call.output_preview = Some(output);
-}
-
-/// Marks a tool call failed and appends the error to its output preview.
-fn fail_tool_call(state: &mut State, tool_call_id: &str, error: String) {
-    let Some(index) = find_tool_call_index(state, tool_call_id) else {
-        return;
-    };
-    let TranscriptItemContent::ToolCall(tool_call) = &mut state.session.transcript[index].content
-    else {
-        return;
-    };
-
-    tool_call.status = ToolStatus::Failed;
-    let output = tool_call.output_preview.get_or_insert_with(String::new);
-    output.push_str(&error);
-}
-
-/// Appends command output to the matching command transcript item.
-fn append_command_output(state: &mut State, command_id: &str, text: &str) {
-    let Some(index) = find_command_index(state, command_id) else {
-        return;
-    };
-    let TranscriptItemContent::Command(command) = &mut state.session.transcript[index].content
-    else {
-        return;
-    };
-
-    command.output.push_str(text);
-}
-
-/// Marks a command complete and records its exit code.
-fn finish_command(state: &mut State, command_id: &str, exit_code: Option<i32>) {
-    let Some(index) = find_command_index(state, command_id) else {
-        return;
-    };
-    let TranscriptItemContent::Command(command) = &mut state.session.transcript[index].content
-    else {
-        return;
-    };
-
-    command.status = match exit_code {
-        Some(0) | None => CommandStatus::Finished,
-        Some(_) => CommandStatus::Failed,
-    };
-    command.exit_code = exit_code;
-}
-
-/// Appends a semantic error transcript item using a reducer-owned ID.
-fn append_error(state: &mut State, message: String, details: Option<String>) {
-    let id = generated_transcript_id(state, "error");
-    append_transcript_item(
-        state,
-        id,
-        TranscriptItemContent::Error(ErrorItem::new(message, details)),
-    );
-}
-
-/// Appends a semantic warning transcript item using a reducer-owned ID.
-fn append_warning(state: &mut State, message: String) {
-    let id = generated_transcript_id(state, "warning");
-    append_transcript_item(
-        state,
-        id,
-        TranscriptItemContent::Warning(WarningItem::new(message)),
-    );
-}
-
-/// Appends a semantic success transcript item using a reducer-owned ID.
-fn append_success(state: &mut State, message: String) {
-    let id = generated_transcript_id(state, "success");
-    append_transcript_item(
-        state,
-        id,
-        TranscriptItemContent::Success(SuccessItem::new(message)),
-    );
-}
-
-/// Appends a semantic notice transcript item using a reducer-owned ID.
-fn append_notice(state: &mut State, message: String) {
-    let id = generated_transcript_id(state, "notice");
-    append_transcript_item(
-        state,
-        id,
-        TranscriptItemContent::Notice(NoticeItem::new(message)),
-    );
-}
-
-/// Appends a semantic cancellation transcript item using a reducer-owned ID.
-fn append_cancellation(state: &mut State, reason: String) {
-    let id = generated_transcript_id(state, "cancellation");
-    append_transcript_item(
-        state,
-        id,
-        TranscriptItemContent::Cancellation(CancellationItem::new(reason)),
-    );
-}
-
-/// Appends a worked-summary transcript item using a reducer-owned ID.
-fn append_worked_summary(state: &mut State, duration: String, turn_tokens: Option<u64>) {
-    let id = generated_transcript_id(state, "worked-summary");
-    append_transcript_item(
-        state,
-        id,
-        TranscriptItemContent::WorkedSummary(WorkedSummaryItem::new(duration, turn_tokens)),
-    );
-}
-
-/// Generates deterministic reducer-boundary IDs for reducer-created transcript items.
-fn generated_transcript_id(state: &State, prefix: &str) -> TranscriptItemId {
-    TranscriptItemId::new(format!("{prefix}-{}", state.session.next_timestamp.value()))
-}
-
-/// Returns a non-empty preview for optional argument storage.
-fn optional_preview(value: String) -> Option<String> {
-    if value.is_empty() {
-        return None;
-    }
-
-    Some(value)
 }

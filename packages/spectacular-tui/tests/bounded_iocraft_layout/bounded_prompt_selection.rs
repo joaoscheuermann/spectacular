@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 
-fn multiline_prompt_renders_explicit_rows_on_canvas() {
+fn render_app_canvas_when_multiline_prompt_renders_explicit_rows_on_canvas() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("first\nsecond");
@@ -26,7 +26,7 @@ fn multiline_prompt_renders_explicit_rows_on_canvas() {
 
 #[test]
 
-fn short_transcript_starts_at_top_without_bottom_anchoring() {
+fn render_app_canvas_when_short_transcript_starts_at_top_without_bottom_anchoring() {
     let mut state = state();
 
     reduce(
@@ -59,7 +59,7 @@ fn short_transcript_starts_at_top_without_bottom_anchoring() {
 
 #[test]
 
-fn cursor_uses_solid_white_background_without_changing_other_spans() {
+fn render_app_canvas_when_cursor_uses_solid_white_background_without_changing_other_spans() {
     let state = state();
 
     let canvas = render_canvas(&state, 80, 8);
@@ -75,7 +75,7 @@ fn cursor_uses_solid_white_background_without_changing_other_spans() {
 
 #[test]
 
-fn prompt_selection_uses_concrete_selected_text_color() {
+fn render_app_canvas_when_prompt_selection_uses_concrete_selected_text_color() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("hello");
@@ -99,7 +99,7 @@ fn prompt_selection_uses_concrete_selected_text_color() {
 
 #[test]
 
-fn rendered_selection_prompt_marker_is_not_styled_but_text_is_selected() {
+fn render_app_canvas_when_rendered_selection_prompt_marker_is_not_styled_but_text_is_selected() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("draft");
@@ -158,7 +158,8 @@ fn rendered_selection_prompt_marker_is_not_styled_but_text_is_selected() {
 
 #[test]
 
-fn rendered_selection_transcript_virtual_spaces_receive_selection_background() {
+fn render_app_canvas_when_rendered_selection_transcript_virtual_spaces_receive_selection_background(
+) {
     let mut state = state();
 
     reduce(
@@ -216,7 +217,7 @@ fn rendered_selection_transcript_virtual_spaces_receive_selection_background() {
 
 #[test]
 
-fn rendered_selection_prompt_virtual_spaces_skip_marker_and_cursor() {
+fn render_app_canvas_when_rendered_selection_prompt_virtual_spaces_skip_marker_and_cursor() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("draft");
@@ -293,7 +294,7 @@ fn rendered_selection_prompt_virtual_spaces_skip_marker_and_cursor() {
 
 #[test]
 
-fn default_selection_background_uses_concrete_selected_text_color() {
+fn render_app_canvas_when_default_selection_background_uses_concrete_selected_text_color() {
     let mut state = state();
 
     reduce(
@@ -343,7 +344,7 @@ fn default_selection_background_uses_concrete_selected_text_color() {
 
 #[test]
 
-fn custom_selection_background_uses_rgb_complement_text_color() {
+fn render_app_canvas_when_custom_selection_background_uses_rgb_complement_text_color() {
     let mut state = state();
 
     reduce(
@@ -400,7 +401,7 @@ fn custom_selection_background_uses_rgb_complement_text_color() {
 
 #[tokio::test]
 
-async fn scroll_up_clamps_when_oldest_row_reaches_viewport_top() {
+async fn render_app_canvas_when_oldest_row_reaches_viewport_top_clamps_scroll_up() {
     let mut state = state();
 
     for index in 0..8 {

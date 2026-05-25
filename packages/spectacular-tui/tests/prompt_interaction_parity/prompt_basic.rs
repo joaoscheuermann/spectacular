@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 
-fn prompt_inserts_text_at_cursor() {
+fn prompt_state_when_prompt_inserts_text_at_cursor() {
     let mut prompt = PromptState::from_text("helo");
 
     prompt.move_left(false);
@@ -16,7 +16,7 @@ fn prompt_inserts_text_at_cursor() {
 
 #[test]
 
-fn prompt_replaces_selected_text_on_insert() {
+fn prompt_state_when_prompt_replaces_selected_text_on_insert() {
     let mut prompt = PromptState::from_text("hello");
 
     prompt.move_left(false);
@@ -34,7 +34,7 @@ fn prompt_replaces_selected_text_on_insert() {
 
 #[test]
 
-fn prompt_backspace_and_delete_match_original() {
+fn prompt_state_when_prompt_backspace_and_delete_match_original() {
     let mut prompt = PromptState::from_text("a\u{1f9d1}\u{200d}\u{1f4bb}b");
 
     prompt.move_left(false);
@@ -52,7 +52,7 @@ fn prompt_backspace_and_delete_match_original() {
 
 #[test]
 
-fn prompt_word_movement_matches_original() {
+fn prompt_state_when_prompt_word_movement_matches_original() {
     let mut prompt = PromptState::from_text("alpha  beta.gamma");
 
     prompt.move_word_left(false);
@@ -70,7 +70,7 @@ fn prompt_word_movement_matches_original() {
 
 #[test]
 
-fn prompt_word_deletion_matches_original() {
+fn prompt_state_when_prompt_word_deletion_matches_original() {
     let mut prompt = PromptState::from_text("alpha  beta.gamma");
 
     prompt.delete_previous_word();
@@ -90,7 +90,7 @@ fn prompt_word_deletion_matches_original() {
 
 #[test]
 
-fn prompt_ctrl_a_selects_all() {
+fn prompt_state_when_prompt_ctrl_a_selects_all() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("select me");
@@ -102,7 +102,7 @@ fn prompt_ctrl_a_selects_all() {
 
 #[test]
 
-fn prompt_kill_and_yank_match_original() {
+fn prompt_state_when_prompt_kill_and_yank_match_original() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("first\nsecond third");
@@ -136,7 +136,7 @@ fn prompt_kill_and_yank_match_original() {
 
 #[test]
 
-fn prompt_kill_selection_updates_yank_buffer() {
+fn prompt_state_when_prompt_kill_selection_updates_yank_buffer() {
     let mut prompt = PromptState::from_text("alpha beta");
 
     prompt.move_to_start(false);
@@ -152,7 +152,7 @@ fn prompt_kill_selection_updates_yank_buffer() {
 
 #[test]
 
-fn prompt_escape_clears_contexts_like_original() {
+fn prompt_state_when_prompt_escape_clears_contexts_like_original() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("hello");
@@ -172,7 +172,7 @@ fn prompt_escape_clears_contexts_like_original() {
 
 #[test]
 
-fn prompt_escape_idle_clear_then_exit_matches_original() {
+fn prompt_state_when_prompt_escape_idle_clear_then_exit_matches_original() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("draft");
@@ -189,7 +189,7 @@ fn prompt_escape_idle_clear_then_exit_matches_original() {
 
 #[test]
 
-fn prompt_enter_variants_insert_newline_and_ctrl_enter_submits() {
+fn prompt_state_when_prompt_enter_variants_insert_newline_and_ctrl_enter_submits() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("one");
@@ -213,7 +213,7 @@ fn prompt_enter_variants_insert_newline_and_ctrl_enter_submits() {
 
 #[test]
 
-fn prompt_paste_burst_preserves_multiline_text() {
+fn prompt_state_when_prompt_paste_burst_preserves_multiline_text() {
     let mut prompt = PromptState::empty();
 
     prompt.insert_paste("one\r\ntwo\rthree");
@@ -225,14 +225,14 @@ fn prompt_paste_burst_preserves_multiline_text() {
 
 #[test]
 
-fn prompt_cursor_renders_grapheme_cluster_cell() {
+fn prompt_state_when_prompt_cursor_renders_grapheme_cluster_cell() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("e\u{301}x");
 
     state.session.prompt.move_to_start(false);
 
-    let lines = spectacular_tui::prompt_render_lines(&state);
+    let lines = prompt_render_lines(&state);
 
     let cursor_text = lines[0]
         .spans
@@ -245,7 +245,7 @@ fn prompt_cursor_renders_grapheme_cluster_cell() {
 
 #[test]
 
-fn prompt_selection_renders_styled_ranges() {
+fn prompt_state_when_prompt_selection_renders_styled_ranges() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("hello");
@@ -256,7 +256,7 @@ fn prompt_selection_renders_styled_ranges() {
 
     state.session.prompt.move_left(true);
 
-    let lines = spectacular_tui::prompt_render_lines(&state);
+    let lines = prompt_render_lines(&state);
 
     assert_eq!(lines[0].plain_text(), "> hello");
 

@@ -1,6 +1,5 @@
 use crate::scroll::TranscriptScrollState;
 use iocraft::prelude::*;
-use iocraft::taffy;
 
 /// Scrollable transcript viewport that preserves Spectacular's bottom-relative scroll behavior.
 #[component]
@@ -175,56 +174,32 @@ fn scrollbar_thumb_top(
         .min(scrollable_rows)
 }
 
-/// Renders the transcript scrollbar in one fixed-width component.
+/// Renders the transcript scrollbar as one fixed-width IOCraft layout column.
 #[derive(Default, Props)]
 struct TranscriptScrollbarProps {
     marks: Vec<ScrollbarMark>,
 }
 
-/// Fixed-width transcript scrollbar drawn directly into its layout box.
-#[derive(Default)]
-struct TranscriptScrollbar {
-    marks: Vec<ScrollbarMark>,
-}
+#[component]
+fn TranscriptScrollbar(props: &TranscriptScrollbarProps) -> impl Into<AnyElement<'static>> {
+    let marks = props.marks.clone();
 
-impl Component for TranscriptScrollbar {
-    type Props<'a> = TranscriptScrollbarProps;
-
-    fn new(_props: &Self::Props<'_>) -> Self {
-        Self::default()
-    }
-
-    fn update(
-        &mut self,
-        props: &mut Self::Props<'_>,
-        _hooks: Hooks,
-        updater: &mut ComponentUpdater,
+    element!(View(
+        flex_direction: FlexDirection::Column,
+        width: 1,
+        min_width: 1,
+        max_width: 1,
+        height: 100pct,
+        flex_shrink: 0.0,
+        overflow: Overflow::Hidden,
     ) {
-        self.marks = std::mem::take(&mut props.marks);
-        updater.set_layout_style(taffy::style::Style {
-            size: taffy::geometry::Size {
-                width: taffy::style::Dimension::Length(1.0),
-                height: taffy::style::Dimension::Percent(1.0),
-            },
-            min_size: taffy::geometry::Size {
-                width: taffy::style::Dimension::Length(1.0),
-                height: taffy::style::Dimension::Auto,
-            },
-            max_size: taffy::geometry::Size {
-                width: taffy::style::Dimension::Length(1.0),
-                height: taffy::style::Dimension::Auto,
-            },
-            flex_shrink: 0.0,
-            ..Default::default()
-        });
-    }
-
-    fn draw(&mut self, drawer: &mut ComponentDrawer<'_>) {
-        let mut canvas = drawer.canvas();
-        for (row, mark) in self.marks.iter().enumerate() {
-            canvas.set_text(0, row as isize, mark.glyph(), mark.style());
-        }
-    }
+        #(marks.into_iter().enumerate().map(|(row, mark)| element!(Text(
+            key: row,
+            content: mark.glyph().to_string(),
+            color: mark.color(),
+            wrap: TextWrap::NoWrap,
+        ))))
+    })
 }
 
 /// One rendered scrollbar row.
@@ -243,9 +218,9 @@ impl ScrollbarMark {
         "│"
     }
 
-    /// Returns the color style used for this scrollbar row.
-    fn style(self) -> CanvasTextStyle {
-        let color = if self.thumb {
+    /// Returns the color used for this scrollbar row.
+    fn color(self) -> Color {
+        if self.thumb {
             Color::Rgb {
                 r: 71,
                 g: 85,
@@ -257,11 +232,7 @@ impl ScrollbarMark {
                 g: 41,
                 b: 59,
             }
-        };
-
-        let mut style = CanvasTextStyle::default();
-        style.color = Some(color);
-        style
+        }
     }
 }
 

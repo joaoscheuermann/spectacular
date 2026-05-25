@@ -18,14 +18,14 @@ pub use assistant::{Assistant, AssistantProps};
 pub use banner::{Banner, BannerProps};
 pub use cancellation::{Cancellation, CancellationProps};
 pub use command::{Command, CommandProps};
-pub use content::{plain_lines, TRANSCRIPT_SEPARATOR};
+pub(crate) use content::plain_lines;
+pub use content::TRANSCRIPT_SEPARATOR;
 pub use error::{Error, ErrorProps};
 pub use notice::{Notice, NoticeProps};
+pub(crate) use projection::transcript_render_lines;
 pub use projection::{
-    transcript_item_layout_rows, transcript_item_lines, transcript_item_render_lines,
-    transcript_layout_item_range, transcript_layout_row_starts, transcript_layout_total_rows,
-    transcript_lines, transcript_render_lines, transcript_total_render_rows,
-    wrapped_layout_text_rows,
+    transcript_item_layout_rows, transcript_item_lines, transcript_layout_item_range,
+    transcript_layout_row_starts, transcript_layout_total_rows, wrapped_layout_text_rows,
 };
 pub use reasoning::{Reasoning, ReasoningProps};
 pub use scroll::{Scroll, ScrollProps};
@@ -46,8 +46,8 @@ use std::sync::{Arc, Mutex};
 /// Renders the transcript as scrollable IOCraft item components.
 #[component]
 pub fn Transcript(mut hooks: Hooks, props: &TranscriptProps) -> impl Into<AnyElement<'static>> {
-    let state = props.state.clone().expect("Transcript requires state");
-    let capacity = props.capacity.unwrap_or_default();
+    let state = props.state.as_ref();
+    let capacity = props.capacity;
     let (terminal_width, _) = hooks.use_terminal_size();
     let width = props.width.unwrap_or(terminal_width);
     let content_width = transcript_content_width(width);
@@ -88,10 +88,10 @@ pub fn Transcript(mut hooks: Hooks, props: &TranscriptProps) -> impl Into<AnyEle
 }
 
 /// Props for the transcript component.
-#[derive(Default, Props)]
+#[derive(Props)]
 pub struct TranscriptProps {
-    pub state: Option<State>,
-    pub capacity: Option<u16>,
+    pub state: Arc<State>,
+    pub capacity: u16,
     pub width: Option<u16>,
 }
 
@@ -146,46 +146,130 @@ fn transcript_item_element(
     item: &TranscriptItem,
 ) -> AnyElement<'static> {
     let key = item.id.as_str().to_owned();
-    let item = item.clone();
-    let context = context.clone();
+    let source_id = item.id.as_str().to_owned();
 
     match &item.content {
-        TranscriptItemContent::OpeningBanner(_) => {
-            element!(Banner(key: key, item: item, context: context)).into_any()
+        TranscriptItemContent::OpeningBanner(banner) => Element::<Banner> {
+            key: ElementKey::new(key),
+            props: BannerProps {
+                source_id,
+                version: banner.version.clone(),
+                model: banner.model.clone(),
+                reasoning: banner.reasoning.clone(),
+                directory: banner.directory.clone(),
+                session_id: banner.session_id.clone(),
+                context: context.clone(),
+            },
         }
-        TranscriptItemContent::UserPrompt(_) => {
-            element!(User(key: key, item: item, context: context)).into_any()
+        .into_any(),
+        TranscriptItemContent::UserPrompt(prompt) => Element::<User> {
+            key: ElementKey::new(key),
+            props: UserProps {
+                source_id,
+                text: prompt.text.clone(),
+                context: context.clone(),
+            },
         }
-        TranscriptItemContent::AssistantMessage(_) => {
-            element!(Assistant(key: key, item: item, context: context)).into_any()
+        .into_any(),
+        TranscriptItemContent::AssistantMessage(message) => Element::<Assistant> {
+            key: ElementKey::new(key),
+            props: AssistantProps {
+                source_id,
+                text: message.text.clone(),
+                context: context.clone(),
+            },
         }
-        TranscriptItemContent::Reasoning(_) => {
-            element!(Reasoning(key: key, item: item, context: context)).into_any()
+        .into_any(),
+        TranscriptItemContent::Reasoning(reasoning) => Element::<Reasoning> {
+            key: ElementKey::new(key),
+            props: ReasoningProps {
+                source_id,
+                text: reasoning.text.clone(),
+                context: context.clone(),
+            },
         }
-        TranscriptItemContent::ToolCall(_) => {
-            element!(Tool(key: key, item: item, context: context)).into_any()
+        .into_any(),
+        TranscriptItemContent::ToolCall(tool) => Element::<Tool> {
+            key: ElementKey::new(key),
+            props: ToolProps {
+                source_id,
+                name: tool.name.clone(),
+                arguments_preview: tool.arguments_preview.clone(),
+                output_preview: tool.output_preview.clone(),
+                display: tool.display.clone(),
+                context: context.clone(),
+            },
         }
-        TranscriptItemContent::Command(_) => {
-            element!(Command(key: key, item: item, context: context)).into_any()
+        .into_any(),
+        TranscriptItemContent::Command(command) => Element::<Command> {
+            key: ElementKey::new(key),
+            props: CommandProps {
+                source_id,
+                command: command.command.clone(),
+                status: command.status,
+                output: command.output.clone(),
+                exit_code: command.exit_code,
+                display: command.display.clone(),
+                context: context.clone(),
+            },
         }
-        TranscriptItemContent::Error(_) => {
-            element!(Error(key: key, item: item, context: context)).into_any()
+        .into_any(),
+        TranscriptItemContent::Error(error) => Element::<Error> {
+            key: ElementKey::new(key),
+            props: ErrorProps {
+                source_id,
+                message: error.message.clone(),
+                details: error.details.clone(),
+                context: context.clone(),
+            },
         }
-        TranscriptItemContent::Warning(_) => {
-            element!(Warning(key: key, item: item, context: context)).into_any()
+        .into_any(),
+        TranscriptItemContent::Warning(warning) => Element::<Warning> {
+            key: ElementKey::new(key),
+            props: WarningProps {
+                source_id,
+                message: warning.message.clone(),
+                context: context.clone(),
+            },
         }
-        TranscriptItemContent::Success(_) => {
-            element!(Success(key: key, item: item, context: context)).into_any()
+        .into_any(),
+        TranscriptItemContent::Success(success) => Element::<Success> {
+            key: ElementKey::new(key),
+            props: SuccessProps {
+                source_id,
+                message: success.message.clone(),
+                context: context.clone(),
+            },
         }
-        TranscriptItemContent::Notice(_) => {
-            element!(Notice(key: key, item: item, context: context)).into_any()
+        .into_any(),
+        TranscriptItemContent::Notice(notice) => Element::<Notice> {
+            key: ElementKey::new(key),
+            props: NoticeProps {
+                source_id,
+                message: notice.message.clone(),
+                context: context.clone(),
+            },
         }
-        TranscriptItemContent::Cancellation(_) => {
-            element!(Cancellation(key: key, item: item, context: context)).into_any()
+        .into_any(),
+        TranscriptItemContent::Cancellation(cancellation) => Element::<Cancellation> {
+            key: ElementKey::new(key),
+            props: CancellationProps {
+                source_id,
+                reason: cancellation.reason.clone(),
+                context: context.clone(),
+            },
         }
-        TranscriptItemContent::WorkedSummary(_) => {
-            element!(Summary(key: key, item: item, context: context)).into_any()
+        .into_any(),
+        TranscriptItemContent::WorkedSummary(summary) => Element::<Summary> {
+            key: ElementKey::new(key),
+            props: SummaryProps {
+                source_id,
+                duration: summary.duration.clone(),
+                turn_tokens: summary.turn_tokens,
+                context: context.clone(),
+            },
         }
+        .into_any(),
     }
 }
 

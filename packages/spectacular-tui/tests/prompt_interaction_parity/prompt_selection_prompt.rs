@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 
-fn selection_prompt_navigation_matches_original() {
+fn selection_prompt_when_selection_prompt_navigation_matches_original() {
     let mut state = state();
 
     state.selection = Some(SelectionPromptState::new(
@@ -26,7 +26,7 @@ fn selection_prompt_navigation_matches_original() {
 
 #[test]
 
-fn selection_prompt_custom_input_and_comment_mode_match_original() {
+fn selection_prompt_when_selection_prompt_custom_input_and_comment_mode_match_original() {
     let mut state = state();
 
     state.selection = Some(
@@ -60,7 +60,7 @@ fn selection_prompt_custom_input_and_comment_mode_match_original() {
 
 #[test]
 
-fn selection_prompt_editable_cursor_keys_match_original() {
+fn selection_prompt_when_selection_prompt_editable_cursor_keys_match_original() {
     let mut state = state();
 
     state.selection = Some(
@@ -104,7 +104,7 @@ fn selection_prompt_editable_cursor_keys_match_original() {
 
 #[test]
 
-fn selection_prompt_submit_and_cancel_match_original() {
+fn selection_prompt_when_selection_prompt_submit_and_cancel_match_original() {
     let mut active_state = state();
 
     active_state.selection = Some(

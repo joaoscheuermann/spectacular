@@ -6,7 +6,7 @@ use std::time::Duration;
 
 /// Verifies the fake stream drives one assistant message through incremental deltas.
 #[tokio::test]
-async fn fake_stream_appends_assistant_deltas_to_one_item() {
+async fn reduce_when_fake_stream_appends_assistant_deltas_to_one_item() {
     let mut harness = FakeStreamingTimeline::new(fake_streaming_plan());
 
     harness.run_until_finished().await;
@@ -20,7 +20,7 @@ async fn fake_stream_appends_assistant_deltas_to_one_item() {
 
 /// Verifies reasoning lifecycle events accumulate onto one active reasoning item.
 #[tokio::test]
-async fn fake_reasoning_stream_appends_deltas_to_one_item() {
+async fn reduce_when_fake_reasoning_stream_appends_deltas_to_one_item() {
     let mut harness = FakeStreamingTimeline::new(fake_streaming_plan());
 
     harness.run_until_finished().await;
@@ -34,7 +34,7 @@ async fn fake_reasoning_stream_appends_deltas_to_one_item() {
 
 /// Verifies tool lifecycle updates one transcript item from running to finished.
 #[tokio::test]
-async fn fake_tool_lifecycle_finishes_one_tool_item() {
+async fn reduce_when_fake_tool_lifecycle_finishes_one_tool_item() {
     let mut harness = FakeStreamingTimeline::new(fake_streaming_plan());
 
     harness.run_until_finished().await;
@@ -50,7 +50,7 @@ async fn fake_tool_lifecycle_finishes_one_tool_item() {
 
 /// Verifies command lifecycle updates one semantic command item without terminal output rows.
 #[tokio::test]
-async fn fake_command_lifecycle_finishes_one_command_item() {
+async fn reduce_when_fake_command_lifecycle_finishes_one_command_item() {
     let mut harness = FakeStreamingTimeline::new(fake_streaming_plan());
 
     harness.run_until_finished().await;
@@ -66,7 +66,7 @@ async fn fake_command_lifecycle_finishes_one_command_item() {
 
 /// Verifies AgentFinished returns status to idle after fake streaming completes.
 #[tokio::test]
-async fn agent_finished_returns_status_to_idle() {
+async fn reduce_when_agent_finished_returns_status_to_idle() {
     let mut harness = FakeStreamingTimeline::new(fake_streaming_plan());
 
     harness.run_until_finished().await;
@@ -76,7 +76,7 @@ async fn agent_finished_returns_status_to_idle() {
 
 /// Verifies no additional spinner ticks are emitted after a terminal fake event.
 #[tokio::test]
-async fn terminal_fake_events_stop_spinner_ticks() {
+async fn reduce_when_terminal_fake_events_stop_spinner_ticks() {
     let mut harness = FakeStreamingTimeline::new(fake_streaming_plan());
 
     harness.run_until_finished().await;
@@ -88,7 +88,7 @@ async fn terminal_fake_events_stop_spinner_ticks() {
 
 /// Verifies cancellation and failure scenarios deterministically leave running state.
 #[tokio::test]
-async fn terminal_fake_events_leave_streaming_state() {
+async fn reduce_when_terminal_fake_events_leave_streaming_state() {
     let mut cancelled = FakeStreamingTimeline::new(spectacular_tui::fake_cancellation_plan());
     cancelled.run_until_finished().await;
 
@@ -106,7 +106,7 @@ async fn terminal_fake_events_leave_streaming_state() {
 
 /// Verifies prompt changes applied during streaming survive later fake runtime actions.
 #[tokio::test]
-async fn prompt_changes_during_fake_streaming_are_retained() {
+async fn reduce_when_prompt_changes_during_fake_streaming_are_retained() {
     let mut harness = FakeStreamingTimeline::new(fake_streaming_plan());
 
     harness.run_for(Duration::from_millis(25)).await;
@@ -121,7 +121,7 @@ async fn prompt_changes_during_fake_streaming_are_retained() {
 
 /// Verifies spinner ticks are independent of agent deltas at the intended cadence.
 #[tokio::test]
-async fn spinner_ticks_independently_at_documented_cadence() {
+async fn reduce_when_spinner_ticks_independently_at_documented_cadence() {
     let mut harness = FakeStreamingTimeline::new(fake_streaming_plan());
 
     let first = harness.step().await;
@@ -134,7 +134,7 @@ async fn spinner_ticks_independently_at_documented_cadence() {
 
 /// Verifies the Tokio/IOCraft compatibility finding is exposed for Effort 09.
 #[test]
-fn tokio_iocraft_compatibility_finding_is_documented() {
+fn reduce_when_tokio_iocraft_compatibility_finding_is_documented() {
     let finding = spectacular_tui::fake_streaming_runtime_finding();
 
     assert!(finding.contains("Tokio"));
@@ -144,7 +144,7 @@ fn tokio_iocraft_compatibility_finding_is_documented() {
 
 /// Verifies normal fake streaming updates render from state without direct terminal printing.
 #[tokio::test]
-async fn fake_streaming_requires_no_direct_terminal_printing() {
+async fn reduce_when_fake_streaming_requires_no_direct_terminal_printing() {
     let mut harness = FakeStreamingTimeline::new(fake_streaming_plan());
 
     harness.run_until_finished().await;

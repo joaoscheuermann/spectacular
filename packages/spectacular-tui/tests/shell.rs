@@ -28,7 +28,7 @@ fn state() -> State {
 
 /// Verifies the shell stays movable across the async runtime controller task.
 #[test]
-fn shell_is_send_for_controller_runtime_task() {
+fn shell_when_shell_is_send_for_controller_runtime_task() {
     fn assert_send<T: Send>() {}
 
     assert_send::<spectacular_tui::Shell>();
@@ -54,7 +54,7 @@ fn control_enter_paste_events(value: &str) -> Vec<TerminalEvent> {
 
 /// Verifies controller snapshots do not clobber local prompt input feedback.
 #[test]
-fn merge_controller_state_update_same_session_preserves_local_input_state() {
+fn shell_when_merge_controller_state_update_same_session_preserves_local_input_state() {
     let mut local = state();
     local.session.prompt = PromptState::from_text("local prompt");
     local.input_notice = Some("Use Ctrl+V to paste".to_owned());
@@ -74,7 +74,7 @@ fn merge_controller_state_update_same_session_preserves_local_input_state() {
 
 /// Verifies the IOCraft shell emits submitted prompts to the runtime controller.
 #[tokio::test]
-async fn shell_ctrl_enter_submit_prompt_emits_runtime_intent() {
+async fn shell_when_shell_ctrl_enter_submit_prompt_emits_runtime_intent() {
     let mut state = state();
     state.session.prompt = PromptState::from_text("hello runtime");
 
@@ -92,7 +92,7 @@ async fn shell_ctrl_enter_submit_prompt_emits_runtime_intent() {
 
 /// Verifies bracketed paste updates local prompt text without emitting a submit intent.
 #[tokio::test]
-async fn shell_terminal_paste_inserts_multiline_prompt_without_submit_intent() {
+async fn shell_when_shell_terminal_paste_inserts_multiline_prompt_without_submit_intent() {
     let (mut shell, mut intents) = spectacular_tui::Shell::new(state());
     let pasted = "mod app;\r\nmod footer;";
 
@@ -107,7 +107,8 @@ async fn shell_terminal_paste_inserts_multiline_prompt_without_submit_intent() {
 
 /// Verifies unbracketed multiline paste with Ctrl+Enter line breaks does not autosubmit.
 #[tokio::test]
-async fn shell_control_enter_key_stream_paste_preserves_user_lines_without_submit_intent() {
+async fn shell_when_shell_control_enter_key_stream_paste_preserves_user_lines_without_submit_intent(
+) {
     let (mut shell, mut intents) = spectacular_tui::Shell::new(state());
     let pasted =
         "mod app;\nmod footer;\nmod input_notice;\nmod prompt;\nmod transcript;\nmod working;";
@@ -126,7 +127,7 @@ async fn shell_control_enter_key_stream_paste_preserves_user_lines_without_submi
 
 /// Verifies a final pasted newline is retained as text instead of submitting the prompt.
 #[tokio::test]
-async fn shell_trailing_control_enter_paste_newline_does_not_submit() {
+async fn shell_when_shell_trailing_control_enter_paste_newline_does_not_submit() {
     let (mut shell, mut intents) = spectacular_tui::Shell::new(state());
     let pasted = "mod app;\n";
 
@@ -144,7 +145,7 @@ async fn shell_trailing_control_enter_paste_newline_does_not_submit() {
 
 /// Verifies controller actions reduce into shell state for rendered transcript data.
 #[tokio::test]
-async fn shell_reduces_controller_actions_into_transcript() {
+async fn shell_when_shell_reduces_controller_actions_into_transcript() {
     let (mut shell, _intents) = spectacular_tui::Shell::new(state());
 
     shell.apply_action(ChatTuiAction::SubmitPrompt {
@@ -171,7 +172,7 @@ async fn shell_reduces_controller_actions_into_transcript() {
 
 /// Verifies shell cancellation emits runtime cancellation and keeps reducer semantics.
 #[tokio::test]
-async fn shell_cancel_run_emits_cancel_intent() {
+async fn shell_when_shell_cancel_run_emits_cancel_intent() {
     let mut state = state();
     reduce(&mut state, ChatTuiAction::AgentStarted);
 
@@ -187,7 +188,7 @@ async fn shell_cancel_run_emits_cancel_intent() {
 
 /// Verifies Ctrl+C no longer emits runtime cancellation while a run is active.
 #[tokio::test]
-async fn shell_ctrl_c_while_running_does_not_cancel() {
+async fn shell_when_shell_ctrl_c_while_running_does_not_cancel() {
     let mut state = state();
     reduce(&mut state, ChatTuiAction::AgentStarted);
 
@@ -206,7 +207,7 @@ async fn shell_ctrl_c_while_running_does_not_cancel() {
 
 /// Verifies selection prompt answers are emitted to the runtime controller.
 #[tokio::test]
-async fn shell_selection_submit_emits_intent() {
+async fn shell_when_shell_selection_submit_emits_intent() {
     let mut state = state();
     state.selection = Some(
         SelectionPromptState::new("Pick one", "", vec!["alpha".to_owned()]).with_inputs(true, true),
@@ -232,7 +233,7 @@ async fn shell_selection_submit_emits_intent() {
 
 /// Verifies selection prompt paste-like Ctrl+Enter becomes editable space instead of submit.
 #[tokio::test]
-async fn shell_selection_prompt_control_enter_paste_inserts_space_without_submit() {
+async fn shell_when_shell_selection_prompt_control_enter_paste_inserts_space_without_submit() {
     let mut state = state();
     state.selection = Some(
         SelectionPromptState::new("Pick one", "", vec!["alpha".to_owned()]).with_inputs(true, true),
@@ -257,7 +258,7 @@ async fn shell_selection_prompt_control_enter_paste_inserts_space_without_submit
 
 /// Verifies selection prompt cancellation is emitted to the runtime controller.
 #[tokio::test]
-async fn shell_selection_cancel_emits_intent() {
+async fn shell_when_shell_selection_cancel_emits_intent() {
     let mut state = state();
     state.selection = Some(SelectionPromptState::new(
         "Pick one",

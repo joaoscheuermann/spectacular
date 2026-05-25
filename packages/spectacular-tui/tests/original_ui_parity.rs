@@ -50,7 +50,8 @@ fn key(code: KeyCode, modifiers: KeyModifiers) -> TerminalEvent {
 }
 
 #[test]
-fn opening_banner_empty_transcript_prompt_and_footer_match_original_shape() {
+fn render_state_to_string_when_opening_banner_empty_transcript_prompt_and_footer_match_original_shape(
+) {
     let usage = ContextTokenUsage::new(42_000, Some(200_000));
     let mut state = State::new(
         SessionId::new("session-123"),
@@ -90,7 +91,7 @@ fn opening_banner_empty_transcript_prompt_and_footer_match_original_shape() {
 }
 
 #[test]
-fn transcript_semantic_items_render_without_prototype_labels() {
+fn render_state_to_string_when_transcript_semantic_items_render_without_prototype_labels() {
     let mut state = state();
     state.session.transcript = vec![
         item(
@@ -183,7 +184,7 @@ fn transcript_semantic_items_render_without_prototype_labels() {
 }
 
 #[test]
-fn prompt_multiline_and_slash_suggestions_match_original_shape() {
+fn render_state_to_string_when_prompt_multiline_and_slash_suggestions_match_original_shape() {
     let mut state = state();
     state.commands = vec![
         CommandDescriptor::with_usage("config", "Manage configuration", "/config list"),
@@ -205,7 +206,7 @@ fn prompt_multiline_and_slash_suggestions_match_original_shape() {
 }
 
 #[test]
-fn working_spinner_and_completed_summary_match_original_text() {
+fn render_state_to_string_when_working_spinner_and_completed_summary_match_original_text() {
     let mut state = state();
     reduce(&mut state, ChatTuiAction::AgentStarted);
 
@@ -228,7 +229,7 @@ fn working_spinner_and_completed_summary_match_original_text() {
 }
 
 #[test]
-fn input_notice_renders_near_prompt_without_transcript_item() {
+fn render_state_to_string_when_input_notice_renders_near_prompt_without_transcript_item() {
     let mut state = state();
     reduce(
         &mut state,
@@ -244,7 +245,7 @@ fn input_notice_renders_near_prompt_without_transcript_item() {
 }
 
 #[test]
-fn idle_escape_clears_non_empty_prompt_before_requesting_exit() {
+fn render_state_to_string_when_idle_escape_clears_non_empty_prompt_before_requesting_exit() {
     let mut state = state();
     state.session.prompt = PromptState::from_text("draft");
 

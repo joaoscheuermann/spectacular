@@ -3,7 +3,8 @@ use super::*;
 /// Verifies footer copy feedback is centered in the gap between metadata and usage.
 #[test]
 
-fn footer_render_line_with_width_centers_copy_feedback_between_left_and_right() {
+fn footer_projection_when_footer_render_line_with_width_centers_copy_feedback_between_left_and_right(
+) {
     let state = state_with_copied_selection_feedback(100);
 
     let line = footer_render_line_with_width(&state, 100);
@@ -40,7 +41,7 @@ fn footer_render_line_with_width_centers_copy_feedback_between_left_and_right() 
 
 #[test]
 
-fn footer_render_line_with_width_hides_copy_feedback_when_gap_is_too_narrow() {
+fn footer_projection_when_gap_is_too_narrow_hides_copy_feedback() {
     let state = state_with_copied_selection_feedback(100);
 
     let left = footer_left_render_line(&state).plain_text();
@@ -68,7 +69,7 @@ fn footer_render_line_with_width_hides_copy_feedback_when_gap_is_too_narrow() {
 
 #[test]
 
-fn style_line_for_footer_with_center_feedback_preserves_selected_columns() {
+fn footer_projection_when_style_line_for_footer_with_center_feedback_preserves_selected_columns() {
     let mut state = state_with_copied_selection_feedback(100);
 
     let footer_row = SelectableProjection::for_state(&state)

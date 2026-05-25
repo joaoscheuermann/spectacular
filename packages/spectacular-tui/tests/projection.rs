@@ -1,3 +1,7 @@
+use spectacular_tui::components::{
+    transcript_item_layout_rows, transcript_item_lines, transcript_layout_item_range,
+    transcript_layout_row_starts, transcript_layout_total_rows, wrapped_layout_text_rows,
+};
 use spectacular_tui::{
     footer_left_render_line, footer_render_line, footer_render_line_with_width,
     footer_right_render_line, footer_text_with_width, reduce, selected_text, ChatTuiAction,

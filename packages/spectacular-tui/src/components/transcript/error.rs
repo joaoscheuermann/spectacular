@@ -1,38 +1,23 @@
-use super::content::{
-    selectable_line, selectable_text_wrap, styled_visible_lines, visible_text_row_count,
-};
+use super::content::{styled_visible_lines, transcript_item_frame, TranscriptRowWrap};
 use super::TranscriptRenderContext;
-use crate::render::{iocraft_content_with_selection_colors, RenderLine, RenderStyle};
-use crate::transcript::{TranscriptItem, TranscriptItemContent};
+use crate::render::{RenderLine, RenderStyle};
 use iocraft::prelude::*;
 
 /// Renders an error transcript item.
 #[component]
 pub fn Error(props: &ErrorProps) -> impl Into<AnyElement<'static>> {
-    let item = props.item.clone().expect("Error requires item");
-    let context = props.context.as_ref();
-    let selection_colors = context
-        .map(|context| context.selection_colors)
-        .unwrap_or_default();
-    let item_id = item.id.as_str().to_owned();
-    let TranscriptItemContent::Error(error) = item.content else {
-        panic!("Error requires error content");
-    };
-    let elements = error_render_lines(&error.message, error.details.as_deref())
-        .into_iter()
-        .enumerate()
-        .map(|(index, line)| {
-            let line = selectable_line(context, &item_id, index, line);
-            let wrap = selectable_text_wrap(context, &line);
-            let contents = iocraft_content_with_selection_colors(&line, selection_colors);
-            element!(MixedText(wrap: wrap, contents))
-        });
+    let rows = error_render_lines(&props.message, props.details.as_deref());
 
-    element!(View(flex_direction: FlexDirection::Column, margin_bottom: 1) { #(elements) })
+    transcript_item_frame(
+        props.source_id.clone(),
+        rows,
+        props.context.clone(),
+        TranscriptRowWrap::Auto,
+    )
 }
 
 /// Formats an error transcript item as semantic rows.
-pub fn error_render_lines(message: &str, details: Option<&str>) -> Vec<RenderLine> {
+pub(super) fn error_render_lines(message: &str, details: Option<&str>) -> Vec<RenderLine> {
     let mut lines = vec![RenderLine::styled(
         format!("error: {message}"),
         RenderStyle::Error,
@@ -43,14 +28,11 @@ pub fn error_render_lines(message: &str, details: Option<&str>) -> Vec<RenderLin
     lines
 }
 
-/// Counts rows for an error item without allocating detail rows.
-pub fn error_row_count(details: Option<&str>) -> usize {
-    1 + details.map(visible_text_row_count).unwrap_or(0)
-}
-
 /// Props for the error component.
-#[derive(Default, Props)]
+#[derive(Props)]
 pub struct ErrorProps {
-    pub item: Option<TranscriptItem>,
-    pub context: Option<TranscriptRenderContext>,
+    pub source_id: String,
+    pub message: String,
+    pub details: Option<String>,
+    pub context: TranscriptRenderContext,
 }

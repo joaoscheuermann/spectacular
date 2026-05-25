@@ -3,12 +3,13 @@ use crate::selection::{style_line_for_source, SelectableSource};
 use crate::session::SelectionPromptState;
 use crate::state::State;
 use iocraft::prelude::*;
+use std::sync::Arc;
 
 /// Renders an active command-owned option selection prompt.
 #[component]
 pub fn SelectionPrompt(props: &SelectionPromptProps) -> impl Into<AnyElement<'static>> {
-    let state = props.state.clone().expect("SelectionPrompt requires state");
-    let elements = selection_prompt_render_lines(&state)
+    let state = props.state.as_ref();
+    let elements = selection_prompt_rows(&state)
         .into_iter()
         .enumerate()
         .map(|(index, line)| {
@@ -25,7 +26,22 @@ pub fn SelectionPrompt(props: &SelectionPromptProps) -> impl Into<AnyElement<'st
 }
 
 /// Formats the active selection prompt as semantic render rows.
-pub fn selection_prompt_render_lines(state: &State) -> Vec<RenderLine> {
+///
+/// This is a flattened compatibility adapter; live prompt rendering should use
+/// the `SelectionPrompt` component.
+pub(crate) fn selection_prompt_render_lines(state: &State) -> Vec<RenderLine> {
+    selection_prompt_rows(state)
+}
+
+pub(crate) fn selection_prompt_row_count(state: &State) -> usize {
+    state
+        .selection
+        .as_ref()
+        .map(selection_row_count)
+        .unwrap_or_default()
+}
+
+fn selection_prompt_rows(state: &State) -> Vec<RenderLine> {
     state
         .selection
         .as_ref()
@@ -34,9 +50,9 @@ pub fn selection_prompt_render_lines(state: &State) -> Vec<RenderLine> {
 }
 
 /// Props for the active selection prompt component.
-#[derive(Default, Props)]
+#[derive(Props)]
 pub struct SelectionPromptProps {
-    pub state: Option<State>,
+    pub state: Arc<State>,
 }
 
 /// Formats one selection prompt state using the legacy terminal-flow shape.
@@ -67,6 +83,21 @@ fn selection_lines(selection: &SelectionPromptState) -> Vec<RenderLine> {
     }
 
     lines
+}
+
+fn selection_row_count(selection: &SelectionPromptState) -> usize {
+    let title = 1;
+    let description = if selection.description.trim().is_empty() {
+        0
+    } else {
+        selection.description.lines().count()
+    };
+    let separator = 1;
+    let options = selection.options.len();
+    let custom = usize::from(selection.allow_custom);
+    let comment = if selection.allow_comment { 2 } else { 0 };
+
+    title + description + separator + options + custom + comment
 }
 
 /// Formats one predefined option row.

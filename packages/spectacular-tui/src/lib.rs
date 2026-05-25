@@ -20,14 +20,9 @@ pub use action::{
     ChatTuiAction, CommandDisplayChunk, SelectionPromptAnswer, SelectionPromptChoice,
 };
 pub use components::{
-    app_lines, app_render_lines, footer_center_render_line, footer_left_render_line,
-    footer_render_line, footer_render_line_with_width, footer_right_render_line, footer_text,
-    footer_text_with_width, input_notice_render_line, prompt_lines, prompt_render_lines,
-    prompt_render_lines_with_width, selection_prompt_render_lines, transcript_item_layout_rows,
-    transcript_item_lines, transcript_item_render_lines, transcript_layout_item_range,
-    transcript_layout_row_starts, transcript_layout_total_rows, transcript_lines,
-    transcript_render_lines, transcript_total_render_rows, turn_usage_text, usage_text,
-    working_render_line, wrapped_layout_text_rows, SelectionPrompt, SelectionPromptProps,
+    app_element, footer_center_render_line, footer_left_render_line, footer_render_line,
+    footer_render_line_with_width, footer_right_render_line, footer_text, footer_text_with_width,
+    turn_usage_text, usage_text, working_render_line, SelectionPrompt, SelectionPromptProps,
 };
 pub use fake_streaming::{
     fake_cancellation_plan, fake_failure_plan, fake_streaming_plan, fake_streaming_runtime_finding,
@@ -51,7 +46,7 @@ pub use render::{
     TUI_SELECTION_BACKGROUND_COLOR_ENV, TUI_SELECTION_TEXT_COLOR_ENV,
 };
 pub use runtime::{
-    effects, effects_with_clipboard, merge_controller_state_update, system_clipboard,
+    effects, effects_with_clipboard, merge_controller_state_update, root_element, system_clipboard,
     timer_tick_effects, ClipboardError, ClipboardService, EventEffect, Intent, Root, RootProps,
     Shell, SystemClipboard, MAX_PASTE_BYTES, SPINNER_TICK_INTERVAL,
 };

@@ -48,7 +48,7 @@ fn render(state: &State) -> String {
 
 /// Verifies the empty read-only layout renders prompt/footer without prototype regions.
 #[test]
-fn empty_state_renders_terminal_flow_prompt_and_footer() {
+fn render_state_to_string_when_empty_state_renders_terminal_flow_prompt_and_footer() {
     let output = render(&state());
 
     assert!(output.contains(">"));
@@ -65,7 +65,7 @@ fn empty_state_renders_terminal_flow_prompt_and_footer() {
 
 /// Verifies every semantic transcript item kind renders without prototype labels.
 #[test]
-fn populated_transcript_renders_all_semantic_item_kinds() {
+fn render_state_to_string_when_populated_transcript_renders_all_semantic_item_kinds() {
     let mut state = state();
     state.session.transcript = vec![
         item(
@@ -144,7 +144,7 @@ fn populated_transcript_renders_all_semantic_item_kinds() {
 
 /// Verifies opening banner metadata is read from semantic state rather than external services.
 #[test]
-fn opening_banner_renders_state_metadata() {
+fn render_state_to_string_when_opening_banner_renders_state_metadata() {
     let mut state = state();
     state.session.transcript.push(item(
         1,
@@ -166,7 +166,7 @@ fn opening_banner_renders_state_metadata() {
 
 /// Verifies running status renders the original working line shape.
 #[test]
-fn running_status_renders_working_line_spinner() {
+fn render_state_to_string_when_running_status_renders_working_line_spinner() {
     let mut state = state();
     state.status = Status::Running {
         activity: Activity::RunningTool {
@@ -186,7 +186,7 @@ fn running_status_renders_working_line_spinner() {
 
 /// Verifies context usage renders in the compact footer region when available.
 #[test]
-fn usage_renders_in_footer() {
+fn render_state_to_string_when_usage_renders_in_footer() {
     let usage = ContextTokenUsage::new(42_000, Some(200_000));
     let mut state = State::new(
         SessionId::new("session-123"),
@@ -204,7 +204,7 @@ fn usage_renders_in_footer() {
 
 /// Verifies non-command prompt text renders with the original prompt marker only.
 #[test]
-fn prompt_renders_current_text_without_reserved_regions() {
+fn render_state_to_string_when_prompt_renders_current_text_without_reserved_regions() {
     let mut state = state();
     state.session.prompt = spectacular_tui::PromptState::from_text("model gpt-5.1");
 
@@ -218,7 +218,7 @@ fn prompt_renders_current_text_without_reserved_regions() {
 
 /// Verifies active command-owned ask prompts render as the input surface.
 #[test]
-fn selection_prompt_renders_option_custom_and_comment_state() {
+fn render_state_to_string_when_selection_prompt_renders_option_custom_and_comment_state() {
     let mut state = state();
     state.selection = Some(
         SelectionPromptState::new(
@@ -244,7 +244,7 @@ fn selection_prompt_renders_option_custom_and_comment_state() {
 
 /// Verifies command-owned selection prompts replace the normal prompt composer.
 #[test]
-fn selection_prompt_replaces_prompt_composer() {
+fn render_state_to_string_when_selection_prompt_replaces_prompt_composer() {
     let mut state = state();
     state.session.prompt = PromptState::from_text("draft prompt");
     state.selection = Some(SelectionPromptState::new(
@@ -262,7 +262,7 @@ fn selection_prompt_replaces_prompt_composer() {
 
 /// Verifies welcome/banner text is rendered as semantic state instead of terminal printing.
 #[test]
-fn notice_renders_from_semantic_transcript_state() {
+fn render_state_to_string_when_notice_renders_from_semantic_transcript_state() {
     let mut state = state();
     state.session.transcript.push(item(
         1,
@@ -277,7 +277,7 @@ fn notice_renders_from_semantic_transcript_state() {
 
 /// Verifies rendering is a pure state projection with no runtime side effects.
 #[test]
-fn rendering_does_not_mutate_state_or_require_side_effects() {
+fn render_state_to_string_when_rendering_does_not_mutate_state_or_require_side_effects() {
     let state = state();
     let original = state.clone();
 

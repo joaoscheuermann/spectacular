@@ -3,7 +3,7 @@ use super::*;
 /// Verifies submitting a prompt appends semantic prompt content and clears prompt state.
 #[test]
 
-fn submit_prompt_appends_user_prompt_and_clears_prompt() {
+fn reduce_when_submit_prompt_appends_user_prompt_and_clears_prompt() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("run this");
@@ -40,7 +40,7 @@ fn submit_prompt_appends_user_prompt_and_clears_prompt() {
 
 #[test]
 
-fn submit_prompt_is_idempotent_by_transcript_id() {
+fn reduce_when_submit_prompt_is_idempotent_by_transcript_id() {
     let mut state = state();
 
     reduce(
@@ -76,7 +76,7 @@ fn submit_prompt_is_idempotent_by_transcript_id() {
 
 #[test]
 
-fn submit_prompt_keeps_same_text_with_different_ids_distinct() {
+fn reduce_when_submit_prompt_keeps_same_text_with_different_ids_distinct() {
     let mut state = state();
 
     reduce(
@@ -108,7 +108,7 @@ fn submit_prompt_keeps_same_text_with_different_ids_distinct() {
 
 #[test]
 
-fn agent_started_and_finished_update_status() {
+fn reduce_when_agent_started_and_finished_update_status() {
     let mut state = state();
 
     let prior_context_usage = ContextTokenUsage::new(90, Some(100));
@@ -184,7 +184,7 @@ fn agent_started_and_finished_update_status() {
 
 #[test]
 
-fn agent_failed_and_cancelled_leave_running_state() {
+fn reduce_when_agent_failed_and_cancelled_leave_running_state() {
     let mut failed = state();
 
     reduce(&mut failed, ChatTuiAction::AgentStarted);
@@ -262,7 +262,7 @@ fn agent_failed_and_cancelled_leave_running_state() {
 
 #[test]
 
-fn cancel_run_moves_cancellable_running_state_to_cancelling() {
+fn reduce_when_cancel_run_moves_cancellable_running_state_to_cancelling() {
     let mut state = state();
 
     reduce(&mut state, ChatTuiAction::AgentStarted);
@@ -276,7 +276,7 @@ fn cancel_run_moves_cancellable_running_state_to_cancelling() {
 
 #[test]
 
-fn runtime_and_display_metadata_actions_replace_state() {
+fn reduce_when_runtime_and_display_metadata_actions_replace_state() {
     let mut state = state();
 
     let runtime = runtime("openrouter", "new/model");
@@ -307,7 +307,7 @@ fn runtime_and_display_metadata_actions_replace_state() {
 
 #[test]
 
-fn worktree_metadata_action_updates_footer_metadata() {
+fn reduce_when_worktree_metadata_action_updates_footer_metadata() {
     let mut state = state();
 
     reduce(
@@ -326,7 +326,7 @@ fn worktree_metadata_action_updates_footer_metadata() {
 
 #[test]
 
-fn spinner_tick_advances_spinner_state_without_terminal_output() {
+fn reduce_when_spinner_tick_advances_spinner_state_without_terminal_output() {
     let mut state = state();
 
     let first = state.spinner.current_frame();
@@ -342,7 +342,7 @@ fn spinner_tick_advances_spinner_state_without_terminal_output() {
 
 #[test]
 
-fn commands_loaded_replaces_command_metadata() {
+fn reduce_when_commands_loaded_replaces_command_metadata() {
     let mut state = state();
 
     let commands = vec![
@@ -359,7 +359,7 @@ fn commands_loaded_replaces_command_metadata() {
 
 #[test]
 
-fn session_created_starts_new_session_with_opening_banner() {
+fn reduce_when_session_created_starts_new_session_with_opening_banner() {
     let mut state = state();
 
     state.scroll.offset = 5;

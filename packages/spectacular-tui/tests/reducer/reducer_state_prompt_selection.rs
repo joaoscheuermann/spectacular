@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 
-fn state_new_initializes_foundation_defaults() {
+fn reduce_when_state_new_initializes_foundation_defaults() {
     let runtime = runtime("openrouter", "anthropic/claude");
 
     let display = display("OpenRouter", "Claude");
@@ -49,7 +49,7 @@ fn state_new_initializes_foundation_defaults() {
 
 #[test]
 
-fn prompt_changed_updates_only_prompt_state() {
+fn reduce_when_prompt_changed_updates_only_prompt_state() {
     let mut state = state();
 
     let original = state.clone();
@@ -71,7 +71,7 @@ fn prompt_changed_updates_only_prompt_state() {
 
 #[test]
 
-fn input_notice_reported_and_cleared_updates_only_notice_state() {
+fn reduce_when_input_notice_reported_and_cleared_updates_only_notice_state() {
     let mut state = state();
 
     reduce(
@@ -96,7 +96,7 @@ fn input_notice_reported_and_cleared_updates_only_notice_state() {
 
 #[test]
 
-fn prompt_changed_with_input_notice_clears_notice() {
+fn reduce_when_prompt_changed_with_input_notice_clears_notice() {
     let mut state = state();
 
     state.input_notice = Some("Use Ctrl+V to paste".to_owned());
@@ -113,7 +113,7 @@ fn prompt_changed_with_input_notice_clears_notice() {
 
 #[test]
 
-fn prompt_changed_leaves_rendered_selection_to_view_state() {
+fn reduce_when_prompt_changed_leaves_rendered_selection_to_view_state() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("selected text");
@@ -148,7 +148,7 @@ fn prompt_changed_leaves_rendered_selection_to_view_state() {
 
 #[test]
 
-fn modal_and_session_changes_leave_rendered_selection_to_view_state() {
+fn reduce_when_modal_and_session_changes_leave_rendered_selection_to_view_state() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("selected text");
@@ -205,7 +205,7 @@ fn modal_and_session_changes_leave_rendered_selection_to_view_state() {
 
 #[test]
 
-fn rendered_selection_feedback_lifecycle_tracks_active_selection() {
+fn reduce_when_rendered_selection_feedback_lifecycle_tracks_active_selection() {
     let mut state = state();
 
     spectacular_tui::apply_view_action_to_state(

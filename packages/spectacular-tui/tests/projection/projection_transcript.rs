@@ -3,7 +3,7 @@ use super::*;
 /// Verifies copied text does not insert artificial line breaks for visual wrapping.
 #[test]
 
-fn selected_text_wrapped_transcript_row_preserves_source_line() {
+fn selection_projection_when_selected_text_wrapped_transcript_row_preserves_source_line() {
     let mut state = state();
 
     state.session.transcript = vec![user_prompt_item("abcdef")];
@@ -28,7 +28,7 @@ fn selected_text_wrapped_transcript_row_preserves_source_line() {
 
 #[test]
 
-fn start_selection_at_transcript_virtual_whitespace_returns_selection() {
+fn selection_projection_when_start_selection_at_transcript_virtual_whitespace_returns_selection() {
     let mut state = state();
 
     state.session.transcript = vec![user_prompt_item("short")];
@@ -52,7 +52,7 @@ fn start_selection_at_transcript_virtual_whitespace_returns_selection() {
 
 #[test]
 
-fn selected_text_virtual_whitespace_only_omits_padding() {
+fn selection_projection_when_selected_text_virtual_whitespace_only_omits_padding() {
     let mut state = state();
 
     state.session.transcript = vec![user_prompt_item("short")];
@@ -81,7 +81,8 @@ fn selected_text_virtual_whitespace_only_omits_padding() {
 
 #[test]
 
-fn selected_text_drag_from_text_to_virtual_whitespace_copies_real_text_only() {
+fn selection_projection_when_selected_text_drag_from_text_to_virtual_whitespace_copies_real_text_only(
+) {
     let mut state = state();
 
     state.session.transcript = vec![user_prompt_item("short")];
@@ -108,7 +109,7 @@ fn selected_text_drag_from_text_to_virtual_whitespace_copies_real_text_only() {
 
 #[test]
 
-fn start_selection_at_blank_separator_row_returns_selection() {
+fn selection_projection_when_start_selection_at_blank_separator_row_returns_selection() {
     let mut state = state();
 
     state.session.transcript = vec![user_prompt_item("one")];
@@ -144,7 +145,7 @@ fn start_selection_at_blank_separator_row_returns_selection() {
 
 #[test]
 
-fn selected_text_with_wide_unicode_copies_complete_character() {
+fn selection_projection_when_selected_text_with_wide_unicode_copies_complete_character() {
     let mut state = state();
 
     state.session.transcript = vec![user_prompt_item("a\u{6f22}b")];
@@ -169,7 +170,7 @@ fn selected_text_with_wide_unicode_copies_complete_character() {
 
 #[test]
 
-fn selected_text_includes_blank_rows_between_sources() {
+fn selection_projection_when_selected_text_includes_blank_rows_between_sources() {
     let mut state = state();
 
     state.session.transcript = vec![user_prompt_item("one"), user_prompt_item("two")];
@@ -192,7 +193,7 @@ fn selected_text_includes_blank_rows_between_sources() {
 
 /// Verifies transcript selection remains copyable after the selected row scrolls away.
 #[test]
-fn selected_text_transcript_selection_survives_scroll_out_of_view() {
+fn selection_projection_when_selected_text_transcript_selection_survives_scroll_out_of_view() {
     let mut state = state();
 
     for index in 0..8 {
@@ -247,7 +248,8 @@ fn selected_text_transcript_selection_survives_scroll_out_of_view() {
 
 /// Verifies edge autoscroll extends rendered selection over stable transcript rows.
 #[test]
-fn rendered_selection_auto_scroll_extends_focus_over_stable_transcript_rows() {
+fn selection_projection_when_rendered_selection_auto_scroll_extends_focus_over_stable_transcript_rows(
+) {
     let mut state = state();
 
     for index in 0..8 {

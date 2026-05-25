@@ -1,45 +1,57 @@
 use super::content::{
-    display_line_render_line, selectable_line, styled_visible_lines, visible_text_row_count,
+    display_line_render_line, styled_visible_lines, transcript_item_frame, TranscriptRowWrap,
 };
 use super::TranscriptRenderContext;
-use crate::render::{iocraft_content_with_selection_colors, RenderLine, RenderStyle};
-use crate::transcript::{ToolCallItem, TranscriptItem, TranscriptItemContent};
+use crate::render::{RenderLine, RenderStyle};
+use crate::transcript::{ToolCallItem, ToolDisplay};
 use iocraft::prelude::*;
 
 /// Renders a tool-call transcript item.
 #[component]
 pub fn Tool(props: &ToolProps) -> impl Into<AnyElement<'static>> {
-    let item = props.item.clone().expect("Tool requires item");
-    let context = props.context.as_ref();
-    let selection_colors = context
-        .map(|context| context.selection_colors)
-        .unwrap_or_default();
-    let item_id = item.id.as_str().to_owned();
-    let TranscriptItemContent::ToolCall(tool) = item.content else {
-        panic!("Tool requires tool-call content");
-    };
-    let elements = tool_render_lines(&tool)
-        .into_iter()
-        .enumerate()
-        .map(|(index, line)| {
-            let line = selectable_line(context, &item_id, index, line);
-            let contents = iocraft_content_with_selection_colors(&line, selection_colors);
-            element!(MixedText(wrap: TextWrap::NoWrap, contents))
-        });
+    let rows = tool_render_lines_from_fields(
+        &props.name,
+        props.arguments_preview.as_deref(),
+        props.output_preview.as_deref(),
+        props.display.as_ref(),
+    );
 
-    element!(View(flex_direction: FlexDirection::Column, margin_bottom: 1) { #(elements) })
+    transcript_item_frame(
+        props.source_id.clone(),
+        rows,
+        props.context.clone(),
+        TranscriptRowWrap::NoWrap,
+    )
 }
 
 /// Props for the tool component.
-#[derive(Default, Props)]
+#[derive(Props)]
 pub struct ToolProps {
-    pub item: Option<TranscriptItem>,
-    pub context: Option<TranscriptRenderContext>,
+    pub source_id: String,
+    pub name: String,
+    pub arguments_preview: Option<String>,
+    pub output_preview: Option<String>,
+    pub display: Option<ToolDisplay>,
+    pub context: TranscriptRenderContext,
 }
 
 /// Formats a tool-call transcript item as original-shaped semantic rows.
-pub fn tool_render_lines(tool: &ToolCallItem) -> Vec<RenderLine> {
-    if let Some(display) = &tool.display {
+pub(super) fn tool_render_lines(tool: &ToolCallItem) -> Vec<RenderLine> {
+    tool_render_lines_from_fields(
+        &tool.name,
+        tool.arguments_preview.as_deref(),
+        tool.output_preview.as_deref(),
+        tool.display.as_ref(),
+    )
+}
+
+fn tool_render_lines_from_fields(
+    name: &str,
+    arguments_preview: Option<&str>,
+    output_preview: Option<&str>,
+    display: Option<&ToolDisplay>,
+) -> Vec<RenderLine> {
+    if let Some(display) = display {
         let mut lines = Vec::new();
         if let Some(call_line) = &display.call_line {
             lines.push(display_line_render_line(call_line));
@@ -49,8 +61,8 @@ pub fn tool_render_lines(tool: &ToolCallItem) -> Vec<RenderLine> {
         return lines;
     }
 
-    let mut call = tool.name.clone();
-    if let Some(arguments) = &tool.arguments_preview {
+    let mut call = name.to_owned();
+    if let Some(arguments) = arguments_preview {
         if !arguments.trim().is_empty() {
             call.push(' ');
             call.push_str(arguments);
@@ -59,23 +71,8 @@ pub fn tool_render_lines(tool: &ToolCallItem) -> Vec<RenderLine> {
 
     let mut lines = vec![RenderLine::styled(call, RenderStyle::Tool)];
     lines.extend(styled_visible_lines(
-        tool.output_preview.as_deref().unwrap_or_default(),
+        output_preview.unwrap_or_default(),
         RenderStyle::CommandOutput,
     ));
     lines
-}
-
-/// Counts rows for a tool-call item without building output rows.
-pub fn tool_row_count(tool: &ToolCallItem) -> usize {
-    if let Some(display) = &tool.display {
-        return usize::from(display.call_line.is_some())
-            + display.argument_lines.len()
-            + display.output_lines.len();
-    }
-
-    1 + tool
-        .output_preview
-        .as_deref()
-        .map(visible_text_row_count)
-        .unwrap_or(0)
 }

@@ -3,7 +3,7 @@ use super::*;
 /// Verifies the app-wide projection includes every fixed visible surface.
 #[test]
 
-fn selectable_projection_with_prompt_surfaces_includes_visible_rows() {
+fn selectable_projection_when_selectable_projection_with_prompt_surfaces_includes_visible_rows() {
     let mut state = state();
 
     state.status = Status::Running {
@@ -44,7 +44,7 @@ fn selectable_projection_with_prompt_surfaces_includes_visible_rows() {
 
 #[test]
 
-fn selectable_projection_empty_prompt_chrome_has_no_selectable_point() {
+fn selectable_projection_when_selectable_projection_empty_prompt_chrome_has_no_selectable_point() {
     let mut state = state();
 
     reduce(
@@ -87,7 +87,7 @@ fn selectable_projection_empty_prompt_chrome_has_no_selectable_point() {
 
 #[test]
 
-fn start_selection_at_non_empty_prompt_marker_columns_returns_none() {
+fn selectable_projection_when_start_selection_at_non_empty_prompt_marker_columns_returns_none() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("draft");
@@ -112,7 +112,7 @@ fn start_selection_at_non_empty_prompt_marker_columns_returns_none() {
 
 #[test]
 
-fn selected_text_prompt_drag_across_marker_copies_only_buffer_text() {
+fn selectable_projection_when_selected_text_prompt_drag_across_marker_copies_only_buffer_text() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("draft");
@@ -139,7 +139,7 @@ fn selected_text_prompt_drag_across_marker_copies_only_buffer_text() {
 
 #[test]
 
-fn selected_text_prompt_drag_past_text_excludes_synthetic_cursor_cell() {
+fn selectable_projection_when_selected_text_prompt_drag_past_text_excludes_synthetic_cursor_cell() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("draft");
@@ -166,7 +166,7 @@ fn selected_text_prompt_drag_past_text_excludes_synthetic_cursor_cell() {
 
 #[test]
 
-fn start_selection_at_prompt_synthetic_cursor_cell_returns_none() {
+fn selectable_projection_when_start_selection_at_prompt_synthetic_cursor_cell_returns_none() {
     let mut state = state();
 
     state.session.prompt = PromptState::from_text("draft");
@@ -189,7 +189,8 @@ fn start_selection_at_prompt_synthetic_cursor_cell_returns_none() {
 
 #[test]
 
-fn drag_selection_to_empty_prompt_chrome_returns_no_autoscroll_selection() {
+fn selectable_projection_when_drag_selection_to_empty_prompt_chrome_returns_no_autoscroll_selection(
+) {
     let mut state = state();
 
     state.session.transcript = vec![user_prompt_item("one")];
@@ -229,7 +230,8 @@ fn drag_selection_to_empty_prompt_chrome_returns_no_autoscroll_selection() {
 
 #[test]
 
-fn drag_selection_to_projected_non_transcript_row_does_not_request_autoscroll() {
+fn selectable_projection_when_drag_selection_to_projected_non_transcript_row_does_not_request_autoscroll(
+) {
     let mut state = state();
 
     state.session.transcript = vec![user_prompt_item("one")];
