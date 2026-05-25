@@ -50,6 +50,15 @@ impl OpenAiResponsesRequest {
         let model_request = OpenAiModelRequest::from_configured_model(model);
         let instructions = instructions_from_messages(&messages);
         let input = input_from_messages(messages);
+        if input.is_empty() {
+            return Err(ProviderError::MalformedResponse {
+                provider_name: "OpenAI".to_owned(),
+                reason: "Responses request requires at least one non-system input item".to_owned(),
+                diagnostics: Some(ProviderErrorDiagnostics::new(
+                    ProviderErrorStage::RequestBuild,
+                )),
+            });
+        }
         let tools = tools
             .into_iter()
             .map(OpenAiToolManifest::from_tool_manifest)
