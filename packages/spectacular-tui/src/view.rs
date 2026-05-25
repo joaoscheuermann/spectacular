@@ -3,7 +3,7 @@ use crate::render::TuiSelectionColors;
 use crate::scroll::TranscriptScrollState;
 use crate::selection::{RenderedSelectionState, ViewportEdge};
 use crate::state::State;
-use crate::transcript::{TranscriptLayoutCache, TranscriptLayoutSnapshot};
+use crate::transcript::{TranscriptLayout, TranscriptLayoutCache, TranscriptLayoutSnapshot};
 
 /// Local, non-durable view state owned by the terminal view layer.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -64,6 +64,7 @@ pub enum ViewAction {
 pub fn apply_view_action(view: &mut ViewState, state: &State, action: ViewAction) {
     match action {
         ViewAction::ScrollTranscript(delta) => {
+            stop_selection_auto_scroll(view);
             let total_rows = total_transcript_rows_with_view(state, view);
             view.scroll.scroll_by(
                 delta,
@@ -122,9 +123,38 @@ pub fn preserve_review_position_for_growth(view: &mut ViewState, old_rows: usize
     view.scroll.follow_tail = view.scroll.offset == 0;
 }
 
+/// Keeps the same semantic top row visible after transcript layout changes.
+pub(crate) fn preserve_review_position_for_layout_change(
+    view: &mut ViewState,
+    old_layout: &TranscriptLayout,
+    new_layout: &TranscriptLayout,
+) {
+    if view.scroll.follow_tail {
+        return;
+    }
+
+    let Some(anchor) = viewport_anchor(&view.scroll, old_layout) else {
+        preserve_review_position_for_growth(view, old_layout.total_rows, new_layout.total_rows);
+        return;
+    };
+    let Some(new_item) = new_layout.items.get(anchor.item_index) else {
+        preserve_review_position_for_growth(view, old_layout.total_rows, new_layout.total_rows);
+        return;
+    };
+
+    let row_in_item = anchor.row_in_item.min(new_item.row_count.saturating_sub(1));
+    let top_row = new_item.start_row.saturating_add(row_in_item);
+    set_scroll_top_row(view, new_layout.total_rows, top_row);
+}
+
 /// Clears rendered selection for semantic changes that invalidate visible coordinates.
 pub fn clear_selection(view: &mut ViewState) {
     view.app_selection = RenderedSelectionState::default();
+}
+
+fn stop_selection_auto_scroll(view: &mut ViewState) {
+    view.app_selection.dragging = false;
+    view.app_selection.viewport_edge = None;
 }
 
 /// Returns the total rendered transcript rows at the current view width.
@@ -172,6 +202,44 @@ fn max_scroll_offset(total_rows: usize, visible_rows: u32) -> u32 {
     u32::try_from(total_rows)
         .unwrap_or(u32::MAX)
         .saturating_sub(visible_rows)
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ViewportAnchor {
+    item_index: usize,
+    row_in_item: usize,
+}
+
+fn viewport_anchor(
+    scroll: &TranscriptScrollState,
+    layout: &TranscriptLayout,
+) -> Option<ViewportAnchor> {
+    if layout.items.is_empty() {
+        return None;
+    }
+
+    let top_row = scroll_top_row(scroll, layout.total_rows);
+    let item_index = layout
+        .items
+        .partition_point(|item| item.start_row.saturating_add(item.row_count) <= top_row)
+        .min(layout.items.len().saturating_sub(1));
+    let item = &layout.items[item_index];
+    Some(ViewportAnchor {
+        item_index,
+        row_in_item: top_row.saturating_sub(item.start_row),
+    })
+}
+
+fn scroll_top_row(scroll: &TranscriptScrollState, total_rows: usize) -> usize {
+    let max_offset = max_scroll_offset(total_rows, scroll.visible_rows);
+    usize::try_from(max_offset.saturating_sub(scroll.offset)).unwrap_or(usize::MAX)
+}
+
+fn set_scroll_top_row(view: &mut ViewState, total_rows: usize, top_row: usize) {
+    let max_offset = max_scroll_offset(total_rows, view.scroll.visible_rows);
+    let top_offset = u32::try_from(top_row).unwrap_or(u32::MAX).min(max_offset);
+    view.scroll.offset = max_offset.saturating_sub(top_offset);
+    view.scroll.follow_tail = view.scroll.offset == 0;
 }
 
 fn transcript_content_width(state: &State) -> usize {

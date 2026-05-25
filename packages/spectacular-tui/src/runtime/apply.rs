@@ -5,8 +5,8 @@ use crate::runtime::{EventEffect, Intent};
 use crate::state::State;
 use crate::transcript::TranscriptItemContent;
 use crate::view::{
-    apply_view_action, clear_selection, preserve_review_position_for_growth,
-    total_transcript_rows_with_view, ViewState,
+    apply_view_action, clear_selection, preserve_review_position_for_layout_change,
+    transcript_layout_snapshot, ViewState,
 };
 
 /// Applies local event effects to semantic state and view state, returning controller intents.
@@ -70,7 +70,7 @@ fn apply_action(state: &mut State, view: &mut ViewState, action: ChatTuiAction) 
     let intent = intent_for_action(&action);
     let should_clear_selection = clears_rendered_selection(&action);
     let transcript_update = transcript_update_for_action(state, &action);
-    let old_rows = total_transcript_rows_with_view(state, view);
+    let old_layout = transcript_layout_snapshot(state, view).layout;
 
     reduce(state, action);
 
@@ -81,8 +81,8 @@ fn apply_action(state: &mut State, view: &mut ViewState, action: ChatTuiAction) 
     }
 
     if transcript_update != TranscriptUpdate::Reset {
-        let new_rows = total_transcript_rows_with_view(state, view);
-        preserve_review_position_for_growth(view, old_rows, new_rows);
+        let new_layout = transcript_layout_snapshot(state, view).layout;
+        preserve_review_position_for_layout_change(view, &old_layout, &new_layout);
         if should_clear_selection {
             clear_selection(view);
         }

@@ -6,8 +6,8 @@ use crate::runtime::{
 use crate::session::PromptState;
 use crate::state::State as TuiState;
 use crate::view::{
-    apply_view_action, materialize_state, preserve_review_position_for_growth,
-    total_transcript_rows_with_view, ViewAction, ViewState,
+    apply_view_action, materialize_state, preserve_review_position_for_layout_change,
+    transcript_layout_snapshot, ViewAction, ViewState,
 };
 use iocraft::prelude::*;
 use std::sync::{Arc, Mutex};
@@ -248,12 +248,13 @@ pub fn merge_controller_state_and_view_update(
 
     controller_state.session.prompt = current_prompt.clone();
     controller_state.input_notice = local_state.input_notice.clone();
+    controller_state.prompt_layout = local_state.prompt_layout;
     controller_state.exit_requested |= local_state.exit_requested;
     let mut view = local_view.clone();
-    let old_rows = total_transcript_rows_with_view(local_state, &mut view);
+    let old_layout = transcript_layout_snapshot(local_state, &mut view).layout;
     record_controller_transcript_update(&mut view, local_state, &controller_state);
-    let new_rows = total_transcript_rows_with_view(&controller_state, &mut view);
-    preserve_review_position_for_growth(&mut view, old_rows, new_rows);
+    let new_layout = transcript_layout_snapshot(&controller_state, &mut view).layout;
+    preserve_review_position_for_layout_change(&mut view, &old_layout, &new_layout);
     (controller_state, view, None)
 }
 

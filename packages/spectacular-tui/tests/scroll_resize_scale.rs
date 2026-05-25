@@ -71,6 +71,8 @@ fn timed_render(state: &State) -> (String, Duration) {
 
 #[path = "scroll_resize_scale/bounded_window.rs"]
 mod bounded_window;
+#[path = "scroll_resize_scale/layout_growth.rs"]
+mod layout_growth;
 #[path = "scroll_resize_scale/state.rs"]
 mod scroll_state;
 #[path = "scroll_resize_scale/streaming.rs"]
