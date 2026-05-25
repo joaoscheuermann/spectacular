@@ -24,7 +24,7 @@ Use Red-Green-Refactor for new or changed behavior when the project has an execu
 
 - Write the minimum implementation needed for the current test.
 - Avoid speculative development and unrequested future features.
-- Apply "Shameless Green" when useful: hardcode or simplify temporarily to keep the feedback loop short, then improve during refactoring.
+- Apply "Shameless Green" only as an intermediate step: hardcode or simplify temporarily to keep the feedback loop short, then remove temporary hardcoding during refactoring unless the hardcoded value is the intended behavior.
 
 ### Refactor: clean up safely
 
@@ -70,6 +70,8 @@ Keep control flow flat in the idiom of the language being edited. Guard clauses 
 Public APIs, constructors, entry points, and module seams should receive their dependencies explicitly rather than importing, constructing, or hiding them in global module state.
 
 - Resolve clients, config, and tokens at the application entry point and pass them down explicitly.
+- Prefer injecting dependencies once at constructors, factories, or composition roots. Keep routine public methods focused on domain inputs so deep modules remain small and semantic.
+- When explicit dependencies would push a boundary past the repository argument threshold, group cohesive dependencies into a named dependency or configuration object. Do not hide dependencies in service locators, globals, or untyped bags.
 - Let internal functions use dependencies owned by their module when that keeps the public interface small and stable.
 - Avoid module-level shared mutable state or factories that capture dependencies in closures when a boundary parameter would be clearer.
 
@@ -79,6 +81,7 @@ Use this section only for TypeScript/JavaScript. For other languages, preserve t
 
 - **Strict Immutability:** Prefer `const` and structural sharing (`{...obj}`, `[...arr]`).
 - **Pure Functions:** Isolate I/O, network, and mutation at the boundaries (e.g., `main.ts` or framework callbacks).
+- **Scoped Mutation:** Local mutation is acceptable when it is contained, language-idiomatic, and improves clarity or performance without creating hidden side effects.
 - **Declarative Flow:** Prefer `.map`, `.filter`, `.reduce` over imperative loops when readability wins.
 
 ## 9. Method and Function Documentation
