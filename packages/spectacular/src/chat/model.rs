@@ -140,6 +140,7 @@ impl ChatModel {
     pub fn resume_session(&mut self, prefix: &str) -> Result<ResumeResultModel, ChatError> {
         let records = self.session.resume(prefix)?;
         self.restore_runtime_from_records(&records)?;
+        self.clear_context_token_usage();
         Ok(ResumeResultModel {
             id: self.session.current_id().to_owned(),
             records,

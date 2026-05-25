@@ -194,6 +194,35 @@ async fn context_render_records_accepts_transient_records() {
     context.render_records(&[]).await.unwrap();
 }
 
+/// Verifies TUI clear screen dispatches only a visual transcript clear.
+#[test]
+fn context_clear_screen_when_tui_dispatches_transcript_cleared() {
+    let mut model = test_model();
+    let renderer = Renderer::default();
+    let tools = ToolStorage::default();
+    let runner = NoopRunner;
+    let mut control = ChatCommandControl::default();
+    let (_selection_sender, mut selection_receiver) = mpsc::unbounded_channel();
+    let mut actions = Vec::new();
+
+    {
+        let mut dispatch = |action| actions.push(action);
+        let context = ChatCommandContext::new_tui(
+            &mut model,
+            &renderer,
+            &tools,
+            &runner,
+            &mut control,
+            None,
+            &mut dispatch,
+            &mut selection_receiver,
+        );
+        context.clear_screen();
+    }
+
+    assert_eq!(actions, vec![spectacular_tui::ChatTuiAction::TranscriptCleared]);
+}
+
 /// Verifies that context render history accepts transient history.
 #[test]
 fn context_render_history_accepts_transient_history() {

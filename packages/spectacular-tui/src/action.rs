@@ -20,6 +20,7 @@ pub enum ChatTuiAction {
     SelectionPromptSubmitted(SelectionPromptAnswer),
     SelectionPromptCancelled,
     CommandsLoaded(Vec<CommandDescriptor>),
+    TranscriptCleared,
     SessionChanged {
         id: SessionId,
     },

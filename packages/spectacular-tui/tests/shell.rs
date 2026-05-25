@@ -143,6 +143,30 @@ async fn shell_when_shell_trailing_control_enter_paste_newline_does_not_submit()
     );
 }
 
+/// Verifies controller transcript clears reset view-local scroll and transcript state.
+#[tokio::test]
+async fn shell_when_transcript_cleared_resets_visible_transcript_and_scroll() {
+    let (mut shell, _intents) = spectacular_tui::Shell::new(state());
+
+    shell.apply_action(ChatTuiAction::SubmitPrompt {
+        id: TranscriptItemId::new("prompt-1"),
+        text: "hello".to_owned(),
+    });
+    shell.apply_action(ChatTuiAction::NoticeReported {
+        message: "notice".to_owned(),
+    });
+    shell.apply_terminal_event(key(KeyCode::PageUp, KeyModifiers::empty()));
+
+    assert!(!shell.state().session.transcript.is_empty());
+    assert!(!shell.state().scroll.follow_tail);
+
+    shell.apply_action(ChatTuiAction::TranscriptCleared);
+
+    assert!(shell.state().session.transcript.is_empty());
+    assert_eq!(shell.state().scroll.offset, 0);
+    assert!(shell.state().scroll.follow_tail);
+}
+
 /// Verifies controller actions reduce into shell state for rendered transcript data.
 #[tokio::test]
 async fn shell_when_shell_reduces_controller_actions_into_transcript() {

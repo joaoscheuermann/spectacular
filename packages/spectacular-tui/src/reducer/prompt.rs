@@ -1,9 +1,9 @@
 use crate::action::ChatTuiAction;
-use crate::ids::TranscriptItemId;
+use crate::ids::{SessionId, TranscriptItemId};
 use crate::reducer::lookup::{find_content_index_by_id, transcript_contains_id};
 use crate::reducer::transcript::append_transcript_item;
 use crate::session::{PromptState, Session};
-use crate::state::{PromptLayoutMetrics, State};
+use crate::state::{default_display_context_usage, PromptLayoutMetrics, State};
 use crate::transcript::{OpeningBannerItem, TranscriptItemContent, UserPromptItem};
 
 pub(super) fn reduce(state: &mut State, action: ChatTuiAction) {
@@ -29,11 +29,14 @@ pub(super) fn reduce(state: &mut State, action: ChatTuiAction) {
         ChatTuiAction::CommandsLoaded(commands) => {
             state.commands = commands;
         }
+        ChatTuiAction::TranscriptCleared => {
+            clear_transcript(state);
+        }
         ChatTuiAction::SessionChanged { id } => {
-            state.session = Session::new(id);
+            start_session(state, id);
         }
         ChatTuiAction::SessionCreated { id, banner } => {
-            state.session = Session::new(id);
+            start_session(state, id);
             append_opening_banner(state, banner);
         }
         ChatTuiAction::Resize { width, height } => {
@@ -42,6 +45,22 @@ pub(super) fn reduce(state: &mut State, action: ChatTuiAction) {
         }
         _ => unreachable!("prompt reducer received non-prompt action"),
     }
+}
+
+/// Starts a fresh TUI session while keeping global metadata in sync with it.
+fn start_session(state: &mut State, id: SessionId) {
+    state.display.session_label = id.as_str().to_owned();
+    state.display.context_usage = None;
+    state.display.turn_usage = None;
+    state.display.total_usage = None;
+    default_display_context_usage(&state.runtime, &mut state.display);
+    state.session = Session::new(id);
+}
+
+/// Clears visible transcript history without changing session metadata.
+fn clear_transcript(state: &mut State) {
+    state.session.transcript.clear();
+    state.session.refresh_next_timestamp();
 }
 
 /// Keeps the prompt cursor visible within the current textarea viewport.

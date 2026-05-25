@@ -383,6 +383,8 @@ fn reduce_when_session_created_starts_new_session_with_opening_banner() {
 
     assert_eq!(state.session.id.as_str(), "session-2");
 
+    assert_eq!(state.display.session_label, "session-2");
+
     assert_eq!(state.scroll.offset, 5);
 
     assert!(!state.scroll.follow_tail);

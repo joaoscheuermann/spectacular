@@ -17,6 +17,7 @@ pub fn reduce(state: &mut State, action: ChatTuiAction) {
         | ChatTuiAction::SelectionPromptSubmitted(_)
         | ChatTuiAction::SelectionPromptCancelled
         | ChatTuiAction::CommandsLoaded(_)
+        | ChatTuiAction::TranscriptCleared
         | ChatTuiAction::SessionChanged { .. }
         | ChatTuiAction::SessionCreated { .. }
         | ChatTuiAction::Resize { .. } => prompt::reduce(state, action),

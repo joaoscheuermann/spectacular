@@ -1,4 +1,5 @@
 use super::*;
+use spectacular_tui::{NoticeItem, Timestamp, TranscriptItem, UserPromptItem};
 
 /// Verifies context usage updates both session usage and display metadata usage.
 #[test]
@@ -53,6 +54,99 @@ fn reduce_when_provider_usage_reported_accumulates_turn_and_total_usage() {
     assert_eq!(state.session.total_usage, expected);
 
     assert_eq!(state.display.total_usage, expected);
+}
+
+/// Verifies visual transcript clears preserve footer metadata for the active session.
+
+#[test]
+
+fn reduce_when_transcript_cleared_preserves_footer_session_and_usage_metadata() {
+    let mut state = state_with_usage_metadata();
+    state.session.transcript = vec![
+        transcript_item(
+            "prompt-1",
+            3,
+            TranscriptItemContent::UserPrompt(UserPromptItem::new("old prompt")),
+        ),
+        transcript_item(
+            "notice-1",
+            7,
+            TranscriptItemContent::Notice(NoticeItem::new("old notice")),
+        ),
+    ];
+    state.session.refresh_next_timestamp();
+
+    reduce(&mut state, ChatTuiAction::TranscriptCleared);
+
+    assert_eq!(state.session.id.as_str(), "session-1");
+    assert_eq!(state.display.session_label, "session");
+    assert_eq!(state.session.transcript, Vec::new());
+    assert_eq!(state.session.next_timestamp, Timestamp::default());
+    assert_eq!(state.session.context_usage, Some(context_usage()));
+    assert_eq!(state.display.context_usage, Some(context_usage()));
+    assert_eq!(state.session.turn_usage, Some(token_usage()));
+    assert_eq!(state.display.turn_usage, Some(token_usage()));
+    assert_eq!(state.session.total_usage, Some(token_usage()));
+    assert_eq!(state.display.total_usage, Some(token_usage()));
+}
+
+/// Verifies session changes reset stale footer metadata from the prior session.
+
+#[test]
+
+fn reduce_when_session_changed_resets_footer_session_and_usage_metadata() {
+    let mut state = state_with_usage_metadata();
+
+    reduce(
+        &mut state,
+        ChatTuiAction::SessionChanged {
+            id: SessionId::new("session-2"),
+        },
+    );
+
+    assert_eq!(state.session.id.as_str(), "session-2");
+    assert_eq!(state.display.session_label, "session-2");
+    assert_eq!(state.session.context_usage, None);
+    assert_eq!(state.session.turn_usage, None);
+    assert_eq!(state.session.total_usage, None);
+    assert_eq!(
+        state.display.context_usage,
+        ContextTokenUsage::default_for_window(Some(4096))
+    );
+    assert_eq!(state.display.turn_usage, None);
+    assert_eq!(state.display.total_usage, None);
+}
+
+fn state_with_usage_metadata() -> State {
+    let mut state = state();
+    state.session.context_usage = Some(context_usage());
+    state.display.context_usage = Some(context_usage());
+    state.session.turn_usage = Some(token_usage());
+    state.display.turn_usage = Some(token_usage());
+    state.session.total_usage = Some(token_usage());
+    state.display.total_usage = Some(token_usage());
+    state
+}
+
+fn context_usage() -> ContextTokenUsage {
+    ContextTokenUsage::new(100, Some(1000))
+}
+
+fn token_usage() -> TurnTokenUsage {
+    TurnTokenUsage {
+        input_tokens: 10,
+        output_tokens: 20,
+        total_tokens: 30,
+        has_provider_metadata: true,
+    }
+}
+
+fn transcript_item(id: &str, timestamp: u64, content: TranscriptItemContent) -> TranscriptItem {
+    TranscriptItem::new(
+        TranscriptItemId::new(id),
+        Timestamp::new(timestamp),
+        content,
+    )
 }
 
 /// Verifies transcript scrolling updates offset and tail following rules.

@@ -206,9 +206,7 @@ impl<'a> ChatCommandContext<'a> {
     /// Clears the terminal screen through the injected renderer.
     pub fn clear_screen(&self) {
         if let Some(tui) = &self.tui {
-            tui.dispatch(ChatTuiAction::SessionChanged {
-                id: spectacular_tui::SessionId::new(self.model.current_session_id()),
-            });
+            tui.dispatch(ChatTuiAction::TranscriptCleared);
             return;
         }
 

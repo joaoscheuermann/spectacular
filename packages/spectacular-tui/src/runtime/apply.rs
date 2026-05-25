@@ -126,9 +126,9 @@ enum TranscriptUpdate {
 
 fn transcript_update_for_action(state: &State, action: &ChatTuiAction) -> TranscriptUpdate {
     match action {
-        ChatTuiAction::SessionChanged { .. } | ChatTuiAction::SessionCreated { .. } => {
-            TranscriptUpdate::Reset
-        }
+        ChatTuiAction::TranscriptCleared
+        | ChatTuiAction::SessionChanged { .. }
+        | ChatTuiAction::SessionCreated { .. } => TranscriptUpdate::Reset,
         ChatTuiAction::SubmitPrompt { id, .. } => submit_prompt_update(state, id),
         ChatTuiAction::MessageStarted { .. }
         | ChatTuiAction::ReasoningStarted { .. }
