@@ -4,8 +4,6 @@ use crate::chat::commands::{
     self, ChatCommandAdapter, ChatCommandContext, ChatCommandControl, ChatCommandResult,
 };
 use crate::chat::model::{ChatModel, ChatRunRequestModel};
-use crate::chat::renderer::Renderer;
-use crate::chat::runner::{ChatTurnFuture, ChatTurnRunner};
 use crate::chat::session::SessionManager;
 use crate::chat::worktree::current_worktree_metadata;
 use crate::chat::{ChatBootstrap, ChatError, RuntimeSelection};
@@ -173,7 +171,12 @@ where
         match parse_line(&text) {
             Ok(ParseOutcome::Command(invocation)) => {
                 return self
-                    .dispatch_command(invocation, state_sender, selection_receiver)
+                    .dispatch_command(
+                        invocation,
+                        state_sender,
+                        cancellation_receiver,
+                        selection_receiver,
+                    )
                     .await;
             }
             Ok(ParseOutcome::NotCommand) => {}
@@ -194,15 +197,7 @@ where
             return Ok(false);
         }
 
-        self.refresh_worktree_metadata(state_sender).await;
         let prompt_event_id = id.as_str().to_owned();
-        self.shell.apply_action(ChatTuiAction::SubmitPrompt {
-            id,
-            text: text.clone(),
-        });
-        self.publish_state(state_sender);
-        self.shell.apply_action(ChatTuiAction::AgentStarted);
-        self.publish_state(state_sender);
         let request = ChatRunRequestModel {
             prompt: text,
             prompt_event_id: Some(prompt_event_id),
@@ -210,6 +205,29 @@ where
             retry_existing_prompt: false,
             runtime: self.model.runtime().clone(),
         };
+        self.run_prompt_request(request, Some(id), state_sender, cancellation_receiver)
+            .await?;
+        Ok(false)
+    }
+
+    /// Runs a prepared prompt request through the TUI runtime without command parsing.
+    async fn run_prompt_request(
+        &mut self,
+        request: ChatRunRequestModel,
+        prompt_item_id: Option<TranscriptItemId>,
+        state_sender: Option<&mpsc::UnboundedSender<State>>,
+        cancellation_receiver: &mut mpsc::UnboundedReceiver<()>,
+    ) -> Result<(), ChatError> {
+        self.refresh_worktree_metadata(state_sender).await;
+        if let Some(id) = prompt_item_id {
+            self.shell.apply_action(ChatTuiAction::SubmitPrompt {
+                id,
+                text: request.prompt.clone(),
+            });
+            self.publish_state(state_sender);
+        }
+        self.shell.apply_action(ChatTuiAction::AgentStarted);
+        self.publish_state(state_sender);
         let run_result = {
             let model = &self.model;
             let tools = &self.tools;
@@ -230,7 +248,7 @@ where
         self.model
             .session_manager()
             .save_snapshot(&self.shell.state().session)?;
-        Ok(false)
+        Ok(())
     }
 
     /// Executes a parsed slash command using TUI-safe output and prompt bridges.
@@ -238,6 +256,7 @@ where
         &mut self,
         invocation: CommandInvocation,
         state_sender: Option<&mpsc::UnboundedSender<State>>,
+        cancellation_receiver: &mut mpsc::UnboundedReceiver<()>,
         selection_receiver: &mut mpsc::UnboundedReceiver<Intent>,
     ) -> Result<bool, ChatError> {
         let mut control = ChatCommandControl::default();
@@ -246,8 +265,6 @@ where
             self.model.runtime(),
             self.model.context_token_usage(),
         );
-        let renderer = Renderer::default();
-        let runner = TuiCommandRunner;
         let result = {
             let shell = &mut self.shell;
             let mut dispatch = |action| {
@@ -258,9 +275,7 @@ where
             };
             let context = ChatCommandContext::new_tui(
                 &mut self.model,
-                &renderer,
                 &self.tools,
-                &runner,
                 &mut control,
                 Some(prompt_footer),
                 &mut dispatch,
@@ -269,6 +284,7 @@ where
             self.commands.execute(context, invocation).await
         };
 
+        let command_succeeded = matches!(&result, ChatCommandResult::Success);
         if let ChatCommandResult::Error(message) = result {
             self.shell.apply_action(ChatTuiAction::ErrorReported {
                 message,
@@ -280,6 +296,12 @@ where
         }
         self.refresh_command_completions();
         self.publish_state(state_sender);
+        if command_succeeded && !control.exit_requested() {
+            if let Some(request) = control.take_follow_up_prompt() {
+                self.run_prompt_request(request, None, state_sender, cancellation_receiver)
+                    .await?;
+            }
+        }
         Ok(control.exit_requested())
     }
 
@@ -316,11 +338,10 @@ where
 }
 
 impl Bootstrap {
-    /// Converts the legacy chat bootstrap into IOCraft runtime bootstrap data.
+    /// Converts chat bootstrap data into IOCraft runtime bootstrap data.
     pub(super) fn from_chat_bootstrap(bootstrap: ChatBootstrap) -> Result<Self, ChatError> {
         let ChatBootstrap {
             session,
-            renderer: _,
             runtime,
             tools,
             workspace_root,
@@ -334,25 +355,6 @@ impl Bootstrap {
             workspace_root,
             debug_logger,
             warnings,
-        })
-    }
-}
-
-struct TuiCommandRunner;
-
-impl ChatTurnRunner for TuiCommandRunner {
-    /// Prevents legacy nested prompt execution from writing through the terminal renderer.
-    fn run<'a>(
-        &'a self,
-        _model: &'a mut ChatModel,
-        _renderer: &'a Renderer,
-        _tools: &'a spectacular_agent::ToolStorage,
-        _request: ChatRunRequestModel,
-    ) -> ChatTurnFuture<'a> {
-        Box::pin(async {
-            Err(ChatError::Session(
-                "nested prompt execution is not available in the TUI command bridge".to_owned(),
-            ))
         })
     }
 }

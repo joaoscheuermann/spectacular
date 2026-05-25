@@ -336,7 +336,11 @@ impl CompletionSnapshot {
     fn from_model(model: &ChatModel) -> Self {
         let config_io = model.config_io();
         Self {
-            enabled_provider_type_ids: model.completion_environment().enabled_provider_type_ids(),
+            enabled_provider_type_ids: spectacular_llms::provider_registry()
+                .iter()
+                .filter(|provider| provider.is_enabled())
+                .map(|provider| provider.id().to_owned())
+                .collect(),
             config: config_io
                 .read_config_or_default()
                 .map_err(|error| error.to_string()),

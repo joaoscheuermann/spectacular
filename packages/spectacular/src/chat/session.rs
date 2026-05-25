@@ -101,29 +101,6 @@ impl SessionManager {
         self.append_event(&ChatEvent::from_command_event(event, now()))
     }
 
-    pub fn append_title(
-        &self,
-        title: &str,
-        slot: TaskModelSlot,
-        model: &str,
-        fallback: bool,
-    ) -> Result<(), ChatError> {
-        self.append_event(&ChatEvent::SessionTitleUpdated {
-            title: title.to_owned(),
-            slot: slot.as_str().to_owned(),
-            model: model.to_owned(),
-            source: fallback.then(|| "fallback_coding".to_owned()),
-            created_at: now(),
-        })
-    }
-
-    pub fn has_title(&self) -> Result<bool, ChatError> {
-        Ok(self
-            .records()?
-            .iter()
-            .any(|record| matches!(record.event(), Some(ChatEvent::SessionTitleUpdated { .. }))))
-    }
-
     pub fn records(&self) -> Result<Vec<ChatRecord>, ChatError> {
         let active = self.active()?;
         self.store.read(&active.path)
@@ -201,12 +178,6 @@ pub enum ChatRecord {
 }
 
 impl ChatRecord {
-    pub fn line(&self) -> usize {
-        match self {
-            Self::Known { line, .. } | Self::Unknown { line, .. } | Self::Corrupt { line } => *line,
-        }
-    }
-
     pub fn event(&self) -> Option<&ChatEvent> {
         match self {
             Self::Known { event, .. } => Some(event),

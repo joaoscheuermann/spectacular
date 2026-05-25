@@ -2,24 +2,17 @@ mod auth;
 mod command_event;
 mod commands;
 mod config_mutation;
-mod controller;
 mod display;
 mod model;
-mod paste_burst;
-mod prompt;
 mod provider;
-mod renderer;
 mod runner;
+mod selection;
 mod session;
-mod title;
 mod tui;
 mod worktree;
 
-use crate::chat::renderer::Renderer;
 use crate::chat::runner::main_chat_tool_storage;
 use crate::chat::session::{ChatEvent, SessionManager};
-use controller::ChatController;
-use model::ChatModel;
 use spectacular_agent::ToolStorage;
 use spectacular_commands::CommandError;
 use spectacular_config::{
@@ -34,51 +27,13 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Runs the test command implementation and returns its command future.
-pub async fn run(debug_logger: LlmDebugLogger, tui: bool) -> Result<(), ChatError> {
-    if tui {
-        return run_tui(debug_logger).await;
-    }
-
-    run_legacy(debug_logger).await
-}
-
-/// Runs the legacy terminal renderer chat loop.
-async fn run_legacy(debug_logger: LlmDebugLogger) -> Result<(), ChatError> {
-    let ChatBootstrap {
-        session,
-        renderer,
-        runtime,
-        tools,
-        workspace_root,
-        debug_logger,
-        warnings,
-    } = ChatBootstrap::new(debug_logger)?;
-    let mut model = ChatModel::new_with_debug_logger(session, runtime, debug_logger);
-    let started = model.start_new_session()?;
-    renderer.clear_screen();
-    renderer.session_created(&started.id, model.runtime(), &workspace_root);
-    for warning in warnings {
-        renderer.warning(&warning);
-    }
-    let mut controller = ChatController::new(
-        model,
-        commands::registry()?,
-        renderer,
-        tools,
-        workspace_root,
-    );
-    controller.run_loop().await
-}
-
-/// Runs the experimental IOCraft TUI chat loop.
-async fn run_tui(debug_logger: LlmDebugLogger) -> Result<(), ChatError> {
+/// Runs the IOCraft TUI chat loop.
+pub async fn run(debug_logger: LlmDebugLogger) -> Result<(), ChatError> {
     tui::run(debug_logger).await
 }
 
 pub(crate) struct ChatBootstrap {
     session: SessionManager,
-    renderer: Renderer,
     runtime: RuntimeSelection,
     tools: ToolStorage,
     workspace_root: PathBuf,
@@ -107,7 +62,6 @@ impl ChatBootstrap {
             .map_err(|error| ChatError::Session(error.to_string()))?;
         Ok(Self {
             session: SessionManager::new()?,
-            renderer: Renderer::default(),
             runtime,
             tools,
             workspace_root,

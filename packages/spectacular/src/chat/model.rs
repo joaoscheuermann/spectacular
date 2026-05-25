@@ -1,6 +1,5 @@
 use super::RuntimeSelection;
 use crate::chat::command_event::CommandEvent;
-use crate::chat::commands::CompletionEnvironment;
 use crate::chat::session::{ChatRecord, HistoryQuery, HistorySummary, SessionManager};
 use crate::chat::ChatError;
 use spectacular_agent::{AgentEvent, ContextTokenUsage};
@@ -251,11 +250,6 @@ impl ChatModel {
         self.config_io
     }
 
-    /// Builds the narrow environment exposed to prompt completion value resolvers.
-    pub(crate) fn completion_environment(&self) -> CompletionEnvironment {
-        CompletionEnvironment::new(self.config_io, spectacular_llms::provider_registry())
-    }
-
     /// Restores runtime selection from session metadata, falling back to current config.
     fn restore_runtime_from_records(&mut self, records: &[ChatRecord]) -> Result<(), ChatError> {
         let cache = self
@@ -356,7 +350,7 @@ impl From<HistorySummary> for HistoryRowModel {
     }
 }
 
-/// Data carried with a new prompt so the renderer can show contextual footer text.
+/// Data carried with a new prompt so the TUI can show contextual footer text.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ChatPromptFooterModel {
     pub directory: PathBuf,

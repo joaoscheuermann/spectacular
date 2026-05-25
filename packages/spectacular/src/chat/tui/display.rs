@@ -87,7 +87,7 @@ impl ToolDisplayAdapter {
     }
 }
 
-/// Converts a renderer-compatible tool call line into a semantic display line.
+/// Converts a formatted tool call line into a semantic display line.
 fn tool_call_display_line(line: &str) -> DisplayLine {
     if !line.contains("\u{1b}[") {
         return DisplayLine::new(line, DisplayLineStyle::Tool);
@@ -132,7 +132,7 @@ pub(crate) fn command_finished_action(
     }
 }
 
-/// Converts original renderer tool result status into TUI display status.
+/// Converts tool result status into TUI display status.
 fn tool_display_status(view: &ToolResultView) -> ToolDisplayStatus {
     match view.status {
         ToolStatus::Done => ToolDisplayStatus::Succeeded,
@@ -140,7 +140,7 @@ fn tool_display_status(view: &ToolResultView) -> ToolDisplayStatus {
     }
 }
 
-/// Converts formatted tool output into display-ready rows with renderer-parity styles.
+/// Converts formatted tool output into display-ready rows with terminal-parity styles.
 fn tool_output_display_lines(view: &ToolResultView) -> Vec<DisplayLine> {
     let style = match view.status {
         ToolStatus::Done => None,
@@ -167,7 +167,7 @@ fn tool_output_display_style(style: ToolOutputLineStyle) -> DisplayLineStyle {
     }
 }
 
-/// Removes terminal escape sequences before handing display text to the TUI renderer.
+/// Removes terminal escape sequences before handing display text to the TUI.
 fn strip_ansi_codes(value: &str) -> String {
     let mut output = String::new();
     let mut characters = value.chars().peekable();
@@ -202,7 +202,7 @@ fn command_display_status(status: CommandStatus) -> CommandDisplayStatus {
     }
 }
 
-/// Builds the original renderer-parity command completion summary row.
+/// Builds the terminal-parity command completion summary row.
 fn command_summary_line(status: CommandStatus, summary: &str) -> DisplayLine {
     DisplayLine::new(
         command_summary_text(status, summary),
@@ -210,7 +210,7 @@ fn command_summary_line(status: CommandStatus, summary: &str) -> DisplayLine {
     )
 }
 
-/// Applies the same status prefixes used by the legacy renderer helpers.
+/// Applies the terminal status prefixes used for command summaries.
 fn command_summary_text(status: CommandStatus, summary: &str) -> String {
     match status {
         CommandStatus::Success => summary.to_owned(),
@@ -219,7 +219,7 @@ fn command_summary_text(status: CommandStatus, summary: &str) -> String {
     }
 }
 
-/// Maps command completion status to original renderer line styles.
+/// Maps command completion status to terminal line styles.
 fn command_summary_style(status: CommandStatus) -> DisplayLineStyle {
     match status {
         CommandStatus::Success => DisplayLineStyle::Success,

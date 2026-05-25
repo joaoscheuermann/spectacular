@@ -66,3 +66,52 @@ async fn cancel_signal_reaches_active_prompt_run() {
     let (controller_result, _) = tokio::join!(controller_loop, driver);
     controller_result.unwrap();
 }
+
+/// Verifies cancellation reaches a prompt run queued by a TUI retry command.
+#[tokio::test]
+async fn cancel_signal_reaches_retry_follow_up_prompt_run() {
+    let bootstrap = TestTuiBootstrap::create("retry-cancel-session");
+    let controller = TuiRuntimeController::new_with_runner(bootstrap, CancellingTuiTurnRunner)
+        .unwrap();
+    controller
+        .model()
+        .append_agent_event(&AgentEvent::user_prompt("retry cancel"))
+        .unwrap();
+    let (intent_sender, intent_receiver) = mpsc::unbounded_channel();
+    let (cancellation_sender, cancellation_receiver) = mpsc::unbounded_channel();
+    let (_selection_sender, selection_receiver) = mpsc::unbounded_channel();
+    let (state_sender, mut state_receiver) = mpsc::unbounded_channel();
+    let controller_loop = run_controller_loop(
+        controller,
+        intent_receiver,
+        cancellation_receiver,
+        selection_receiver,
+        state_sender,
+    );
+    let driver = async move {
+        intent_sender
+            .send(Intent::SubmitPrompt {
+                id: TranscriptItemId::new("prompt-1"),
+                text: "/retry".to_owned(),
+            })
+            .unwrap();
+        cancellation_sender.send(()).unwrap();
+
+        let cancelled_state = next_state_matching(&mut state_receiver, |state| {
+            matches!(state.status, spectacular_tui::Status::Idle)
+                && state.session.transcript.iter().any(|item| {
+                    matches!(
+                        &item.content,
+                        TranscriptItemContent::Cancellation(cancellation)
+                            if cancellation.reason == "test cancellation"
+                    )
+                })
+        })
+        .await;
+
+        assert!(cancelled_state.is_some());
+        intent_sender.send(Intent::RequestExit).unwrap();
+    };
+    let (controller_result, _) = tokio::join!(controller_loop, driver);
+    controller_result.unwrap();
+}

@@ -1,8 +1,7 @@
     use super::*;
-    use crate::chat::commands::{test_support::NoopRunner, ChatCommandControl, ChatCommandResult};
+    use crate::chat::commands::{ChatCommandControl, ChatCommandResult};
     use crate::chat::model::ChatModel;
-    use crate::chat::renderer::Renderer;
-    use crate::chat::session::{ChatEvent, SessionManager};
+        use crate::chat::session::{ChatEvent, SessionManager};
     use crate::chat::RuntimeSelection;
     use spectacular_agent::ToolStorage;
     use spectacular_config::ReasoningLevel;
@@ -83,11 +82,9 @@
     #[tokio::test]
     async fn git_commit_invalid_args_persist_lifecycle_records() {
         let mut model = test_model();
-        let renderer = Renderer::default();
         let tools = ToolStorage::default();
-        let runner = NoopRunner;
         let mut control = ChatCommandControl::default();
-        let context = ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
+        let context = ChatCommandContext::new(&mut model, &tools, &mut control);
 
         let result = execute(context, vec!["extra".to_owned()]).await;
 
@@ -116,14 +113,12 @@
     #[tokio::test]
     async fn command_lifecycle_persists_commit_output_before_success() {
         let mut model = test_model();
-        let renderer = Renderer::default();
         let tools = ToolStorage::default();
-        let runner = NoopRunner;
         let mut control = ChatCommandControl::default();
 
         {
             let context =
-                ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
+                ChatCommandContext::new(&mut model, &tools, &mut control);
             let mut lifecycle = CommitLifecycle::new(&context);
             lifecycle.start().unwrap();
             lifecycle.delta("committing changes").unwrap();
@@ -159,14 +154,12 @@
     #[tokio::test]
     async fn command_lifecycle_persists_cancelled_status() {
         let mut model = test_model();
-        let renderer = Renderer::default();
         let tools = ToolStorage::default();
-        let runner = NoopRunner;
         let mut control = ChatCommandControl::default();
 
         {
             let context =
-                ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
+                ChatCommandContext::new(&mut model, &tools, &mut control);
             let lifecycle = CommitLifecycle::new(&context);
             lifecycle.start().unwrap();
             lifecycle
@@ -191,14 +184,12 @@
     #[tokio::test]
     async fn command_lifecycle_records_truncation_notice_before_event_limit() {
         let mut model = test_model();
-        let renderer = Renderer::default();
         let tools = ToolStorage::default();
-        let runner = NoopRunner;
         let mut control = ChatCommandControl::default();
 
         {
             let context =
-                ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
+                ChatCommandContext::new(&mut model, &tools, &mut control);
             let mut lifecycle = CommitLifecycle::new(&context);
             lifecycle.start().unwrap();
             for index in 0..(MAX_COMMAND_DELTA_EVENTS + 4) {
@@ -223,14 +214,12 @@
     #[tokio::test]
     async fn command_lifecycle_records_truncation_notice_before_byte_limit() {
         let mut model = test_model();
-        let renderer = Renderer::default();
         let tools = ToolStorage::default();
-        let runner = NoopRunner;
         let mut control = ChatCommandControl::default();
 
         {
             let context =
-                ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
+                ChatCommandContext::new(&mut model, &tools, &mut control);
             let mut lifecycle = CommitLifecycle::new(&context);
             lifecycle.start().unwrap();
             let content = "x".repeat(MAX_COMMAND_DELTA_CONTENT_CHARS);

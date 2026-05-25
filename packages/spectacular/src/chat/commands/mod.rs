@@ -8,15 +8,14 @@ use crate::chat::command_event::CommandEvent;
 use crate::chat::model::{
     ChatModel, ChatPromptFooterModel, ChatRunRequestModel, HistoryTableModel,
 };
-use crate::chat::prompt::{SelectionPrompt, SelectionPromptAnswer, SelectionPromptRequest};
-use crate::chat::renderer::Renderer;
-use crate::chat::runner::ChatTurnRunner;
+use crate::chat::selection::{
+    SelectionPromptAnswer, SelectionPromptChoice, SelectionPromptRequest,
+};
 use crate::chat::session::ChatRecord;
 use crate::chat::tui::TuiEventAdapter;
 use crate::chat::ChatError;
 pub(crate) use completion::{
-    ChatCompletionContext, CompletionCommandSpec, CompletionEnvironment, CompletionFieldSpec,
-    CompletionSubcommandSpec, CompletionValueValidation,
+    CompletionCommandSpec, CompletionFieldSpec, CompletionSubcommandSpec, CompletionValueValidation,
 };
 use spectacular_agent::{AgentEvent, ToolStorage};
 use spectacular_commands::{
@@ -29,7 +28,6 @@ use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::Duration;
 
 pub type ChatCommandFuture<'a> = Pin<Box<dyn Future<Output = ChatCommandResult> + 'a>>;
 
@@ -57,6 +55,7 @@ impl ChatCommandResult {
 #[derive(Debug, Default)]
 pub struct ChatCommandControl {
     exit_requested: bool,
+    follow_up_prompt: Option<ChatRunRequestModel>,
 }
 
 impl ChatCommandControl {
@@ -68,6 +67,16 @@ impl ChatCommandControl {
     /// Returns whether a command requested the chat loop to exit.
     pub fn exit_requested(&self) -> bool {
         self.exit_requested
+    }
+
+    /// Requests that the controller run a prompt after the command completes.
+    pub fn request_prompt_run(&mut self, request: ChatRunRequestModel) {
+        self.follow_up_prompt = Some(request);
+    }
+
+    /// Takes the pending follow-up prompt request, if a command queued one.
+    pub fn take_follow_up_prompt(&mut self) -> Option<ChatRunRequestModel> {
+        self.follow_up_prompt.take()
     }
 }
 
@@ -90,11 +99,8 @@ impl Copy for ChatCommand {}
 
 pub struct ChatCommandContext<'a> {
     pub model: &'a mut ChatModel,
-    renderer: &'a Renderer,
     pub tools: &'a ToolStorage,
-    runner: &'a dyn ChatTurnRunner,
     control: &'a mut ChatCommandControl,
-    prompt_footer: Option<ChatPromptFooterModel>,
     tui: Option<TuiCommandBridge<'a>>,
 }
 
@@ -108,34 +114,18 @@ impl<'a> ChatCommandContext<'a> {
     /// Creates a command execution context from the active chat services.
     #[allow(
         dead_code,
-        reason = "unit tests and embedders use contexts without prompt footer metadata"
+        reason = "unit tests use contexts without the live TUI bridge"
     )]
+    #[cfg(test)]
     pub fn new(
         model: &'a mut ChatModel,
-        renderer: &'a Renderer,
         tools: &'a ToolStorage,
-        runner: &'a dyn ChatTurnRunner,
         control: &'a mut ChatCommandControl,
-    ) -> Self {
-        Self::new_with_footer(model, renderer, tools, runner, control, None)
-    }
-
-    /// Creates a command execution context with optional prompt footer metadata.
-    pub fn new_with_footer(
-        model: &'a mut ChatModel,
-        renderer: &'a Renderer,
-        tools: &'a ToolStorage,
-        runner: &'a dyn ChatTurnRunner,
-        control: &'a mut ChatCommandControl,
-        prompt_footer: Option<ChatPromptFooterModel>,
     ) -> Self {
         Self {
             model,
-            renderer,
             tools,
-            runner,
             control,
-            prompt_footer,
             tui: None,
         }
     }
@@ -143,21 +133,16 @@ impl<'a> ChatCommandContext<'a> {
     /// Creates a command execution context that projects command output into TUI actions.
     pub(crate) fn new_tui(
         model: &'a mut ChatModel,
-        renderer: &'a Renderer,
         tools: &'a ToolStorage,
-        runner: &'a dyn ChatTurnRunner,
         control: &'a mut ChatCommandControl,
-        prompt_footer: Option<ChatPromptFooterModel>,
+        _prompt_footer: Option<ChatPromptFooterModel>,
         dispatch: &'a mut (dyn FnMut(ChatTuiAction) + Send),
         selection_receiver: &'a mut tokio::sync::mpsc::UnboundedReceiver<Intent>,
     ) -> Self {
         Self {
             model,
-            renderer,
             tools,
-            runner,
             control,
-            prompt_footer,
             tui: Some(TuiCommandBridge {
                 dispatch: RefCell::new(dispatch),
                 adapter: RefCell::new(TuiEventAdapter::new()),
@@ -183,47 +168,36 @@ impl<'a> ChatCommandContext<'a> {
         Ok(())
     }
 
-    /// Renders chat records through the injected renderer and tool storage.
+    /// Replays chat records through the active command display bridge when available.
     pub async fn render_records(&self, records: &[ChatRecord]) -> Result<(), ChatError> {
         if let Some(tui) = &self.tui {
             tui.render_records(records, self.tools);
-            return Ok(());
         }
 
-        self.renderer.render_records(records, self.tools).await
+        Ok(())
     }
 
-    /// Renders a chat history table through the injected renderer.
+    /// Renders a chat history table through the active command display bridge.
     pub fn render_history(&self, table: &HistoryTableModel) {
         if let Some(tui) = &self.tui {
             tui.render_history(table);
-            return;
         }
-
-        self.renderer.history_table(table);
     }
 
-    /// Clears the terminal screen through the injected renderer.
+    /// Clears the visible transcript in the active command display bridge.
     pub fn clear_screen(&self) {
         if let Some(tui) = &self.tui {
             tui.dispatch(ChatTuiAction::TranscriptCleared);
-            return;
         }
-
-        self.renderer.clear_screen();
     }
 
-    /// Renders a session-created notice for a new chat session.
+    /// Renders a session-created notice for a new chat session when a display bridge exists.
     pub fn session_created(&self, id: &str, directory: &Path) {
         if let Some(tui) = &self.tui {
             tui.dispatch(crate::chat::tui::state::session_created_action(
                 id, self.model, directory,
             ));
-            return;
         }
-
-        self.renderer
-            .session_created(id, self.model.runtime(), directory);
     }
 
     /// Renders a session-resumed notice for an existing chat session.
@@ -235,10 +209,7 @@ impl<'a> ChatCommandContext<'a> {
             tui.dispatch(ChatTuiAction::NoticeReported {
                 message: format!("resumed session {id}"),
             });
-            return;
         }
-
-        self.renderer.resumed(id);
     }
 
     /// Renders a low-emphasis informational command message.
@@ -247,10 +218,7 @@ impl<'a> ChatCommandContext<'a> {
             tui.dispatch(ChatTuiAction::NoticeReported {
                 message: message.to_owned(),
             });
-            return;
         }
-
-        self.renderer.dim(message);
     }
 
     /// Renders a successful command message.
@@ -259,50 +227,24 @@ impl<'a> ChatCommandContext<'a> {
             tui.dispatch(ChatTuiAction::SuccessReported {
                 message: message.to_owned(),
             });
-            return;
         }
-
-        self.renderer.success(message);
     }
 
     /// Renders a blank line when the active command output supports line-oriented spacing.
-    pub fn blank_line(&self) {
-        if self.tui.is_some() {
-            return;
-        }
-
-        self.renderer.blank_line();
-    }
+    pub fn blank_line(&self) {}
 
     /// Renders a command lifecycle start record.
-    pub fn command_start(&self, title: &str, command: &str) {
-        if self.tui.is_some() {
-            return;
-        }
-
-        self.renderer.command_start(title, command);
-    }
+    pub fn command_start(&self, _title: &str, _command: &str) {}
 
     /// Renders a command lifecycle progress record.
-    pub fn command_delta(&self, content: &str) {
-        if self.tui.is_some() {
-            return;
-        }
-
-        self.renderer.command_delta(content);
-    }
+    pub fn command_delta(&self, _content: &str) {}
 
     /// Renders a command lifecycle completion record.
     pub fn command_finished(
         &self,
-        status: crate::chat::command_event::CommandStatus,
-        summary: &str,
+        _status: crate::chat::command_event::CommandStatus,
+        _summary: &str,
     ) {
-        if self.tui.is_some() {
-            return;
-        }
-
-        self.renderer.command_finished(status, summary);
     }
 
     /// Renders an interactive option selection prompt and returns the user's answer.
@@ -314,12 +256,9 @@ impl<'a> ChatCommandContext<'a> {
             return tui.ask(request).await;
         }
 
-        let prompt = SelectionPrompt::new(self.renderer, request);
-        if let Some(footer) = &self.prompt_footer {
-            return prompt.with_footer(footer.clone()).read_selection();
-        }
-
-        prompt.read_selection()
+        Err(ChatError::Session(
+            "selection prompt requires the TUI command bridge".to_owned(),
+        ))
     }
 
     /// Runs async command work with a transient "working" indicator until the
@@ -328,33 +267,7 @@ impl<'a> ChatCommandContext<'a> {
     where
         F: Future<Output = T>,
     {
-        if self.tui.is_some() {
-            return f.await;
-        }
-
-        use std::pin::pin;
-
-        let mut future = pin!(f);
-        let mut frame = 0usize;
-        let mut interval = tokio::time::interval(Duration::from_millis(90));
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-
-        self.renderer.working();
-
-        let result = loop {
-            tokio::select! {
-                _ = interval.tick() => {
-                    self.renderer.working_frame(frame, None);
-                    frame = frame.wrapping_add(1);
-                }
-                result = &mut future => {
-                    break result;
-                }
-            }
-        };
-
-        self.renderer.clear_working();
-        result
+        f.await
     }
 
     /// Requests that the chat command loop exit after this command.
@@ -362,11 +275,9 @@ impl<'a> ChatCommandContext<'a> {
         self.control.request_exit();
     }
 
-    /// Runs a prompt through the injected turn runner from inside a command.
-    pub async fn run_prompt(&mut self, request: ChatRunRequestModel) -> Result<(), ChatError> {
-        self.runner
-            .run(self.model, self.renderer, self.tools, request)
-            .await
+    /// Requests that the controller run a prompt after command execution.
+    pub fn request_prompt_run(&mut self, request: ChatRunRequestModel) {
+        self.control.request_prompt_run(request);
     }
 }
 
@@ -481,10 +392,10 @@ fn selection_answer_from_tui(
     SelectionPromptAnswer {
         choice: match answer.choice {
             spectacular_tui::SelectionPromptChoice::Option { index, label } => {
-                crate::chat::prompt::SelectionPromptChoice::Option { index, label }
+                SelectionPromptChoice::Option { index, label }
             }
             spectacular_tui::SelectionPromptChoice::Custom(value) => {
-                crate::chat::prompt::SelectionPromptChoice::Custom(value)
+                SelectionPromptChoice::Custom(value)
             }
         },
         comment: answer.comment,
@@ -574,27 +485,6 @@ pub fn registry() -> Result<ChatCommandAdapter, CommandError> {
         runtime::retry::command(),
         git::command(),
     ])
-}
-
-#[cfg(test)]
-pub(crate) mod test_support {
-    use super::*;
-    use crate::chat::runner::{ChatTurnFuture, ChatTurnRunner};
-
-    pub(crate) struct NoopRunner;
-
-    impl ChatTurnRunner for NoopRunner {
-        /// Ignores prompt execution for command unit tests that only need a runner seam.
-        fn run<'a>(
-            &'a self,
-            _model: &'a mut ChatModel,
-            _renderer: &'a Renderer,
-            _tools: &'a ToolStorage,
-            _request: ChatRunRequestModel,
-        ) -> ChatTurnFuture<'a> {
-            Box::pin(async { Ok(()) })
-        }
-    }
 }
 
 #[cfg(test)]

@@ -38,9 +38,7 @@ fn execute<'a>(mut context: ChatCommandContext<'a>, args: Vec<String>) -> ChatCo
         };
 
         context.notice("retrying latest prompt...");
-        if let Err(error) = context.run_prompt(request).await {
-            return ChatCommandResult::error(error.to_string());
-        }
+        context.request_prompt_run(request);
 
         ChatCommandResult::success()
     })

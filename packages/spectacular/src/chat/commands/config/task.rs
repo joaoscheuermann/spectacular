@@ -1,29 +1,21 @@
 use crate::chat::commands::{
-    ChatCommand, ChatCommandContext, ChatCommandFuture, ChatCommandResult, ChatCompletionContext,
-    CompletionFieldSpec, CompletionSubcommandSpec, CompletionValueValidation,
+    ChatCommand, ChatCommandContext, ChatCommandFuture, ChatCommandResult, CompletionFieldSpec,
+    CompletionSubcommandSpec, CompletionValueValidation,
 };
 use crate::config_fields::{named_args, parse_task};
 use spectacular_commands::CommandError;
-use spectacular_config::TaskModelSlot;
 
 const TASK_SET_FIELDS: &[CompletionFieldSpec] = &[
     CompletionFieldSpec {
         name: "task",
         summary: "task slot",
         required: true,
-        values: |_: &ChatCompletionContext<'_>| {
-            Ok(TaskModelSlot::ALL
-                .into_iter()
-                .map(|slot| slot.as_str().to_owned())
-                .collect())
-        },
         validation: CompletionValueValidation::OneOfValues,
     },
     CompletionFieldSpec {
         name: "model",
         summary: "saved model key",
         required: true,
-        values: |ctx: &ChatCompletionContext<'_>| ctx.saved_model_names(),
         validation: CompletionValueValidation::None,
     },
 ];

@@ -191,6 +191,47 @@ async fn submit_prompt_intent_runs_real_controller_path() {
     }));
 }
 
+/// Verifies TUI retry commands run the latest prompt through the TUI runner path.
+#[tokio::test]
+async fn retry_command_intent_runs_latest_prompt_through_tui_runner() {
+    let mut runner = RecordingTuiTurnRunner::default();
+    runner.events.push(AgentEvent::Finished {
+        finish_reason: FinishReason::Stop,
+    });
+    let bootstrap = TestTuiBootstrap::create("retry-session");
+    let mut controller = TuiRuntimeController::new_with_runner(bootstrap, runner).unwrap();
+    controller
+        .model()
+        .append_agent_event(&AgentEvent::user_prompt("retry this"))
+        .unwrap();
+
+    let should_exit = controller
+        .handle_intent(Intent::SubmitPrompt {
+            id: TranscriptItemId::new("prompt-1"),
+            text: "/retry".to_owned(),
+        })
+        .await
+        .unwrap();
+
+    assert!(!should_exit);
+    assert_eq!(controller.runner().requests, vec!["retry this".to_owned()]);
+    assert_eq!(controller.runner().prompt_event_ids, vec![None]);
+    assert_eq!(controller.runner().retry_existing_prompts, vec![true]);
+    assert!(controller.state().session.transcript.iter().any(|item| {
+        matches!(
+            &item.content,
+            TranscriptItemContent::Notice(notice) if notice.message == "retrying latest prompt..."
+        )
+    }));
+    assert!(!controller.state().session.transcript.iter().any(|item| {
+        matches!(
+            &item.content,
+            TranscriptItemContent::Error(error)
+                if error.message.contains("nested prompt execution")
+        )
+    }));
+}
+
 /// Verifies slash command control requests propagate through the TUI controller.
 #[tokio::test]
 async fn exit_command_intent_requests_runtime_exit() {
@@ -287,6 +328,7 @@ struct RecordingTuiTurnRunner {
     events: Vec<AgentEvent>,
     requests: Vec<String>,
     prompt_event_ids: Vec<Option<String>>,
+    retry_existing_prompts: Vec<bool>,
     cancel_count: usize,
     running: bool,
 }
@@ -303,6 +345,8 @@ impl TuiTurnRunner for RecordingTuiTurnRunner {
     ) -> TuiTurnFuture<'a> {
         Box::pin(async move {
             self.prompt_event_ids.push(request.prompt_event_id.clone());
+            self.retry_existing_prompts
+                .push(request.retry_existing_prompt);
             self.requests.push(request.prompt);
             let mut adapter = TuiEventAdapter::new();
             for event in self.events.clone() {

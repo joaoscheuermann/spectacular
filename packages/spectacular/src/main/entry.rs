@@ -29,12 +29,12 @@ async fn main() -> ExitCode {
 
 async fn handle(cli: Cli, debug_logger: LlmDebugLogger) -> Result<Option<String>, AppError> {
     match cli.command {
-        Command::Chat(args) => match chat::run(debug_logger, args.tui).await {
+        None => match chat::run(debug_logger).await {
             Ok(()) | Err(chat::ChatError::Exit) => Ok(None),
             Err(error) => Err(error.into()),
         },
-        Command::Config(args) => handle_config(args).map(Some),
-        Command::Plan { prompt } => handle_plan(&prompt).map(Some),
+        Some(Command::Config(args)) => handle_config(args).map(Some),
+        Some(Command::Plan { prompt }) => handle_plan(&prompt).map(Some),
     }
 }
 

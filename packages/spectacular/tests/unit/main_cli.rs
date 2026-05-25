@@ -1,4 +1,5 @@
 use super::*;
+use clap::error::ErrorKind;
 use clap::CommandFactory;
 use spectacular_config::{
     CachedModelMetadata, ModelCache, ModelConfig, ProviderModelCache, TaskAssignments,
@@ -7,33 +8,37 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 
 #[test]
-fn top_level_help_lists_chat_config_and_plan() {
+fn top_level_help_lists_config_and_plan_without_chat() {
     let mut command = Cli::command();
     let mut buffer = Vec::new();
 
     command.write_long_help(&mut buffer).unwrap();
     let help = String::from_utf8(buffer).unwrap();
 
-    assert!(help.contains("chat"));
+    assert!(!help.contains("chat"));
     assert!(help.contains("config"));
     assert!(help.contains("plan"));
 }
 
 #[test]
-fn chat_without_tui_flag_uses_legacy_renderer_path() {
-    let cli = Cli::try_parse_from(["spectacular", "chat"]).unwrap();
+fn bare_invocation_defaults_to_chat() {
+    let cli = Cli::try_parse_from(["spectacular"]).unwrap();
 
-    assert!(matches!(
-        cli.command,
-        Command::Chat(ChatArgs { tui: false })
-    ));
+    assert!(cli.command.is_none());
 }
 
 #[test]
-fn chat_tui_flag_opts_into_iocraft_path() {
-    let cli = Cli::try_parse_from(["spectacular", "chat", "--tui"]).unwrap();
+fn chat_subcommand_is_not_accepted() {
+    let error = Cli::try_parse_from(["spectacular", "chat"]).unwrap_err();
 
-    assert!(matches!(cli.command, Command::Chat(ChatArgs { tui: true })));
+    assert_eq!(error.kind(), ErrorKind::InvalidSubcommand);
+}
+
+#[test]
+fn tui_flag_is_not_accepted() {
+    let error = Cli::try_parse_from(["spectacular", "--tui"]).unwrap_err();
+
+    assert_eq!(error.kind(), ErrorKind::UnknownArgument);
 }
 
 #[test]

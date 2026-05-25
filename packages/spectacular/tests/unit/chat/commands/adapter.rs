@@ -1,6 +1,5 @@
 use super::*;
-use crate::chat::commands::test_support::NoopRunner;
-use crate::chat::prompt::SelectionPromptChoice;
+use crate::chat::selection::SelectionPromptChoice;
 use crate::chat::RuntimeSelection;
 use spectacular_agent::AgentEvent;
 use spectacular_config::ReasoningLevel;
@@ -13,11 +12,9 @@ use tokio::sync::mpsc;
 async fn adapter_executes_registered_command_success() {
     let adapter = ChatCommandAdapter::new([session::clear::command()]).unwrap();
     let mut model = test_model();
-    let renderer = Renderer::default();
     let tools = ToolStorage::default();
-    let runner = NoopRunner;
     let mut control = ChatCommandControl::default();
-    let context = ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
+    let context = ChatCommandContext::new(&mut model, &tools, &mut control);
 
     let result = adapter
         .execute(
@@ -162,12 +159,10 @@ fn provider_completion_uses_provider_type_for_add_and_auth() {
 #[test]
 fn context_append_agent_event_persists_chat_record() {
     let mut model = test_model();
-    let renderer = Renderer::default();
     let tools = ToolStorage::default();
-    let runner = NoopRunner;
     let mut control = ChatCommandControl::default();
     {
-        let context = ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
+        let context = ChatCommandContext::new(&mut model, &tools, &mut control);
 
         context
             .append_agent_event(&AgentEvent::user_prompt("persist me"))
@@ -185,11 +180,9 @@ fn context_append_agent_event_persists_chat_record() {
 #[tokio::test]
 async fn context_render_records_accepts_transient_records() {
     let mut model = test_model();
-    let renderer = Renderer::default();
     let tools = ToolStorage::default();
-    let runner = NoopRunner;
     let mut control = ChatCommandControl::default();
-    let context = ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
+    let context = ChatCommandContext::new(&mut model, &tools, &mut control);
 
     context.render_records(&[]).await.unwrap();
 }
@@ -198,9 +191,7 @@ async fn context_render_records_accepts_transient_records() {
 #[test]
 fn context_clear_screen_when_tui_dispatches_transcript_cleared() {
     let mut model = test_model();
-    let renderer = Renderer::default();
     let tools = ToolStorage::default();
-    let runner = NoopRunner;
     let mut control = ChatCommandControl::default();
     let (_selection_sender, mut selection_receiver) = mpsc::unbounded_channel();
     let mut actions = Vec::new();
@@ -209,9 +200,7 @@ fn context_clear_screen_when_tui_dispatches_transcript_cleared() {
         let mut dispatch = |action| actions.push(action);
         let context = ChatCommandContext::new_tui(
             &mut model,
-            &renderer,
             &tools,
-            &runner,
             &mut control,
             None,
             &mut dispatch,
@@ -227,14 +216,12 @@ fn context_clear_screen_when_tui_dispatches_transcript_cleared() {
 #[test]
 fn context_render_history_accepts_transient_history() {
     let mut model = test_model();
-    let renderer = Renderer::default();
     let tools = ToolStorage::default();
     let table = model
         .history(crate::chat::session::HistoryQuery::FirstPage)
         .unwrap();
-    let runner = NoopRunner;
     let mut control = ChatCommandControl::default();
-    let context = ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
+    let context = ChatCommandContext::new(&mut model, &tools, &mut control);
 
     context.render_history(&table);
 }
@@ -243,9 +230,7 @@ fn context_render_history_accepts_transient_history() {
 #[tokio::test]
 async fn context_tui_selection_prompt_round_trips_command_request() {
     let mut model = test_model();
-    let renderer = Renderer::default();
     let tools = ToolStorage::default();
-    let runner = NoopRunner;
     let mut control = ChatCommandControl::default();
     let (selection_sender, mut selection_receiver) = mpsc::unbounded_channel();
     selection_sender
@@ -262,9 +247,7 @@ async fn context_tui_selection_prompt_round_trips_command_request() {
         let mut dispatch = |action| actions.push(action);
         let context = ChatCommandContext::new_tui(
             &mut model,
-            &renderer,
             &tools,
-            &runner,
             &mut control,
             None,
             &mut dispatch,
@@ -305,9 +288,7 @@ async fn context_tui_selection_prompt_round_trips_command_request() {
 #[tokio::test]
 async fn context_tui_selection_cancel_returns_exit() {
     let mut model = test_model();
-    let renderer = Renderer::default();
     let tools = ToolStorage::default();
-    let runner = NoopRunner;
     let mut control = ChatCommandControl::default();
     let (selection_sender, mut selection_receiver) = mpsc::unbounded_channel();
     selection_sender
@@ -319,9 +300,7 @@ async fn context_tui_selection_cancel_returns_exit() {
         let mut dispatch = |action| actions.push(action);
         let context = ChatCommandContext::new_tui(
             &mut model,
-            &renderer,
             &tools,
-            &runner,
             &mut control,
             None,
             &mut dispatch,
@@ -347,9 +326,7 @@ async fn context_tui_selection_cancel_returns_exit() {
 #[tokio::test]
 async fn context_tui_selection_prompt_requires_option_or_custom_input() {
     let mut model = test_model();
-    let renderer = Renderer::default();
     let tools = ToolStorage::default();
-    let runner = NoopRunner;
     let mut control = ChatCommandControl::default();
     let (_selection_sender, mut selection_receiver) = mpsc::unbounded_channel();
     let mut actions = Vec::new();
@@ -358,9 +335,7 @@ async fn context_tui_selection_prompt_requires_option_or_custom_input() {
         let mut dispatch = |action| actions.push(action);
         let context = ChatCommandContext::new_tui(
             &mut model,
-            &renderer,
             &tools,
-            &runner,
             &mut control,
             None,
             &mut dispatch,

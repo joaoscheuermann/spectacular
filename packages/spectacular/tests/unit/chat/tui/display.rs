@@ -1,5 +1,5 @@
 use super::*;
-use crate::chat::renderer::{ToolCallView, ToolResultView};
+use crate::chat::display::{ToolCallView, ToolResultView};
 use serde_json::{json, Value};
 use spectacular_agent::{AgentEvent, Cancellation, Tool, ToolDisplay, ToolExecution, ToolManifest, ToolStorage};
 use spectacular_tools::edit::EditTool;

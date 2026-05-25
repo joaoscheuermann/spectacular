@@ -12,7 +12,7 @@ pub(crate) struct ToolResultView {
     pub status: ToolStatus,
 }
 
-/// Renderer-neutral status for a completed tool result.
+/// Display-neutral status for a completed tool result.
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) enum ToolStatus {
     Done,
@@ -71,7 +71,7 @@ impl ToolResultView {
     }
 }
 
-/// Formats tool output into lines with renderer-compatible diff semantics.
+/// Formats tool output into lines with terminal-compatible diff semantics.
 pub(crate) fn styled_tool_output_lines(output: &str) -> Vec<StyledToolOutputLine> {
     let is_diff_output = output
         .lines()

@@ -1,4 +1,4 @@
-//! `/git-commit` command implementation (legacy).
+//! `/git-commit` command implementation.
 //!
 //! Generates a conventional commit message using a standalone AI agent
 //! and commits the currently staged changes.
@@ -7,7 +7,9 @@ use crate::chat::command_event::{
     CommandDelta, CommandEvent, CommandFinished, CommandStart, CommandStatus,
 };
 use crate::chat::commands::{ChatCommandContext, ChatCommandFuture, ChatCommandResult};
-use crate::chat::prompt::{SelectionPromptAnswer, SelectionPromptChoice, SelectionPromptRequest};
+use crate::chat::selection::{
+    SelectionPromptAnswer, SelectionPromptChoice, SelectionPromptRequest,
+};
 use crate::chat::ChatError;
 
 use crate::chat::provider::provider_for_runtime;

@@ -16,7 +16,7 @@ Deliver actionable solutions with clear, straightforward explanations that stric
 - Do not use Python or other scripting languages to update code if there is a better-suited, dedicated tool available.
 
 # Success criteria
-- You have reviewed and adhered to the customized repository instructions found in the `.agents` folder to maintain standard coding patterns and conventions.
+- You have reviewed and adhered to the customized repository instructions found in the `.agents` folder to maintain standard coding patterns, guidelines and conventions.
 - You have thoroughly reasoned about whether existing codebase components can fit the solution before deciding to add any new code.
 
 # Output
@@ -27,3 +27,4 @@ Stop and ask the user for instructions if you:
 - Encounter any ambiguity or unclear requirements (do not guess; clarify first).
 - Notice that you are struggling or unsure of the best implementation path.
 - Are missing critical codebase context.
+- Found an implementation blocker that was not discussed before.

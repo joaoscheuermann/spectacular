@@ -5,23 +5,25 @@ It runs as a native chat loop, streams model output, keeps session history, and
 lets the model use built-in tools to inspect, edit, search, and run commands in
 the current workspace.
 
-The main product surface today is `spectacular chat`. The longer-term direction
-is spec-driven development, but the current working functionality is centered on
+The main product surface is bare `spectacular`. The longer-term direction is
+spec-driven development, but the current working functionality is centered on
 chat, tool use, sessions, provider configuration, and repository workflows.
 
 ## Functionality
 
 ### Terminal Chat
 
-Start a fresh terminal chat session:
+Start a fresh IOCraft TUI chat session:
 
 ```sh
-npx nx run spectacular:run --args='chat'
+npx nx run spectacular:run
 ```
 
-The chat experience is transcript-first: no fullscreen TUI, no fixed panels,
-and normal terminal scrollback. User prompts and assistant responses stay in the
-terminal output, while the prompt editor handles interactive input.
+When using the built binary directly, run `spectacular` with no subcommand.
+
+The chat experience runs in the IOCraft terminal UI. User prompts, assistant
+responses, tool calls, session state, and command output stay in one interactive
+terminal surface.
 
 The prompt supports:
 
@@ -34,15 +36,7 @@ The prompt supports:
 - `Shift+Enter`, `Alt+Enter`, `Ctrl+Enter`, or `Ctrl+J` to insert a newline.
 - `Ctrl+C` to clear the current prompt, or exit when the prompt is empty.
 
-### Experimental Fullscreen TUI
-
-Start the IOCraft fullscreen TUI:
-
-```sh
-npx nx run spectacular:run --args='chat --tui'
-```
-
-This path owns clipboard shortcuts inside the app:
+The TUI owns clipboard shortcuts inside the app:
 
 - `Ctrl+C` copies the focused prompt selection.
 - `Ctrl+X` cuts the focused prompt selection.
@@ -123,7 +117,7 @@ Chat sessions are persisted as structured JSONL records. A session can include:
 
 Useful session behavior:
 
-- `spectacular chat` starts a fresh session by default.
+- `spectacular` starts a fresh session by default.
 - `/history` lists recent saved sessions.
 - `/resume <session-id>` restores a previous session.
 - `/retry` truncates after the latest user prompt and reruns it.
@@ -135,7 +129,7 @@ OpenRouter is the enabled provider implementation in this checkout.
 
 Spectacular stores provider settings locally and supports three model slots:
 
-- `coding`: used by `spectacular chat`.
+- `coding`: used by `spectacular`.
 - `labeling`: used for background session titles when configured.
 - `planning`: reserved for the planning route.
 
@@ -207,7 +201,7 @@ npx nx run spectacular:run --args='config --provider openrouter --task coding --
 Start chat:
 
 ```sh
-npx nx run spectacular:run --args='chat'
+npx nx run spectacular:run
 ```
 
 ## Local Data

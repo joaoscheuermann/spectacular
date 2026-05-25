@@ -1,5 +1,4 @@
     use super::*;
-    use spectacular_commands::CommandControl;
     use spectacular_config::{
         CachedModelMetadata, ModelCache, ModelConfig, ProviderConfig, TaskAssignments,
     };
@@ -92,32 +91,6 @@
         assert_eq!(runtime.context_window_tokens, Some(64_000));
     }
 
-    /// Verifies that chat controller dispatches exit command.
-    #[tokio::test]
-    async fn chat_controller_dispatches_exit_command() {
-        let session = session::SessionManager::new_in(temp_session_dir("controller-exit"))
-            .expect("session manager should be created");
-        let mut model = super::model::ChatModel::new(session, test_runtime());
-        model.start_new_session().unwrap();
-        let mut controller = super::controller::ChatController::new(
-            model,
-            commands::registry().unwrap(),
-            Renderer::default(),
-            ToolStorage::default(),
-            std::path::PathBuf::from("workspace"),
-        );
-
-        let control = controller
-            .dispatch_command(spectacular_commands::CommandInvocation {
-                name: "exit".to_owned(),
-                args: Vec::new(),
-            })
-            .await
-            .unwrap();
-
-        assert_eq!(control, CommandControl::Exit);
-    }
-
     /// Builds a complete configuration for test scenarios.
     fn complete_config() -> SpectacularConfig {
         let mut providers = BTreeMap::new();
@@ -142,31 +115,7 @@
         }
     }
 
-    /// Builds a runtime selection for chat tests.
-    fn test_runtime() -> RuntimeSelection {
-        RuntimeSelection {
-            provider_type: "openrouter".to_owned(),
-            provider_auth: Some(spectacular_config::ProviderAuthMode::ApiKey),
-            provider: "openrouter".to_owned(),
-            api_key: "sk-or-v1-test".to_owned(),
-            model_key: "test-model".to_owned(),
-            model: "test/model".to_owned(),
-            reasoning: ReasoningLevel::Medium,
-            context_window_tokens: None,
-        }
-    }
-
     /// Wraps a chat event in a session record for runtime-selection tests.
     fn chat_record(event: ChatEvent) -> session::ChatRecord {
         session::ChatRecord::Known { line: 1, event }
-    }
-
-    /// Builds a temporary session directory path for a named test case.
-    fn temp_session_dir(name: &str) -> std::path::PathBuf {
-        let suffix = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-
-        std::env::temp_dir().join(format!("spectacular-chat-{name}-{suffix}"))
     }

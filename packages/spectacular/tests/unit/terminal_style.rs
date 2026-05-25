@@ -1,5 +1,7 @@
 use crate::terminal_style::*;
-use spectacular_tui::tool_style;
+use spectacular_tui::{
+    assistant_style, command_output_style, command_style, tool_style, user_style,
+};
 
 #[test]
 fn paint_wraps_value_with_style_and_reset() {

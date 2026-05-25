@@ -215,7 +215,7 @@ fn validate_model_from_cache(
         cache
             .model(provider, model_id)
             .ok_or_else(|| AppError::InvalidConfigCommand(format!(
-                "Model `{model_id}` is not available in API metadata cache for provider `{provider}`. Start `spectacular chat` with a configured API key to refresh model metadata."
+                "Model `{model_id}` is not available in API metadata cache for provider `{provider}`. Start `spectacular` with a configured API key to refresh model metadata."
             )))?;
 
     validate_reasoning_for_cached_model(metadata, model_id, reasoning)

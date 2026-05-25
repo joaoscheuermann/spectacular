@@ -1,8 +1,7 @@
     use super::*;
-    use crate::chat::commands::{test_support::NoopRunner, ChatCommandControl};
+    use crate::chat::commands::{ChatCommandControl};
     use crate::chat::model::ChatModel;
-    use crate::chat::renderer::Renderer;
-    use crate::chat::session::SessionManager;
+        use crate::chat::session::SessionManager;
     use crate::chat::RuntimeSelection;
     use spectacular_agent::ToolStorage;
     use spectacular_config::ReasoningLevel;
@@ -13,11 +12,9 @@
     #[tokio::test]
     async fn git_status_returns_success() {
         let mut model = test_model();
-        let renderer = Renderer::default();
         let tools = ToolStorage::default();
-        let runner = NoopRunner;
         let mut control = ChatCommandControl::default();
-        let context = ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
+        let context = ChatCommandContext::new(&mut model, &tools, &mut control);
 
         let result = execute(context, Vec::new()).await;
 
@@ -28,11 +25,9 @@
     #[tokio::test]
     async fn git_status_rejects_args() {
         let mut model = test_model();
-        let renderer = Renderer::default();
         let tools = ToolStorage::default();
-        let runner = NoopRunner;
         let mut control = ChatCommandControl::default();
-        let context = ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
+        let context = ChatCommandContext::new(&mut model, &tools, &mut control);
 
         let result = execute(context, vec!["extra".to_owned()]).await;
 

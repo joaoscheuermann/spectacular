@@ -1,82 +1,35 @@
 use crate::chat::commands::{
-    ChatCommand, ChatCommandContext, ChatCommandFuture, ChatCommandResult, ChatCompletionContext,
-    CompletionFieldSpec, CompletionSubcommandSpec, CompletionValueValidation,
+    ChatCommand, ChatCommandContext, ChatCommandFuture, ChatCommandResult, CompletionFieldSpec,
+    CompletionSubcommandSpec, CompletionValueValidation,
 };
-use crate::chat::{validate_cached_model_reasoning, ChatError};
+use crate::chat::validate_cached_model_reasoning;
 use crate::config_fields::{named_args, parse_reasoning};
 use spectacular_commands::CommandError;
 use spectacular_config::{ModelCache, ReasoningLevel};
-
-/// Returns the supported reasoning-level completion values from the canonical config enum.
-fn reasoning_values(_: &ChatCompletionContext<'_>) -> Result<Vec<String>, ChatError> {
-    Ok(ReasoningLevel::ALL
-        .into_iter()
-        .map(|value| value.as_str().to_owned())
-        .collect())
-}
-
-/// Returns configured provider names from persisted chat configuration.
-fn configured_provider_values(ctx: &ChatCompletionContext<'_>) -> Result<Vec<String>, ChatError> {
-    ctx.configured_provider_names()
-}
-
-/// Returns the provider typed in args or inferred from the edited model name.
-fn typed_or_inferred_provider(
-    ctx: &ChatCompletionContext<'_>,
-) -> Result<Option<String>, ChatError> {
-    if let Some(provider) = ctx.args.get("provider") {
-        return Ok(Some(provider.to_owned()));
-    }
-
-    if ctx.subcommand != "edit" {
-        return Ok(None);
-    }
-
-    let Some(model_name) = ctx.args.get("name") else {
-        return Ok(None);
-    };
-
-    ctx.saved_model_provider(model_name)
-}
-
-/// Returns cached model ids scoped by typed provider, inferred edited model, or all providers.
-fn cached_model_id_values(ctx: &ChatCompletionContext<'_>) -> Result<Vec<String>, ChatError> {
-    let provider = typed_or_inferred_provider(ctx)?;
-    ctx.cached_model_ids(provider.as_deref())
-}
-
-/// Returns saved model aliases from persisted chat configuration.
-fn saved_model_values(ctx: &ChatCompletionContext<'_>) -> Result<Vec<String>, ChatError> {
-    ctx.saved_model_names()
-}
 
 const MODEL_ADD_FIELDS: &[CompletionFieldSpec] = &[
     CompletionFieldSpec {
         name: "provider",
         summary: "configured provider name",
         required: true,
-        values: configured_provider_values,
         validation: CompletionValueValidation::None,
     },
     CompletionFieldSpec {
         name: "id",
         summary: "model ID from the selected provider",
         required: true,
-        values: cached_model_id_values,
         validation: CompletionValueValidation::None,
     },
     CompletionFieldSpec {
         name: "reasoning",
         summary: "reasoning level",
         required: true,
-        values: reasoning_values,
         validation: CompletionValueValidation::OneOfValues,
     },
     CompletionFieldSpec {
         name: "name",
         summary: "optional saved model name",
         required: false,
-        values: saved_model_values,
         validation: CompletionValueValidation::None,
     },
 ];
@@ -86,28 +39,24 @@ const MODEL_EDIT_FIELDS: &[CompletionFieldSpec] = &[
         name: "name",
         summary: "saved model key",
         required: true,
-        values: saved_model_values,
         validation: CompletionValueValidation::None,
     },
     CompletionFieldSpec {
         name: "provider",
         summary: "replacement provider name",
         required: false,
-        values: configured_provider_values,
         validation: CompletionValueValidation::None,
     },
     CompletionFieldSpec {
         name: "id",
         summary: "replacement model ID",
         required: false,
-        values: cached_model_id_values,
         validation: CompletionValueValidation::None,
     },
     CompletionFieldSpec {
         name: "reasoning",
         summary: "replacement reasoning level",
         required: false,
-        values: reasoning_values,
         validation: CompletionValueValidation::OneOfValues,
     },
 ];
@@ -116,7 +65,6 @@ const MODEL_REMOVE_FIELDS: &[CompletionFieldSpec] = &[CompletionFieldSpec {
     name: "name",
     summary: "saved model key",
     required: true,
-    values: saved_model_values,
     validation: CompletionValueValidation::None,
 }];
 
