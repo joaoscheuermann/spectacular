@@ -13,6 +13,19 @@ use tokio::sync::mpsc;
 
 pub(crate) type TurnFuture<'a> = Pin<Box<dyn Future<Output = Result<(), ChatError>> + Send + 'a>>;
 
+#[derive(Eq, PartialEq)]
+enum StreamFlow {
+    Continue,
+    Stop,
+}
+
+struct EventHandler<'a, 'dispatch> {
+    model: &'a ChatModel,
+    tools: &'a ToolStorage,
+    adapter: TuiEventAdapter,
+    dispatch: &'dispatch mut (dyn FnMut(ChatTuiAction) + Send),
+}
+
 /// Async seam for executing one TUI chat turn without coupling the TUI to runtime APIs.
 pub(crate) trait TurnRunner: Send {
     /// Runs a prompt and sends controller-owned TUI actions to the supplied callback.
@@ -69,6 +82,19 @@ impl AgentRunner {
         dispatch: &mut (dyn FnMut(ChatTuiAction) + Send),
         cancellation: &mut mpsc::UnboundedReceiver<()>,
     ) -> Result<(), ChatError> {
+        self.start_stream(model, tools, request)?;
+        let mut handler = EventHandler::new(model, tools, dispatch);
+        self.consume_stream(&mut handler, cancellation).await?;
+        self.active = None;
+        Ok(())
+    }
+
+    fn start_stream(
+        &mut self,
+        model: &ChatModel,
+        tools: &ToolStorage,
+        request: ChatRunRequestModel,
+    ) -> Result<(), ChatError> {
         let agent = main_chat_agent(
             provider_for_runtime(
                 &request.runtime,
@@ -83,27 +109,19 @@ impl AgentRunner {
             Arc::new(agent)
                 .run_stream_with_prompt_event_id(request.prompt, request.prompt_event_id),
         );
-        let mut adapter = TuiEventAdapter::new();
+        Ok(())
+    }
+
+    async fn consume_stream(
+        &mut self,
+        handler: &mut EventHandler<'_, '_>,
+        cancellation: &mut mpsc::UnboundedReceiver<()>,
+    ) -> Result<(), ChatError> {
         while let Some(event) = self.next_event(cancellation).await {
-            if let AgentEvent::ContextTokenUsage(usage) = event {
-                model.set_context_token_usage(usage);
-                for action in adapter
-                    .adapt_agent_event_with_tools(&AgentEvent::ContextTokenUsage(usage), tools)
-                {
-                    dispatch(action);
-                }
-                continue;
-            }
-            let is_terminal_cancellation = matches!(event, AgentEvent::Cancelled { .. });
-            model.append_agent_event(&event)?;
-            for action in adapter.adapt_agent_event_with_tools(&event, tools) {
-                dispatch(action);
-            }
-            if is_terminal_cancellation {
+            if handler.handle(event)? == StreamFlow::Stop {
                 break;
             }
         }
-        self.active = None;
         Ok(())
     }
 
@@ -122,6 +140,44 @@ impl AgentRunner {
                     reason: "run cancelled".to_owned(),
                 })
             }
+        }
+    }
+}
+
+impl<'a, 'dispatch> EventHandler<'a, 'dispatch> {
+    fn new(
+        model: &'a ChatModel,
+        tools: &'a ToolStorage,
+        dispatch: &'dispatch mut (dyn FnMut(ChatTuiAction) + Send),
+    ) -> Self {
+        Self {
+            model,
+            tools,
+            adapter: TuiEventAdapter::new(),
+            dispatch,
+        }
+    }
+
+    fn handle(&mut self, event: AgentEvent) -> Result<StreamFlow, ChatError> {
+        if let AgentEvent::ContextTokenUsage(usage) = event {
+            self.model.set_context_token_usage(usage);
+            self.dispatch(&AgentEvent::ContextTokenUsage(usage));
+            return Ok(StreamFlow::Continue);
+        }
+
+        let flow = if matches!(event, AgentEvent::Cancelled { .. }) {
+            StreamFlow::Stop
+        } else {
+            StreamFlow::Continue
+        };
+        self.model.append_agent_event(&event)?;
+        self.dispatch(&event);
+        Ok(flow)
+    }
+
+    fn dispatch(&mut self, event: &AgentEvent) {
+        for action in self.adapter.adapt_agent_event_with_tools(event, self.tools) {
+            (self.dispatch)(action);
         }
     }
 }

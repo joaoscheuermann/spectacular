@@ -3,7 +3,9 @@ use crate::chat::commands::{
     CompletionSubcommandSpec, CompletionValueValidation,
 };
 use crate::config_fields::{named_args, parse_task};
-use spectacular_commands::CommandError;
+use spectacular_commands::{CommandError, NamedArgs};
+
+const TASK_USAGE: &str = "/task set task:<general|coding|labeling> model:<model-key>";
 
 const TASK_SET_FIELDS: &[CompletionFieldSpec] = &[
     CompletionFieldSpec {
@@ -30,7 +32,7 @@ const TASK_SUBCOMMANDS: &[CompletionSubcommandSpec] = &[CompletionSubcommandSpec
 pub fn command() -> ChatCommand {
     ChatCommand {
         name: "task",
-        usage: "/task set task:<general|coding|labeling> model:<model-key>",
+        usage: TASK_USAGE,
         summary: "Assign task models",
         completion: TASK_SUBCOMMANDS,
         execute,
@@ -42,31 +44,73 @@ fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatComman
     Box::pin(async move {
         match args.split_first() {
             Some((subcommand, fields)) if subcommand == "set" => task_set(context, fields),
-            _ => ChatCommandResult::error(CommandError::usage(command().usage).to_string()),
+            _ => ChatCommandResult::error(CommandError::usage(TASK_USAGE).to_string()),
         }
     })
 }
 
 /// Assigns a saved model to a task slot and reports the updated mapping.
 fn task_set(context: ChatCommandContext<'_>, fields: &[String]) -> ChatCommandResult {
-    let args = match named_args(fields, &["task", "model"]) {
-        Ok(args) => args,
-        Err(error) => return ChatCommandResult::error(error.to_string()),
-    };
-    let task = match args.require("task").and_then(parse_task) {
-        Ok(task) => task,
-        Err(error) => return ChatCommandResult::error(error.to_string()),
-    };
-    let model = match args.require("model") {
-        Ok(value) => value,
-        Err(error) => return ChatCommandResult::error(error.to_string()),
-    };
+    finish(run_task_set(context, fields))
+}
 
-    match context.model.set_task_model(task, model) {
-        Ok(_) => {
-            context.success(&format!("task updated: {} -> {model}", task.as_str()));
-            ChatCommandResult::success()
-        }
-        Err(error) => ChatCommandResult::error(error.to_string()),
+fn run_task_set(
+    context: ChatCommandContext<'_>,
+    fields: &[String],
+) -> Result<ChatCommandResult, String> {
+    let spec = TaskSetSpec::parse(fields)?;
+    context
+        .model
+        .set_task_model(spec.task, &spec.model)
+        .map_err(|error| error.to_string())?;
+    context.success(&format!(
+        "task updated: {} -> {}",
+        spec.task.as_str(),
+        spec.model
+    ));
+    Ok(ChatCommandResult::success())
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct TaskSetSpec {
+    task: spectacular_config::TaskModelSlot,
+    model: String,
+}
+
+impl TaskSetSpec {
+    fn parse(fields: &[String]) -> Result<Self, String> {
+        let args = parse_fields(fields, &["task", "model"])?;
+        Ok(Self {
+            task: parse_task_field(&args)?,
+            model: require_field(&args, "model")?,
+        })
     }
+}
+
+fn parse_task_field(args: &NamedArgs) -> Result<spectacular_config::TaskModelSlot, String> {
+    args.require("task")
+        .and_then(parse_task)
+        .map_err(|error| error.to_string())
+}
+
+fn parse_fields(fields: &[String], allowed: &[&str]) -> Result<NamedArgs, String> {
+    named_args(fields, allowed).map_err(|error| error.to_string())
+}
+
+fn require_field(args: &NamedArgs, name: &'static str) -> Result<String, String> {
+    args.require(name)
+        .map(str::to_owned)
+        .map_err(|error| error.to_string())
+}
+
+fn finish(result: Result<ChatCommandResult, String>) -> ChatCommandResult {
+    result.unwrap_or_else(ChatCommandResult::error)
+}
+
+#[cfg(test)]
+mod tests {
+    include!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/unit/chat/commands/config/task.rs"
+    ));
 }

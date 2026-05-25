@@ -1,5 +1,17 @@
+use super::{
+    chat,
+    cli_types::{Cli, Command, ConfigArgs},
+    config_ops::{handle_config_with_io, ConfigIo},
+    plan_errors::handle_plan,
+    plan_errors::user_facing_error,
+    plan_errors::AppError,
+};
+use clap::Parser;
+use spectacular_llms::LlmDebugLogger;
+use std::process::ExitCode;
+
 #[tokio::main]
-async fn main() -> ExitCode {
+pub(super) async fn run() -> ExitCode {
     let cli = Cli::parse();
     let debug_logger = match LlmDebugLogger::create_for_current_exe() {
         Ok(logger) => logger,
@@ -41,9 +53,11 @@ async fn handle(cli: Cli, debug_logger: LlmDebugLogger) -> Result<Option<String>
 fn handle_config(args: ConfigArgs) -> Result<String, AppError> {
     handle_config_with_io(
         args,
-        spectacular_config::read_config_or_default,
-        spectacular_config::read_model_cache_or_default,
-        spectacular_config::backup_config,
-        spectacular_config::write_config,
+        ConfigIo::new(
+            spectacular_config::read_config_or_default,
+            spectacular_config::read_model_cache_or_default,
+            spectacular_config::backup_config,
+            spectacular_config::write_config,
+        ),
     )
 }

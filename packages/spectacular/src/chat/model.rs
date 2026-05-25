@@ -260,18 +260,7 @@ impl ChatModel {
             .config_io
             .read_config_or_default()
             .unwrap_or_else(|_| config_for_runtime(&self.runtime));
-        if let Some(runtime) =
-            RuntimeSelection::from_session_records_and_cache(&config, &cache, records)?
-        {
-            self.runtime = runtime;
-            return Ok(());
-        }
-
-        if let Some(runtime) = RuntimeSelection::from_session_records_and_cache(
-            &config_for_runtime(&self.runtime),
-            &cache,
-            records,
-        )? {
+        if let Some(runtime) = resume_runtime(&config, &cache, records, &self.runtime)? {
             self.runtime = runtime;
             return Ok(());
         }
@@ -408,7 +397,23 @@ fn truncate(value: &str, limit: usize) -> String {
 /// Builds a minimal config containing the active runtime for session-resume fallback logic.
 fn config_for_runtime(runtime: &RuntimeSelection) -> SpectacularConfig {
     let mut providers = BTreeMap::new();
-    let provider = match runtime.provider_auth {
+    providers.insert(
+        runtime.provider.clone(),
+        provider_config_for_runtime(runtime),
+    );
+
+    let mut models = BTreeMap::new();
+    models.insert(runtime.model_key.clone(), model_config_for_runtime(runtime));
+
+    SpectacularConfig {
+        providers,
+        models,
+        tasks: task_assignments_for_runtime(runtime),
+    }
+}
+
+fn provider_config_for_runtime(runtime: &RuntimeSelection) -> ProviderConfig {
+    match runtime.provider_auth {
         Some(ProviderAuthMode::Oauth) => ProviderConfig {
             provider_type: runtime.provider_type.clone(),
             credentials: None,
@@ -416,27 +421,37 @@ fn config_for_runtime(runtime: &RuntimeSelection) -> SpectacularConfig {
         Some(ProviderAuthMode::ApiKey) | None => {
             ProviderConfig::new(runtime.provider_type.clone(), runtime.api_key.clone())
         }
-    };
-    providers.insert(runtime.provider.clone(), provider);
-    let mut models = BTreeMap::new();
-    models.insert(
-        runtime.model_key.clone(),
-        ModelConfig::new(
-            runtime.provider.clone(),
-            runtime.model.clone(),
-            runtime.reasoning,
-        ),
-    );
-
-    SpectacularConfig {
-        providers,
-        models,
-        tasks: TaskAssignments {
-            general: None,
-            coding: Some(runtime.model_key.clone()),
-            labeling: None,
-        },
     }
+}
+
+fn model_config_for_runtime(runtime: &RuntimeSelection) -> ModelConfig {
+    ModelConfig::new(
+        runtime.provider.clone(),
+        runtime.model.clone(),
+        runtime.reasoning,
+    )
+}
+
+fn task_assignments_for_runtime(runtime: &RuntimeSelection) -> TaskAssignments {
+    TaskAssignments {
+        general: None,
+        coding: Some(runtime.model_key.clone()),
+        labeling: None,
+    }
+}
+
+fn resume_runtime(
+    config: &SpectacularConfig,
+    cache: &ModelCache,
+    records: &[ChatRecord],
+    current: &RuntimeSelection,
+) -> Result<Option<RuntimeSelection>, ChatError> {
+    if let Some(runtime) = RuntimeSelection::from_session_records_and_cache(config, cache, records)?
+    {
+        return Ok(Some(runtime));
+    }
+
+    RuntimeSelection::from_session_records_and_cache(&config_for_runtime(current), cache, records)
 }
 
 #[cfg(test)]

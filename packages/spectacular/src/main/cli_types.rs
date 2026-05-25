@@ -1,12 +1,15 @@
+use clap::{Args, Parser, Subcommand};
+use spectacular_config::{ReasoningLevel, TaskModelSlot};
+
 #[derive(Debug, Parser)]
 #[command(name = "spectacular")]
 #[command(about = "Spec Driven Development workflow assistant")]
-struct Cli {
+pub(super) struct Cli {
     #[command(subcommand)]
-    command: Option<Command>,
+    pub(super) command: Option<Command>,
 }
 #[derive(Debug, Subcommand)]
-enum Command {
+pub(super) enum Command {
     /// Inspect or update Spectacular configuration.
     Config(ConfigArgs),
     /// Run the first SDD planning step.
@@ -17,13 +20,13 @@ enum Command {
 }
 
 #[derive(Debug, Args)]
-struct ConfigArgs {
+pub(super) struct ConfigArgs {
     #[command(subcommand)]
-    command: Option<ConfigCommand>,
+    pub(super) command: Option<ConfigCommand>,
 }
 
 #[derive(Debug, Subcommand)]
-enum ConfigCommand {
+pub(super) enum ConfigCommand {
     Provider {
         #[command(subcommand)]
         command: ConfigProviderCommand,
@@ -39,7 +42,7 @@ enum ConfigCommand {
 }
 
 #[derive(Debug, Subcommand)]
-enum ConfigProviderCommand {
+pub(super) enum ConfigProviderCommand {
     /// Add a provider with fields: provider:<type> apikey:<apikey>.
     Add { fields: Vec<String> },
     /// Remove a provider with fields: name:<name> confirm:true.
@@ -47,7 +50,7 @@ enum ConfigProviderCommand {
 }
 
 #[derive(Debug, Subcommand)]
-enum ConfigModelCommand {
+pub(super) enum ConfigModelCommand {
     /// Add a saved model with fields: provider:<name> id:<model-id> reasoning:<level> [name:<key>].
     Add { fields: Vec<String> },
     /// Edit a saved model with fields: name:<key> [provider:<name>] [id:<model-id>] [reasoning:<level>].
@@ -57,13 +60,13 @@ enum ConfigModelCommand {
 }
 
 #[derive(Debug, Subcommand)]
-enum ConfigTaskCommand {
+pub(super) enum ConfigTaskCommand {
     /// Assign a task with fields: task:<general|coding|labeling> model:<model-key>.
     Set { fields: Vec<String> },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-enum ConfigOperation {
+pub(super) enum ConfigOperation {
     Show,
     AddProvider {
         provider_type: String,

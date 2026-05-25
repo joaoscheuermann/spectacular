@@ -1,9 +1,13 @@
 use super::*;
-use serde_json::json;
+use crate::chat::command_event::{
+    CommandDelta, CommandEvent, CommandFinished, CommandStart, CommandStatus,
+};
+use serde_json::{json, Value};
 use spectacular_agent::{
-    provider_messages_from_store, AgentErrorDetails, AgentErrorKind, AgentErrorStage,
+    provider_messages_from_store, AgentErrorDetails, AgentErrorKind, AgentErrorStage, AgentEvent,
     ContextSummary, Store,
 };
+use spectacular_llms::FinishReason;
 
 /// Verifies that recognized JSONL event deserializes.
 #[test]
@@ -448,8 +452,7 @@ fn context_summary_round_trips_through_jsonl_to_agent_event() {
         content: "# Goal\nKeep context compact.".to_owned(),
         estimated_tokens: 42,
     });
-    let event =
-        ChatEvent::from_agent_event(&summary, "2026-04-29T14:01:00Z".to_owned()).unwrap();
+    let event = ChatEvent::from_agent_event(&summary, "2026-04-29T14:01:00Z".to_owned()).unwrap();
     let value = serde_json::to_value(event).unwrap();
 
     assert_eq!(

@@ -9,22 +9,38 @@ mod terminal_style_tests {
     ));
 }
 
-use anstyle::Style;
-use clap::{Args, Parser, Subcommand};
-use spectacular_commands::NamedArgs;
-use spectacular_config::{
-    mask_api_key, CachedModelMetadata, ConfigError, ModelCache, ReasoningLevel, SpectacularConfig,
-    TaskModelSlot,
-};
-use spectacular_llms::{LlmDebugLogger, ProviderError, ProviderMetadata};
-use spectacular_plan::PlanError;
 use std::process::ExitCode;
 
-include!("main/cli_types.rs");
-include!("main/entry.rs");
-include!("main/config_ops.rs");
-include!("main/output.rs");
-include!("main/plan_errors.rs");
+#[path = "main/cli_types.rs"]
+mod cli_types;
+#[path = "main/config_ops.rs"]
+mod config_ops;
+#[path = "main/entry.rs"]
+mod entry;
+#[path = "main/output.rs"]
+mod output;
+#[path = "main/plan_errors.rs"]
+mod plan_errors;
+
+#[cfg(test)]
+use clap::Parser;
+#[cfg(test)]
+use cli_types::{
+    Cli, ConfigArgs, ConfigCommand, ConfigModelCommand, ConfigOperation, ConfigProviderCommand,
+    ConfigTaskCommand,
+};
+#[cfg(test)]
+use config_ops::{config_operation, handle_config_with_io, ConfigIo};
+#[cfg(test)]
+use plan_errors::{handle_plan_with_loader, user_facing_error, AppError};
+#[cfg(test)]
+use spectacular_config::{ConfigError, ReasoningLevel, SpectacularConfig, TaskModelSlot};
+#[cfg(test)]
+use spectacular_plan::PlanError;
+
+fn main() -> ExitCode {
+    entry::run()
+}
 
 #[cfg(test)]
 mod tests {

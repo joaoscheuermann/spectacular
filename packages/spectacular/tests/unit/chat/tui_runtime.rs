@@ -447,7 +447,7 @@ async fn next_state_matching(
     receiver: &mut mpsc::UnboundedReceiver<State>,
     predicate: impl Fn(&State) -> bool,
 ) -> Option<State> {
-    let deadline = tokio::time::sleep(Duration::from_secs(1));
+    let deadline = tokio::time::sleep(Duration::from_secs(3));
     tokio::pin!(deadline);
     loop {
         tokio::select! {

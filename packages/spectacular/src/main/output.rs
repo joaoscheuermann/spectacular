@@ -1,59 +1,102 @@
-fn format_config_report(config: &SpectacularConfig) -> String {
+use super::terminal_style;
+use anstyle::Style;
+use spectacular_config::{mask_api_key, ReasoningLevel, SpectacularConfig, TaskModelSlot};
+
+pub(super) fn format_config_report(config: &SpectacularConfig) -> String {
     let mut lines = Vec::new();
 
+    append_report_title(&mut lines);
+    append_provider_section(&mut lines, config);
+    append_model_section(&mut lines, config);
+    append_task_section(&mut lines, config);
+
+    lines.join("\n")
+}
+
+fn append_report_title(lines: &mut Vec<String>) {
     lines.push(paint(title_style(), "Spectacular config"));
     lines.push(String::new());
+}
+
+fn append_provider_section(lines: &mut Vec<String>, config: &SpectacularConfig) {
     lines.push(paint(section_style(), "Providers"));
 
     if config.providers.is_empty() {
         lines.push(format!("  {}", paint(missing_style(), "None")));
     } else {
         for (name, provider) in &config.providers {
-            let credential = match provider.auth_mode() {
-                Some(spectacular_config::ProviderAuthMode::Oauth) => "authenticated".to_owned(),
-                _ => mask_api_key(provider.api_key()),
-            };
-            lines.push(format!(
-                "  {} {} {} {}",
-                paint(provider_style(), name),
-                paint(label_style(), "type:"),
-                paint(provider_style(), &provider.provider_type),
-                paint(secret_style(), credential)
-            ));
+            append_provider_report(lines, name, provider);
         }
     }
+}
 
+fn append_provider_report(
+    lines: &mut Vec<String>,
+    name: &str,
+    provider: &spectacular_config::ProviderConfig,
+) {
+    lines.push(format!(
+        "  {} {} {} {}",
+        paint(provider_style(), name),
+        paint(label_style(), "type:"),
+        paint(provider_style(), &provider.provider_type),
+        paint(secret_style(), provider_credential(provider))
+    ));
+}
+
+fn provider_credential(provider: &spectacular_config::ProviderConfig) -> String {
+    match provider.auth_mode() {
+        Some(spectacular_config::ProviderAuthMode::Oauth) => "authenticated".to_owned(),
+        _ => mask_api_key(provider.api_key()),
+    }
+}
+
+fn append_model_section(lines: &mut Vec<String>, config: &SpectacularConfig) {
     lines.push(String::new());
     lines.push(paint(section_style(), "Models"));
+
     if config.models.is_empty() {
         lines.push(format!("  {}", paint(missing_style(), "None")));
     } else {
         for (name, model) in &config.models {
-            let provider_state = if config.providers.contains_key(&model.provider) {
-                String::new()
-            } else {
-                format!(" {}", paint(missing_style(), "(provider missing)"))
-            };
-            lines.push(format!(
-                "  {} {} {} {} {} {}{}",
-                paint(model_style(), name),
-                paint(label_style(), "provider:"),
-                paint(provider_style(), &model.provider),
-                paint(label_style(), "id:"),
-                paint(model_style(), &model.model),
-                paint_reasoning(model.reasoning, ""),
-                provider_state
-            ));
+            append_model_report(lines, config, name, model);
         }
     }
+}
 
+fn append_model_report(
+    lines: &mut Vec<String>,
+    config: &SpectacularConfig,
+    name: &str,
+    model: &spectacular_config::ModelConfig,
+) {
+    lines.push(format!(
+        "  {} {} {} {} {} {}{}",
+        paint(model_style(), name),
+        paint(label_style(), "provider:"),
+        paint(provider_style(), &model.provider),
+        paint(label_style(), "id:"),
+        paint(model_style(), &model.model),
+        paint_reasoning(model.reasoning, ""),
+        provider_state(config, &model.provider)
+    ));
+}
+
+fn provider_state(config: &SpectacularConfig, provider: &str) -> String {
+    if config.providers.contains_key(provider) {
+        String::new()
+    } else {
+        format!(" {}", paint(missing_style(), "(provider missing)"))
+    }
+}
+
+fn append_task_section(lines: &mut Vec<String>, config: &SpectacularConfig) {
     lines.push(String::new());
     lines.push(paint(section_style(), "Tasks"));
-    for slot in TaskModelSlot::ALL {
-        append_task_report(&mut lines, config, slot);
-    }
 
-    lines.join("\n")
+    for slot in TaskModelSlot::ALL {
+        append_task_report(lines, config, slot);
+    }
 }
 
 fn append_task_report(lines: &mut Vec<String>, config: &SpectacularConfig, slot: TaskModelSlot) {
@@ -83,7 +126,7 @@ fn append_task_report(lines: &mut Vec<String>, config: &SpectacularConfig, slot:
     ));
 }
 
-fn format_provider_added_output(name: &str, provider_type: &str) -> String {
+pub(super) fn format_provider_added_output(name: &str, provider_type: &str) -> String {
     format!(
         "{} {}\n  {} {}\n  {} {}",
         paint(success_style(), "[saved]"),
@@ -95,7 +138,7 @@ fn format_provider_added_output(name: &str, provider_type: &str) -> String {
     )
 }
 
-fn format_provider_removed_output(name: &str) -> String {
+pub(super) fn format_provider_removed_output(name: &str) -> String {
     format!(
         "{} {}\n  {} {}",
         paint(success_style(), "[removed]"),
@@ -105,7 +148,7 @@ fn format_provider_removed_output(name: &str) -> String {
     )
 }
 
-fn format_model_saved_output(action: &str, key: &str) -> String {
+pub(super) fn format_model_saved_output(action: &str, key: &str) -> String {
     format!(
         "{} {}\n  {} {}",
         paint(success_style(), "[saved]"),
@@ -115,7 +158,10 @@ fn format_model_saved_output(action: &str, key: &str) -> String {
     )
 }
 
-fn format_model_remove_confirmation_output(name: &str, references: &[TaskModelSlot]) -> String {
+pub(super) fn format_model_remove_confirmation_output(
+    name: &str,
+    references: &[TaskModelSlot],
+) -> String {
     if references.is_empty() {
         return format_confirmation_required_output(
             "Model removal requires confirm:true. No tasks currently reference this model.",
@@ -132,7 +178,7 @@ fn format_model_remove_confirmation_output(name: &str, references: &[TaskModelSl
     ))
 }
 
-fn format_model_removed_output(name: &str, references: &[TaskModelSlot]) -> String {
+pub(super) fn format_model_removed_output(name: &str, references: &[TaskModelSlot]) -> String {
     let warning = if references.is_empty() {
         String::new()
     } else {
@@ -160,7 +206,7 @@ fn format_model_removed_output(name: &str, references: &[TaskModelSlot]) -> Stri
     )
 }
 
-fn format_task_saved_output(slot: TaskModelSlot, model: &str) -> String {
+pub(super) fn format_task_saved_output(slot: TaskModelSlot, model: &str) -> String {
     format!(
         "{} {}\n  {} {}\n  {} {}",
         paint(success_style(), "[saved]"),
@@ -172,7 +218,7 @@ fn format_task_saved_output(slot: TaskModelSlot, model: &str) -> String {
     )
 }
 
-fn format_confirmation_required_output(message: &str) -> String {
+pub(super) fn format_confirmation_required_output(message: &str) -> String {
     format!(
         "{} {}",
         paint(missing_style(), "[confirmation required]"),

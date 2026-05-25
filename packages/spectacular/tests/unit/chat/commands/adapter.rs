@@ -1,7 +1,11 @@
 use super::*;
-use crate::chat::selection::SelectionPromptChoice;
-use crate::chat::RuntimeSelection;
-use spectacular_agent::AgentEvent;
+use crate::chat::model::ChatModel;
+use crate::chat::selection::{
+    SelectionPromptAnswer, SelectionPromptChoice, SelectionPromptRequest,
+};
+use crate::chat::{ChatError, RuntimeSelection};
+use spectacular_agent::{AgentEvent, ToolStorage};
+use spectacular_commands::CommandInvocation;
 use spectacular_config::ReasoningLevel;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -209,7 +213,10 @@ fn context_clear_screen_when_tui_dispatches_transcript_cleared() {
         context.clear_screen();
     }
 
-    assert_eq!(actions, vec![spectacular_tui::ChatTuiAction::TranscriptCleared]);
+    assert_eq!(
+        actions,
+        vec![spectacular_tui::ChatTuiAction::TranscriptCleared]
+    );
 }
 
 /// Verifies that context render history accepts transient history.

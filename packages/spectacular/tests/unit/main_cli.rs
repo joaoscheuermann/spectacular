@@ -1,6 +1,6 @@
 use super::*;
-use clap::error::ErrorKind;
 use clap::CommandFactory;
+use clap::error::ErrorKind;
 use spectacular_config::{
     CachedModelMetadata, ModelCache, ModelConfig, ProviderModelCache, TaskAssignments,
 };
@@ -71,10 +71,7 @@ fn provider_add_operation_parses_named_fields() {
     let args = ConfigArgs {
         command: Some(ConfigCommand::Provider {
             command: ConfigProviderCommand::Add {
-                fields: vec![
-                    "provider:openrouter".to_owned(),
-                    "apikey:secret".to_owned(),
-                ],
+                fields: vec!["provider:openrouter".to_owned(), "apikey:secret".to_owned()],
             },
         }),
     };
@@ -100,7 +97,9 @@ fn provider_add_operation_rejects_old_name_type_fields() {
 
     let error = config_operation(args).unwrap_err();
 
-    assert!(matches!(error, AppError::InvalidConfigCommand(message) if message.contains("unknown argument `name`")));
+    assert!(
+        matches!(error, AppError::InvalidConfigCommand(message) if message.contains("unknown argument `name`"))
+    );
 }
 
 #[test]
@@ -137,20 +136,19 @@ fn provider_add_saves_openai_api_key() {
         ConfigArgs {
             command: Some(ConfigCommand::Provider {
                 command: ConfigProviderCommand::Add {
-                    fields: vec![
-                        "provider:openai".to_owned(),
-                        "apikey:sk-test".to_owned(),
-                    ],
+                    fields: vec!["provider:openai".to_owned(), "apikey:sk-test".to_owned()],
                 },
             }),
         },
-        || Ok(SpectacularConfig::default()),
-        || Ok(ModelCache::default()),
-        || Ok(None),
-        |config| {
-            saved_config.replace(Some(config.clone()));
-            Ok(())
-        },
+        ConfigIo::new(
+            || Ok(SpectacularConfig::default()),
+            || Ok(ModelCache::default()),
+            || Ok(None),
+            |config| {
+                saved_config.replace(Some(config.clone()));
+                Ok(())
+            },
+        ),
     )
     .unwrap();
     let output = strip_ansi_codes(&output);
@@ -170,10 +168,12 @@ fn provider_add_saves_openai_api_key() {
 fn config_show_masks_api_keys() {
     let output = handle_config_with_io(
         ConfigArgs { command: None },
-        || Ok(complete_config()),
-        || Ok(ModelCache::default()),
-        || Ok(None),
-        |_| panic!("show must not write config"),
+        ConfigIo::new(
+            || Ok(complete_config()),
+            || Ok(ModelCache::default()),
+            || Ok(None),
+            |_| panic!("show must not write config"),
+        ),
     )
     .unwrap();
     let output = strip_ansi_codes(&output);
@@ -201,13 +201,15 @@ fn provider_add_saves_config_without_leaking_key() {
                 },
             }),
         },
-        || Ok(SpectacularConfig::default()),
-        || Ok(ModelCache::default()),
-        || Ok(None),
-        |config| {
-            saved_config.replace(Some(config.clone()));
-            Ok(())
-        },
+        ConfigIo::new(
+            || Ok(SpectacularConfig::default()),
+            || Ok(ModelCache::default()),
+            || Ok(None),
+            |config| {
+                saved_config.replace(Some(config.clone()));
+                Ok(())
+            },
+        ),
     )
     .unwrap();
     let output = strip_ansi_codes(&output);
@@ -237,13 +239,15 @@ fn provider_remove_requires_confirmation_without_write() {
                 },
             }),
         },
-        || Ok(complete_config()),
-        || Ok(ModelCache::default()),
-        || Ok(None),
-        |_| {
-            wrote.replace(true);
-            Ok(())
-        },
+        ConfigIo::new(
+            || Ok(complete_config()),
+            || Ok(ModelCache::default()),
+            || Ok(None),
+            |_| {
+                wrote.replace(true);
+                Ok(())
+            },
+        ),
     )
     .unwrap();
     let output = strip_ansi_codes(&output);
@@ -266,10 +270,12 @@ fn model_add_requires_cached_api_metadata() {
                 },
             }),
         },
-        || Ok(provider_only_config()),
-        || Ok(ModelCache::default()),
-        || Ok(None),
-        |_| panic!("invalid model must not be written"),
+        ConfigIo::new(
+            || Ok(provider_only_config()),
+            || Ok(ModelCache::default()),
+            || Ok(None),
+            |_| panic!("invalid model must not be written"),
+        ),
     )
     .unwrap_err();
 
@@ -292,10 +298,12 @@ fn model_add_rejects_reasoning_without_supported_parameter() {
                 },
             }),
         },
-        || Ok(provider_only_config()),
-        || Ok(cache_with_model(false)),
-        || Ok(None),
-        |_| panic!("invalid reasoning must not be written"),
+        ConfigIo::new(
+            || Ok(provider_only_config()),
+            || Ok(cache_with_model(false)),
+            || Ok(None),
+            |_| panic!("invalid reasoning must not be written"),
+        ),
     )
     .unwrap_err();
 
@@ -320,22 +328,26 @@ fn model_add_saves_when_cache_allows_reasoning() {
                 },
             }),
         },
-        || Ok(provider_only_config()),
-        || Ok(cache_with_model(true)),
-        || Ok(None),
-        |config| {
-            saved_config.replace(Some(config.clone()));
-            Ok(())
-        },
+        ConfigIo::new(
+            || Ok(provider_only_config()),
+            || Ok(cache_with_model(true)),
+            || Ok(None),
+            |config| {
+                saved_config.replace(Some(config.clone()));
+                Ok(())
+            },
+        ),
     )
     .unwrap();
 
     assert!(strip_ansi_codes(&output).contains("Model added"));
-    assert!(saved_config
-        .into_inner()
-        .unwrap()
-        .models
-        .contains_key("main"));
+    assert!(
+        saved_config
+            .into_inner()
+            .unwrap()
+            .models
+            .contains_key("main")
+    );
 }
 
 #[test]
@@ -349,13 +361,15 @@ fn task_set_saves_model_reference() {
                 },
             }),
         },
-        || Ok(complete_config()),
-        || Ok(ModelCache::default()),
-        || Ok(None),
-        |config| {
-            saved_config.replace(Some(config.clone()));
-            Ok(())
-        },
+        ConfigIo::new(
+            || Ok(complete_config()),
+            || Ok(ModelCache::default()),
+            || Ok(None),
+            |config| {
+                saved_config.replace(Some(config.clone()));
+                Ok(())
+            },
+        ),
     )
     .unwrap();
 

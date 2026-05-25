@@ -4,9 +4,33 @@ use crate::chat::{ChatBootstrap, ChatError};
 use iocraft::prelude::*;
 use spectacular_llms::LlmDebugLogger;
 use spectacular_tui::{root_element, Intent, State};
+use std::future::Future;
+use std::io;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::mpsc;
+use tokio::task::{JoinError, JoinHandle};
+
+type RenderTask = JoinHandle<io::Result<()>>;
+
+struct RenderChannels {
+    intent_sender: mpsc::UnboundedSender<Intent>,
+    cancellation_sender: mpsc::UnboundedSender<()>,
+    selection_sender: mpsc::UnboundedSender<Intent>,
+    state_receiver: Arc<Mutex<mpsc::UnboundedReceiver<State>>>,
+}
+
+struct ControllerChannels {
+    intent_receiver: mpsc::UnboundedReceiver<Intent>,
+    cancellation_receiver: mpsc::UnboundedReceiver<()>,
+    selection_receiver: mpsc::UnboundedReceiver<Intent>,
+    state_sender: mpsc::UnboundedSender<State>,
+}
+
+enum LoopEvent {
+    Intent(Option<Intent>),
+    WorktreeRefresh,
+}
 
 /// Runs the production IOCraft render loop with the real Spectacular runtime controller.
 pub(crate) async fn run(debug_logger: LlmDebugLogger) -> Result<(), ChatError> {
@@ -19,13 +43,15 @@ async fn run_with_controller<R>(controller: Controller<R>) -> Result<(), ChatErr
 where
     R: TurnRunner + 'static,
 {
-    let (intent_sender, intent_receiver) = mpsc::unbounded_channel();
-    let (cancellation_sender, cancellation_receiver) = mpsc::unbounded_channel();
-    let (selection_sender, selection_receiver) = mpsc::unbounded_channel();
-    let (state_sender, state_receiver) = mpsc::unbounded_channel();
     let initial_state = controller.state_snapshot();
-    let state_receiver = Arc::new(Mutex::new(state_receiver));
-    let runtime = tokio::runtime::Handle::current();
+    let (render_channels, controller_channels) = runtime_channels();
+    let render_task = spawn_render_task(initial_state, render_channels);
+    let ControllerChannels {
+        intent_receiver,
+        cancellation_receiver,
+        selection_receiver,
+        state_sender,
+    } = controller_channels;
     let controller_loop = run_controller_loop(
         controller,
         intent_receiver,
@@ -33,61 +59,135 @@ where
         selection_receiver,
         state_sender,
     );
-    let render_task = tokio::task::spawn_blocking(move || {
+    join_runtime_tasks(render_task, controller_loop).await
+}
+
+fn runtime_channels() -> (RenderChannels, ControllerChannels) {
+    let (intent_sender, intent_receiver) = mpsc::unbounded_channel();
+    let (cancellation_sender, cancellation_receiver) = mpsc::unbounded_channel();
+    let (selection_sender, selection_receiver) = mpsc::unbounded_channel();
+    let (state_sender, state_receiver) = mpsc::unbounded_channel();
+
+    (
+        RenderChannels {
+            intent_sender,
+            cancellation_sender,
+            selection_sender,
+            state_receiver: Arc::new(Mutex::new(state_receiver)),
+        },
+        ControllerChannels {
+            intent_receiver,
+            cancellation_receiver,
+            selection_receiver,
+            state_sender,
+        },
+    )
+}
+
+fn spawn_render_task(initial_state: State, channels: RenderChannels) -> RenderTask {
+    let runtime = tokio::runtime::Handle::current();
+    tokio::task::spawn_blocking(move || {
         runtime.block_on(async move {
             root_element(
                 initial_state,
-                intent_sender,
-                cancellation_sender,
-                selection_sender,
-                state_receiver,
+                channels.intent_sender,
+                channels.cancellation_sender,
+                channels.selection_sender,
+                channels.state_receiver,
             )
             .fullscreen()
             .ignore_ctrl_c()
             .await
         })
-    });
+    })
+}
+
+async fn join_runtime_tasks(
+    render_task: RenderTask,
+    controller_loop: impl Future<Output = Result<(), ChatError>>,
+) -> Result<(), ChatError> {
     let (render_result, controller_result) = tokio::join!(render_task, controller_loop);
-    let render_result = render_result.map_err(|error| ChatError::Session(error.to_string()))?;
-    render_result.map_err(ChatError::Io)?;
+    finish_render_task(render_result)?;
     controller_result
+}
+
+fn finish_render_task(result: Result<io::Result<()>, JoinError>) -> Result<(), ChatError> {
+    let render_result = result.map_err(|error| ChatError::Session(error.to_string()))?;
+    render_result.map_err(ChatError::Io)
 }
 
 /// Processes intents emitted by the IOCraft shell and publishes reducer snapshots for rendering.
 pub(crate) async fn run_controller_loop<R>(
-    mut controller: Controller<R>,
-    mut intent_receiver: mpsc::UnboundedReceiver<Intent>,
-    mut cancellation_receiver: mpsc::UnboundedReceiver<()>,
-    mut selection_receiver: mpsc::UnboundedReceiver<Intent>,
+    controller: Controller<R>,
+    intent_receiver: mpsc::UnboundedReceiver<Intent>,
+    cancellation_receiver: mpsc::UnboundedReceiver<()>,
+    selection_receiver: mpsc::UnboundedReceiver<Intent>,
     state_sender: mpsc::UnboundedSender<State>,
 ) -> Result<(), ChatError>
 where
     R: TurnRunner,
 {
-    let mut worktree_refresh = tokio::time::interval(Duration::from_secs(2));
+    ControllerChannels {
+        intent_receiver,
+        cancellation_receiver,
+        selection_receiver,
+        state_sender,
+    }
+    .run(controller)
+    .await
+}
 
-    loop {
-        tokio::select! {
-            intent = intent_receiver.recv() => {
-                let Some(intent) = intent else {
-                    return Ok(());
-                };
-                let should_exit = controller
-                    .handle_intent_with_state_sender(
-                        intent,
-                        &state_sender,
-                        &mut cancellation_receiver,
-                        &mut selection_receiver,
-                    )
-                    .await?;
-                let _ = state_sender.send(controller.state_snapshot());
-                if should_exit {
-                    return Ok(());
+impl ControllerChannels {
+    async fn run<R>(mut self, mut controller: Controller<R>) -> Result<(), ChatError>
+    where
+        R: TurnRunner,
+    {
+        let mut worktree_refresh = tokio::time::interval(Duration::from_secs(2));
+
+        loop {
+            match next_loop_event(&mut self.intent_receiver, &mut worktree_refresh).await {
+                LoopEvent::Intent(Some(intent)) => {
+                    if self.handle_intent(&mut controller, intent).await? {
+                        return Ok(());
+                    }
+                }
+                LoopEvent::Intent(None) => return Ok(()),
+                LoopEvent::WorktreeRefresh => {
+                    controller
+                        .refresh_worktree_metadata(Some(&self.state_sender))
+                        .await;
                 }
             }
-            _ = worktree_refresh.tick() => {
-                controller.refresh_worktree_metadata(Some(&state_sender)).await;
-            }
         }
+    }
+
+    async fn handle_intent<R>(
+        &mut self,
+        controller: &mut Controller<R>,
+        intent: Intent,
+    ) -> Result<bool, ChatError>
+    where
+        R: TurnRunner,
+    {
+        let should_exit = controller
+            .handle_intent_with_state_sender(
+                intent,
+                &self.state_sender,
+                &mut self.cancellation_receiver,
+                &mut self.selection_receiver,
+            )
+            .await?;
+        let _ = self.state_sender.send(controller.state_snapshot());
+        Ok(should_exit)
+    }
+}
+
+async fn next_loop_event(
+    intent_receiver: &mut mpsc::UnboundedReceiver<Intent>,
+    worktree_refresh: &mut tokio::time::Interval,
+) -> LoopEvent {
+    tokio::select! {
+        intent = intent_receiver.recv() => LoopEvent::Intent(intent),
+        _ = worktree_refresh.tick() => LoopEvent::WorktreeRefresh,
     }
 }
