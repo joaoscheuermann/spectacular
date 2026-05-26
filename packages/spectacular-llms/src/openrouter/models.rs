@@ -48,11 +48,11 @@ pub(crate) fn fetch_openrouter_models(
         401 | 403 => Err(ProviderError::AuthenticationFailed {
             provider_name: "OpenRouter".to_owned(),
             reason: format!("credentials rejected with status {status}"),
-            diagnostics: Some(models_error_diagnostics(status, &body)),
+            diagnostics: Some(models_error_diagnostics(status, &body).boxed()),
         }),
         _ => Err(ProviderError::ModelFetchFailed {
             provider_name: "OpenRouter".to_owned(),
-            diagnostics: Some(models_error_diagnostics(status, &body)),
+            diagnostics: Some(models_error_diagnostics(status, &body).boxed()),
         }),
     }
 }
@@ -72,7 +72,9 @@ fn parse_openrouter_models(body: &str) -> Result<Vec<Model>, ProviderError> {
             provider_name: "OpenRouter".to_owned(),
             reason: error.to_string(),
             diagnostics: Some(
-                ProviderErrorDiagnostics::new(ProviderErrorStage::PayloadParse).with_excerpt(body),
+                ProviderErrorDiagnostics::new(ProviderErrorStage::PayloadParse)
+                    .with_excerpt(body)
+                    .boxed(),
             ),
         })?;
     let response: OpenRouterModelsResponse =
@@ -80,7 +82,9 @@ fn parse_openrouter_models(body: &str) -> Result<Vec<Model>, ProviderError> {
             provider_name: "OpenRouter".to_owned(),
             reason: error.to_string(),
             diagnostics: Some(
-                ProviderErrorDiagnostics::new(ProviderErrorStage::PayloadParse).with_excerpt(body),
+                ProviderErrorDiagnostics::new(ProviderErrorStage::PayloadParse)
+                    .with_excerpt(body)
+                    .boxed(),
             ),
         })?;
     let models = response

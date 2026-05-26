@@ -58,6 +58,21 @@ async fn stream_openrouter_response(
     cancellation: Cancellation,
     sender: mpsc::Sender<Result<ProviderStreamEvent, ProviderError>>,
 ) -> Result<(), ProviderError> {
+    let body = build_chat_request(request, debug_logger)?;
+    let response = open_chat_response(client, api_key, debug_logger, &body).await?;
+    let mut response = successful_response_or_error(debug_logger, response).await?;
+    let context = OpenRouterStreamContext {
+        debug_logger,
+        sender: &sender,
+    };
+
+    stream_successful_response(&mut response, cancellation, context).await
+}
+
+fn build_chat_request(
+    request: ProviderRequest,
+    debug_logger: &LlmDebugLogger,
+) -> Result<OpenRouterChatRequest, ProviderError> {
     let body = OpenRouterChatRequest::from_provider_request(request).inspect_err(|error| {
         debug::log_error(debug_logger, "chat_request_build_error", error);
     })?;
@@ -65,13 +80,27 @@ async fn stream_openrouter_response(
         debug::log_raw_json(debug_logger, "chat_request", raw_json);
     }
 
-    let mut response = client
-        .stream_response(api_key, &body)
+    Ok(body)
+}
+
+async fn open_chat_response(
+    client: &OpenRouterHttpClient,
+    api_key: &str,
+    debug_logger: &LlmDebugLogger,
+    body: &OpenRouterChatRequest,
+) -> Result<reqwest::Response, ProviderError> {
+    client
+        .stream_response(api_key, body)
         .await
         .inspect_err(|error| {
             debug::log_error(debug_logger, "chat_request_network_error", error);
-        })?;
+        })
+}
 
+async fn successful_response_or_error(
+    debug_logger: &LlmDebugLogger,
+    response: reqwest::Response,
+) -> Result<reqwest::Response, ProviderError> {
     let status = response.status().as_u16();
     debug::log_event(
         debug_logger,
@@ -83,78 +112,137 @@ async fn stream_openrouter_response(
         return Err(ProviderError::AuthenticationFailed {
             provider_name: "OpenRouter".to_owned(),
             reason: format!("credentials rejected with status {status}"),
-            diagnostics: Some(diagnostics),
+            diagnostics: Some(diagnostics.boxed()),
         });
     }
     if !(200..300).contains(&status) {
         let diagnostics = non_success_response_diagnostics(debug_logger, response, status).await;
         return Err(ProviderError::ProviderUnavailable {
             provider_name: "OpenRouter".to_owned(),
-            diagnostics: Some(diagnostics),
+            diagnostics: Some(diagnostics.boxed()),
         });
     }
 
+    Ok(response)
+}
+
+#[derive(Clone, Copy)]
+struct OpenRouterStreamContext<'a> {
+    debug_logger: &'a LlmDebugLogger,
+    sender: &'a mpsc::Sender<Result<ProviderStreamEvent, ProviderError>>,
+}
+
+async fn stream_successful_response(
+    response: &mut reqwest::Response,
+    cancellation: Cancellation,
+    context: OpenRouterStreamContext<'_>,
+) -> Result<(), ProviderError> {
     let mut sse_parser = OpenRouterSseParser::default();
     let mut saw_finished = false;
     let mut stream_state = OpenRouterStreamState::default();
-    while let Some(chunk) = next_response_chunk(&mut response, debug_logger).await? {
+    while let Some(chunk) = next_response_chunk(response, context.debug_logger).await? {
         if cancellation.is_cancelled() {
-            debug::log_event(debug_logger, "stream_cancelled", json!({}));
+            debug::log_event(context.debug_logger, "stream_cancelled", json!({}));
             return Err(ProviderError::CancellationError);
         }
 
-        for payload in parse_sse_payloads(&mut sse_parser, &chunk, debug_logger)? {
-            debug::log_raw_text(debug_logger, "sse_payload", &payload);
-            if payload.trim() == "[DONE]" {
-                debug::log_event(debug_logger, "sse_done", json!({}));
-                if stream_state.has_pending_tool_call() {
-                    return Err(ProviderError::MalformedResponse {
-                        provider_name: "OpenRouter".to_owned(),
-                        reason: "stream ended before tool-call finish".to_owned(),
-                        diagnostics: Some(ProviderErrorDiagnostics::new(
-                            ProviderErrorStage::ProviderStream,
-                        )),
-                    });
-                }
-                if !saw_finished {
-                    let finished = stream_state
-                        .take_pending_finish()
-                        .unwrap_or_else(ProviderFinished::stopped);
-                    debug::log_finish(debug_logger, "stream_finished", &finished);
-                    send_openrouter_event(ProviderStreamEvent::Finished(finished), &sender).await?;
-                }
-                return Ok(());
-            }
-
-            let finished_in_payload =
-                send_openrouter_payload_events(&payload, &mut stream_state, debug_logger, &sender)
-                    .await?;
-            saw_finished |= finished_in_payload;
-            if finished_in_payload {
-                return Ok(());
-            }
+        if process_response_chunk(
+            &mut sse_parser,
+            &chunk,
+            &mut stream_state,
+            &mut saw_finished,
+            context,
+        )
+        .await?
+        {
+            return Ok(());
         }
     }
 
-    if !saw_finished && stream_state.has_pending_tool_call() {
-        return Err(ProviderError::MalformedResponse {
-            provider_name: "OpenRouter".to_owned(),
-            reason: "stream ended before tool-call finish".to_owned(),
-            diagnostics: Some(ProviderErrorDiagnostics::new(
-                ProviderErrorStage::ProviderStream,
-            )),
-        });
+    finish_stream_if_needed(&mut stream_state, saw_finished, context).await
+}
+
+async fn process_response_chunk(
+    sse_parser: &mut OpenRouterSseParser,
+    chunk: &[u8],
+    state: &mut OpenRouterStreamState,
+    saw_finished: &mut bool,
+    context: OpenRouterStreamContext<'_>,
+) -> Result<bool, ProviderError> {
+    for payload in parse_sse_payloads(sse_parser, chunk, context.debug_logger)? {
+        debug::log_raw_text(context.debug_logger, "sse_payload", &payload);
+        if handle_payload(&payload, state, saw_finished, context).await? {
+            return Ok(true);
+        }
     }
 
+    Ok(false)
+}
+
+async fn handle_payload(
+    payload: &str,
+    state: &mut OpenRouterStreamState,
+    saw_finished: &mut bool,
+    context: OpenRouterStreamContext<'_>,
+) -> Result<bool, ProviderError> {
+    if payload.trim() == "[DONE]" {
+        return finish_done_payload(state, *saw_finished, context).await;
+    }
+
+    let finished_in_payload =
+        send_openrouter_payload_events(payload, state, context.debug_logger, context.sender)
+            .await?;
+    *saw_finished |= finished_in_payload;
+    Ok(finished_in_payload)
+}
+
+async fn finish_done_payload(
+    state: &mut OpenRouterStreamState,
+    saw_finished: bool,
+    context: OpenRouterStreamContext<'_>,
+) -> Result<bool, ProviderError> {
+    debug::log_event(context.debug_logger, "sse_done", json!({}));
+    if state.has_pending_tool_call() {
+        return Err(pending_tool_call_error());
+    }
     if !saw_finished {
-        let finished = stream_state
+        let finished = state
             .take_pending_finish()
             .unwrap_or_else(ProviderFinished::stopped);
-        debug::log_finish(debug_logger, "stream_finished", &finished);
-        send_openrouter_event(ProviderStreamEvent::Finished(finished), &sender).await?;
+        debug::log_finish(context.debug_logger, "stream_finished", &finished);
+        send_openrouter_event(ProviderStreamEvent::Finished(finished), context.sender).await?;
+    }
+    Ok(true)
+}
+
+async fn finish_stream_if_needed(
+    state: &mut OpenRouterStreamState,
+    saw_finished: bool,
+    context: OpenRouterStreamContext<'_>,
+) -> Result<(), ProviderError> {
+    if !saw_finished && state.has_pending_tool_call() {
+        return Err(pending_tool_call_error());
     }
 
-    Ok(())
+    if saw_finished {
+        return Ok(());
+    }
+
+    let finished = state
+        .take_pending_finish()
+        .unwrap_or_else(ProviderFinished::stopped);
+    debug::log_finish(context.debug_logger, "stream_finished", &finished);
+    send_openrouter_event(ProviderStreamEvent::Finished(finished), context.sender).await
+}
+
+fn pending_tool_call_error() -> ProviderError {
+    ProviderError::MalformedResponse {
+        provider_name: "OpenRouter".to_owned(),
+        reason: "stream ended before tool-call finish".to_owned(),
+        diagnostics: Some(
+            ProviderErrorDiagnostics::new(ProviderErrorStage::ProviderStream).boxed(),
+        ),
+    }
 }
 
 async fn next_response_chunk(
@@ -170,7 +258,8 @@ async fn next_response_chunk(
                 reason: error.to_string(),
                 diagnostics: Some(
                     ProviderErrorDiagnostics::new(ProviderErrorStage::ProviderStream)
-                        .with_debug_event("stream_chunk_network_error"),
+                        .with_debug_event("stream_chunk_network_error")
+                        .boxed(),
                 ),
             };
             debug::log_error(debug_logger, "stream_chunk_network_error", &error);
@@ -262,7 +351,8 @@ async fn send_openrouter_payload_events(
                         ProviderErrorDiagnostics::new(ProviderErrorStage::PayloadParse)
                             .with_excerpt(payload)
                             .with_debug_event("sse_payload")
-                            .with_debug_event("payload_parse_error"),
+                            .with_debug_event("payload_parse_error")
+                            .boxed(),
                     ),
                 });
             }

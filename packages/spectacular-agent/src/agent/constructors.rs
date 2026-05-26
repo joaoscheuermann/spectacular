@@ -43,14 +43,31 @@ where
         store: Store,
         token_counter: C,
     ) -> Self {
-        Self {
+        let dependencies = Dependencies {
             provider,
+            config,
+            store,
             token_counter,
+        };
+        Self::from_dependencies(dependencies)
+    }
+
+    fn from_dependencies(dependencies: Dependencies<P, C>) -> Self {
+        Self {
+            provider: dependencies.provider,
+            token_counter: dependencies.token_counter,
             queue: Arc::new(Default::default()),
-            store: Mutex::new(store),
+            store: Mutex::new(dependencies.store),
             active_run_control: Arc::new(Mutex::new(None)),
             tools: RwLock::new(ToolStorage::default()),
-            config,
+            config: dependencies.config,
         }
     }
+}
+
+struct Dependencies<P, C> {
+    provider: P,
+    config: AgentConfig,
+    store: Store,
+    token_counter: C,
 }

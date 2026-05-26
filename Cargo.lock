@@ -2031,7 +2031,6 @@ dependencies = [
  "serde_json",
  "similar",
  "spectacular-agent",
- "spectacular-tui",
  "tokio",
 ]
 

@@ -12,11 +12,14 @@ pub(crate) fn parse_openai_response_event(
         serde_json::from_str(payload).map_err(|error| ProviderError::ResponseParsingFailed {
             provider_name: "OpenAI".to_owned(),
             reason: error.to_string(),
-            diagnostics: Some(payload_diagnostics(
-                ProviderErrorStage::PayloadParse,
-                payload,
-                &["sse_payload", "payload_parse_error"],
-            )),
+            diagnostics: Some(
+                payload_diagnostics(
+                    ProviderErrorStage::PayloadParse,
+                    payload,
+                    &["sse_payload", "payload_parse_error"],
+                )
+                .boxed(),
+            ),
         })?;
 
     match event.kind.as_str() {
@@ -88,11 +91,14 @@ fn parse_output_item_done(
             .map_err(|error| ProviderError::MalformedResponse {
                 provider_name: "OpenAI".to_owned(),
                 reason: error.to_string(),
-                diagnostics: Some(payload_diagnostics(
-                    ProviderErrorStage::PayloadParse,
-                    payload,
-                    &["sse_payload", "payload_parse_error"],
-                )),
+                diagnostics: Some(
+                    payload_diagnostics(
+                        ProviderErrorStage::PayloadParse,
+                        payload,
+                        &["sse_payload", "payload_parse_error"],
+                    )
+                    .boxed(),
+                ),
             })?;
     Ok(vec![ProviderStreamEvent::Finished(ProviderFinished {
         finish_reason: FinishReason::ToolCalls,
@@ -112,11 +118,14 @@ fn openai_failed_response(event: OpenAiStreamMessage, payload: &str) -> Provider
         provider_name: "OpenAI".to_owned(),
         code: Some(status),
         message: "OpenAI response failed".to_owned(),
-        diagnostics: Some(payload_diagnostics(
-            ProviderErrorStage::ProviderStream,
-            payload,
-            &["sse_payload"],
-        )),
+        diagnostics: Some(
+            payload_diagnostics(
+                ProviderErrorStage::ProviderStream,
+                payload,
+                &["sse_payload"],
+            )
+            .boxed(),
+        ),
     }
 }
 
@@ -127,11 +136,14 @@ fn openai_stream_error(event: OpenAiStreamMessage, payload: &str) -> ProviderErr
             provider_name: "OpenAI".to_owned(),
             code: None,
             message: "OpenAI stream returned error".to_owned(),
-            diagnostics: Some(payload_diagnostics(
-                ProviderErrorStage::ProviderStream,
-                payload,
-                &["sse_payload"],
-            )),
+            diagnostics: Some(
+                payload_diagnostics(
+                    ProviderErrorStage::ProviderStream,
+                    payload,
+                    &["sse_payload"],
+                )
+                .boxed(),
+            ),
         };
     };
 
@@ -157,7 +169,7 @@ fn openai_stream_error(event: OpenAiStreamMessage, payload: &str) -> ProviderErr
         provider_name: "OpenAI".to_owned(),
         code: error.code,
         message: error.message,
-        diagnostics: Some(diagnostics),
+        diagnostics: Some(diagnostics.boxed()),
     }
 }
 

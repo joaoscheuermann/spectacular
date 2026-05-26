@@ -122,7 +122,8 @@ impl OpenAiHttpClient {
                         .with_http_status(status)
                         .with_provider_code_from_body(&body)
                         .with_excerpt(&body)
-                        .with_debug_event("token_error_body"),
+                        .with_debug_event("token_error_body")
+                        .boxed(),
                 ),
             });
         }
@@ -131,7 +132,9 @@ impl OpenAiHttpClient {
             provider_name: "OpenAI".to_owned(),
             reason: format!("token endpoint returned invalid JSON: {error}"),
             diagnostics: Some(
-                ProviderErrorDiagnostics::new(ProviderErrorStage::PayloadParse).with_excerpt(&body),
+                ProviderErrorDiagnostics::new(ProviderErrorStage::PayloadParse)
+                    .with_excerpt(&body)
+                    .boxed(),
             ),
         })
     }
@@ -142,9 +145,7 @@ fn openai_network_error(error: reqwest::Error) -> ProviderError {
     ProviderError::NetworkError {
         provider_name: "OpenAI".to_owned(),
         reason: error.to_string(),
-        diagnostics: Some(ProviderErrorDiagnostics::new(
-            ProviderErrorStage::HttpRequest,
-        )),
+        diagnostics: Some(ProviderErrorDiagnostics::new(ProviderErrorStage::HttpRequest).boxed()),
     }
 }
 

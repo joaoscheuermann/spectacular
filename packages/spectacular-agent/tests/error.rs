@@ -78,7 +78,8 @@ fn error_report_provider_http_status_exposes_structured_details() {
             ProviderErrorDiagnostics::new(ProviderErrorStage::HttpStatus)
                 .with_http_status(503)
                 .with_excerpt("temporary outage")
-                .with_debug_event("fake_error_body"),
+                .with_debug_event("fake_error_body")
+                .boxed(),
         ),
     });
 
@@ -123,7 +124,8 @@ fn error_report_provider_auth_failure_has_authentication_kind() {
                 .with_http_status(401)
                 .with_provider_code("invalid_api_key")
                 .with_excerpt("invalid key")
-                .with_debug_event("chat_response_error_body"),
+                .with_debug_event("chat_response_error_body")
+                .boxed(),
         ),
     });
 
@@ -144,7 +146,9 @@ fn error_report_post_output_provider_error_is_not_retryable() {
     let error = AgentError::from(ProviderError::ProviderUnavailable {
         provider_name: "Fake".to_owned(),
         diagnostics: Some(
-            ProviderErrorDiagnostics::new(ProviderErrorStage::HttpStatus).with_http_status(503),
+            ProviderErrorDiagnostics::new(ProviderErrorStage::HttpStatus)
+                .with_http_status(503)
+                .boxed(),
         ),
     });
 
@@ -163,7 +167,8 @@ fn error_report_provider_parse_failure_preserves_payload_breadcrumbs() {
         diagnostics: Some(
             ProviderErrorDiagnostics::new(ProviderErrorStage::PayloadParse)
                 .with_excerpt("{bad json")
-                .with_debug_event("payload_parse_error"),
+                .with_debug_event("payload_parse_error")
+                .boxed(),
         ),
     });
 

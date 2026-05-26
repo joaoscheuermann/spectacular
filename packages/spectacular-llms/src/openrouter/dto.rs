@@ -32,9 +32,9 @@ impl OpenRouterChatRequest {
             .ok_or_else(|| ProviderError::MalformedResponse {
                 provider_name: "OpenRouter".to_owned(),
                 reason: "missing model for chat completion".to_owned(),
-                diagnostics: Some(ProviderErrorDiagnostics::new(
-                    ProviderErrorStage::RequestBuild,
-                )),
+                diagnostics: Some(
+                    ProviderErrorDiagnostics::new(ProviderErrorStage::RequestBuild).boxed(),
+                ),
             })?;
         let tools = tools
             .into_iter()

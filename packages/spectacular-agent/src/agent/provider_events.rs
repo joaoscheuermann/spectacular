@@ -20,17 +20,17 @@ pub(super) enum ProviderEventOutcome {
 }
 
 /// Converts visible provider stream events into durable agent events and outcomes.
-pub(super) struct AgentProviderEventHandler<'a, P, C>
+pub(super) struct ProviderEventHandler<'a, P, C>
 where
     P: LlmProvider,
     C: TokenCounter + Clone,
 {
     agent: &'a Agent<P, C>,
     run_event_start: usize,
-    lifecycle: AgentLifecycleState,
+    lifecycle: LifecycleState,
 }
 
-impl<'a, P, C> AgentProviderEventHandler<'a, P, C>
+impl<'a, P, C> ProviderEventHandler<'a, P, C>
 where
     P: LlmProvider,
     C: TokenCounter + Clone,
@@ -40,7 +40,7 @@ where
         Self {
             agent,
             run_event_start,
-            lifecycle: AgentLifecycleState::default(),
+            lifecycle: LifecycleState::default(),
         }
     }
 
@@ -212,7 +212,7 @@ where
     }
 }
 
-impl<P, C> ProviderStreamHandler<P, C> for AgentProviderEventHandler<'_, P, C>
+impl<P, C> ProviderStreamHandler<P, C> for ProviderEventHandler<'_, P, C>
 where
     P: LlmProvider,
     C: TokenCounter + Clone,
@@ -246,14 +246,14 @@ where
 
 /// Tracks active provider-to-agent transcript lifecycle boundaries for one completion.
 #[derive(Default)]
-struct AgentLifecycleState {
+struct LifecycleState {
     next_message_sequence: u64,
     active_message: Option<String>,
     next_reasoning_sequence: u64,
     active_reasoning: Option<String>,
 }
 
-impl AgentLifecycleState {
+impl LifecycleState {
     /// Records assistant text and emits a start boundary before the first delta.
     async fn record_message_delta<P, C>(
         &mut self,

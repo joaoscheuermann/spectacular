@@ -118,6 +118,22 @@ struct SelectedLines {
     truncated: bool,
 }
 
+#[derive(Clone, Copy, Debug)]
+struct StreamStats {
+    bytes: usize,
+    line_count: usize,
+}
+
+impl StreamStats {
+    /// Counts stream size once so compaction branches share the same metadata.
+    fn from_text(text: &str) -> Self {
+        Self {
+            bytes: text.len(),
+            line_count: count_lines(text),
+        }
+    }
+}
+
 /// Builds the compact provider-visible terminal output for one execution.
 pub(crate) fn compact_terminal_execution(
     execution: &TerminalExecution,
@@ -185,37 +201,51 @@ pub(crate) fn format_compact_output(output: &Value) -> String {
 /// Builds a compact stream summary with short-output and head-tail paths.
 fn compact_stream(text: &str, policy: &CompactPolicy) -> CompactStream {
     let lines = text.lines().map(str::to_owned).collect::<Vec<_>>();
-    let bytes = text.len();
-    let line_count = count_lines(text);
-    let block_budget = policy.max_compact_chars;
+    let stats = StreamStats::from_text(text);
 
-    if bytes <= policy.short_output_byte_limit {
-        let selected = select_lines(&lines, policy, block_budget);
-        return CompactStream {
-            bytes,
-            lines: line_count,
-            head: selected.lines,
-            tail: Vec::new(),
-            omitted_lines: selected.omitted_lines,
-            omitted_bytes: selected.omitted_bytes,
-            truncated: selected.truncated,
-        };
+    if stats.bytes <= policy.short_output_byte_limit {
+        return compact_selected_stream(
+            stats,
+            select_lines(&lines, policy, policy.max_compact_chars),
+            false,
+        );
     }
 
-    if line_count <= policy.head_line_limit + policy.tail_line_limit {
-        let selected = select_lines(&lines, policy, block_budget);
-        return CompactStream {
-            bytes,
-            lines: line_count,
-            head: selected.lines,
-            tail: Vec::new(),
-            omitted_lines: selected.omitted_lines,
-            omitted_bytes: selected.omitted_bytes,
-            truncated: true,
-        };
+    if stats.line_count <= policy.head_line_limit + policy.tail_line_limit {
+        return compact_selected_stream(
+            stats,
+            select_lines(&lines, policy, policy.max_compact_chars),
+            true,
+        );
     }
 
-    let tail_start = line_count - policy.tail_line_limit;
+    compact_head_tail_stream(stats, &lines, policy)
+}
+
+/// Builds a stream whose visible lines fit in the head block only.
+fn compact_selected_stream(
+    stats: StreamStats,
+    selected: SelectedLines,
+    force_truncated: bool,
+) -> CompactStream {
+    CompactStream {
+        bytes: stats.bytes,
+        lines: stats.line_count,
+        head: selected.lines,
+        tail: Vec::new(),
+        omitted_lines: selected.omitted_lines,
+        omitted_bytes: selected.omitted_bytes,
+        truncated: force_truncated || selected.truncated,
+    }
+}
+
+/// Builds a stream with separate head and tail excerpts for large output.
+fn compact_head_tail_stream(
+    stats: StreamStats,
+    lines: &[String],
+    policy: &CompactPolicy,
+) -> CompactStream {
+    let tail_start = stats.line_count - policy.tail_line_limit;
     let head = select_lines(
         &lines[..policy.head_line_limit],
         policy,
@@ -225,8 +255,8 @@ fn compact_stream(text: &str, policy: &CompactPolicy) -> CompactStream {
     let omitted_middle = &lines[policy.head_line_limit..tail_start];
 
     CompactStream {
-        bytes,
-        lines: line_count,
+        bytes: stats.bytes,
+        lines: stats.line_count,
         head: head.lines,
         tail: tail.lines,
         omitted_lines: omitted_middle.len() + head.omitted_lines + tail.omitted_lines,

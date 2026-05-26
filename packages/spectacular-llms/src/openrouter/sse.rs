@@ -21,7 +21,8 @@ impl OpenRouterSseParser {
                     reason: error.to_string(),
                     diagnostics: Some(
                         ProviderErrorDiagnostics::new(ProviderErrorStage::SseDecode)
-                            .with_debug_event("sse_parse_error"),
+                            .with_debug_event("sse_parse_error")
+                            .boxed(),
                     ),
                 }
             })?;

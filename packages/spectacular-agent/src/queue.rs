@@ -2,15 +2,18 @@ use std::collections::VecDeque;
 use std::sync::Mutex;
 use tokio::sync::oneshot;
 
+/// Stable identifier assigned to an enqueued or active run.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RunId(usize);
 
 impl RunId {
+    /// Returns the numeric run identifier.
     pub fn value(self) -> usize {
         self.0
     }
 }
 
+/// Prompt request selected by the run queue for execution.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RunRequest {
     id: RunId,
@@ -27,19 +30,23 @@ impl RunRequest {
         }
     }
 
+    /// Returns the queue-assigned run identifier.
     pub fn id(&self) -> RunId {
         self.id
     }
 
+    /// Returns the prompt text to execute.
     pub fn prompt(&self) -> &str {
         &self.prompt
     }
 
+    /// Returns the caller-owned prompt event ID, when one was provided.
     pub fn prompt_event_id(&self) -> Option<&str> {
         self.prompt_event_id.as_deref()
     }
 }
 
+/// Coordinates manual and immediately awaited agent run requests.
 #[derive(Debug, Default)]
 pub struct RunQueue {
     state: Mutex<QueueState>,
@@ -61,10 +68,12 @@ struct WaitingRun {
 }
 
 impl RunQueue {
+    /// Adds a prompt to the manual queue and returns its assigned run ID.
     pub fn enqueue_prompt(&self, prompt: impl Into<String>) -> RunId {
         self.enqueue_prompt_with_event_id(prompt, None::<String>)
     }
 
+    /// Adds a prompt with a caller-owned prompt event ID to the manual queue.
     pub fn enqueue_prompt_with_event_id(
         &self,
         prompt: impl Into<String>,
@@ -77,6 +86,7 @@ impl RunQueue {
         id
     }
 
+    /// Starts the next manually queued run when no run is active.
     pub async fn start_next(&self) -> Option<RunRequest> {
         let mut state = self.state.lock().unwrap();
         if state.active || state.rejecting {
@@ -88,11 +98,13 @@ impl RunQueue {
         Some(request)
     }
 
+    /// Enqueues a prompt and waits until it becomes the active request.
     pub async fn enqueue_and_wait(&self, prompt: impl Into<String>) -> Result<RunRequest, ()> {
         self.enqueue_and_wait_with_event_id(prompt, None::<String>)
             .await
     }
 
+    /// Enqueues a prompt with a caller-owned prompt event ID and waits for activation.
     pub async fn enqueue_and_wait_with_event_id(
         &self,
         prompt: impl Into<String>,
@@ -121,6 +133,7 @@ impl RunQueue {
         receiver.await.unwrap_or(Err(()))
     }
 
+    /// Marks the active run as finished and wakes the next waiting request.
     pub async fn finish_active(&self) {
         let next = {
             let mut state = self.state.lock().unwrap();
@@ -133,6 +146,7 @@ impl RunQueue {
         let _ = next.ready.send(Ok(next.request));
     }
 
+    /// Marks the active run as cancelled and releases pending waiters.
     pub async fn finish_cancelled_active(&self) {
         let mut state = self.state.lock().unwrap();
         state.active = false;
@@ -140,10 +154,12 @@ impl RunQueue {
         cancel_waiting(&mut state);
     }
 
+    /// Cancels pending runs asynchronously.
     pub async fn cancel_pending(&self) {
         self.cancel_pending_now();
     }
 
+    /// Cancels pending runs without awaiting.
     pub fn cancel_pending_now(&self) {
         let mut state = self.state.lock().unwrap();
         state.rejecting = true;

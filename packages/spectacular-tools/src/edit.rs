@@ -12,10 +12,12 @@ use spectacular_agent::{Cancellation, Tool, ToolDisplay, ToolExecution, ToolMani
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// Provider-visible name for the exact replacement edit tool.
 pub const EDIT_TOOL_NAME: &str = "edit";
 
 const EDIT_TOOL_DESCRIPTION: &str = "Edit a file using exact text replacement. Each edit's oldText must match a unique, non-overlapping region of the original file. If two changes affect the same block or nearby lines, merge them into one edit.";
 
+/// Tool that applies exact text replacements within a configured workspace root.
 #[derive(Clone, Debug)]
 pub struct EditTool {
     workspace_root: PathBuf,
@@ -190,12 +192,17 @@ struct EditInput {
     edits: Vec<EditEntry>,
 }
 
+/// Structured result returned by the edit tool after replacement attempts.
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct EditOutput {
+    /// Whether all requested replacements were applied and written.
     pub success: bool,
+    /// Human-readable diff preview for successful edits.
     pub diff: String,
+    /// First changed line in the new file, when a diff was produced.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub first_changed_line: Option<usize>,
+    /// User-facing failure message for validation, matching, or write errors.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }

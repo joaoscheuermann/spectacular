@@ -210,7 +210,9 @@ fn provider_unavailable_with_status(status: u16) -> ProviderError {
     ProviderError::ProviderUnavailable {
         provider_name: "Fake".to_owned(),
         diagnostics: Some(
-            ProviderErrorDiagnostics::new(ProviderErrorStage::HttpStatus).with_http_status(status),
+            ProviderErrorDiagnostics::new(ProviderErrorStage::HttpStatus)
+                .with_http_status(status)
+                .boxed(),
         ),
     }
 }

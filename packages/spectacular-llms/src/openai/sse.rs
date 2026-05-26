@@ -20,7 +20,8 @@ impl OpenAiSseParser {
                     reason: error.to_string(),
                     diagnostics: Some(
                         ProviderErrorDiagnostics::new(ProviderErrorStage::SseDecode)
-                            .with_debug_event("sse_parse_error"),
+                            .with_debug_event("sse_parse_error")
+                            .boxed(),
                     ),
                 })?;
             if let Some(payload) = sse_payload(&event) {

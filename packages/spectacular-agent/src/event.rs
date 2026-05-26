@@ -3,6 +3,7 @@ use crate::usage::ContextTokenUsage;
 use spectacular_llms::{FinishReason, ReasoningMetadata, UsageMetadata};
 use std::fmt::{self, Display};
 
+/// Stable transcript item identifier owned by the agent layer.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AgentTranscriptItemId(String);
 
@@ -25,6 +26,7 @@ impl Display for AgentTranscriptItemId {
     }
 }
 
+/// Durable event emitted by an agent run.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum AgentEvent {
@@ -88,13 +90,20 @@ pub enum AgentEvent {
     },
 }
 
+/// Compact summary that replaces an earlier range of transcript events.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContextSummary {
+    /// Stable summary identifier for replay and UI correlation.
     pub id: String,
+    /// Previous summary ID replaced by this summary, when compaction chains.
     pub replaces: Option<String>,
+    /// Inclusive source event offset covered by this summary.
     pub source_event_start: usize,
+    /// Exclusive source event offset covered by this summary.
     pub source_event_end: usize,
+    /// Provider-generated summary content.
     pub content: String,
+    /// Estimated source transcript tokens represented by the summary.
     pub estimated_tokens: usize,
 }
 
@@ -234,6 +243,11 @@ impl AgentEvent {
     }
 
     /// Creates an event that stores a compact summary replacing earlier transcript context.
+    pub fn context_summary(summary: ContextSummary) -> Self {
+        Self::ContextSummaryCreated(summary)
+    }
+
+    /// Creates an event that stores a compact summary replacing earlier transcript context.
     pub fn context_summary_created(
         id: impl Into<String>,
         replaces: Option<String>,
@@ -242,7 +256,7 @@ impl AgentEvent {
         content: impl Into<String>,
         estimated_tokens: usize,
     ) -> Self {
-        Self::ContextSummaryCreated(ContextSummary {
+        Self::context_summary(ContextSummary {
             id: id.into(),
             replaces,
             source_event_start,
@@ -283,44 +297,23 @@ impl Display for AgentEvent {
                 write!(formatter, "ReasoningDelta(id={id}, content={content})")
             }
             AgentEvent::ReasoningFinish { id } => write!(formatter, "ReasoningFinish(id={id})"),
-            AgentEvent::UsageMetadata(usage) => write!(
-                formatter,
-                "UsageMetadata(input={:?}, output={:?}, total={:?})",
-                usage.input_tokens, usage.output_tokens, usage.total_tokens
-            ),
-            AgentEvent::ContextTokenUsage(usage) => write!(
-                formatter,
-                "ContextTokenUsage(input={}, window={:?})",
-                usage.input_tokens, usage.context_window_tokens
-            ),
-            AgentEvent::ReasoningMetadata(metadata) => write!(
-                formatter,
-                "ReasoningMetadata(effort={:?}, summary={:?})",
-                metadata.effort, metadata.summary
-            ),
+            AgentEvent::UsageMetadata(usage) => fmt_usage_metadata(formatter, usage),
+            AgentEvent::ContextTokenUsage(usage) => fmt_context_token_usage(formatter, usage),
+            AgentEvent::ReasoningMetadata(metadata) => fmt_reasoning_metadata(formatter, metadata),
             AgentEvent::ToolCallStart {
                 tool_call_id,
                 name,
                 arguments,
-            } => write!(
-                formatter,
-                "ToolCallStart(id={tool_call_id}, name={name}, arguments={arguments})"
-            ),
+            } => fmt_tool_call_start(formatter, tool_call_id, name, arguments),
             AgentEvent::ToolCallDelta {
                 tool_call_id,
                 content,
-            } => write!(
-                formatter,
-                "ToolCallDelta(id={tool_call_id}, content={content})"
-            ),
+            } => fmt_tool_call_delta(formatter, tool_call_id, content),
             AgentEvent::ToolCallFinish {
                 tool_call_id,
                 name,
                 output,
-            } => write!(
-                formatter,
-                "ToolCallFinish(id={tool_call_id}, name={name}, output={output})"
-            ),
+            } => fmt_tool_call_finish(formatter, tool_call_id, name, output),
             AgentEvent::ValidationError { message } => {
                 write!(formatter, "ValidationError({message})")
             }
@@ -329,15 +322,84 @@ impl Display for AgentEvent {
             AgentEvent::Finished { finish_reason } => {
                 write!(formatter, "Finished(reason={finish_reason:?})")
             }
-            AgentEvent::ContextSummaryCreated(summary) => write!(
-                formatter,
-                "ContextSummaryCreated(id={}, source={}..{}, tokens={})",
-                summary.id,
-                summary.source_event_start,
-                summary.source_event_end,
-                summary.estimated_tokens
-            ),
+            AgentEvent::ContextSummaryCreated(summary) => fmt_context_summary(formatter, summary),
             AgentEvent::Internal { message } => write!(formatter, "Internal({message})"),
         }
     }
+}
+
+fn fmt_usage_metadata(formatter: &mut fmt::Formatter<'_>, usage: &UsageMetadata) -> fmt::Result {
+    write!(
+        formatter,
+        "UsageMetadata(input={:?}, output={:?}, total={:?})",
+        usage.input_tokens, usage.output_tokens, usage.total_tokens
+    )
+}
+
+fn fmt_context_token_usage(
+    formatter: &mut fmt::Formatter<'_>,
+    usage: &ContextTokenUsage,
+) -> fmt::Result {
+    write!(
+        formatter,
+        "ContextTokenUsage(input={}, window={:?})",
+        usage.input_tokens, usage.context_window_tokens
+    )
+}
+
+fn fmt_reasoning_metadata(
+    formatter: &mut fmt::Formatter<'_>,
+    metadata: &ReasoningMetadata,
+) -> fmt::Result {
+    write!(
+        formatter,
+        "ReasoningMetadata(effort={:?}, summary={:?})",
+        metadata.effort, metadata.summary
+    )
+}
+
+fn fmt_tool_call_start(
+    formatter: &mut fmt::Formatter<'_>,
+    tool_call_id: &str,
+    name: &str,
+    arguments: &str,
+) -> fmt::Result {
+    write!(
+        formatter,
+        "ToolCallStart(id={tool_call_id}, name={name}, arguments={arguments})"
+    )
+}
+
+fn fmt_tool_call_delta(
+    formatter: &mut fmt::Formatter<'_>,
+    tool_call_id: &str,
+    content: &str,
+) -> fmt::Result {
+    write!(
+        formatter,
+        "ToolCallDelta(id={tool_call_id}, content={content})"
+    )
+}
+
+fn fmt_tool_call_finish(
+    formatter: &mut fmt::Formatter<'_>,
+    tool_call_id: &str,
+    name: &str,
+    output: &str,
+) -> fmt::Result {
+    write!(
+        formatter,
+        "ToolCallFinish(id={tool_call_id}, name={name}, output={output})"
+    )
+}
+
+fn fmt_context_summary(
+    formatter: &mut fmt::Formatter<'_>,
+    summary: &ContextSummary,
+) -> fmt::Result {
+    write!(
+        formatter,
+        "ContextSummaryCreated(id={}, source={}..{}, tokens={})",
+        summary.id, summary.source_event_start, summary.source_event_end, summary.estimated_tokens
+    )
 }

@@ -5,20 +5,29 @@ const ERROR_EXCERPT_LIMIT: usize = 1024;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ValidationMode {
+    /// API-key validation against a provider-owned credential endpoint.
     ApiKey,
 }
 
+/// Provider pipeline stage that produced diagnostics for a failure.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProviderErrorStage {
+    /// The provider-neutral request could not be converted to provider wire format.
     RequestBuild,
+    /// The HTTP request failed before a provider response was received.
     HttpRequest,
+    /// The provider returned a non-success HTTP status.
     HttpStatus,
+    /// Server-sent event framing could not be decoded.
     SseDecode,
+    /// A response payload could not be parsed into provider events.
     PayloadParse,
+    /// A provider stream failed while reading or interpreting events.
     ProviderStream,
 }
 
 impl ProviderErrorStage {
+    /// Returns the stable diagnostic label for this stage.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::RequestBuild => "request_build",
@@ -31,16 +40,23 @@ impl ProviderErrorStage {
     }
 }
 
+/// Structured details preserved for provider failures and debug surfaces.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ProviderErrorDiagnostics {
+    /// Pipeline stage that produced the error when it is known.
     pub stage: Option<ProviderErrorStage>,
+    /// HTTP status returned by the provider for non-success responses.
     pub http_status: Option<u16>,
+    /// Provider-specific error code extracted from a response body or stream event.
     pub provider_code: Option<String>,
+    /// Bounded, redacted response excerpt useful for diagnostics.
     pub excerpt: Option<String>,
+    /// Debug-log event names that contain related raw provider context.
     pub debug_events: Vec<String>,
 }
 
 impl ProviderErrorDiagnostics {
+    /// Starts diagnostics for a known provider stage.
     pub fn new(stage: ProviderErrorStage) -> Self {
         Self {
             stage: Some(stage),
@@ -48,11 +64,13 @@ impl ProviderErrorDiagnostics {
         }
     }
 
+    /// Attaches an HTTP status to these diagnostics.
     pub fn with_http_status(mut self, status: u16) -> Self {
         self.http_status = Some(status);
         self
     }
 
+    /// Attaches a non-empty provider-specific error code.
     pub fn with_provider_code(mut self, code: impl Into<String>) -> Self {
         let code = code.into();
         if !code.trim().is_empty() {
@@ -61,6 +79,7 @@ impl ProviderErrorDiagnostics {
         self
     }
 
+    /// Extracts a provider error code from a JSON body when one is present.
     pub fn with_provider_code_from_body(self, body: &str) -> Self {
         let Some(code) = provider_code_from_json(body) else {
             return self;
@@ -69,6 +88,7 @@ impl ProviderErrorDiagnostics {
         self.with_provider_code(code)
     }
 
+    /// Attaches a bounded, redacted excerpt from provider text.
     pub fn with_excerpt(mut self, value: impl AsRef<str>) -> Self {
         let excerpt = provider_error_excerpt(value.as_ref());
         if !excerpt.is_empty() {
@@ -77,6 +97,7 @@ impl ProviderErrorDiagnostics {
         self
     }
 
+    /// Records a debug-log event name that can provide more context.
     pub fn with_debug_event(mut self, event: impl Into<String>) -> Self {
         let event = event.into();
         if !event.trim().is_empty() {
@@ -84,66 +105,116 @@ impl ProviderErrorDiagnostics {
         }
         self
     }
+
+    /// Moves these diagnostics behind a box for storage in compact error variants.
+    pub fn boxed(self) -> Box<Self> {
+        Box::new(self)
+    }
 }
 
+/// Error contract returned by provider implementations.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ProviderError {
+    /// The caller cancelled the provider call.
     CancellationError,
+    /// The supplied API key was rejected or empty.
     InvalidApiKey,
+    /// Model discovery failed before a usable list was returned.
     ModelFetchFailed {
+        /// Provider that failed model discovery.
         provider_name: String,
-        diagnostics: Option<ProviderErrorDiagnostics>,
+        /// Structured diagnostics from the model discovery request.
+        diagnostics: Option<Box<ProviderErrorDiagnostics>>,
     },
+    /// Model discovery succeeded but the provider returned no models.
     NoModelsReturned {
+        /// Provider that returned an empty model list.
         provider_name: String,
     },
+    /// The provider could not complete the request.
     ProviderUnavailable {
+        /// Provider that was unavailable.
         provider_name: String,
-        diagnostics: Option<ProviderErrorDiagnostics>,
+        /// Structured diagnostics from the failed provider request.
+        diagnostics: Option<Box<ProviderErrorDiagnostics>>,
     },
+    /// The provider requires authentication before the request can run.
     AuthenticationRequired {
+        /// Provider that needs authentication.
         provider_name: String,
     },
+    /// Authentication failed with provider-specific detail.
     AuthenticationFailed {
+        /// Provider that rejected authentication.
         provider_name: String,
+        /// Human-readable rejection reason.
         reason: String,
-        diagnostics: Option<ProviderErrorDiagnostics>,
+        /// Structured diagnostics from the authentication failure.
+        diagnostics: Option<Box<ProviderErrorDiagnostics>>,
     },
+    /// Streaming is not implemented for the selected provider.
     StreamUnavailable {
+        /// Provider without streaming support.
         provider_name: String,
     },
+    /// The provider returned a response that violated the expected shape.
     MalformedResponse {
+        /// Provider that returned malformed data.
         provider_name: String,
+        /// Human-readable parse or validation reason.
         reason: String,
-        diagnostics: Option<ProviderErrorDiagnostics>,
+        /// Structured diagnostics from the malformed response.
+        diagnostics: Option<Box<ProviderErrorDiagnostics>>,
     },
+    /// Raw provider data could not be parsed.
     ResponseParsingFailed {
+        /// Provider whose response could not be parsed.
         provider_name: String,
+        /// Parser failure reason.
         reason: String,
-        diagnostics: Option<ProviderErrorDiagnostics>,
+        /// Structured diagnostics from the parse failure.
+        diagnostics: Option<Box<ProviderErrorDiagnostics>>,
     },
+    /// The provider emitted an error event inside a stream.
     StreamError {
+        /// Provider that emitted the stream error.
         provider_name: String,
+        /// Provider-specific stream error code when available.
         code: Option<String>,
+        /// Provider-supplied stream error message.
         message: String,
-        diagnostics: Option<ProviderErrorDiagnostics>,
+        /// Structured diagnostics from the stream error.
+        diagnostics: Option<Box<ProviderErrorDiagnostics>>,
     },
+    /// Network I/O failed before the provider response could be handled.
     NetworkError {
+        /// Provider whose network request failed.
         provider_name: String,
+        /// Network-layer failure reason.
         reason: String,
-        diagnostics: Option<ProviderErrorDiagnostics>,
+        /// Structured diagnostics from the network failure.
+        diagnostics: Option<Box<ProviderErrorDiagnostics>>,
     },
+    /// The request exceeded a provider-owned context bound.
     ContextLimitExceeded {
+        /// Provider enforcing the context limit.
         provider_name: String,
+        /// Context-limit failure reason.
         reason: String,
     },
+    /// The request required a provider capability that is not available.
     CapabilityMismatch {
+        /// Provider missing the capability.
         provider_name: String,
+        /// Capability required by the call.
         capability: String,
     },
+    /// The requested provider identifier is not registered.
     UnsupportedProvider {
+        /// Unknown provider identifier.
         provider_id: String,
     },
+    /// The provider does not support the requested validation mode.
     UnsupportedValidationMode,
 }
 
@@ -196,19 +267,7 @@ impl Display for ProviderError {
                 code,
                 message,
                 ..
-            } => {
-                if let Some(code) = code {
-                    write!(
-                        formatter,
-                        "{provider_name} stream returned error `{code}`: {message}"
-                    )
-                } else {
-                    write!(
-                        formatter,
-                        "{provider_name} stream returned error: {message}"
-                    )
-                }
-            }
+            } => write_stream_error(formatter, provider_name, code.as_deref(), message),
             ProviderError::NetworkError {
                 provider_name,
                 reason,
@@ -244,6 +303,7 @@ impl Display for ProviderError {
 impl Error for ProviderError {}
 
 impl ProviderError {
+    /// Returns the provider name or identifier associated with this error.
     pub fn provider_name(&self) -> Option<&str> {
         match self {
             Self::ModelFetchFailed { provider_name, .. }
@@ -263,6 +323,7 @@ impl ProviderError {
         }
     }
 
+    /// Returns structured diagnostics attached to this error, if any.
     pub fn diagnostics(&self) -> Option<&ProviderErrorDiagnostics> {
         match self {
             Self::ModelFetchFailed { diagnostics, .. }
@@ -271,7 +332,7 @@ impl ProviderError {
             | Self::ResponseParsingFailed { diagnostics, .. }
             | Self::StreamError { diagnostics, .. }
             | Self::NetworkError { diagnostics, .. }
-            | Self::AuthenticationFailed { diagnostics, .. } => diagnostics.as_ref(),
+            | Self::AuthenticationFailed { diagnostics, .. } => diagnostics.as_deref(),
             Self::CancellationError
             | Self::InvalidApiKey
             | Self::NoModelsReturned { .. }
@@ -284,11 +345,13 @@ impl ProviderError {
         }
     }
 
+    /// Returns the HTTP status from diagnostics when present.
     pub fn http_status(&self) -> Option<u16> {
         self.diagnostics()
             .and_then(|diagnostics| diagnostics.http_status)
     }
 
+    /// Returns the provider-specific code from stream data or diagnostics.
     pub fn provider_code(&self) -> Option<&str> {
         match self {
             Self::StreamError {
@@ -301,6 +364,26 @@ impl ProviderError {
     }
 }
 
+fn write_stream_error(
+    formatter: &mut fmt::Formatter<'_>,
+    provider_name: &str,
+    code: Option<&str>,
+    message: &str,
+) -> fmt::Result {
+    if let Some(code) = code {
+        return write!(
+            formatter,
+            "{provider_name} stream returned error `{code}`: {message}"
+        );
+    }
+
+    write!(
+        formatter,
+        "{provider_name} stream returned error: {message}"
+    )
+}
+
+/// Produces a bounded, redacted provider response excerpt for diagnostics.
 pub fn provider_error_excerpt(value: &str) -> String {
     let stripped = value
         .chars()

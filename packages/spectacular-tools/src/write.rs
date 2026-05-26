@@ -6,10 +6,12 @@ use serde_json::{json, Value};
 use spectacular_agent::{Cancellation, Tool, ToolDisplay, ToolExecution, ToolManifest};
 use std::path::{Path, PathBuf};
 
+/// Provider-visible name for the workspace write tool.
 pub const WRITE_TOOL_NAME: &str = "write";
 
 const WRITE_TOOL_DESCRIPTION: &str = "Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Automatically creates parent directories.";
 
+/// Tool that writes file content under a configured workspace root.
 #[derive(Clone, Debug)]
 pub struct WriteTool {
     workspace_root: PathBuf,
@@ -128,12 +130,17 @@ struct WriteInput {
     content: String,
 }
 
+/// Structured result returned by the write tool.
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct WriteOutput {
+    /// Whether the write completed successfully.
     pub success: bool,
+    /// Number of bytes written to disk for successful writes.
     pub bytes_written: usize,
+    /// Human-readable diff preview for successful writes.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub diff: String,
+    /// User-facing failure message for validation or IO errors.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }

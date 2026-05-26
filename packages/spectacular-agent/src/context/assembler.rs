@@ -91,70 +91,37 @@ where
         &self,
         input: ContextAssemblyInput<'_>,
     ) -> Result<ContextAssembly, ContextAssemblyError> {
-        let latest_summary = latest_context_summary(input.store.events()).cloned();
-        let replay_start = latest_summary
-            .as_ref()
-            .map(|summary| summary.source_event_end)
-            .unwrap_or_default();
-        let replay_events = input.store.events().get(replay_start..).unwrap_or_default();
-        let summary_message = latest_summary
-            .as_ref()
-            .map(|summary| ProviderMessage::system(format_summary_message(&summary.content)));
-        let transcript_messages = transcript_messages_from_events(replay_events);
-        let continuation_message = input.continuation_prompt.map(ProviderMessage::user);
-        let messages = build_messages(
-            input.system_prompt,
-            summary_message,
-            transcript_messages,
-            continuation_message,
-        );
-        let diagnostics = self.diagnostics(&messages, latest_summary.is_some());
+        let replay = replay_context(&input);
+        let diagnostics = self.diagnostics(&replay.messages, replay.latest_summary.is_some());
 
         if diagnostics.compaction_would_trigger {
             if let Some(summary_request) =
-                self.summary_request(input.store, latest_summary, diagnostics.clone())
+                self.summary_request(input.store, replay.latest_summary, diagnostics.clone())
             {
                 return Ok(ContextAssembly::NeedsSummary(summary_request));
             }
         }
 
-        validate_context_limits(&messages, input.provider_limits)
+        validate_context_limits(&replay.messages, input.provider_limits)
             .map_err(ContextAssemblyError::ProviderLimit)?;
         self.validate_token_budget(&diagnostics)?;
 
         Ok(ContextAssembly::Ready(AssembledProviderContext {
-            messages,
+            messages: replay.messages,
             diagnostics,
         }))
     }
 
     /// Builds diagnostics by counting each provider-context section independently.
     fn diagnostics(&self, messages: &[ProviderMessage], has_summary: bool) -> ContextDiagnostics {
-        let system_count = 1;
-        let summary_count = usize::from(has_summary);
-        let continuation_count = usize::from(
-            messages
-                .last()
-                .is_some_and(|message| message.role == ProviderMessageRole::User),
-        );
-        let transcript_count = messages
-            .len()
-            .saturating_sub(system_count + summary_count + continuation_count);
-        let system_tokens = self.count_messages(&messages[..system_count]);
-        let summary_tokens =
-            self.count_messages(&messages[system_count..system_count + summary_count]);
-        let transcript_start = system_count + summary_count;
-        let transcript_end = transcript_start + transcript_count;
-        let transcript_tokens = self.count_messages(&messages[transcript_start..transcript_end]);
-        let continuation_tokens = self.count_messages(&messages[transcript_end..]);
-        let total_input_tokens =
-            system_tokens + summary_tokens + transcript_tokens + continuation_tokens;
+        let counts = SectionCounts::from_messages(messages, has_summary);
+        let tokens = self.section_tokens(messages, &counts);
         let budget = self.policy.budget();
         let active_compaction_threshold = self.policy.active_compaction_threshold();
         let soft_compaction_threshold = self.policy.soft_compaction_threshold();
 
         ContextDiagnostics {
-            total_input_tokens,
+            total_input_tokens: tokens.total_input_tokens,
             usable_input_tokens: budget.map(|budget| budget.usable_input_tokens),
             active_compaction_threshold,
             soft_compaction_threshold,
@@ -162,26 +129,13 @@ where
             reasoning_reserve_tokens: self.policy.reasoning_reserve_tokens,
             safety_margin_tokens: self.policy.safety_margin_tokens,
             message_count: messages.len(),
-            section_usage: section_usage(vec![
-                (ContextSection::System, system_count, system_tokens),
-                (ContextSection::Summary, summary_count, summary_tokens),
-                (
-                    ContextSection::Transcript,
-                    transcript_count,
-                    transcript_tokens,
-                ),
-                (
-                    ContextSection::Continuation,
-                    continuation_count,
-                    continuation_tokens,
-                ),
-            ]),
+            section_usage: tokens.section_usage(&counts),
             soft_compaction_would_trigger: threshold_exceeded(
-                total_input_tokens,
+                tokens.total_input_tokens,
                 soft_compaction_threshold,
             ),
             compaction_would_trigger: threshold_exceeded(
-                total_input_tokens,
+                tokens.total_input_tokens,
                 active_compaction_threshold,
             ),
         }
@@ -199,103 +153,91 @@ where
             .as_ref()
             .map(|summary| summary.source_event_end)
             .unwrap_or_default();
-        if let Some(summary_request) = self.old_turn_summary_request(
+        let context = SummaryContext {
             events,
             replay_start,
-            latest_summary.clone(),
-            diagnostics.clone(),
-        ) {
+            latest_summary,
+            diagnostics,
+        };
+        if let Some(summary_request) = self.old_turn_summary_request(&context) {
             return Some(summary_request);
         }
 
-        self.same_turn_summary_request(events, replay_start, latest_summary, diagnostics)
+        self.same_turn_summary_request(context)
     }
 
     /// Creates a summary request for compactable transcript before protected turns.
     fn old_turn_summary_request(
         &self,
-        events: &[AgentEvent],
-        replay_start: usize,
-        latest_summary: Option<ContextSummary>,
-        diagnostics: ContextDiagnostics,
+        context: &SummaryContext<'_>,
     ) -> Option<ContextSummaryRequest> {
         let protect_start = protected_event_start(
-            events,
-            replay_start,
+            context.events,
+            context.replay_start,
             self.policy.latest_turns_to_protect.max(1),
         );
-        if protect_start <= replay_start {
+        if protect_start <= context.replay_start {
             return None;
         }
 
         let summary_end = summary_source_event_end(
-            events,
-            replay_start,
+            context.events,
+            context.replay_start,
             protect_start,
             self.policy.summary_source_token_limit(),
             &self.token_counter,
         );
-        self.summary_request_for_range(
-            events,
-            replay_start,
-            summary_end,
-            latest_summary,
-            diagnostics,
-            true,
-        )
+        self.summary_request_for_range(SummaryRange {
+            events: context.events,
+            source_event_start: context.replay_start,
+            source_event_end: summary_end,
+            latest_summary: context.latest_summary.clone(),
+            diagnostics: context.diagnostics.clone(),
+            allow_empty_with_previous_summary: true,
+        })
     }
 
     /// Creates a summary request for completed work inside the active protected turn.
     fn same_turn_summary_request(
         &self,
-        events: &[AgentEvent],
-        replay_start: usize,
-        latest_summary: Option<ContextSummary>,
-        diagnostics: ContextDiagnostics,
+        context: SummaryContext<'_>,
     ) -> Option<ContextSummaryRequest> {
-        let turn_start = latest_user_prompt_start(events, replay_start).unwrap_or(replay_start);
+        let turn_start = latest_user_prompt_start(context.events, context.replay_start)
+            .unwrap_or(context.replay_start);
         let summary_end = same_turn_summary_source_event_end(
-            events,
+            context.events,
             turn_start,
             self.policy.summary_source_token_limit(),
             &self.token_counter,
         )?;
         let compactable_messages =
-            transcript_messages_from_events(&events[turn_start..summary_end]);
+            transcript_messages_from_events(&context.events[turn_start..summary_end]);
         if is_prompt_only_same_turn_range(&compactable_messages)
-            && !diagnostics.exceeds_usable_input_budget()
+            && !context.diagnostics.exceeds_usable_input_budget()
         {
             return None;
         }
 
-        self.summary_request_for_range(
-            events,
-            turn_start,
-            summary_end,
-            latest_summary,
-            diagnostics,
-            false,
-        )
+        self.summary_request_for_range(SummaryRange {
+            events: context.events,
+            source_event_start: turn_start,
+            source_event_end: summary_end,
+            latest_summary: context.latest_summary,
+            diagnostics: context.diagnostics,
+            allow_empty_with_previous_summary: false,
+        })
     }
 
     /// Builds a summary request for an already-selected source event range.
-    fn summary_request_for_range(
-        &self,
-        events: &[AgentEvent],
-        source_event_start: usize,
-        source_event_end: usize,
-        latest_summary: Option<ContextSummary>,
-        diagnostics: ContextDiagnostics,
-        allow_empty_with_previous_summary: bool,
-    ) -> Option<ContextSummaryRequest> {
-        if source_event_end <= source_event_start {
+    fn summary_request_for_range(&self, range: SummaryRange<'_>) -> Option<ContextSummaryRequest> {
+        if range.source_event_end <= range.source_event_start {
             return None;
         }
 
-        let compactable_events = &events[source_event_start..source_event_end];
+        let compactable_events = &range.events[range.source_event_start..range.source_event_end];
         let compactable_messages = transcript_messages_from_events(compactable_events);
         if compactable_messages.is_empty()
-            && (!allow_empty_with_previous_summary || latest_summary.is_none())
+            && (!range.allow_empty_with_previous_summary || range.latest_summary.is_none())
         {
             return None;
         }
@@ -305,18 +247,19 @@ where
             .iter()
             .map(|message| self.token_counter.count_message_tokens(message))
             .sum::<usize>();
-        let summary_source_event_start = latest_summary
+        let summary_source_event_start = range
+            .latest_summary
             .as_ref()
             .map(|summary| summary.source_event_start)
-            .unwrap_or(source_event_start);
+            .unwrap_or(range.source_event_start);
 
         Some(ContextSummaryRequest {
-            previous_summary: latest_summary,
+            previous_summary: range.latest_summary,
             source_event_start: summary_source_event_start,
-            source_event_end,
+            source_event_end: range.source_event_end,
             transcript,
             estimated_tokens,
-            diagnostics,
+            diagnostics: range.diagnostics,
         })
     }
 
@@ -345,6 +288,27 @@ where
             .map(|message| self.token_counter.count_message_tokens(message))
             .sum()
     }
+
+    fn section_tokens(
+        &self,
+        messages: &[ProviderMessage],
+        counts: &SectionCounts,
+    ) -> SectionTokens {
+        let summary_end = counts.system + counts.summary;
+        let transcript_end = summary_end + counts.transcript;
+        let system = self.count_messages(&messages[..counts.system]);
+        let summary = self.count_messages(&messages[counts.system..summary_end]);
+        let transcript = self.count_messages(&messages[summary_end..transcript_end]);
+        let continuation = self.count_messages(&messages[transcript_end..]);
+
+        SectionTokens {
+            system,
+            summary,
+            transcript,
+            continuation,
+            total_input_tokens: system + summary + transcript + continuation,
+        }
+    }
 }
 
 /// Returns true when same-turn compaction would only summarize the active prompt.
@@ -364,6 +328,108 @@ impl ContextDiagnostics {
         self.usable_input_tokens
             .map(|usable_input_tokens| self.total_input_tokens > usable_input_tokens)
             .unwrap_or(false)
+    }
+}
+
+struct ReplayContext {
+    latest_summary: Option<ContextSummary>,
+    messages: Vec<ProviderMessage>,
+}
+
+struct SummaryContext<'a> {
+    events: &'a [AgentEvent],
+    replay_start: usize,
+    latest_summary: Option<ContextSummary>,
+    diagnostics: ContextDiagnostics,
+}
+
+struct SummaryRange<'a> {
+    events: &'a [AgentEvent],
+    source_event_start: usize,
+    source_event_end: usize,
+    latest_summary: Option<ContextSummary>,
+    diagnostics: ContextDiagnostics,
+    allow_empty_with_previous_summary: bool,
+}
+
+struct SectionCounts {
+    system: usize,
+    summary: usize,
+    transcript: usize,
+    continuation: usize,
+}
+
+impl SectionCounts {
+    fn from_messages(messages: &[ProviderMessage], has_summary: bool) -> Self {
+        let system = 1;
+        let summary = usize::from(has_summary);
+        let continuation = usize::from(
+            messages
+                .last()
+                .is_some_and(|message| message.role == ProviderMessageRole::User),
+        );
+        let transcript = messages
+            .len()
+            .saturating_sub(system + summary + continuation);
+
+        Self {
+            system,
+            summary,
+            transcript,
+            continuation,
+        }
+    }
+}
+
+struct SectionTokens {
+    system: usize,
+    summary: usize,
+    transcript: usize,
+    continuation: usize,
+    total_input_tokens: usize,
+}
+
+impl SectionTokens {
+    fn section_usage(&self, counts: &SectionCounts) -> Vec<ContextSectionUsage> {
+        section_usage(vec![
+            (ContextSection::System, counts.system, self.system),
+            (ContextSection::Summary, counts.summary, self.summary),
+            (
+                ContextSection::Transcript,
+                counts.transcript,
+                self.transcript,
+            ),
+            (
+                ContextSection::Continuation,
+                counts.continuation,
+                self.continuation,
+            ),
+        ])
+    }
+}
+
+fn replay_context(input: &ContextAssemblyInput<'_>) -> ReplayContext {
+    let latest_summary = latest_context_summary(input.store.events()).cloned();
+    let replay_start = latest_summary
+        .as_ref()
+        .map(|summary| summary.source_event_end)
+        .unwrap_or_default();
+    let replay_events = input.store.events().get(replay_start..).unwrap_or_default();
+    let summary_message = latest_summary
+        .as_ref()
+        .map(|summary| ProviderMessage::system(format_summary_message(&summary.content)));
+    let transcript_messages = transcript_messages_from_events(replay_events);
+    let continuation_message = input.continuation_prompt.map(ProviderMessage::user);
+    let messages = build_messages(
+        input.system_prompt.clone(),
+        summary_message,
+        transcript_messages,
+        continuation_message,
+    );
+
+    ReplayContext {
+        latest_summary,
+        messages,
     }
 }
 
