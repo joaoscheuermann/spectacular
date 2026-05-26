@@ -23,11 +23,11 @@ pub fn Working(mut hooks: Hooks, props: &WorkingProps) -> impl Into<AnyElement<'
 
     let state = props.state.as_ref();
 
-    let Some(line) = working_render_line_with_frame(&state, frame) else {
+    let Some(line) = working_render_line_with_frame(state, frame) else {
         return element!(View(width: 100pct)).into_any();
     };
 
-    let line = style_line_for_source(&state, line, SelectableSource::Working);
+    let line = style_line_for_source(state, line, SelectableSource::Working);
     let contents = iocraft_content_with_selection_colors(&line, state.selection_colors);
     element!(View(width: 100pct, margin_bottom: 1) {
         MixedText(wrap: TextWrap::NoWrap, contents)

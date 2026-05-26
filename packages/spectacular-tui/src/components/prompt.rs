@@ -8,12 +8,11 @@ use std::sync::Arc;
 #[component]
 pub fn Prompt(props: &PromptProps) -> impl Into<AnyElement<'static>> {
     let state = props.state.as_ref();
-    let elements = prompt_rows(&state, props.width)
+    let elements = prompt_rows(state, props.width)
         .into_iter()
         .enumerate()
         .map(|(index, line)| {
-            let line =
-                style_line_for_source(&state, line, SelectableSource::Prompt { line: index });
+            let line = style_line_for_source(state, line, SelectableSource::Prompt { line: index });
             let contents = iocraft_content_with_selection_colors(&line, state.selection_colors);
             element!(MixedText(wrap: TextWrap::NoWrap, contents))
         });

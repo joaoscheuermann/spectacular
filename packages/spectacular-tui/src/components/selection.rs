@@ -9,12 +9,12 @@ use std::sync::Arc;
 #[component]
 pub fn SelectionPrompt(props: &SelectionPromptProps) -> impl Into<AnyElement<'static>> {
     let state = props.state.as_ref();
-    let elements = selection_prompt_rows(&state)
+    let elements = selection_prompt_rows(state)
         .into_iter()
         .enumerate()
         .map(|(index, line)| {
             let line = style_line_for_source(
-                &state,
+                state,
                 line,
                 SelectableSource::SelectionPrompt { line: index },
             );

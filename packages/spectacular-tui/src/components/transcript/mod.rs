@@ -57,7 +57,7 @@ pub fn Transcript(mut hooks: Hooks, props: &TranscriptProps) -> impl Into<AnyEle
         let mut cache = cache_ref
             .lock()
             .expect("transcript layout cache lock poisoned");
-        cache.snapshot_for_state(&state, content_width)
+        cache.snapshot_for_state(state, content_width)
     };
     let layout = layout.layout;
     let height = transcript_height(layout.total_rows, capacity);
@@ -72,8 +72,8 @@ pub fn Transcript(mut hooks: Hooks, props: &TranscriptProps) -> impl Into<AnyEle
         ..scroll_offset
             .saturating_add(usize::from(height))
             .min(layout.total_rows);
-    let context = TranscriptRenderContext::new(&state, content_width, &layout, visible_window);
-    let items = transcript_item_elements(context, &state, item_range);
+    let context = TranscriptRenderContext::new(state, content_width, &layout, visible_window);
+    let items = transcript_item_elements(context, state, item_range);
 
     element!(Scroll(
         key: state.session.id.as_str().to_owned(),

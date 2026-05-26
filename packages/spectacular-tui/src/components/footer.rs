@@ -21,11 +21,11 @@ pub fn Footer(props: &FooterProps) -> impl Into<AnyElement<'static>> {
     let state = props.state.as_ref();
     let width = props
         .width
-        .unwrap_or_else(|| footer_width_from_state(&state));
-    if footer_center_layout(&state, width).is_some() {
-        let line = footer_render_line_with_width(&state, width);
+        .unwrap_or_else(|| footer_width_from_state(state));
+    if footer_center_layout(state, width).is_some() {
+        let line = footer_render_line_with_width(state, width);
         let contents = iocraft_content_with_selection_colors(
-            &style_line_for_source_at_columns(&state, line, SelectableSource::Footer, 0),
+            &style_line_for_source_at_columns(state, line, SelectableSource::Footer, 0),
             state.selection_colors,
         );
         return element!(View(width: 100pct) {
@@ -34,16 +34,16 @@ pub fn Footer(props: &FooterProps) -> impl Into<AnyElement<'static>> {
         .into_any();
     }
 
-    let left = footer_left_render_line(&state);
+    let left = footer_left_render_line(state);
     let left_width = UnicodeWidthStr::width(left.plain_text().as_str());
     let left_contents = iocraft_content_with_selection_colors(
-        &style_line_for_source_at_columns(&state, left, SelectableSource::Footer, 0),
+        &style_line_for_source_at_columns(state, left, SelectableSource::Footer, 0),
         state.selection_colors,
     );
-    let right_contents = footer_right_render_line(&state).map(|line| {
+    let right_contents = footer_right_render_line(state).map(|line| {
         iocraft_content_with_selection_colors(
             &style_line_for_source_at_columns(
-                &state,
+                state,
                 line,
                 SelectableSource::Footer,
                 left_width.saturating_add(UnicodeWidthStr::width(TRANSCRIPT_SEPARATOR)),

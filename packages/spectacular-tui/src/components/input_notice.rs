@@ -8,11 +8,11 @@ use std::sync::Arc;
 #[component]
 pub fn InputNotice(props: &InputNoticeProps) -> impl Into<AnyElement<'static>> {
     let state = props.state.as_ref();
-    let Some(line) = input_notice_line(&state) else {
+    let Some(line) = input_notice_line(state) else {
         return element!(View(width: 100pct)).into_any();
     };
 
-    let line = style_line_for_source(&state, line, SelectableSource::InputNotice);
+    let line = style_line_for_source(state, line, SelectableSource::InputNotice);
     let contents = iocraft_content_with_selection_colors(&line, state.selection_colors);
     element!(View(width: 100pct) {
         MixedText(wrap: TextWrap::NoWrap, contents)
