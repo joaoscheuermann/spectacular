@@ -1,6 +1,7 @@
 use crate::chat::session::{now, ChatEvent, ChatRecord};
 use crate::chat::ChatError;
 use serde_json::Value;
+use spectacular_tui::Session;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -25,12 +26,39 @@ impl SessionStore {
         &self.dir
     }
 
+    /// Returns the append-only JSONL event path for a session identifier.
     pub fn path(&self, id: &str) -> PathBuf {
         self.dir.join(format!("{id}.jsonl"))
     }
 
+    /// Returns the durable semantic snapshot path for a session identifier.
+    pub fn snapshot_path(&self, id: &str) -> PathBuf {
+        self.dir.join(format!("{id}.snapshot.json"))
+    }
+
+    /// Returns whether either persisted session representation exists for an identifier.
     pub fn exists(&self, id: &str) -> bool {
-        self.path(id).exists()
+        self.path(id).exists() || self.snapshot_path(id).exists()
+    }
+
+    /// Saves the durable semantic TUI session snapshot without terminal output replay data.
+    #[allow(dead_code)]
+    pub fn save_snapshot(&self, session: &Session) -> Result<(), ChatError> {
+        let path = self.snapshot_path(session.id.as_str());
+        let mut file = File::create(path).map_err(|error| ChatError::Session(error.to_string()))?;
+        serde_json::to_writer_pretty(&mut file, session)
+            .map_err(|error| ChatError::Session(error.to_string()))?;
+        writeln!(file).map_err(|error| ChatError::Session(error.to_string()))?;
+        file.flush()
+            .map_err(|error| ChatError::Session(error.to_string()))
+    }
+
+    /// Loads a durable semantic TUI session snapshot by session identifier.
+    #[allow(dead_code)]
+    pub fn load_snapshot(&self, id: &str) -> Result<Session, ChatError> {
+        let path = self.snapshot_path(id);
+        let file = File::open(path).map_err(|error| ChatError::Session(error.to_string()))?;
+        serde_json::from_reader(file).map_err(|error| ChatError::Session(error.to_string()))
     }
 
     pub fn append(&self, path: &Path, event: &ChatEvent) -> Result<(), ChatError> {
@@ -54,69 +82,88 @@ impl SessionStore {
     }
 
     pub fn truncate_after_latest_user_prompt(&self, path: &Path) -> Result<String, ChatError> {
-        let content =
-            fs::read_to_string(path).map_err(|error| ChatError::Session(error.to_string()))?;
-        let mut offset = 0usize;
-        let mut latest_prompt = None;
-        let mut truncate_at = None;
-
-        for line in content.split_inclusive('\n') {
-            offset += line.len();
-            let parsed = serde_json::from_str::<Value>(line.trim_end())
-                .ok()
-                .and_then(|value| ChatEvent::from_value(value).ok());
-            let Some(event) = parsed else {
-                continue;
-            };
-            let Some(prompt) = event.user_prompt() else {
-                continue;
-            };
-
-            latest_prompt = Some(prompt.to_owned());
-            truncate_at = Some(offset);
-        }
-
-        let prompt =
-            latest_prompt.ok_or_else(|| ChatError::Session("no prompt to retry".to_owned()))?;
-        let truncate_at =
-            truncate_at.ok_or_else(|| ChatError::Session("no prompt to retry".to_owned()))?;
-        let file = OpenOptions::new()
-            .write(true)
-            .open(path)
-            .map_err(|error| ChatError::Session(error.to_string()))?;
-        file.set_len(truncate_at as u64)
-            .map_err(|error| ChatError::Session(error.to_string()))?;
-        Ok(prompt)
+        let target = latest_prompt_target(&read_content(path)?)?;
+        truncate_file(path, target.offset)?;
+        Ok(target.prompt)
     }
 }
 
 fn read_records(path: &Path) -> Result<Vec<ChatRecord>, ChatError> {
-    let file = File::open(path).map_err(|error| ChatError::Session(error.to_string()))?;
-    let reader = BufReader::new(file);
-    let mut records = Vec::new();
-    for (index, line) in reader.lines().enumerate() {
-        let line_number = index + 1;
-        let line = line.map_err(|error| ChatError::Session(error.to_string()))?;
-        let value = match serde_json::from_str::<Value>(&line) {
-            Ok(value) => value,
-            Err(_) => {
-                records.push(ChatRecord::Corrupt { line: line_number });
-                continue;
-            }
-        };
+    BufReader::new(open_file(path)?)
+        .lines()
+        .enumerate()
+        .map(|(index, line)| {
+            let line = line.map_err(to_session_error)?;
+            Ok(record_from_line(index + 1, &line))
+        })
+        .collect()
+}
 
-        match ChatEvent::from_value(value) {
-            Ok(event) => records.push(ChatRecord::Known {
-                line: line_number,
-                event,
-            }),
-            Err(value) => records.push(ChatRecord::Unknown {
-                line: line_number,
-                value,
-            }),
+fn record_from_line(line_number: usize, line: &str) -> ChatRecord {
+    let Ok(value) = serde_json::from_str::<Value>(line) else {
+        return ChatRecord::Corrupt { line: line_number };
+    };
+
+    record_from_value(line_number, value)
+}
+
+fn record_from_value(line_number: usize, value: Value) -> ChatRecord {
+    match ChatEvent::from_value(value) {
+        Ok(event) => ChatRecord::Known {
+            line: line_number,
+            event,
+        },
+        Err(value) => ChatRecord::Unknown {
+            line: line_number,
+            value,
+        },
+    }
+}
+
+struct RetryTarget {
+    prompt: String,
+    offset: usize,
+}
+
+fn latest_prompt_target(content: &str) -> Result<RetryTarget, ChatError> {
+    let mut latest = None;
+    let mut offset = 0usize;
+
+    for line in content.split_inclusive('\n') {
+        offset += line.len();
+        if let Some(prompt) = line_user_prompt(line) {
+            latest = Some(RetryTarget { prompt, offset });
         }
     }
-    Ok(records)
+
+    latest.ok_or_else(|| ChatError::Session("no prompt to retry".to_owned()))
+}
+
+fn line_user_prompt(line: &str) -> Option<String> {
+    let event = serde_json::from_str::<Value>(line.trim_end())
+        .ok()
+        .and_then(|value| ChatEvent::from_value(value).ok())?;
+    event.user_prompt().map(str::to_owned)
+}
+
+fn read_content(path: &Path) -> Result<String, ChatError> {
+    fs::read_to_string(path).map_err(to_session_error)
+}
+
+fn open_file(path: &Path) -> Result<File, ChatError> {
+    File::open(path).map_err(to_session_error)
+}
+
+fn truncate_file(path: &Path, offset: usize) -> Result<(), ChatError> {
+    let file = OpenOptions::new()
+        .write(true)
+        .open(path)
+        .map_err(to_session_error)?;
+    file.set_len(offset as u64).map_err(to_session_error)
+}
+
+fn to_session_error(error: std::io::Error) -> ChatError {
+    ChatError::Session(error.to_string())
 }
 
 pub fn session_started(id: &str, schema_version: u64, title: &str) -> ChatEvent {
@@ -133,5 +180,13 @@ mod tests {
     include!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/tests/unit/chat/session/store.rs"
+    ));
+}
+
+#[cfg(test)]
+mod snapshot_tests {
+    include!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/unit/chat/session/snapshot.rs"
     ));
 }

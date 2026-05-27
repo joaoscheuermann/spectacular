@@ -1,8 +1,13 @@
 use super::*;
 
 #[test]
-fn normal_text_is_not_command() {
+fn parse_line_without_leading_slash_is_not_command() {
     assert_eq!(parse_line("hello").unwrap(), ParseOutcome::NotCommand);
+}
+
+#[test]
+fn parse_line_with_indented_slash_is_not_command() {
+    assert_eq!(parse_line(" /history").unwrap(), ParseOutcome::NotCommand);
 }
 
 #[test]

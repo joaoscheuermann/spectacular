@@ -20,7 +20,7 @@
 ### Dependency Inversion (DIP)
 
 - High-level policy must not depend directly on low-level details. Point source dependencies toward the policies that should survive library or vendor swaps.
-- Flow goes: **apps → bindings/surface → runtime/tooling APIs**, not the reverse.
+- Flow goes: **apps -> bindings/surface -> runtime/tooling APIs**, not the reverse.
 - Pass paths, credentials, and limits at initialization or call boundaries rather than using hidden globals.
 
 ### Interface Segregation (ISP)
@@ -36,15 +36,18 @@
 - Extend the existing workspace layout before adding a cross-cutting "platform" package.
 - Defer generalization until a second concrete consumer validates the shape.
 
-### Don't Repeat Yourself (DRY) & Reusability-First
+### Reuse Existing Code Before Abstracting
 
 - Keep schemas, IDLs, or proto definitions as the source of truth for generated code in multiple languages.
 - **Workflow before writing new code:**
   1. Audit the workspace for similar logic.
-  2. Extract logic that could serve a second caller.
-  3. Move cross-app shared code into `packages/*` using workspace generators.
+  2. Reuse existing logic when a suitable implementation already exists.
+  3. Extract shared logic only after an actual second consumer or proven duplication validates the abstraction.
+  4. Move cross-app shared code into `packages/*` using workspace generators.
 
 ## 3. Deep and Shallow Modules
+
+Use this section as the high-level architecture summary. The canonical complexity and deep-module guidance lives in `simplicity-complexity.md`.
 
 - **Deep module:** Exposes a small, stable interface while hiding substantial behavior, knowledge, or implementation complexity. (e.g., A provider client that owns auth, retries, and rate-limits).
 - **Shallow module:** Exposes nearly as much interface complexity as the implementation complexity it hides. (e.g., A service layer that merely forwards calls 1-to-1).

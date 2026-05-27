@@ -21,6 +21,31 @@ fn openai_responses_request_maps_messages_and_instructions() {
 }
 
 #[test]
+fn openai_responses_request_rejects_system_only_input() {
+    let error = match OpenAiResponsesRequest::from_provider_request(
+        ProviderRequest::new(vec![ProviderMessage::system("system")]).with_model("gpt-5.5"),
+    ) {
+        Ok(_) => panic!("system-only request should be rejected"),
+        Err(error) => error,
+    };
+
+    let ProviderError::MalformedResponse {
+        provider_name,
+        reason,
+        diagnostics: Some(diagnostics),
+    } = error
+    else {
+        panic!("expected request-build validation error");
+    };
+    assert_eq!(provider_name, "OpenAI");
+    assert_eq!(
+        reason,
+        "Responses request requires at least one non-system input item"
+    );
+    assert_eq!(diagnostics.stage, Some(ProviderErrorStage::RequestBuild));
+}
+
+#[test]
 fn openai_responses_request_maps_fast_alias_to_priority_service_tier() {
     let request = OpenAiResponsesRequest::from_provider_request(
         ProviderRequest::new(vec![ProviderMessage::user("hello")]).with_model("gpt-5.5-fast"),

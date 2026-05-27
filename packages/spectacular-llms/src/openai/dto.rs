@@ -1,6 +1,6 @@
 use crate::{
-    ProviderError, ProviderMessage, ProviderMessageRole, ProviderRequest, ProviderToolCall,
-    ToolManifest, UsageMetadata,
+    ProviderError, ProviderErrorDiagnostics, ProviderErrorStage, ProviderMessage,
+    ProviderMessageRole, ProviderRequest, ProviderToolCall, ToolManifest, UsageMetadata,
 };
 use serde::{Deserialize, Serialize};
 
@@ -38,21 +38,12 @@ impl OpenAiResponsesRequest {
             flags,
             ..
         } = request;
-        let model = model
-            .filter(|model| !model.trim().is_empty())
-            .ok_or_else(|| ProviderError::MalformedResponse {
-                provider_name: "OpenAI".to_owned(),
-                reason: "missing model for Responses request".to_owned(),
-            })?;
+        let model = required_model(model)?;
         let model_request = OpenAiModelRequest::from_configured_model(model);
         let instructions = instructions_from_messages(&messages);
-        let input = input_from_messages(messages);
-        let tools = tools
-            .into_iter()
-            .map(OpenAiToolManifest::from_tool_manifest)
-            .collect::<Vec<_>>();
-        let tool_choice = if tools.is_empty() { None } else { Some("auto") };
-        let parallel_tool_calls = if tools.is_empty() { None } else { Some(false) };
+        let input = required_input(input_from_messages(messages))?;
+        let tools = openai_tools(tools);
+        let (tool_choice, parallel_tool_calls) = tool_options(&tools);
         let reasoning =
             OpenAiReasoningRequest::from_flags(flags.include_reasoning, flags.reasoning_effort);
 
@@ -68,6 +59,45 @@ impl OpenAiResponsesRequest {
             parallel_tool_calls,
             reasoning,
         })
+    }
+}
+
+fn required_model(model: Option<String>) -> Result<String, ProviderError> {
+    model
+        .filter(|model| !model.trim().is_empty())
+        .ok_or_else(|| ProviderError::MalformedResponse {
+            provider_name: "OpenAI".to_owned(),
+            reason: "missing model for Responses request".to_owned(),
+            diagnostics: Some(
+                ProviderErrorDiagnostics::new(ProviderErrorStage::RequestBuild).boxed(),
+            ),
+        })
+}
+
+fn required_input(input: Vec<OpenAiInputItem>) -> Result<Vec<OpenAiInputItem>, ProviderError> {
+    if !input.is_empty() {
+        return Ok(input);
+    }
+
+    Err(ProviderError::MalformedResponse {
+        provider_name: "OpenAI".to_owned(),
+        reason: "Responses request requires at least one non-system input item".to_owned(),
+        diagnostics: Some(ProviderErrorDiagnostics::new(ProviderErrorStage::RequestBuild).boxed()),
+    })
+}
+
+fn openai_tools(tools: Vec<ToolManifest>) -> Vec<OpenAiToolManifest> {
+    tools
+        .into_iter()
+        .map(OpenAiToolManifest::from_tool_manifest)
+        .collect()
+}
+
+fn tool_options(tools: &[OpenAiToolManifest]) -> (Option<&'static str>, Option<bool>) {
+    if tools.is_empty() {
+        (None, None)
+    } else {
+        (Some("auto"), Some(false))
     }
 }
 
@@ -209,6 +239,7 @@ impl OpenAiOutputItem {
             return Err(ProviderError::MalformedResponse {
                 provider_name: "OpenAI".to_owned(),
                 reason: "output item was not a function call".to_owned(),
+                diagnostics: None,
             });
         }
         let call_id = self
@@ -218,6 +249,7 @@ impl OpenAiOutputItem {
             .ok_or_else(|| ProviderError::MalformedResponse {
                 provider_name: "OpenAI".to_owned(),
                 reason: "function call omitted call_id".to_owned(),
+                diagnostics: None,
             })?;
         let name = self
             .name
@@ -225,6 +257,7 @@ impl OpenAiOutputItem {
             .ok_or_else(|| ProviderError::MalformedResponse {
                 provider_name: "OpenAI".to_owned(),
                 reason: "function call omitted name".to_owned(),
+                diagnostics: None,
             })?;
         let arguments = self.arguments.unwrap_or_default();
 
@@ -274,32 +307,39 @@ fn input_from_messages(messages: Vec<ProviderMessage>) -> Vec<OpenAiInputItem> {
 
 /// Converts one provider message into one or more Responses input items.
 fn input_from_message(message: ProviderMessage) -> Vec<OpenAiInputItem> {
-    if message.role == ProviderMessageRole::Tool {
-        return vec![OpenAiInputItem::FunctionCallOutput(
-            OpenAiFunctionCallOutputItem {
-                kind: "function_call_output",
-                call_id: message.tool_call_id.unwrap_or_default(),
-                output: message.content,
-            },
-        )];
+    match message.role {
+        ProviderMessageRole::Tool => vec![function_call_output_item(message)],
+        ProviderMessageRole::Assistant if !message.tool_calls.is_empty() => {
+            function_call_items(message.tool_calls)
+        }
+        role => vec![message_item(role, message.content)],
     }
+}
 
-    if message.role == ProviderMessageRole::Assistant && !message.tool_calls.is_empty() {
-        return message
-            .tool_calls
-            .into_iter()
-            .map(|tool_call| {
-                OpenAiInputItem::FunctionCall(OpenAiFunctionCallItem {
-                    kind: "function_call",
-                    call_id: tool_call.id,
-                    name: tool_call.name,
-                    arguments: tool_call.arguments,
-                })
+fn function_call_output_item(message: ProviderMessage) -> OpenAiInputItem {
+    OpenAiInputItem::FunctionCallOutput(OpenAiFunctionCallOutputItem {
+        kind: "function_call_output",
+        call_id: message.tool_call_id.unwrap_or_default(),
+        output: message.content,
+    })
+}
+
+fn function_call_items(tool_calls: Vec<ProviderToolCall>) -> Vec<OpenAiInputItem> {
+    tool_calls
+        .into_iter()
+        .map(|tool_call| {
+            OpenAiInputItem::FunctionCall(OpenAiFunctionCallItem {
+                kind: "function_call",
+                call_id: tool_call.id,
+                name: tool_call.name,
+                arguments: tool_call.arguments,
             })
-            .collect();
-    }
+        })
+        .collect()
+}
 
-    let role = match message.role {
+fn message_item(role: ProviderMessageRole, content: String) -> OpenAiInputItem {
+    let role = match role {
         ProviderMessageRole::User => "user",
         ProviderMessageRole::Assistant => "assistant",
         ProviderMessageRole::System | ProviderMessageRole::Tool => "user",
@@ -310,13 +350,13 @@ fn input_from_message(message: ProviderMessage) -> Vec<OpenAiInputItem> {
         "input_text"
     };
 
-    vec![OpenAiInputItem::Message(OpenAiMessageItem {
+    OpenAiInputItem::Message(OpenAiMessageItem {
         role,
         content: vec![OpenAiContentItem {
             kind: content_type,
-            text: message.content,
+            text: content,
         }],
-    })]
+    })
 }
 
 #[cfg(test)]

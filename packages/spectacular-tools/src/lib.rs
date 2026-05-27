@@ -1,3 +1,5 @@
+//! Built-in host tools and provider-visible tool registration for Spectacular.
+
 use spectacular_agent::{ToolRegistrationError, ToolStorage};
 use std::path::PathBuf;
 
@@ -17,12 +19,19 @@ pub mod tree;
 pub mod web;
 pub mod write;
 
+/// Exact text replacement tool and provider-visible name.
 pub use edit::{EditTool, EDIT_TOOL_NAME};
+/// Workspace file glob search tool and provider-visible name.
 pub use find::{FindTool, FIND_TOOL_NAME};
+/// Workspace content search tool and provider-visible name.
 pub use grep::{GrepTool, GREP_TOOL_NAME};
+/// Host shell execution tool and provider-visible name.
 pub use terminal::{TerminalTool, TERMINAL_TOOL_NAME};
+/// Workspace tree rendering tool and provider-visible name.
 pub use tree::{TreeTool, TREE_TOOL_NAME};
+/// Web search/page navigation tool and provider-visible name.
 pub use web::{WebSearchTool, WEB_SEARCH_TOOL_NAME};
+/// File write tool and provider-visible name.
 pub use write::{WriteTool, WRITE_TOOL_NAME};
 
 /// Registers all built-in tools against a shared workspace root and returns tool storage.
@@ -55,7 +64,7 @@ fn register_built_in_tools(
         None => TerminalTool::new(workspace_root.clone()),
     })?;
     storage.register(TreeTool::new(workspace_root.clone()))?;
-    storage.register(WebSearchTool)?;
+    storage.register(WebSearchTool::new())?;
     storage.register(WriteTool::new(workspace_root))?;
     Ok(storage)
 }

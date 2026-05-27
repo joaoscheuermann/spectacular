@@ -1,5 +1,5 @@
 use super::dto::OpenRouterChatRequest;
-use crate::ProviderError;
+use crate::{ProviderError, ProviderErrorDiagnostics, ProviderErrorStage};
 use std::future::Future;
 
 const OPENROUTER_API_KEY_URL: &str = "https://openrouter.ai/api/v1/key";
@@ -19,9 +19,10 @@ impl OpenRouterHttpClient {
     }
 
     pub(crate) fn current_key_status(&self, api_key: &str) -> Result<u16, ProviderError> {
+        let http = self.http.clone();
         let api_key = api_key.to_owned();
         run_sync_openrouter_http(async move {
-            let response = reqwest::Client::new()
+            let response = http
                 .get(OPENROUTER_API_KEY_URL)
                 .bearer_auth(api_key)
                 .send()
@@ -29,6 +30,9 @@ impl OpenRouterHttpClient {
                 .map_err(|error| ProviderError::NetworkError {
                     provider_name: "OpenRouter".to_owned(),
                     reason: error.to_string(),
+                    diagnostics: Some(
+                        ProviderErrorDiagnostics::new(ProviderErrorStage::HttpRequest).boxed(),
+                    ),
                 })?;
 
             Ok(response.status().as_u16())
@@ -36,9 +40,10 @@ impl OpenRouterHttpClient {
     }
 
     pub(crate) fn models_response(&self, api_key: &str) -> Result<(u16, String), ProviderError> {
+        let http = self.http.clone();
         let api_key = api_key.to_owned();
         run_sync_openrouter_http(async move {
-            let response = reqwest::Client::new()
+            let response = http
                 .get(OPENROUTER_MODELS_URL)
                 .bearer_auth(api_key)
                 .send()
@@ -46,6 +51,9 @@ impl OpenRouterHttpClient {
                 .map_err(|error| ProviderError::NetworkError {
                     provider_name: "OpenRouter".to_owned(),
                     reason: error.to_string(),
+                    diagnostics: Some(
+                        ProviderErrorDiagnostics::new(ProviderErrorStage::HttpRequest).boxed(),
+                    ),
                 })?;
             let status = response.status().as_u16();
             let body = response
@@ -54,6 +62,9 @@ impl OpenRouterHttpClient {
                 .map_err(|error| ProviderError::NetworkError {
                     provider_name: "OpenRouter".to_owned(),
                     reason: error.to_string(),
+                    diagnostics: Some(
+                        ProviderErrorDiagnostics::new(ProviderErrorStage::HttpRequest).boxed(),
+                    ),
                 })?;
 
             Ok((status, body))
@@ -75,6 +86,9 @@ impl OpenRouterHttpClient {
             .map_err(|error| ProviderError::NetworkError {
                 provider_name: "OpenRouter".to_owned(),
                 reason: error.to_string(),
+                diagnostics: Some(
+                    ProviderErrorDiagnostics::new(ProviderErrorStage::HttpRequest).boxed(),
+                ),
             })
     }
 }
@@ -91,6 +105,9 @@ where
             .map_err(|error| ProviderError::NetworkError {
                 provider_name: "OpenRouter".to_owned(),
                 reason: error.to_string(),
+                diagnostics: Some(
+                    ProviderErrorDiagnostics::new(ProviderErrorStage::HttpRequest).boxed(),
+                ),
             })?;
 
         runtime.block_on(future)
@@ -99,5 +116,6 @@ where
     .map_err(|_| ProviderError::NetworkError {
         provider_name: "OpenRouter".to_owned(),
         reason: "OpenRouter HTTP worker panicked".to_owned(),
+        diagnostics: Some(ProviderErrorDiagnostics::new(ProviderErrorStage::HttpRequest).boxed()),
     })?
 }

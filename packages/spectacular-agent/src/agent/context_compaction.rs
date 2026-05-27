@@ -70,7 +70,7 @@ where
     fn summary_request(&self, summary_request: &ContextSummaryRequest) -> ProviderRequest {
         let mut request = ProviderRequest::new(vec![
             ProviderMessage::system(CONTEXT_SUMMARY_SYSTEM_PROMPT),
-            ProviderMessage::user(SummaryPrompt::default().user_prompt(
+            ProviderMessage::user(SummaryPrompt.user_prompt(
                 summary_request,
                 self.agent.config.context_policy.summary_max_tokens,
             )),
@@ -148,13 +148,16 @@ where
     }
 
     /// Rejects a hidden summary stream that yielded events but no finish event.
-    fn stream_finished_without_event(
+    async fn stream_finished_without_event(
         &mut self,
+        _recorder: &mut RunRecorder<'_, P, C>,
         saw_provider_event: bool,
     ) -> Result<Self::Output, AgentError> {
         if saw_provider_event {
             return Err(AgentError::MalformedProviderResponse {
                 reason: "context summary stream ended without a finish event".to_owned(),
+                provider: None,
+                diagnostics: None,
             });
         }
 
@@ -189,6 +192,8 @@ fn finish_context_summary(
     if !finished.tool_calls.is_empty() {
         return Err(AgentError::MalformedProviderResponse {
             reason: "context summary response included tool calls".to_owned(),
+            provider: None,
+            diagnostics: None,
         });
     }
 
@@ -196,9 +201,13 @@ fn finish_context_summary(
         FinishReason::Stop => Ok(summary),
         FinishReason::Length => Err(AgentError::ContextLimitError {
             reason: "context summary response was truncated".to_owned(),
+            provider: None,
+            diagnostics: None,
         }),
         FinishReason::ToolCalls => Err(AgentError::MalformedProviderResponse {
             reason: "context summary finished with tool_calls".to_owned(),
+            provider: None,
+            diagnostics: None,
         }),
         FinishReason::ContentFilter => Err(AgentError::ContentFiltered),
         FinishReason::Cancelled => Err(AgentError::CancellationError),

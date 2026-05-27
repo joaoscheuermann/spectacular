@@ -140,7 +140,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .events()
         .iter()
         .filter_map(|event| match event {
-            AgentEvent::MessageDelta(delta) => Some(delta.content.as_str()),
+            AgentEvent::MessageDelta { content, .. } => Some(content.as_str()),
             _ => None,
         })
         .collect::<String>();

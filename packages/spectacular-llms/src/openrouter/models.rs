@@ -1,5 +1,5 @@
 use super::dto::OpenRouterModelsResponse;
-use crate::{Model, ProviderError};
+use crate::{Model, ProviderError, ProviderErrorDiagnostics, ProviderErrorStage};
 
 const OPENROUTER_DEFAULT_CONTEXT_WINDOW_TOKENS: usize = 32_768;
 
@@ -27,6 +27,7 @@ pub(crate) fn validate_openrouter_api_key(
         401 | 403 => Err(ProviderError::InvalidApiKey),
         _ => Err(ProviderError::ProviderUnavailable {
             provider_name: "OpenRouter".to_owned(),
+            diagnostics: None,
         }),
     }
 }
@@ -44,11 +45,24 @@ pub(crate) fn fetch_openrouter_models(
     let (status, body) = request_models(api_key)?;
     match status {
         200 => parse_openrouter_models(&body),
-        401 | 403 => Err(ProviderError::InvalidApiKey),
+        401 | 403 => Err(ProviderError::AuthenticationFailed {
+            provider_name: "OpenRouter".to_owned(),
+            reason: format!("credentials rejected with status {status}"),
+            diagnostics: Some(models_error_diagnostics(status, &body).boxed()),
+        }),
         _ => Err(ProviderError::ModelFetchFailed {
             provider_name: "OpenRouter".to_owned(),
+            diagnostics: Some(models_error_diagnostics(status, &body).boxed()),
         }),
     }
+}
+
+fn models_error_diagnostics(status: u16, body: &str) -> ProviderErrorDiagnostics {
+    ProviderErrorDiagnostics::new(ProviderErrorStage::HttpStatus)
+        .with_http_status(status)
+        .with_provider_code_from_body(body)
+        .with_excerpt(body)
+        .with_debug_event("models_error_body")
 }
 
 /// Parses OpenRouter model metadata from the provider response body.
@@ -57,11 +71,21 @@ fn parse_openrouter_models(body: &str) -> Result<Vec<Model>, ProviderError> {
         serde_json::from_str(body).map_err(|error| ProviderError::ResponseParsingFailed {
             provider_name: "OpenRouter".to_owned(),
             reason: error.to_string(),
+            diagnostics: Some(
+                ProviderErrorDiagnostics::new(ProviderErrorStage::PayloadParse)
+                    .with_excerpt(body)
+                    .boxed(),
+            ),
         })?;
     let response: OpenRouterModelsResponse =
         serde_json::from_value(value).map_err(|error| ProviderError::MalformedResponse {
             provider_name: "OpenRouter".to_owned(),
             reason: error.to_string(),
+            diagnostics: Some(
+                ProviderErrorDiagnostics::new(ProviderErrorStage::PayloadParse)
+                    .with_excerpt(body)
+                    .boxed(),
+            ),
         })?;
     let models = response
         .data

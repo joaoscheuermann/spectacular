@@ -8,7 +8,7 @@ use spectacular_llms::{
 };
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use support::{capabilities, FakeProvider, SlowProvider};
+use support::{capabilities, FakeProvider, PartialThenPendingEventProvider, SlowProvider};
 
 #[tokio::test]
 /// Verifies cancelling an active run records cancellation and cancels queued waiters.
@@ -40,6 +40,28 @@ async fn cancelling_active_run_keeps_partial_events_and_drops_waiters() {
         Err(AgentError::CancellationError)
     ));
     assert_cancelled_run_events(&agent.events(), "active run cancelled");
+}
+
+#[tokio::test]
+/// Verifies cancelling after partial output closes the active message before cancellation.
+async fn cancelling_after_partial_provider_output_finishes_active_message() {
+    let partial_sent = Arc::new(tokio::sync::Notify::new());
+    let provider = PartialThenPendingEventProvider {
+        partial_sent: Arc::clone(&partial_sent),
+    };
+    let agent = Arc::new(Agent::new(provider));
+    let active = tokio::spawn({
+        let agent = Arc::clone(&agent);
+        async move { agent.run("active").await }
+    });
+    partial_sent.notified().await;
+
+    assert!(agent.cancel_active().await);
+    assert!(matches!(
+        active.await.unwrap(),
+        Err(AgentError::CancellationError)
+    ));
+    assert_finish_precedes_terminal_cancellation(&agent.events());
 }
 
 #[tokio::test]
@@ -193,8 +215,40 @@ async fn dropping_completed_stream_does_not_reject_next_run() {
 
     agent.run("second").await.unwrap();
     assert!(agent.events().iter().any(|event| {
-        matches!(event, AgentEvent::UserPrompt { content } if content == "second")
+        matches!(event, AgentEvent::UserPrompt { content, .. } if content == "second")
     }));
+}
+
+#[tokio::test]
+/// Verifies streaming runs preserve caller-owned prompt occurrence IDs.
+async fn run_stream_with_prompt_event_id_records_user_prompt_id() {
+    let agent = Arc::new(Agent::new(FakeProvider::text("hello")));
+    let mut stream =
+        Arc::clone(&agent).run_stream_with_prompt_event_id("same text", Some("local-prompt-1"));
+
+    while stream.next().await.is_some() {}
+
+    assert!(agent.events().iter().any(|event| {
+        matches!(
+            event,
+            AgentEvent::UserPrompt { id: Some(id), content }
+                if id.as_str() == "local-prompt-1" && content == "same text"
+        )
+    }));
+}
+
+/// Asserts a message finish boundary was recorded before the terminal cancellation event.
+fn assert_finish_precedes_terminal_cancellation(events: &[AgentEvent]) {
+    let finish_index = events
+        .iter()
+        .position(|event| matches!(event, AgentEvent::MessageFinish { .. }))
+        .unwrap();
+    let cancellation_index = events
+        .iter()
+        .position(|event| matches!(event, AgentEvent::Cancelled { .. }))
+        .unwrap();
+
+    assert!(finish_index < cancellation_index);
 }
 
 /// Asserts cancellation tests keep the expected runtime-only context usage event.
@@ -202,7 +256,7 @@ fn assert_cancelled_run_events(events: &[AgentEvent], expected_reason: &str) {
     assert!(matches!(
         events,
         [
-            AgentEvent::UserPrompt { content },
+            AgentEvent::UserPrompt { content, .. },
             AgentEvent::ContextTokenUsage(usage),
             AgentEvent::Cancelled { reason },
         ] if content == "active"

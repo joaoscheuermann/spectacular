@@ -8,6 +8,7 @@ use serde_json::{json, Value};
 use spectacular_agent::{Cancellation, Tool, ToolDisplay, ToolExecution, ToolManifest};
 use std::path::{Path, PathBuf};
 
+/// Provider-visible name for the workspace file search tool.
 pub const FIND_TOOL_NAME: &str = "find";
 
 const DEFAULT_LIMIT: usize = 1000;
@@ -15,6 +16,7 @@ const MAX_OUTPUT_BYTES: usize = 50 * 1024;
 
 const FIND_TOOL_DESCRIPTION: &str = "Search for files by glob pattern. Returns matching file paths relative to the search directory. Respects .gitignore. Output is truncated to 1000 results or 50KB (whichever is hit first).";
 
+/// Tool that finds files by glob pattern under a configured workspace root.
 #[derive(Clone, Debug)]
 pub struct FindTool {
     workspace_root: PathBuf,
@@ -117,11 +119,16 @@ struct FindInput {
     limit: Option<usize>,
 }
 
+/// Structured result returned by the file search tool.
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct FindOutput {
+    /// Matching paths relative to the requested search root.
     pub results: Vec<String>,
+    /// Total number of matches considered for the response.
     pub total: usize,
+    /// Whether result count or byte limits omitted additional matches.
     pub truncated: bool,
+    /// User-facing failure message for invalid inputs or missing paths.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }

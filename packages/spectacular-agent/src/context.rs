@@ -34,8 +34,8 @@ impl Error for ContextLimitFailure {}
 
 /// Builds provider chat messages from recorded agent events.
 ///
-/// Streaming assistant deltas are coalesced back into turn-sized assistant
-/// messages so the next provider request sees normal transcript shape.
+/// Explicit assistant lifecycle deltas are coalesced back into turn-sized
+/// assistant messages so the next provider request sees normal transcript shape.
 pub fn provider_messages_from_store(
     system_prompt: impl Into<String>,
     store: &Store,
@@ -62,45 +62,59 @@ pub(crate) fn transcript_messages_from_events(events: &[AgentEvent]) -> Vec<Prov
 
 /// Appends provider-visible transcript messages from recorded agent events.
 fn append_transcript_messages(messages: &mut Vec<ProviderMessage>, events: &[AgentEvent]) {
-    let mut pending_assistant = String::new();
-
+    let mut builder = TranscriptBuilder::new(messages);
     for event in events {
+        builder.append(event);
+    }
+    builder.finish();
+}
+
+/// Validates provider message counts and character totals against provider limits.
+pub fn validate_context_limits(
+    messages: &[ProviderMessage],
+    limits: ProviderContextLimits,
+) -> Result<(), ContextLimitFailure> {
+    validate_message_count(messages, limits.max_messages)?;
+    validate_character_count(messages, limits.max_chars)?;
+    Ok(())
+}
+
+struct TranscriptBuilder<'a> {
+    messages: &'a mut Vec<ProviderMessage>,
+    pending_assistant: String,
+}
+
+impl<'a> TranscriptBuilder<'a> {
+    fn new(messages: &'a mut Vec<ProviderMessage>) -> Self {
+        Self {
+            messages,
+            pending_assistant: String::new(),
+        }
+    }
+
+    fn append(&mut self, event: &AgentEvent) {
         match event {
-            AgentEvent::MessageDelta(delta) => pending_assistant.push_str(&delta.content),
-            AgentEvent::UserPrompt { content } => {
-                flush_pending_assistant(messages, &mut pending_assistant);
-                messages.push(ProviderMessage::user(content.clone()));
-            }
-            AgentEvent::AssistantToolCallRequest {
+            AgentEvent::MessageDelta { content, .. } => self.pending_assistant.push_str(content),
+            AgentEvent::MessageFinish { .. } => self.flush_pending_assistant(),
+            AgentEvent::UserPrompt { content, .. } => self.push_user_prompt(content),
+            AgentEvent::ToolCallStart {
                 tool_call_id,
                 name,
                 arguments,
-            } => {
-                flush_pending_assistant(messages, &mut pending_assistant);
-                messages.push(ProviderMessage::assistant_tool_call(ProviderToolCall::new(
-                    tool_call_id.clone(),
-                    name.clone(),
-                    arguments.clone(),
-                )));
-            }
-            AgentEvent::ToolResult {
+            } => self.push_tool_call(tool_call_id, name, arguments),
+            AgentEvent::ToolCallFinish {
                 tool_call_id,
-                content,
+                output,
                 ..
-            } => {
-                flush_pending_assistant(messages, &mut pending_assistant);
-                messages.push(ProviderMessage::tool_result(
-                    tool_call_id.clone(),
-                    content.clone(),
-                ));
-            }
-            AgentEvent::ReasoningDelta(_)
+            } => self.push_tool_result(tool_call_id, output),
+            AgentEvent::MessageStart { .. }
+            | AgentEvent::ReasoningStart { .. }
+            | AgentEvent::ReasoningDelta { .. }
+            | AgentEvent::ReasoningFinish { .. }
             | AgentEvent::UsageMetadata(_)
             | AgentEvent::ContextTokenUsage(_)
             | AgentEvent::ReasoningMetadata(_)
-            | AgentEvent::CommandStart(_)
-            | AgentEvent::CommandDelta(_)
-            | AgentEvent::CommandFinished(_)
+            | AgentEvent::ToolCallDelta { .. }
             | AgentEvent::ValidationError { .. }
             | AgentEvent::Error { .. }
             | AgentEvent::Cancelled { .. }
@@ -110,46 +124,81 @@ fn append_transcript_messages(messages: &mut Vec<ProviderMessage>, events: &[Age
         }
     }
 
-    flush_pending_assistant(messages, &mut pending_assistant);
+    fn finish(&mut self) {
+        self.flush_pending_assistant();
+    }
+
+    fn push_user_prompt(&mut self, content: &str) {
+        self.flush_pending_assistant();
+        self.messages
+            .push(ProviderMessage::user(content.to_owned()));
+    }
+
+    fn push_tool_call(&mut self, tool_call_id: &str, name: &str, arguments: &str) {
+        self.flush_pending_assistant();
+        self.messages
+            .push(ProviderMessage::assistant_tool_call(ProviderToolCall::new(
+                tool_call_id.to_owned(),
+                name.to_owned(),
+                arguments.to_owned(),
+            )));
+    }
+
+    fn push_tool_result(&mut self, tool_call_id: &str, output: &str) {
+        self.flush_pending_assistant();
+        self.messages.push(ProviderMessage::tool_result(
+            tool_call_id.to_owned(),
+            output.to_owned(),
+        ));
+    }
+
+    fn flush_pending_assistant(&mut self) {
+        if self.pending_assistant.is_empty() {
+            return;
+        }
+
+        self.messages
+            .push(ProviderMessage::assistant(std::mem::take(
+                &mut self.pending_assistant,
+            )));
+    }
 }
 
-/// Validates provider message counts and character totals against provider limits.
-pub fn validate_context_limits(
+fn validate_message_count(
     messages: &[ProviderMessage],
-    limits: ProviderContextLimits,
+    max_messages: Option<usize>,
 ) -> Result<(), ContextLimitFailure> {
-    if let Some(max_messages) = limits.max_messages {
-        if messages.len() > max_messages {
-            return Err(ContextLimitFailure {
-                reason: format!("{} messages exceeds limit {max_messages}", messages.len()),
-            });
-        }
+    let Some(max_messages) = max_messages else {
+        return Ok(());
+    };
+    if messages.len() <= max_messages {
+        return Ok(());
     }
 
-    if let Some(max_chars) = limits.max_chars {
-        let chars = messages
-            .iter()
-            .map(|message| message.content.chars().count())
-            .sum::<usize>();
-        if chars > max_chars {
-            return Err(ContextLimitFailure {
-                reason: format!("{chars} characters exceeds limit {max_chars}"),
-            });
-        }
-    }
-
-    Ok(())
+    Err(ContextLimitFailure {
+        reason: format!("{} messages exceeds limit {max_messages}", messages.len()),
+    })
 }
 
-/// Flushes accumulated assistant stream text into the provider message list.
-fn flush_pending_assistant(messages: &mut Vec<ProviderMessage>, pending_assistant: &mut String) {
-    if pending_assistant.is_empty() {
-        return;
+fn validate_character_count(
+    messages: &[ProviderMessage],
+    max_chars: Option<usize>,
+) -> Result<(), ContextLimitFailure> {
+    let Some(max_chars) = max_chars else {
+        return Ok(());
+    };
+
+    let chars = messages
+        .iter()
+        .map(|message| message.content.chars().count())
+        .sum::<usize>();
+    if chars <= max_chars {
+        return Ok(());
     }
 
-    messages.push(ProviderMessage::assistant(std::mem::take(
-        pending_assistant,
-    )));
+    Err(ContextLimitFailure {
+        reason: format!("{chars} characters exceeds limit {max_chars}"),
+    })
 }
 
 #[cfg(test)]

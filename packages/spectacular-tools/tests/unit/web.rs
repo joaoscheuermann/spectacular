@@ -4,7 +4,7 @@ use serde_json::json;
 /// Verifies that display input text mirrors the Codex-style web action detail.
 #[test]
 fn format_input_mirrors_codex_web_action_details() {
-    let tool = WebSearchTool;
+    let tool = WebSearchTool::new();
 
     assert_eq!(
         tool.format_input(&json!({"action": "search", "query": "rust async"})),

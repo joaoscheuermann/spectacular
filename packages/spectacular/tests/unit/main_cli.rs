@@ -1,5 +1,6 @@
 use super::*;
 use clap::CommandFactory;
+use clap::error::ErrorKind;
 use spectacular_config::{
     CachedModelMetadata, ModelCache, ModelConfig, ProviderModelCache, TaskAssignments,
 };
@@ -7,16 +8,37 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 
 #[test]
-fn top_level_help_lists_chat_config_and_plan() {
+fn top_level_help_lists_config_without_chat_or_plan() {
     let mut command = Cli::command();
     let mut buffer = Vec::new();
 
     command.write_long_help(&mut buffer).unwrap();
     let help = String::from_utf8(buffer).unwrap();
 
-    assert!(help.contains("chat"));
+    assert!(!help.contains("chat"));
     assert!(help.contains("config"));
-    assert!(help.contains("plan"));
+    assert!(!help.contains("plan"));
+}
+
+#[test]
+fn bare_invocation_defaults_to_chat() {
+    let cli = Cli::try_parse_from(["spectacular"]).unwrap();
+
+    assert!(cli.command.is_none());
+}
+
+#[test]
+fn chat_subcommand_is_not_accepted() {
+    let error = Cli::try_parse_from(["spectacular", "chat"]).unwrap_err();
+
+    assert_eq!(error.kind(), ErrorKind::InvalidSubcommand);
+}
+
+#[test]
+fn tui_flag_is_not_accepted() {
+    let error = Cli::try_parse_from(["spectacular", "--tui"]).unwrap_err();
+
+    assert_eq!(error.kind(), ErrorKind::UnknownArgument);
 }
 
 #[test]
@@ -49,10 +71,7 @@ fn provider_add_operation_parses_named_fields() {
     let args = ConfigArgs {
         command: Some(ConfigCommand::Provider {
             command: ConfigProviderCommand::Add {
-                fields: vec![
-                    "provider:openrouter".to_owned(),
-                    "apikey:secret".to_owned(),
-                ],
+                fields: vec!["provider:openrouter".to_owned(), "apikey:secret".to_owned()],
             },
         }),
     };
@@ -78,7 +97,9 @@ fn provider_add_operation_rejects_old_name_type_fields() {
 
     let error = config_operation(args).unwrap_err();
 
-    assert!(matches!(error, AppError::InvalidConfigCommand(message) if message.contains("unknown argument `name`")));
+    assert!(
+        matches!(error, AppError::InvalidConfigCommand(message) if message.contains("unknown argument `name`"))
+    );
 }
 
 #[test]
@@ -115,20 +136,19 @@ fn provider_add_saves_openai_api_key() {
         ConfigArgs {
             command: Some(ConfigCommand::Provider {
                 command: ConfigProviderCommand::Add {
-                    fields: vec![
-                        "provider:openai".to_owned(),
-                        "apikey:sk-test".to_owned(),
-                    ],
+                    fields: vec!["provider:openai".to_owned(), "apikey:sk-test".to_owned()],
                 },
             }),
         },
-        || Ok(SpectacularConfig::default()),
-        || Ok(ModelCache::default()),
-        || Ok(None),
-        |config| {
-            saved_config.replace(Some(config.clone()));
-            Ok(())
-        },
+        ConfigIo::new(
+            || Ok(SpectacularConfig::default()),
+            || Ok(ModelCache::default()),
+            || Ok(None),
+            |config| {
+                saved_config.replace(Some(config.clone()));
+                Ok(())
+            },
+        ),
     )
     .unwrap();
     let output = strip_ansi_codes(&output);
@@ -148,10 +168,12 @@ fn provider_add_saves_openai_api_key() {
 fn config_show_masks_api_keys() {
     let output = handle_config_with_io(
         ConfigArgs { command: None },
-        || Ok(complete_config()),
-        || Ok(ModelCache::default()),
-        || Ok(None),
-        |_| panic!("show must not write config"),
+        ConfigIo::new(
+            || Ok(complete_config()),
+            || Ok(ModelCache::default()),
+            || Ok(None),
+            |_| panic!("show must not write config"),
+        ),
     )
     .unwrap();
     let output = strip_ansi_codes(&output);
@@ -179,13 +201,15 @@ fn provider_add_saves_config_without_leaking_key() {
                 },
             }),
         },
-        || Ok(SpectacularConfig::default()),
-        || Ok(ModelCache::default()),
-        || Ok(None),
-        |config| {
-            saved_config.replace(Some(config.clone()));
-            Ok(())
-        },
+        ConfigIo::new(
+            || Ok(SpectacularConfig::default()),
+            || Ok(ModelCache::default()),
+            || Ok(None),
+            |config| {
+                saved_config.replace(Some(config.clone()));
+                Ok(())
+            },
+        ),
     )
     .unwrap();
     let output = strip_ansi_codes(&output);
@@ -215,13 +239,15 @@ fn provider_remove_requires_confirmation_without_write() {
                 },
             }),
         },
-        || Ok(complete_config()),
-        || Ok(ModelCache::default()),
-        || Ok(None),
-        |_| {
-            wrote.replace(true);
-            Ok(())
-        },
+        ConfigIo::new(
+            || Ok(complete_config()),
+            || Ok(ModelCache::default()),
+            || Ok(None),
+            |_| {
+                wrote.replace(true);
+                Ok(())
+            },
+        ),
     )
     .unwrap();
     let output = strip_ansi_codes(&output);
@@ -244,10 +270,12 @@ fn model_add_requires_cached_api_metadata() {
                 },
             }),
         },
-        || Ok(provider_only_config()),
-        || Ok(ModelCache::default()),
-        || Ok(None),
-        |_| panic!("invalid model must not be written"),
+        ConfigIo::new(
+            || Ok(provider_only_config()),
+            || Ok(ModelCache::default()),
+            || Ok(None),
+            |_| panic!("invalid model must not be written"),
+        ),
     )
     .unwrap_err();
 
@@ -270,10 +298,12 @@ fn model_add_rejects_reasoning_without_supported_parameter() {
                 },
             }),
         },
-        || Ok(provider_only_config()),
-        || Ok(cache_with_model(false)),
-        || Ok(None),
-        |_| panic!("invalid reasoning must not be written"),
+        ConfigIo::new(
+            || Ok(provider_only_config()),
+            || Ok(cache_with_model(false)),
+            || Ok(None),
+            |_| panic!("invalid reasoning must not be written"),
+        ),
     )
     .unwrap_err();
 
@@ -298,22 +328,26 @@ fn model_add_saves_when_cache_allows_reasoning() {
                 },
             }),
         },
-        || Ok(provider_only_config()),
-        || Ok(cache_with_model(true)),
-        || Ok(None),
-        |config| {
-            saved_config.replace(Some(config.clone()));
-            Ok(())
-        },
+        ConfigIo::new(
+            || Ok(provider_only_config()),
+            || Ok(cache_with_model(true)),
+            || Ok(None),
+            |config| {
+                saved_config.replace(Some(config.clone()));
+                Ok(())
+            },
+        ),
     )
     .unwrap();
 
     assert!(strip_ansi_codes(&output).contains("Model added"));
-    assert!(saved_config
-        .into_inner()
-        .unwrap()
-        .models
-        .contains_key("main"));
+    assert!(
+        saved_config
+            .into_inner()
+            .unwrap()
+            .models
+            .contains_key("main")
+    );
 }
 
 #[test]
@@ -327,13 +361,15 @@ fn task_set_saves_model_reference() {
                 },
             }),
         },
-        || Ok(complete_config()),
-        || Ok(ModelCache::default()),
-        || Ok(None),
-        |config| {
-            saved_config.replace(Some(config.clone()));
-            Ok(())
-        },
+        ConfigIo::new(
+            || Ok(complete_config()),
+            || Ok(ModelCache::default()),
+            || Ok(None),
+            |config| {
+                saved_config.replace(Some(config.clone()));
+                Ok(())
+            },
+        ),
     )
     .unwrap();
 
@@ -345,32 +381,10 @@ fn task_set_saves_model_reference() {
 }
 
 #[test]
-fn plan_reports_missing_config_before_placeholder_output() {
-    let output = handle_plan_with_loader("Create a login flow", || {
-        Err(ConfigError::MissingConfigFile {
-            path: "config.json".into(),
-        })
-    })
-    .unwrap_err();
-
-    assert!(matches!(
-        output,
-        AppError::Plan(PlanError::Config(ConfigError::MissingConfigFile { .. }))
-    ));
-}
-
-#[test]
-fn plan_with_complete_config_prints_placeholder_output() {
-    let output = handle_plan_with_loader("Create a login flow", || Ok(complete_config())).unwrap();
-
-    assert_eq!(output, "Hello World");
-}
-
-#[test]
 fn incomplete_config_errors_tell_user_to_run_new_config_commands() {
-    let error = AppError::Plan(PlanError::Config(ConfigError::MissingTaskModel {
+    let error = AppError::Config(ConfigError::MissingTaskModel {
         slot: TaskModelSlot::Coding,
-    }));
+    });
 
     assert!(user_facing_error(&error).contains("spectacular config task set"));
 }

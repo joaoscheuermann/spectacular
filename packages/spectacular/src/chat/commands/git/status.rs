@@ -1,77 +1,107 @@
 use crate::chat::commands::{ChatCommandContext, ChatCommandFuture, ChatCommandResult};
 use spectacular_commands::CommandError;
 
-use std::process::Command;
+use std::io;
+use std::process::{Command, Output};
+use tokio::task::JoinError;
+
+const STATUS_ARGS: &[&str] = &["status", "--short"];
+const STAGED_ARGS: &[&str] = &["diff", "--cached", "--stat"];
 
 /// Internal execute function that can be called from the parent git command
 pub fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatCommandFuture<'a> {
-    Box::pin(async move {
-        if !args.is_empty() {
-            return ChatCommandResult::error(CommandError::usage("/git status").to_string());
-        }
+    Box::pin(async move { run(context, args).await })
+}
 
-        // Get git status
-        let status_result = context
-            .work(async {
-                tokio::task::spawn_blocking(|| {
-                    Command::new("git").arg("status").arg("--short").output()
-                })
-                .await
-            })
-            .await;
+async fn run(context: ChatCommandContext<'_>, args: Vec<String>) -> ChatCommandResult {
+    if let Err(result) = validate_args(&args) {
+        return result;
+    }
 
-        match status_result {
-            Ok(Ok(output)) => {
-                let status_text = String::from_utf8_lossy(&output.stdout);
-                if status_text.trim().is_empty() {
-                    context.notice("No changes in working directory.");
-                } else {
-                    context.notice("Working directory changes:");
-                    context.notice(&status_text);
-                }
-            }
-            Ok(Err(e)) => {
-                return ChatCommandResult::error(format!("Failed to run git status: {}", e));
-            }
-            Err(e) => {
-                return ChatCommandResult::error(format!("Failed to run git status: {}", e));
-            }
-        }
+    if let Err(result) = show_working_changes(&context).await {
+        return result;
+    }
 
-        // Get staged changes
-        let staged_result = context
-            .work(async {
-                tokio::task::spawn_blocking(|| {
-                    Command::new("git")
-                        .arg("diff")
-                        .arg("--cached")
-                        .arg("--stat")
-                        .output()
-                })
-                .await
-            })
-            .await;
+    if let Err(result) = show_staged_changes(&context).await {
+        return result;
+    }
 
-        match staged_result {
-            Ok(Ok(output)) => {
-                let staged_text = String::from_utf8_lossy(&output.stdout);
-                if staged_text.trim().is_empty() {
-                    context.notice("No staged changes.");
-                } else {
-                    context.notice("Staged changes:");
-                    context.notice(&staged_text);
-                }
-            }
-            Ok(Err(e)) => {
-                return ChatCommandResult::error(format!("Failed to run git diff --cached: {}", e));
-            }
-            Err(e) => {
-                return ChatCommandResult::error(format!("Failed to run git diff --cached: {}", e));
-            }
-        }
+    ChatCommandResult::success()
+}
 
-        ChatCommandResult::success()
-    })
+fn validate_args(args: &[String]) -> Result<(), ChatCommandResult> {
+    if args.is_empty() {
+        return Ok(());
+    }
+
+    Err(ChatCommandResult::error(
+        CommandError::usage("/git status").to_string(),
+    ))
+}
+
+async fn show_working_changes(context: &ChatCommandContext<'_>) -> Result<(), ChatCommandResult> {
+    let output = git_output(context, STATUS_ARGS, "git status").await?;
+    report_output(
+        context,
+        &output,
+        "Working directory changes:",
+        "No changes in working directory.",
+    );
+    Ok(())
+}
+
+async fn show_staged_changes(context: &ChatCommandContext<'_>) -> Result<(), ChatCommandResult> {
+    let output = git_output(context, STAGED_ARGS, "git diff --cached").await?;
+    report_output(context, &output, "Staged changes:", "No staged changes.");
+    Ok(())
+}
+
+fn report_output(
+    context: &ChatCommandContext<'_>,
+    output: &Output,
+    heading: &str,
+    empty_message: &str,
+) {
+    let text = String::from_utf8_lossy(&output.stdout);
+    if text.trim().is_empty() {
+        context.notice(empty_message);
+    } else {
+        context.notice(heading);
+        context.notice(&text);
+    }
+}
+
+async fn git_output(
+    context: &ChatCommandContext<'_>,
+    args: &'static [&'static str],
+    label: &'static str,
+) -> Result<Output, ChatCommandResult> {
+    let result = context
+        .work(async move { tokio::task::spawn_blocking(move || command_output(args)).await })
+        .await;
+
+    map_command_result(result, label)
+}
+
+fn command_output(args: &[&str]) -> io::Result<Output> {
+    Command::new("git").args(args).output()
+}
+
+fn map_command_result(
+    result: Result<io::Result<Output>, JoinError>,
+    label: &str,
+) -> Result<Output, ChatCommandResult> {
+    match result {
+        Ok(Ok(output)) => Ok(output),
+        Ok(Err(error)) => Err(command_error(label, error)),
+        Err(error) => Err(ChatCommandResult::error(format!(
+            "Failed to run {label}: {error}"
+        ))),
+    }
+}
+
+fn command_error(label: &str, error: io::Error) -> ChatCommandResult {
+    ChatCommandResult::error(format!("Failed to run {label}: {error}"))
 }
 
 #[cfg(test)]

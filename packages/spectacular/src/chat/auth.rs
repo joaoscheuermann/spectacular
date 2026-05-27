@@ -112,5 +112,6 @@ fn config_auth_error(error: ConfigError) -> ProviderError {
     ProviderError::AuthenticationFailed {
         provider_name: "OpenAI".to_owned(),
         reason: error.to_string(),
+        diagnostics: None,
     }
 }

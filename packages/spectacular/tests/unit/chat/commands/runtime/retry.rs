@@ -1,60 +1,30 @@
     use super::*;
     use crate::chat::commands::{ChatCommandContext, ChatCommandControl, ChatCommandResult};
     use crate::chat::model::ChatModel;
-    use crate::chat::renderer::Renderer;
-    use crate::chat::runner::{ChatTurnFuture, ChatTurnRunner};
-    use crate::chat::session::SessionManager;
+            use crate::chat::session::SessionManager;
     use crate::chat::RuntimeSelection;
     use spectacular_agent::{AgentEvent, ToolStorage};
     use spectacular_config::ReasoningLevel;
     use std::path::PathBuf;
-    use std::sync::{Arc, Mutex};
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    /// Verifies that retry runs latest prompt through context.
+    /// Verifies that retry queues latest prompt for controller execution.
     #[tokio::test]
-    async fn retry_runs_latest_prompt_through_context() {
-        let recorded = Arc::new(Mutex::new(None));
+    async fn retry_queues_latest_prompt_for_controller_execution() {
         let mut model = test_model();
         model
-            .append_agent_event(&AgentEvent::UserPrompt {
-                content: "try again".to_owned(),
-            })
+            .append_agent_event(&AgentEvent::user_prompt("try again"))
             .unwrap();
-        let renderer = Renderer::default();
         let tools = ToolStorage::default();
-        let runner = RecordingRunner {
-            recorded: Arc::clone(&recorded),
-        };
         let mut control = ChatCommandControl::default();
-        let context = ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
+        let context = ChatCommandContext::new(&mut model, &tools, &mut control);
 
         let result = execute(context, Vec::new()).await;
 
         assert_eq!(result, ChatCommandResult::Success);
-        assert!(recorded.lock().unwrap().as_ref().is_some_and(|request| {
-            request.prompt == "try again" && request.retry_existing_prompt
-        }));
-    }
-
-    struct RecordingRunner {
-        recorded: Arc<Mutex<Option<ChatRunRequestModel>>>,
-    }
-
-    impl ChatTurnRunner for RecordingRunner {
-        /// Runs the test command implementation and returns its command future.
-        fn run<'a>(
-            &'a self,
-            _model: &'a mut ChatModel,
-            _renderer: &'a Renderer,
-            _tools: &'a ToolStorage,
-            request: ChatRunRequestModel,
-        ) -> ChatTurnFuture<'a> {
-            Box::pin(async move {
-                *self.recorded.lock().unwrap() = Some(request);
-                Ok(())
-            })
-        }
+        assert!(control
+            .take_follow_up_prompt()
+            .is_some_and(|request| request.prompt == "try again" && request.retry_existing_prompt));
     }
 
     /// Builds a chat model configured for command tests.

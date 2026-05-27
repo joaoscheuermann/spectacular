@@ -25,25 +25,25 @@ pub struct OpenRouterProvider {
 }
 
 impl OpenRouterProvider {
-    /// Creates a new value from the supplied inputs.
-    pub fn new(api_key: String) -> Self {
+    /// Creates an OpenRouter provider backed by a caller-supplied API key.
+    pub fn new(api_key: impl Into<String>) -> Self {
         Self::with_debug_logger(api_key, LlmDebugLogger::disabled())
     }
 
-    /// Returns this value with debug logger.
-    pub fn with_debug_logger(api_key: String, debug_logger: LlmDebugLogger) -> Self {
+    /// Creates an OpenRouter provider with debug logging enabled.
+    pub fn with_debug_logger(api_key: impl Into<String>, debug_logger: LlmDebugLogger) -> Self {
         Self::with_client_and_debug_logger(api_key, OpenRouterHttpClient::new(), debug_logger)
     }
 
-    /// Returns this value with client and debug logger.
+    /// Creates an OpenRouter provider with explicit HTTP and debug dependencies.
     pub(crate) fn with_client_and_debug_logger(
-        api_key: String,
+        api_key: impl Into<String>,
         client: OpenRouterHttpClient,
         debug_logger: LlmDebugLogger,
     ) -> Self {
         Self {
             client,
-            api_key,
+            api_key: api_key.into(),
             debug_logger,
         }
     }

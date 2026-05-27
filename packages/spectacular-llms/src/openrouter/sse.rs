@@ -1,4 +1,4 @@
-use crate::ProviderError;
+use crate::{ProviderError, ProviderErrorDiagnostics, ProviderErrorStage};
 
 #[derive(Default)]
 pub(crate) struct OpenRouterSseParser {
@@ -19,6 +19,11 @@ impl OpenRouterSseParser {
                 ProviderError::ResponseParsingFailed {
                     provider_name: "OpenRouter".to_owned(),
                     reason: error.to_string(),
+                    diagnostics: Some(
+                        ProviderErrorDiagnostics::new(ProviderErrorStage::SseDecode)
+                            .with_debug_event("sse_parse_error")
+                            .boxed(),
+                    ),
                 }
             })?;
 

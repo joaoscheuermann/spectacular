@@ -51,8 +51,11 @@ impl<'a> SessionIndex<'a> {
             fs::read_dir(self.dir).map_err(|error| ChatError::Session(error.to_string()))?
         {
             let entry = entry.map_err(|error| ChatError::Session(error.to_string()))?;
-            let Some(id) = entry
-                .path()
+            let path = entry.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("jsonl") {
+                continue;
+            }
+            let Some(id) = path
                 .file_stem()
                 .and_then(|value| value.to_str())
                 .map(str::to_owned)
@@ -69,46 +72,80 @@ impl<'a> SessionIndex<'a> {
 }
 
 fn summarize(id: &str, records: &[ChatRecord]) -> HistorySummary {
-    let mut title = UNTITLED.to_owned();
-    let mut messages = 0usize;
-    let mut in_assistant = false;
-    let mut updated = DateTime::<Utc>::from(UNIX_EPOCH);
-    let mut corrupt = false;
-
+    let mut draft = SummaryDraft::new(id);
     for record in records {
-        corrupt |= record.is_corrupt_or_unknown();
-        let Some(event) = record.event() else {
-            continue;
-        };
+        draft.record(record);
+    }
+
+    draft.finish()
+}
+
+struct SummaryDraft {
+    id: String,
+    updated: DateTime<Utc>,
+    title: String,
+    messages: usize,
+    corrupt: bool,
+    in_assistant: bool,
+}
+
+impl SummaryDraft {
+    fn new(id: &str) -> Self {
+        Self {
+            id: id.to_owned(),
+            updated: DateTime::<Utc>::from(UNIX_EPOCH),
+            title: UNTITLED.to_owned(),
+            messages: 0,
+            corrupt: false,
+            in_assistant: false,
+        }
+    }
+
+    fn record(&mut self, record: &ChatRecord) {
+        self.corrupt |= record.is_corrupt_or_unknown();
+        if let Some(event) = record.event() {
+            self.event(event);
+        }
+    }
+
+    fn event(&mut self, event: &ChatEvent) {
         if let Some(created_at) = event.created_at() {
-            updated = updated.max(created_at);
+            self.updated = self.updated.max(created_at);
         }
 
         match event {
-            ChatEvent::SessionTitleUpdated {
-                title: event_title, ..
-            } => title = event_title.clone(),
-            ChatEvent::UserPrompt { .. } => {
-                messages += 1;
-                in_assistant = false;
-            }
-            ChatEvent::AssistantDelta { .. } if !in_assistant => {
-                messages += 1;
-                in_assistant = true;
-            }
+            ChatEvent::SessionTitleUpdated { title, .. } => self.title = title.clone(),
+            ChatEvent::UserPrompt { .. } => self.user_prompt(),
+            ChatEvent::AssistantDelta { .. } => self.assistant_delta(),
             ChatEvent::Finished { .. } | ChatEvent::Error { .. } | ChatEvent::Cancelled { .. } => {
-                in_assistant = false;
+                self.in_assistant = false;
             }
             _ => {}
         }
     }
 
-    HistorySummary {
-        id: id.to_owned(),
-        updated,
-        title,
-        messages,
-        corrupt,
+    fn user_prompt(&mut self) {
+        self.messages += 1;
+        self.in_assistant = false;
+    }
+
+    fn assistant_delta(&mut self) {
+        if self.in_assistant {
+            return;
+        }
+
+        self.messages += 1;
+        self.in_assistant = true;
+    }
+
+    fn finish(self) -> HistorySummary {
+        HistorySummary {
+            id: self.id,
+            updated: self.updated,
+            title: self.title,
+            messages: self.messages,
+            corrupt: self.corrupt,
+        }
     }
 }
 

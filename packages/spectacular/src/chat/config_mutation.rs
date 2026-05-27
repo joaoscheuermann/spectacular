@@ -1,8 +1,9 @@
 use super::auth::chatgpt_auth_config;
+use super::model_cache::refresh_single_provider_model_cache;
 use super::{ChatError, RuntimeSelection};
 use crate::chat::model::{ChatConfigIo, ChatModel};
 use spectacular_config::{ReasoningLevel, SpectacularConfig, TaskModelSlot};
-use spectacular_llms::{LlmProvider, OpenAiAuthRecord};
+use spectacular_llms::OpenAiAuthRecord;
 
 impl ChatModel {
     /// Stores API-key credentials for the canonical provider type entry.
@@ -42,30 +43,7 @@ impl ChatModel {
 
     /// Refreshes cached model metadata for a single configured provider.
     pub fn refresh_provider_model_cache(&self, name: &str) -> Result<usize, ChatError> {
-        let config_io = self.config_io();
-        let config = config_io.read_config_or_default()?;
-        let provider_config = config
-            .providers
-            .get(name)
-            .ok_or_else(|| ChatError::Session(format!("provider `{name}` is not configured")))?;
-        let provider = crate::chat::provider::provider_for_parts(
-            &provider_config.provider_type,
-            provider_config.api_key().to_owned(),
-            self.debug_logger().clone(),
-        )?;
-        let models = provider
-            .models(provider_config.api_key())
-            .map_err(|error| ChatError::Session(error.to_string()))?;
-        let count = models.len();
-        let mut cache = config_io.read_model_cache_or_default()?;
-        cache.put_provider(
-            name.to_owned(),
-            provider_config.provider_type.clone(),
-            crate::chat::unix_timestamp(),
-            models.into_iter().map(super::cached_model_metadata),
-        );
-        config_io.write_model_cache(&cache)?;
-        Ok(count)
+        refresh_single_provider_model_cache(self.config_io(), name, self.debug_logger().clone())
     }
 
     /// Removes a provider after backing up config and returns model keys that reference it.

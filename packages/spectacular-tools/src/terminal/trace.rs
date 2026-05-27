@@ -50,27 +50,16 @@ impl TerminalTraceStore {
         let path = directory.join(format!("{trace_id}.json"));
 
         if let Err(error) = fs::create_dir_all(&directory) {
-            return TraceWriteResult::Failed(TraceWriteFailure {
-                trace_id,
-                error: error.to_string(),
-            });
+            return TraceWriteResult::failed(trace_id, error);
         }
 
         let file = match File::create(&path) {
             Ok(file) => file,
-            Err(error) => {
-                return TraceWriteResult::Failed(TraceWriteFailure {
-                    trace_id,
-                    error: error.to_string(),
-                });
-            }
+            Err(error) => return TraceWriteResult::failed(trace_id, error),
         };
         let trace = RawTerminalTrace::from_execution(trace_id.clone(), execution);
         if let Err(error) = serde_json::to_writer(file, &trace) {
-            return TraceWriteResult::Failed(TraceWriteFailure {
-                trace_id,
-                error: error.to_string(),
-            });
+            return TraceWriteResult::failed(trace_id, error);
         }
 
         TraceWriteResult::Written(TraceWriteSuccess { trace_id, path })
@@ -78,6 +67,14 @@ impl TerminalTraceStore {
 }
 
 impl TraceWriteResult {
+    /// Builds a failed trace result from any displayable IO or serialization error.
+    fn failed(trace_id: String, error: impl std::fmt::Display) -> Self {
+        Self::Failed(TraceWriteFailure {
+            trace_id,
+            error: error.to_string(),
+        })
+    }
+
     /// Returns the successful trace write details when the write succeeded.
     #[cfg(test)]
     pub(crate) fn written(&self) -> Option<&TraceWriteSuccess> {

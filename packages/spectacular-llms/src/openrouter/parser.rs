@@ -1,7 +1,10 @@
-use super::dto::{OpenRouterChatChunk, OpenRouterChatDeltaToolCall, OpenRouterStreamError};
+use super::dto::{
+    OpenRouterChatChoice, OpenRouterChatChoiceMessage, OpenRouterChatChunk, OpenRouterChatDelta,
+    OpenRouterChatDeltaToolCall, OpenRouterStreamError,
+};
 use crate::{
-    FinishReason, MessageDelta, ProviderError, ProviderFinished, ProviderStreamEvent,
-    ProviderToolCall, ReasoningDelta,
+    FinishReason, MessageDelta, ProviderError, ProviderErrorDiagnostics, ProviderErrorStage,
+    ProviderFinished, ProviderStreamEvent, ProviderToolCall, ReasoningDelta, UsageMetadata,
 };
 use std::collections::BTreeMap;
 
@@ -17,12 +20,7 @@ pub(crate) fn parse_openrouter_chat_chunk_with_accumulator(
     payload: &str,
     accumulator: &mut OpenRouterToolCallAccumulator,
 ) -> Result<Vec<ProviderStreamEvent>, ProviderError> {
-    let chunk: OpenRouterChatChunk =
-        serde_json::from_str(payload).map_err(|error| ProviderError::ResponseParsingFailed {
-            provider_name: "OpenRouter".to_owned(),
-            reason: error.to_string(),
-        })?;
-    let mut events = Vec::new();
+    let chunk = parse_chunk_payload(payload)?;
     let usage = chunk.usage;
 
     if let Some(error) = chunk.error {
@@ -30,76 +28,144 @@ pub(crate) fn parse_openrouter_chat_chunk_with_accumulator(
     }
 
     if chunk.choices.is_empty() {
-        let Some(usage) = usage else {
-            return Err(ProviderError::MalformedResponse {
-                provider_name: "OpenRouter".to_owned(),
-                reason: format!(
-                    "stream chunk omitted choices; OpenRouter response chunk JSON: {payload}"
-                ),
-            });
-        };
-
-        events.push(ProviderStreamEvent::Finished(ProviderFinished {
-            finish_reason: FinishReason::Stop,
-            tool_calls: Vec::new(),
-            usage: Some(usage),
-            reasoning: None,
-        }));
-        return Ok(events);
+        return usage_only_events(usage, payload);
     }
 
+    let mut events = Vec::new();
     for choice in chunk.choices {
-        let mut finish_reason = choice.finish_reason;
-        let native_finish_reason = choice.native_finish_reason;
-        let mut complete_tool_calls = Vec::new();
-        if let Some(delta) = choice.delta {
-            if let Some(tool_calls) = delta.tool_calls {
-                accumulator.add_chunks(tool_calls)?;
-            }
-            append_text_events(&mut events, delta.content, delta.reasoning, delta.refusal);
-            if finish_reason.is_none() {
-                finish_reason = delta.finish_reason;
-            }
-        }
-
-        if let Some(message) = choice.message {
-            append_text_events(
-                &mut events,
-                message.content,
-                message.reasoning,
-                message.refusal,
-            );
-            if let Some(tool_calls) = message.tool_calls {
-                complete_tool_calls = tool_calls
-                    .into_iter()
-                    .enumerate()
-                    .map(|(index, tool_call)| tool_call.into_provider_tool_call(index))
-                    .collect::<Result<Vec<_>, _>>()?;
-            }
-        }
-
-        let Some(finish_reason) = finish_reason else {
-            continue;
-        };
-
-        let finish_reason = parse_openrouter_finish_reason(&finish_reason);
-        let tool_calls = finish_tool_calls(
-            accumulator,
-            complete_tool_calls,
-            finish_reason,
-            native_finish_reason.as_deref(),
-            payload,
-        )?;
-
-        events.push(ProviderStreamEvent::Finished(ProviderFinished {
-            finish_reason,
-            tool_calls,
-            usage,
-            reasoning: None,
-        }));
+        append_choice_events(&mut events, choice, usage, accumulator, payload)?;
     }
 
     Ok(events)
+}
+
+fn parse_chunk_payload(payload: &str) -> Result<OpenRouterChatChunk, ProviderError> {
+    serde_json::from_str(payload).map_err(|error| ProviderError::ResponseParsingFailed {
+        provider_name: "OpenRouter".to_owned(),
+        reason: error.to_string(),
+        diagnostics: Some(
+            payload_diagnostics(
+                ProviderErrorStage::PayloadParse,
+                payload,
+                &["sse_payload", "payload_parse_error"],
+            )
+            .boxed(),
+        ),
+    })
+}
+
+fn usage_only_events(
+    usage: Option<UsageMetadata>,
+    payload: &str,
+) -> Result<Vec<ProviderStreamEvent>, ProviderError> {
+    let Some(usage) = usage else {
+        return Err(ProviderError::MalformedResponse {
+            provider_name: "OpenRouter".to_owned(),
+            reason: "stream chunk omitted choices".to_owned(),
+            diagnostics: Some(
+                payload_diagnostics(
+                    ProviderErrorStage::PayloadParse,
+                    payload,
+                    &["sse_payload", "payload_parse_error"],
+                )
+                .boxed(),
+            ),
+        });
+    };
+
+    Ok(vec![ProviderStreamEvent::Finished(ProviderFinished {
+        finish_reason: FinishReason::Stop,
+        tool_calls: Vec::new(),
+        usage: Some(usage),
+        reasoning: None,
+    })])
+}
+
+fn append_choice_events(
+    events: &mut Vec<ProviderStreamEvent>,
+    choice: OpenRouterChatChoice,
+    usage: Option<UsageMetadata>,
+    accumulator: &mut OpenRouterToolCallAccumulator,
+    payload: &str,
+) -> Result<(), ProviderError> {
+    let finish = collect_choice_events(events, choice, accumulator)?;
+    let Some(finish_reason) = finish.finish_reason else {
+        return Ok(());
+    };
+
+    let finish_reason = parse_openrouter_finish_reason(&finish_reason);
+    let tool_calls = finish_tool_calls(
+        accumulator,
+        finish.complete_tool_calls,
+        finish_reason,
+        finish.native_finish_reason.as_deref(),
+        payload,
+    )?;
+
+    events.push(ProviderStreamEvent::Finished(ProviderFinished {
+        finish_reason,
+        tool_calls,
+        usage,
+        reasoning: None,
+    }));
+    Ok(())
+}
+
+struct OpenRouterChoiceFinish {
+    finish_reason: Option<String>,
+    native_finish_reason: Option<String>,
+    complete_tool_calls: Vec<ProviderToolCall>,
+}
+
+fn collect_choice_events(
+    events: &mut Vec<ProviderStreamEvent>,
+    choice: OpenRouterChatChoice,
+    accumulator: &mut OpenRouterToolCallAccumulator,
+) -> Result<OpenRouterChoiceFinish, ProviderError> {
+    let mut finish_reason = choice.finish_reason;
+    let mut complete_tool_calls = Vec::new();
+    if let Some(delta) = choice.delta {
+        append_delta_events(events, delta, accumulator, &mut finish_reason)?;
+    }
+    if let Some(message) = choice.message {
+        complete_tool_calls = append_message_events(events, message)?;
+    }
+
+    Ok(OpenRouterChoiceFinish {
+        finish_reason,
+        native_finish_reason: choice.native_finish_reason,
+        complete_tool_calls,
+    })
+}
+
+fn append_delta_events(
+    events: &mut Vec<ProviderStreamEvent>,
+    delta: OpenRouterChatDelta,
+    accumulator: &mut OpenRouterToolCallAccumulator,
+    finish_reason: &mut Option<String>,
+) -> Result<(), ProviderError> {
+    if let Some(tool_calls) = delta.tool_calls {
+        accumulator.add_chunks(tool_calls)?;
+    }
+    append_text_events(events, delta.content, delta.reasoning, delta.refusal);
+    if finish_reason.is_none() {
+        *finish_reason = delta.finish_reason;
+    }
+    Ok(())
+}
+
+fn append_message_events(
+    events: &mut Vec<ProviderStreamEvent>,
+    message: OpenRouterChatChoiceMessage,
+) -> Result<Vec<ProviderToolCall>, ProviderError> {
+    append_text_events(events, message.content, message.reasoning, message.refusal);
+    message
+        .tool_calls
+        .unwrap_or_default()
+        .into_iter()
+        .enumerate()
+        .map(|(index, tool_call)| tool_call.into_provider_tool_call(index))
+        .collect()
 }
 
 #[derive(Default)]
@@ -128,6 +194,7 @@ impl OpenRouterToolCallAccumulator {
             return Err(ProviderError::MalformedResponse {
                 provider_name: "OpenRouter".to_owned(),
                 reason: "tool-call finish did not include tool-call chunks".to_owned(),
+                diagnostics: None,
             });
         }
 
@@ -139,30 +206,42 @@ impl OpenRouterToolCallAccumulator {
     }
 
     fn add_chunk(&mut self, tool_call: OpenRouterChatDeltaToolCall) -> Result<(), ProviderError> {
-        if let Some(kind) = tool_call.kind.as_deref() {
-            if kind != "function" {
-                return Err(ProviderError::MalformedResponse {
-                    provider_name: "OpenRouter".to_owned(),
-                    reason: format!("unsupported tool-call type `{kind}`"),
-                });
-            }
-        }
+        validate_delta_tool_call_kind(tool_call.kind.as_deref())?;
 
         let accumulated = self.tool_calls.entry(tool_call.index).or_default();
         if let Some(id) = tool_call.id {
             append_tool_call_id(accumulated, tool_call.index, id)?;
         }
         if let Some(function) = tool_call.function {
-            if let Some(name) = function.name {
-                accumulated.name.push_str(&name);
-            }
-            if let Some(arguments) = function.arguments {
-                accumulated.arguments.push_str(&arguments);
-                accumulated.saw_arguments = true;
-            }
+            append_tool_call_function(accumulated, function.name, function.arguments);
         }
 
         Ok(())
+    }
+}
+
+fn validate_delta_tool_call_kind(kind: Option<&str>) -> Result<(), ProviderError> {
+    match kind {
+        None | Some("function") => Ok(()),
+        Some(kind) => Err(ProviderError::MalformedResponse {
+            provider_name: "OpenRouter".to_owned(),
+            reason: format!("unsupported tool-call type `{kind}`"),
+            diagnostics: None,
+        }),
+    }
+}
+
+fn append_tool_call_function(
+    accumulated: &mut OpenRouterAccumulatedToolCall,
+    name: Option<String>,
+    arguments: Option<String>,
+) {
+    if let Some(name) = name {
+        accumulated.name.push_str(&name);
+    }
+    if let Some(arguments) = arguments {
+        accumulated.arguments.push_str(&arguments);
+        accumulated.saw_arguments = true;
     }
 }
 
@@ -180,6 +259,7 @@ impl OpenRouterAccumulatedToolCall {
             return Err(ProviderError::MalformedResponse {
                 provider_name: "OpenRouter".to_owned(),
                 reason: format!("tool-call index {index} omitted id"),
+                diagnostics: None,
             });
         };
 
@@ -187,6 +267,7 @@ impl OpenRouterAccumulatedToolCall {
             return Err(ProviderError::MalformedResponse {
                 provider_name: "OpenRouter".to_owned(),
                 reason: format!("tool-call index {index} omitted function name"),
+                diagnostics: None,
             });
         }
 
@@ -194,6 +275,7 @@ impl OpenRouterAccumulatedToolCall {
             return Err(ProviderError::MalformedResponse {
                 provider_name: "OpenRouter".to_owned(),
                 reason: format!("tool-call index {index} omitted function arguments"),
+                diagnostics: None,
             });
         }
 
@@ -242,6 +324,7 @@ fn append_tool_call_id(
     Err(ProviderError::MalformedResponse {
         provider_name: "OpenRouter".to_owned(),
         reason: format!("tool-call index {index} changed id from `{existing_id}` to `{id}`"),
+        diagnostics: None,
     })
 }
 
@@ -253,31 +336,71 @@ fn finish_tool_calls(
     payload: &str,
 ) -> Result<Vec<ProviderToolCall>, ProviderError> {
     if finish_reason == FinishReason::ToolCalls {
-        let mut accumulated = if accumulator.has_pending() {
-            accumulator.finish_tool_calls()?
-        } else {
-            Vec::new()
-        };
-        accumulated.extend(complete_tool_calls);
-        if accumulated.is_empty() {
-            return Err(ProviderError::MalformedResponse {
-                provider_name: "OpenRouter".to_owned(),
-                reason: openrouter_empty_tool_call_finish_reason(native_finish_reason, payload),
-            });
-        }
-        return Ok(accumulated);
+        return finish_tool_call_reason(
+            accumulator,
+            complete_tool_calls,
+            native_finish_reason,
+            payload,
+        );
     }
 
     if accumulator.has_pending() || !complete_tool_calls.is_empty() {
-        return Err(ProviderError::MalformedResponse {
-            provider_name: "OpenRouter".to_owned(),
-            reason: format!(
-                "tool-call chunks ended without tool-call finish; OpenRouter response chunk JSON: {payload}"
-            ),
-        });
+        return Err(unexpected_tool_call_chunks_error(payload));
     }
 
     Ok(Vec::new())
+}
+
+fn finish_tool_call_reason(
+    accumulator: &mut OpenRouterToolCallAccumulator,
+    complete_tool_calls: Vec<ProviderToolCall>,
+    native_finish_reason: Option<&str>,
+    payload: &str,
+) -> Result<Vec<ProviderToolCall>, ProviderError> {
+    let mut accumulated = if accumulator.has_pending() {
+        accumulator.finish_tool_calls()?
+    } else {
+        Vec::new()
+    };
+    accumulated.extend(complete_tool_calls);
+    if accumulated.is_empty() {
+        return Err(empty_tool_call_finish_error(native_finish_reason, payload));
+    }
+
+    Ok(accumulated)
+}
+
+fn empty_tool_call_finish_error(
+    native_finish_reason: Option<&str>,
+    payload: &str,
+) -> ProviderError {
+    ProviderError::MalformedResponse {
+        provider_name: "OpenRouter".to_owned(),
+        reason: openrouter_empty_tool_call_finish_reason(native_finish_reason, payload),
+        diagnostics: Some(
+            payload_diagnostics(
+                ProviderErrorStage::PayloadParse,
+                payload,
+                &["sse_payload", "payload_parse_error"],
+            )
+            .boxed(),
+        ),
+    }
+}
+
+fn unexpected_tool_call_chunks_error(payload: &str) -> ProviderError {
+    ProviderError::MalformedResponse {
+        provider_name: "OpenRouter".to_owned(),
+        reason: "tool-call chunks ended without tool-call finish".to_owned(),
+        diagnostics: Some(
+            payload_diagnostics(
+                ProviderErrorStage::PayloadParse,
+                payload,
+                &["sse_payload", "payload_parse_error"],
+            )
+            .boxed(),
+        ),
+    }
 }
 
 fn parse_openrouter_finish_reason(reason: &str) -> FinishReason {
@@ -292,16 +415,33 @@ fn parse_openrouter_finish_reason(reason: &str) -> FinishReason {
 }
 
 fn openrouter_stream_error(error: OpenRouterStreamError, payload: &str) -> ProviderError {
+    let code = error
+        .code
+        .as_ref()
+        .and_then(openrouter_error_code_to_string);
+    let diagnostics = code.as_ref().map_or_else(
+        || {
+            payload_diagnostics(
+                ProviderErrorStage::ProviderStream,
+                payload,
+                &["sse_payload"],
+            )
+        },
+        |code| {
+            payload_diagnostics(
+                ProviderErrorStage::ProviderStream,
+                payload,
+                &["sse_payload"],
+            )
+            .with_provider_code(code)
+        },
+    );
+
     ProviderError::StreamError {
         provider_name: "OpenRouter".to_owned(),
-        code: error
-            .code
-            .as_ref()
-            .and_then(openrouter_error_code_to_string),
-        message: format!(
-            "{}; OpenRouter response chunk JSON: {payload}",
-            error.message
-        ),
+        code,
+        message: error.message,
+        diagnostics: Some(diagnostics.boxed()),
     }
 }
 
@@ -317,7 +457,7 @@ fn openrouter_error_code_to_string(code: &serde_json::Value) -> Option<String> {
 
 fn openrouter_empty_tool_call_finish_reason(
     native_finish_reason: Option<&str>,
-    payload: &str,
+    _payload: &str,
 ) -> String {
     let native_finish_reason = native_finish_reason
         .filter(|reason| !reason.trim().is_empty())
@@ -328,7 +468,17 @@ fn openrouter_empty_tool_call_finish_reason(
          (no delta.tool_calls and no message.tool_calls). \
          native_finish_reason={native_finish_reason}. \
          This usually means the selected model/provider route stopped without emitting a native function call, \
-         even though tools were present. Try a different tool-capable model/provider route or disable tools for this model. \
-         OpenRouter response chunk JSON: {payload}"
+         even though tools were present. Try a different tool-capable model/provider route or disable tools for this model."
+    )
+}
+
+fn payload_diagnostics(
+    stage: ProviderErrorStage,
+    payload: &str,
+    debug_events: &[&str],
+) -> ProviderErrorDiagnostics {
+    debug_events.iter().fold(
+        ProviderErrorDiagnostics::new(stage).with_excerpt(payload),
+        |diagnostics, event| diagnostics.with_debug_event(*event),
     )
 }
