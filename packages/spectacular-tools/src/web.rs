@@ -16,11 +16,12 @@ use spectacular_agent::{Cancellation, Tool, ToolDisplay, ToolExecution, ToolMani
 use web_display::{web_action_call_display, web_action_detail, web_manifest, web_output_display};
 use web_find::find_in_text;
 use web_html::{extract_page_text, extract_title, normalized_url, truncate_text};
-use web_http::fetch_url;
+use web_http::WebHttpClient;
 use web_model::{serialize_output, web_error, WebAction, WebInput, WebOutput, WebPageOutput};
 pub use web_model::{WebFindMatch, WebSearchResult};
 use web_search::parse_duckduckgo_results;
 
+/// Provider-visible name for the web navigation tool.
 pub const WEB_SEARCH_TOOL_NAME: &str = "web";
 
 const DEFAULT_SEARCH_LIMIT: usize = 5;
@@ -30,8 +31,27 @@ const MAX_FIND_LIMIT: usize = 100;
 const DEFAULT_MAX_CHARS: usize = 12_000;
 const MAX_PAGE_CHARS: usize = 50_000;
 
-#[derive(Clone, Debug, Default)]
-pub struct WebSearchTool;
+/// Tool that performs web search, page extraction, and in-page literal find actions.
+#[derive(Clone, Debug)]
+pub struct WebSearchTool {
+    http: WebHttpClient,
+}
+
+impl WebSearchTool {
+    /// Creates a web tool with the default HTTP client and request policy.
+    pub fn new() -> Self {
+        Self {
+            http: WebHttpClient::new(),
+        }
+    }
+}
+
+impl Default for WebSearchTool {
+    /// Creates a web tool with default HTTP behavior.
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl Tool for WebSearchTool {
     /// Returns the stable tool name used for agent registration and dispatch.
@@ -77,22 +97,32 @@ impl Tool for WebSearchTool {
                 }
             };
 
-            Ok(serialize_output(&execute_web(input, cancellation).await))
+            Ok(serialize_output(
+                &execute_web(input, cancellation, &self.http).await,
+            ))
         })
     }
 }
 
 /// Routes a validated web input to its action-specific executor.
-async fn execute_web(input: WebInput, cancellation: Cancellation) -> WebOutput {
+async fn execute_web(
+    input: WebInput,
+    cancellation: Cancellation,
+    http: &WebHttpClient,
+) -> WebOutput {
     match input.action {
-        WebAction::Search => execute_search(input, cancellation).await,
-        WebAction::OpenPage => execute_open_page(input, cancellation).await,
-        WebAction::FindInPage => execute_find_in_page(input, cancellation).await,
+        WebAction::Search => execute_search(input, cancellation, http).await,
+        WebAction::OpenPage => execute_open_page(input, cancellation, http).await,
+        WebAction::FindInPage => execute_find_in_page(input, cancellation, http).await,
     }
 }
 
 /// Executes a DuckDuckGo HTML search and returns normalized search result payloads.
-async fn execute_search(input: WebInput, cancellation: Cancellation) -> WebOutput {
+async fn execute_search(
+    input: WebInput,
+    cancellation: Cancellation,
+    http: &WebHttpClient,
+) -> WebOutput {
     let query = match input
         .query
         .as_deref()
@@ -119,7 +149,7 @@ async fn execute_search(input: WebInput, cancellation: Cancellation) -> WebOutpu
         }
     };
 
-    let html = match fetch_url(url.as_str(), cancellation).await {
+    let html = match http.fetch_url(url.as_str(), cancellation).await {
         Ok(html) => html,
         Err(error) => return web_error(WebAction::Search.as_str(), error),
     };
@@ -143,7 +173,11 @@ async fn execute_search(input: WebInput, cancellation: Cancellation) -> WebOutpu
 }
 
 /// Executes an open-page action and returns extracted page text bounded by the maxChars limit.
-async fn execute_open_page(input: WebInput, cancellation: Cancellation) -> WebOutput {
+async fn execute_open_page(
+    input: WebInput,
+    cancellation: Cancellation,
+    http: &WebHttpClient,
+) -> WebOutput {
     let Some(url) = normalized_url(input.url.as_deref()) else {
         return web_error(
             WebAction::OpenPage.as_str(),
@@ -155,7 +189,7 @@ async fn execute_open_page(input: WebInput, cancellation: Cancellation) -> WebOu
         .unwrap_or(DEFAULT_MAX_CHARS)
         .clamp(1, MAX_PAGE_CHARS);
 
-    let html = match fetch_url(&url, cancellation).await {
+    let html = match http.fetch_url(&url, cancellation).await {
         Ok(html) => html,
         Err(error) => return web_error(WebAction::OpenPage.as_str(), error),
     };
@@ -176,7 +210,11 @@ async fn execute_open_page(input: WebInput, cancellation: Cancellation) -> WebOu
 }
 
 /// Executes a find-in-page action against extracted page text.
-async fn execute_find_in_page(input: WebInput, cancellation: Cancellation) -> WebOutput {
+async fn execute_find_in_page(
+    input: WebInput,
+    cancellation: Cancellation,
+    http: &WebHttpClient,
+) -> WebOutput {
     let Some(url) = normalized_url(input.url.as_deref()) else {
         return web_error(
             WebAction::FindInPage.as_str(),
@@ -202,7 +240,7 @@ async fn execute_find_in_page(input: WebInput, cancellation: Cancellation) -> We
         .unwrap_or(DEFAULT_FIND_LIMIT)
         .clamp(1, MAX_FIND_LIMIT);
 
-    let html = match fetch_url(&url, cancellation).await {
+    let html = match http.fetch_url(&url, cancellation).await {
         Ok(html) => html,
         Err(error) => return web_error(WebAction::FindInPage.as_str(), error),
     };

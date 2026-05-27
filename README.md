@@ -5,23 +5,25 @@ It runs as a native chat loop, streams model output, keeps session history, and
 lets the model use built-in tools to inspect, edit, search, and run commands in
 the current workspace.
 
-The main product surface today is `spectacular chat`. The longer-term direction
-is spec-driven development, but the current working functionality is centered on
+The main product surface is bare `spectacular`. The longer-term direction is
+spec-driven development, but the current working functionality is centered on
 chat, tool use, sessions, provider configuration, and repository workflows.
 
 ## Functionality
 
 ### Terminal Chat
 
-Start a fresh terminal chat session:
+Start a fresh IOCraft TUI chat session:
 
 ```sh
-npx nx run spectacular:run --args='chat'
+npx nx run spectacular:run
 ```
 
-The chat experience is transcript-first: no fullscreen TUI, no fixed panels,
-and normal terminal scrollback. User prompts and assistant responses stay in the
-terminal output, while the prompt editor handles interactive input.
+When using the built binary directly, run `spectacular` with no subcommand.
+
+The chat experience runs in the IOCraft terminal UI. User prompts, assistant
+responses, tool calls, session state, and command output stay in one interactive
+terminal surface.
 
 The prompt supports:
 
@@ -33,6 +35,37 @@ The prompt supports:
 - `Enter` to submit.
 - `Shift+Enter`, `Alt+Enter`, `Ctrl+Enter`, or `Ctrl+J` to insert a newline.
 - `Ctrl+C` to clear the current prompt, or exit when the prompt is empty.
+
+The TUI owns clipboard shortcuts inside the app:
+
+- `Ctrl+C` copies the focused prompt selection.
+- `Ctrl+X` cuts the focused prompt selection.
+- `Ctrl+V` pastes from the OS clipboard with paste guardrails.
+- `Shift+Left/Right/Up/Down` extends prompt text selection when the terminal
+  passes those key events through to the app.
+- Terminal-native paste shows `Use Ctrl+V to paste`.
+- `Esc` cancels a running request, clears prompt selection/text while idle, or exits when the prompt is empty.
+- `Ctrl+Q` exits explicitly.
+
+Some terminal hosts reserve selection shortcuts before console applications can
+read them. On Windows Terminal, `Shift+Up/Down` may be handled by the terminal
+instead of delivered as key events, while `Shift+Left/Right` still reaches the
+app. In that case Spectacular cannot select vertically from the app side because
+there is no `Up` or `Down` event to handle.
+
+The fullscreen TUI uses a solid white cursor. Text selections use a 70% white
+background approximation (`#B3B3B3`), since terminal colors do not carry alpha.
+By default, selected text uses the RGB complement of the selection background
+(`#4C4C4C` for `#B3B3B3`). Selection colors can be customized at startup with
+environment variables:
+
+- `SPECTACULAR_TUI_SELECTION_TEXT_COLOR`
+- `SPECTACULAR_TUI_SELECTION_BACKGROUND_COLOR`
+
+Both accept RGB hex values as `#RRGGBB` or `RRGGBB`, case-insensitive. Invalid
+values fall back independently. If the selected-text color variable is unset or
+invalid, selected text uses the RGB complement of the resolved selection
+background.
 
 ### Slash Commands
 
@@ -84,7 +117,7 @@ Chat sessions are persisted as structured JSONL records. A session can include:
 
 Useful session behavior:
 
-- `spectacular chat` starts a fresh session by default.
+- `spectacular` starts a fresh session by default.
 - `/history` lists recent saved sessions.
 - `/resume <session-id>` restores a previous session.
 - `/retry` truncates after the latest user prompt and reruns it.
@@ -96,7 +129,7 @@ OpenRouter is the enabled provider implementation in this checkout.
 
 Spectacular stores provider settings locally and supports three model slots:
 
-- `coding`: used by `spectacular chat`.
+- `coding`: used by `spectacular`.
 - `labeling`: used for background session titles when configured.
 - `planning`: reserved for the planning route.
 
@@ -127,14 +160,6 @@ Optional title model:
 npx nx run spectacular:run --args='config --provider openrouter --task labeling --model openrouter/title-model --reasoning none'
 ```
 
-### Planning Command
-
-`spectacular plan <prompt>` exists, but it is not a real planning workflow yet.
-It validates a non-empty prompt and complete config, then returns:
-
-```text
-Hello World
-```
 
 ## Quick Start
 
@@ -168,7 +193,7 @@ npx nx run spectacular:run --args='config --provider openrouter --task coding --
 Start chat:
 
 ```sh
-npx nx run spectacular:run --args='chat'
+npx nx run spectacular:run
 ```
 
 ## Local Data
@@ -212,7 +237,6 @@ Spectacular is an Nx workspace backed by a Rust Cargo workspace.
 | `spectacular-tools` | Built-in file, terminal, web, search, edit, and write tools. |
 | `spectacular-commands` | Slash-command parsing, metadata, fuzzy search, and errors. |
 | `spectacular-config` | Config schema, persistence, validation, and migration. |
-| `spectacular-plan` | Placeholder planning command. |
 
 Common commands:
 

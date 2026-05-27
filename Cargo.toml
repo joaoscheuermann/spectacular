@@ -1,15 +1,18 @@
 [workspace]
 resolver = "2"
+exclude = ["packages/vendor/iocraft"]
 members = [
     "packages/spectacular",
     "packages/spectacular-agent",
     "packages/spectacular-commands",
     "packages/spectacular-llms",
     "packages/spectacular-config",
-    "packages/spectacular-plan",
     "packages/spectacular-tools",
-    "packages/spectacular-terminal-ui",
+    "packages/spectacular-tui",
 ]
 
 [profile.release]
 lto = true
+
+[patch.crates-io]
+iocraft = { path = "packages/vendor/iocraft" }

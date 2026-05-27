@@ -1,82 +1,37 @@
 use crate::chat::commands::{
-    ChatCommand, ChatCommandContext, ChatCommandFuture, ChatCommandResult, ChatCompletionContext,
-    CompletionFieldSpec, CompletionSubcommandSpec, CompletionValueValidation,
+    ChatCommand, ChatCommandContext, ChatCommandFuture, ChatCommandResult, CompletionFieldSpec,
+    CompletionSubcommandSpec, CompletionValueValidation,
 };
-use crate::chat::{validate_cached_model_reasoning, ChatError};
+use crate::chat::validate_cached_model_reasoning;
 use crate::config_fields::{named_args, parse_reasoning};
-use spectacular_commands::CommandError;
+use spectacular_commands::{CommandError, NamedArgs};
 use spectacular_config::{ModelCache, ReasoningLevel};
 
-/// Returns the supported reasoning-level completion values from the canonical config enum.
-fn reasoning_values(_: &ChatCompletionContext<'_>) -> Result<Vec<String>, ChatError> {
-    Ok(ReasoningLevel::ALL
-        .into_iter()
-        .map(|value| value.as_str().to_owned())
-        .collect())
-}
-
-/// Returns configured provider names from persisted chat configuration.
-fn configured_provider_values(ctx: &ChatCompletionContext<'_>) -> Result<Vec<String>, ChatError> {
-    ctx.configured_provider_names()
-}
-
-/// Returns the provider typed in args or inferred from the edited model name.
-fn typed_or_inferred_provider(
-    ctx: &ChatCompletionContext<'_>,
-) -> Result<Option<String>, ChatError> {
-    if let Some(provider) = ctx.args.get("provider") {
-        return Ok(Some(provider.to_owned()));
-    }
-
-    if ctx.subcommand != "edit" {
-        return Ok(None);
-    }
-
-    let Some(model_name) = ctx.args.get("name") else {
-        return Ok(None);
-    };
-
-    ctx.saved_model_provider(model_name)
-}
-
-/// Returns cached model ids scoped by typed provider, inferred edited model, or all providers.
-fn cached_model_id_values(ctx: &ChatCompletionContext<'_>) -> Result<Vec<String>, ChatError> {
-    let provider = typed_or_inferred_provider(ctx)?;
-    ctx.cached_model_ids(provider.as_deref())
-}
-
-/// Returns saved model aliases from persisted chat configuration.
-fn saved_model_values(ctx: &ChatCompletionContext<'_>) -> Result<Vec<String>, ChatError> {
-    ctx.saved_model_names()
-}
+const MODEL_USAGE: &str = "/model add provider:<provider> id:<model-id> reasoning:<level> [name:<name>] | /model edit name:<name> [provider:<provider>] [id:<model-id>] [reasoning:<level>] | /model remove name:<name> confirm:true";
 
 const MODEL_ADD_FIELDS: &[CompletionFieldSpec] = &[
     CompletionFieldSpec {
         name: "provider",
         summary: "configured provider name",
         required: true,
-        values: configured_provider_values,
         validation: CompletionValueValidation::None,
     },
     CompletionFieldSpec {
         name: "id",
         summary: "model ID from the selected provider",
         required: true,
-        values: cached_model_id_values,
         validation: CompletionValueValidation::None,
     },
     CompletionFieldSpec {
         name: "reasoning",
         summary: "reasoning level",
         required: true,
-        values: reasoning_values,
         validation: CompletionValueValidation::OneOfValues,
     },
     CompletionFieldSpec {
         name: "name",
         summary: "optional saved model name",
         required: false,
-        values: saved_model_values,
         validation: CompletionValueValidation::None,
     },
 ];
@@ -86,28 +41,24 @@ const MODEL_EDIT_FIELDS: &[CompletionFieldSpec] = &[
         name: "name",
         summary: "saved model key",
         required: true,
-        values: saved_model_values,
         validation: CompletionValueValidation::None,
     },
     CompletionFieldSpec {
         name: "provider",
         summary: "replacement provider name",
         required: false,
-        values: configured_provider_values,
         validation: CompletionValueValidation::None,
     },
     CompletionFieldSpec {
         name: "id",
         summary: "replacement model ID",
         required: false,
-        values: cached_model_id_values,
         validation: CompletionValueValidation::None,
     },
     CompletionFieldSpec {
         name: "reasoning",
         summary: "replacement reasoning level",
         required: false,
-        values: reasoning_values,
         validation: CompletionValueValidation::OneOfValues,
     },
 ];
@@ -116,7 +67,6 @@ const MODEL_REMOVE_FIELDS: &[CompletionFieldSpec] = &[CompletionFieldSpec {
     name: "name",
     summary: "saved model key",
     required: true,
-    values: saved_model_values,
     validation: CompletionValueValidation::None,
 }];
 
@@ -142,7 +92,7 @@ const MODEL_SUBCOMMANDS: &[CompletionSubcommandSpec] = &[
 pub fn command() -> ChatCommand {
     ChatCommand {
         name: "model",
-        usage: "/model add provider:<provider> id:<model-id> reasoning:<level> [name:<name>] | /model edit name:<name> [provider:<provider>] [id:<model-id>] [reasoning:<level>] | /model remove name:<name> confirm:true",
+        usage: MODEL_USAGE,
         summary: "Manage saved models",
         completion: MODEL_SUBCOMMANDS,
         execute,
@@ -160,142 +110,238 @@ fn execute<'a>(context: ChatCommandContext<'a>, args: Vec<String>) -> ChatComman
             Some((subcommand, fields)) if subcommand == "add" => model_add(context, fields),
             Some((subcommand, fields)) if subcommand == "edit" => model_edit(context, fields),
             Some((subcommand, fields)) if subcommand == "remove" => model_remove(context, fields),
-            _ => ChatCommandResult::error(CommandError::usage(command().usage).to_string()),
+            _ => ChatCommandResult::error(CommandError::usage(MODEL_USAGE).to_string()),
         }
     })
 }
 
 /// Adds a saved model after validating cached provider metadata and reasoning support.
 fn model_add(context: ChatCommandContext<'_>, fields: &[String]) -> ChatCommandResult {
-    let args = match named_args(fields, &["provider", "id", "reasoning", "name"]) {
-        Ok(args) => args,
-        Err(error) => return ChatCommandResult::error(error.to_string()),
-    };
-    let provider = match args.require("provider") {
-        Ok(value) => value,
-        Err(error) => return ChatCommandResult::error(error.to_string()),
-    };
-    let model_id = match args.require("id") {
-        Ok(value) => value,
-        Err(error) => return ChatCommandResult::error(error.to_string()),
-    };
-    let reasoning_value = match args.require("reasoning") {
-        Ok(value) => value,
-        Err(error) => return ChatCommandResult::error(error.to_string()),
-    };
-    let reasoning = match parse_reasoning(reasoning_value) {
-        Ok(value) => value,
-        Err(error) => return ChatCommandResult::error(error.to_string()),
-    };
-
-    let cache = match context.model.config_io().read_model_cache_or_default() {
-        Ok(cache) => cache,
-        Err(error) => return ChatCommandResult::error(error.to_string()),
-    };
-    if let Err(error) = validate_reasoning(&cache, provider, model_id, reasoning) {
-        return ChatCommandResult::error(error.to_string());
-    }
-
-    match context.model.add_model(
-        provider,
-        model_id,
-        reasoning,
-        args.optional("name").map(str::to_owned),
-    ) {
-        Ok(key) => {
-            context.success(&format!("model added: {key}"));
-            ChatCommandResult::success()
-        }
-        Err(error) => ChatCommandResult::error(error.to_string()),
-    }
+    finish(run_model_add(context, fields))
 }
 
 /// Updates an existing saved model and refreshes the runtime when needed.
 fn model_edit(context: ChatCommandContext<'_>, fields: &[String]) -> ChatCommandResult {
-    let args = match named_args(fields, &["name", "provider", "id", "reasoning"]) {
-        Ok(args) => args,
-        Err(error) => return ChatCommandResult::error(error.to_string()),
-    };
-    let name = match args.require("name") {
-        Ok(value) => value,
-        Err(error) => return ChatCommandResult::error(error.to_string()),
-    };
-    let reasoning = match args.optional("reasoning").map(parse_reasoning).transpose() {
-        Ok(value) => value,
-        Err(error) => return ChatCommandResult::error(error.to_string()),
-    };
-
-    if args.optional("provider").is_some() || args.optional("id").is_some() || reasoning.is_some() {
-        let config = match context.model.config_io().read_config_or_default() {
-            Ok(config) => config,
-            Err(error) => return ChatCommandResult::error(error.to_string()),
-        };
-        let current = match config.models.get(name) {
-            Some(current) => current,
-            None => return ChatCommandResult::error(format!("model `{name}` is not configured")),
-        };
-        let provider = args
-            .optional("provider")
-            .unwrap_or(current.provider.as_str());
-        let model_id = args.optional("id").unwrap_or(current.model.as_str());
-        let reasoning = reasoning.unwrap_or(current.reasoning);
-        let cache = match context.model.config_io().read_model_cache_or_default() {
-            Ok(cache) => cache,
-            Err(error) => return ChatCommandResult::error(error.to_string()),
-        };
-        if let Err(error) = validate_reasoning(&cache, provider, model_id, reasoning) {
-            return ChatCommandResult::error(error.to_string());
-        }
-    }
-
-    match context.model.edit_model(
-        name,
-        args.optional("provider").map(str::to_owned),
-        args.optional("id").map(str::to_owned),
-        reasoning,
-    ) {
-        Ok(_) => {
-            context.success(&format!("model updated: {name}"));
-            ChatCommandResult::success()
-        }
-        Err(error) => ChatCommandResult::error(error.to_string()),
-    }
+    finish(run_model_edit(context, fields))
 }
 
 /// Removes a saved model after explicit confirmation and reports invalid task references.
 fn model_remove(context: ChatCommandContext<'_>, fields: &[String]) -> ChatCommandResult {
-    let args = match named_args(fields, &["name", "confirm"]) {
-        Ok(args) => args,
-        Err(error) => return ChatCommandResult::error(error.to_string()),
-    };
-    let name = match args.require("name") {
-        Ok(value) => value,
-        Err(error) => return ChatCommandResult::error(error.to_string()),
-    };
+    finish(run_model_remove(context, fields))
+}
 
-    if args.optional("confirm") != Some("true") {
+fn run_model_add(
+    context: ChatCommandContext<'_>,
+    fields: &[String],
+) -> Result<ChatCommandResult, String> {
+    let spec = ModelAddSpec::parse(fields)?;
+    validate_target(&context, &spec.target)?;
+    let key = context
+        .model
+        .add_model(
+            &spec.target.provider,
+            &spec.target.model_id,
+            spec.target.reasoning,
+            spec.name,
+        )
+        .map_err(|error| error.to_string())?;
+    context.success(&format!("model added: {key}"));
+    Ok(ChatCommandResult::success())
+}
+
+fn run_model_edit(
+    context: ChatCommandContext<'_>,
+    fields: &[String],
+) -> Result<ChatCommandResult, String> {
+    let spec = ModelEditSpec::parse(fields)?;
+    if let Some(target) = edit_validation_target(&context, &spec)? {
+        validate_target(&context, &target)?;
+    }
+
+    let name = spec.name.clone();
+    context
+        .model
+        .edit_model(&name, spec.provider, spec.model_id, spec.reasoning)
+        .map_err(|error| error.to_string())?;
+    context.success(&format!("model updated: {name}"));
+    Ok(ChatCommandResult::success())
+}
+
+fn run_model_remove(
+    context: ChatCommandContext<'_>,
+    fields: &[String],
+) -> Result<ChatCommandResult, String> {
+    let spec = ModelRemoveSpec::parse(fields)?;
+    if !spec.confirmed {
         context
             .notice("model removal requires confirm:true; referenced tasks will be left invalid");
-        return ChatCommandResult::success();
+        return Ok(ChatCommandResult::success());
     }
 
-    match context.model.remove_model(name) {
-        Ok(references) => {
-            context.success(&format!("model removed: {name}"));
-            if !references.is_empty() {
-                context.notice(&format!(
-                    "invalid task references: {}",
-                    references
-                        .iter()
-                        .map(|slot| slot.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ));
-            }
-            ChatCommandResult::success()
-        }
-        Err(error) => ChatCommandResult::error(error.to_string()),
+    let references = context
+        .model
+        .remove_model(&spec.name)
+        .map_err(|error| error.to_string())?;
+    context.success(&format!("model removed: {}", spec.name));
+    report_invalid_task_references(&context, &references);
+    Ok(ChatCommandResult::success())
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct ModelTarget {
+    provider: String,
+    model_id: String,
+    reasoning: ReasoningLevel,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct ModelAddSpec {
+    target: ModelTarget,
+    name: Option<String>,
+}
+
+impl ModelAddSpec {
+    fn parse(fields: &[String]) -> Result<Self, String> {
+        let args = parse_fields(fields, &["provider", "id", "reasoning", "name"])?;
+        let reasoning_value = require_field(&args, "reasoning")?;
+        Ok(Self {
+            target: ModelTarget {
+                provider: require_field(&args, "provider")?,
+                model_id: require_field(&args, "id")?,
+                reasoning: parse_reasoning_value(&reasoning_value)?,
+            },
+            name: optional_field(&args, "name"),
+        })
     }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct ModelEditSpec {
+    name: String,
+    provider: Option<String>,
+    model_id: Option<String>,
+    reasoning: Option<ReasoningLevel>,
+}
+
+impl ModelEditSpec {
+    fn parse(fields: &[String]) -> Result<Self, String> {
+        let args = parse_fields(fields, &["name", "provider", "id", "reasoning"])?;
+        Ok(Self {
+            name: require_field(&args, "name")?,
+            provider: optional_field(&args, "provider"),
+            model_id: optional_field(&args, "id"),
+            reasoning: args
+                .optional("reasoning")
+                .map(parse_reasoning_value)
+                .transpose()?,
+        })
+    }
+
+    fn needs_validation(&self) -> bool {
+        self.provider.is_some() || self.model_id.is_some() || self.reasoning.is_some()
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct ModelRemoveSpec {
+    name: String,
+    confirmed: bool,
+}
+
+impl ModelRemoveSpec {
+    fn parse(fields: &[String]) -> Result<Self, String> {
+        let args = parse_fields(fields, &["name", "confirm"])?;
+        Ok(Self {
+            name: require_field(&args, "name")?,
+            confirmed: args.optional("confirm") == Some("true"),
+        })
+    }
+}
+
+fn edit_validation_target(
+    context: &ChatCommandContext<'_>,
+    spec: &ModelEditSpec,
+) -> Result<Option<ModelTarget>, String> {
+    if !spec.needs_validation() {
+        return Ok(None);
+    }
+
+    let current = current_model(context, &spec.name)?;
+    Ok(Some(ModelTarget {
+        provider: spec
+            .provider
+            .clone()
+            .unwrap_or_else(|| current.provider.clone()),
+        model_id: spec
+            .model_id
+            .clone()
+            .unwrap_or_else(|| current.model.clone()),
+        reasoning: spec.reasoning.unwrap_or(current.reasoning),
+    }))
+}
+
+fn current_model(
+    context: &ChatCommandContext<'_>,
+    name: &str,
+) -> Result<spectacular_config::ModelConfig, String> {
+    let config = context
+        .model
+        .config_io()
+        .read_config_or_default()
+        .map_err(|error| error.to_string())?;
+    config
+        .models
+        .get(name)
+        .cloned()
+        .ok_or_else(|| format!("model `{name}` is not configured"))
+}
+
+fn validate_target(context: &ChatCommandContext<'_>, target: &ModelTarget) -> Result<(), String> {
+    let cache = context
+        .model
+        .config_io()
+        .read_model_cache_or_default()
+        .map_err(|error| error.to_string())?;
+    validate_reasoning(&cache, &target.provider, &target.model_id, target.reasoning)
+        .map_err(|error| error.to_string())
+}
+
+fn parse_fields(fields: &[String], allowed: &[&str]) -> Result<NamedArgs, String> {
+    named_args(fields, allowed).map_err(|error| error.to_string())
+}
+
+fn require_field(args: &NamedArgs, name: &'static str) -> Result<String, String> {
+    args.require(name)
+        .map(str::to_owned)
+        .map_err(|error| error.to_string())
+}
+
+fn optional_field(args: &NamedArgs, name: &str) -> Option<String> {
+    args.optional(name).map(str::to_owned)
+}
+
+fn parse_reasoning_value(value: &str) -> Result<ReasoningLevel, String> {
+    parse_reasoning(value).map_err(|error| error.to_string())
+}
+
+fn report_invalid_task_references(
+    context: &ChatCommandContext<'_>,
+    references: &[spectacular_config::TaskModelSlot],
+) {
+    if references.is_empty() {
+        return;
+    }
+
+    let slots = references
+        .iter()
+        .map(|slot| slot.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    context.notice(&format!("invalid task references: {slots}"));
+}
+
+fn finish(result: Result<ChatCommandResult, String>) -> ChatCommandResult {
+    result.unwrap_or_else(ChatCommandResult::error)
 }
 
 /// Validates requested reasoning settings against already loaded model metadata cache.
@@ -306,4 +352,12 @@ fn validate_reasoning(
     reasoning: ReasoningLevel,
 ) -> Result<(), crate::chat::ChatError> {
     validate_cached_model_reasoning(cache, provider, model_id, reasoning)
+}
+
+#[cfg(test)]
+mod tests {
+    include!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/unit/chat/commands/config/model.rs"
+    ));
 }

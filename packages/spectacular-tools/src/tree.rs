@@ -8,12 +8,14 @@ use serde_json::{json, Value};
 use spectacular_agent::{Cancellation, Tool, ToolDisplay, ToolExecution, ToolManifest};
 use std::path::{Path, PathBuf};
 
+/// Provider-visible name for the workspace tree tool.
 pub const TREE_TOOL_NAME: &str = "tree";
 
 const HIDDEN_EXCEPTIONS: &[&str] = &[".agents"];
 
 const TREE_TOOL_DESCRIPTION: &str = "Display directory structure as an ASCII tree. Directories are listed first, then files, both sorted alphabetically. Respects .gitignore and excludes hidden files except .agents.";
 
+/// Tool that renders a bounded ASCII tree for a workspace directory.
 #[derive(Clone, Debug)]
 pub struct TreeTool {
     workspace_root: PathBuf,

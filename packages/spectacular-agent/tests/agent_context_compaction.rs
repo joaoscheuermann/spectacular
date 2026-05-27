@@ -100,9 +100,12 @@ fn auto_compaction_summarizes_before_real_provider_request() {
     let requests = Arc::clone(&provider.requests);
     let store = Store::from(vec![
         AgentEvent::user_prompt("old prompt"),
-        AgentEvent::MessageDelta(MessageDelta::assistant(
+        AgentEvent::message_start("message-old"),
+        AgentEvent::message_delta(
+            "message-old",
             "old answer with enough content to cross a tiny threshold",
-        )),
+        ),
+        AgentEvent::message_finish("message-old"),
         AgentEvent::Finished {
             finish_reason: FinishReason::Stop,
         },
@@ -214,9 +217,12 @@ fn summary_failure_prevents_real_provider_request() {
     let calls = Arc::clone(&provider.calls);
     let store = Store::from(vec![
         AgentEvent::user_prompt("old prompt"),
-        AgentEvent::MessageDelta(MessageDelta::assistant(
+        AgentEvent::message_start("message-old"),
+        AgentEvent::message_delta(
+            "message-old",
             "old answer with enough content to cross a tiny threshold",
-        )),
+        ),
+        AgentEvent::message_finish("message-old"),
         AgentEvent::Finished {
             finish_reason: FinishReason::Stop,
         },

@@ -41,9 +41,7 @@
         model.start_new_session().unwrap();
 
         model
-            .append_agent_event(&spectacular_agent::AgentEvent::UserPrompt {
-                content: "hello".to_owned(),
-            })
+            .append_agent_event(&spectacular_agent::AgentEvent::user_prompt("hello"))
             .unwrap();
 
         assert!(model.records().unwrap().iter().any(|record| matches!(
@@ -103,6 +101,7 @@
         let session = crate::chat::session::SessionManager::new_in(temp_session_dir("usage"))
             .expect("session manager should be created");
         let mut model = ChatModel::new(session, test_runtime());
+        let started = model.start_new_session().unwrap();
         let usage = ContextTokenUsage {
             input_tokens: 100,
             context_window_tokens: Some(240_000),
@@ -112,6 +111,10 @@
         assert_eq!(model.context_token_usage(), Some(usage));
 
         model.start_new_session().unwrap();
+        assert_eq!(model.context_token_usage(), None);
+
+        model.set_context_token_usage(usage);
+        model.resume_session(&started.id).unwrap();
         assert_eq!(model.context_token_usage(), None);
 
         model.set_context_token_usage(usage);

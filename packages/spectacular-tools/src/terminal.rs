@@ -41,7 +41,9 @@ use spectacular_agent::{Cancellation, Tool, ToolDisplay, ToolExecution, ToolMani
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Instant;
+use tokio::process::Child;
 
+/// Provider-visible name for the host shell execution tool.
 pub const TERMINAL_TOOL_NAME: &str = "terminal";
 
 const DEFAULT_TIMEOUT_MS: u64 = 120_000;
@@ -51,6 +53,7 @@ const OUTPUT_DRAIN_TIMEOUT_MS: u64 = 1_000;
 const TERMINAL_TOOL_DESCRIPTION: &str =
     "Executes shell commands on the host machine. Returns compact stdout/stderr summaries, diagnostics, exit_code, duration, and a raw_output_ref when trace storage is enabled.";
 
+/// Tool that runs host shell commands from a configured workspace root.
 #[derive(Clone, Debug)]
 pub struct TerminalTool {
     workspace_root: PathBuf,
@@ -184,10 +187,14 @@ struct TerminalInput {
     timeout_ms: Option<u64>,
 }
 
+/// Legacy raw terminal output shape retained for older transcript payloads.
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct TerminalOutput {
+    /// Captured process stdout.
     pub stdout: String,
+    /// Captured process stderr.
     pub stderr: String,
+    /// Process exit code, or -1 for tool-level failures.
     pub exit_code: i32,
 }
 
@@ -203,46 +210,41 @@ pub(crate) struct TerminalExecution {
     pub(crate) exit_code: i32,
 }
 
-impl TerminalExecution {
-    /// Builds a completed execution record from captured process output.
-    fn completed(
-        command: String,
-        working_directory: PathBuf,
-        started_at: DateTime<Utc>,
-        started_instant: Instant,
-        stdout: String,
-        stderr: String,
-        exit_code: i32,
-    ) -> Self {
+struct ExecutionContext {
+    command: String,
+    working_directory: PathBuf,
+    started_at: DateTime<Utc>,
+    started_instant: Instant,
+}
+
+impl ExecutionContext {
+    /// Starts timing a terminal execution before process creation.
+    fn start(command: String, working_directory: PathBuf) -> Self {
         Self {
             command,
             working_directory,
-            started_at,
+            started_at: Utc::now(),
+            started_instant: Instant::now(),
+        }
+    }
+
+    /// Builds a completed execution record from captured process output.
+    fn completed(self, stdout: String, stderr: String, exit_code: i32) -> TerminalExecution {
+        TerminalExecution {
+            command: self.command,
+            working_directory: self.working_directory,
+            started_at: self.started_at,
             completed_at: Utc::now(),
-            duration_ms: started_instant.elapsed().as_millis(),
+            duration_ms: self.started_instant.elapsed().as_millis(),
             stdout,
             stderr,
             exit_code,
         }
     }
 
-    /// Builds a failed execution record for errors that occur before process output exists.
-    fn failed(
-        command: String,
-        working_directory: PathBuf,
-        started_at: DateTime<Utc>,
-        started_instant: Instant,
-        stderr: String,
-    ) -> Self {
-        Self::completed(
-            command,
-            working_directory,
-            started_at,
-            started_instant,
-            String::new(),
-            stderr,
-            -1,
-        )
+    /// Builds a failed execution record for errors before process output exists.
+    fn failed(self, stderr: String) -> TerminalExecution {
+        self.completed(String::new(), stderr, -1)
     }
 }
 
@@ -253,30 +255,13 @@ async fn execute_terminal(
     cancellation: Cancellation,
 ) -> TerminalExecution {
     let timeout_ms = effective_timeout_ms(input.timeout_ms);
-    let command_text = input.command;
     let working_directory = resolve_working_directory(workspace_root, input.working_directory);
-    let started_at = Utc::now();
-    let started_instant = Instant::now();
-    let shell = ShellSpec::detect();
-    let mut command = shell.command(&command_text);
-    command
-        .current_dir(&working_directory)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-    configure_process_group(&mut command);
+    let context = ExecutionContext::start(input.command, working_directory);
 
-    let mut child = match command.spawn() {
+    let mut child = match spawn_shell_command(&context.command, &context.working_directory) {
         Ok(child) => child,
         Err(error) => {
-            return TerminalExecution::failed(
-                command_text,
-                working_directory,
-                started_at,
-                started_instant,
-                format!("Failed to spawn command: {error}"),
-            );
+            return context.failed(format!("Failed to spawn command: {error}"));
         }
     };
 
@@ -289,43 +274,39 @@ async fn execute_terminal(
     let stderr = read_joined(stderr_reader, output_drain_timeout).await;
 
     match completion {
-        CommandCompletion::Exited(status) => TerminalExecution::completed(
-            command_text,
-            working_directory,
-            started_at,
-            started_instant,
-            stdout,
-            stderr,
-            status.code().unwrap_or(-1),
-        ),
-        CommandCompletion::WaitError(error) => TerminalExecution::completed(
-            command_text,
-            working_directory,
-            started_at,
-            started_instant,
+        CommandCompletion::Exited(status) => {
+            context.completed(stdout, stderr, status.code().unwrap_or(-1))
+        }
+        CommandCompletion::WaitError(error) => context.completed(
             stdout,
             append_message(stderr, format!("Command execution error: {error}")),
             -1,
         ),
-        CommandCompletion::TimedOut => TerminalExecution::completed(
-            command_text,
-            working_directory,
-            started_at,
-            started_instant,
+        CommandCompletion::TimedOut => context.completed(
             stdout,
             append_message(stderr, format!("Command timed out after {timeout_ms}ms")),
             -1,
         ),
-        CommandCompletion::Cancelled => TerminalExecution::completed(
-            command_text,
-            working_directory,
-            started_at,
-            started_instant,
+        CommandCompletion::Cancelled => context.completed(
             stdout,
             append_message(stderr, "Command cancelled".to_owned()),
             -1,
         ),
     }
+}
+
+/// Spawns the platform shell configured for terminal tool execution.
+fn spawn_shell_command(command_text: &str, working_directory: &Path) -> std::io::Result<Child> {
+    let shell = ShellSpec::detect();
+    let mut command = shell.command(command_text);
+    command
+        .current_dir(working_directory)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+    configure_process_group(&mut command);
+    command.spawn()
 }
 
 /// Resolves an optional working-directory argument against the workspace root.
@@ -350,15 +331,9 @@ fn terminal_error(
     trace_dir: Option<&Path>,
     message: impl Into<String>,
 ) -> String {
-    let started_at = Utc::now();
-    let started_instant = Instant::now();
-    let execution = TerminalExecution::failed(
-        "<invalid input>".to_owned(),
-        workspace_root.to_path_buf(),
-        started_at,
-        started_instant,
-        message.into(),
-    );
+    let execution =
+        ExecutionContext::start("<invalid input>".to_owned(), workspace_root.to_path_buf())
+            .failed(message.into());
     serialize_execution_output(&execution, trace_dir)
 }
 
@@ -418,6 +393,6 @@ fn stream_separator(stdout: &str) -> &'static str {
 mod tests {
     include!(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/tests/unit/terminal.rs"
+        "/tests/unit/terminal/mod.rs"
     ));
 }

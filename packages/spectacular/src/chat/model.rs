@@ -1,5 +1,5 @@
 use super::RuntimeSelection;
-use crate::chat::commands::CompletionEnvironment;
+use crate::chat::command_event::CommandEvent;
 use crate::chat::session::{ChatRecord, HistoryQuery, HistorySummary, SessionManager};
 use crate::chat::ChatError;
 use spectacular_agent::{AgentEvent, ContextTokenUsage};
@@ -139,6 +139,7 @@ impl ChatModel {
     pub fn resume_session(&mut self, prefix: &str) -> Result<ResumeResultModel, ChatError> {
         let records = self.session.resume(prefix)?;
         self.restore_runtime_from_records(&records)?;
+        self.clear_context_token_usage();
         Ok(ResumeResultModel {
             id: self.session.current_id().to_owned(),
             records,
@@ -199,6 +200,11 @@ impl ChatModel {
         self.session.append_agent_event(event)
     }
 
+    /// Appends an app-owned command lifecycle event to the active session transcript.
+    pub fn append_command_event(&self, event: &CommandEvent) -> Result<(), ChatError> {
+        self.session.append_command_event(event)
+    }
+
     /// Stores the latest provider-context token usage for prompt footer rendering.
     pub fn set_context_token_usage(&self, usage: ContextTokenUsage) {
         *self.context_token_usage_state() = Some(usage);
@@ -244,11 +250,6 @@ impl ChatModel {
         self.config_io
     }
 
-    /// Builds the narrow environment exposed to prompt completion value resolvers.
-    pub(crate) fn completion_environment(&self) -> CompletionEnvironment {
-        CompletionEnvironment::new(self.config_io, spectacular_llms::provider_registry())
-    }
-
     /// Restores runtime selection from session metadata, falling back to current config.
     fn restore_runtime_from_records(&mut self, records: &[ChatRecord]) -> Result<(), ChatError> {
         let cache = self
@@ -259,18 +260,7 @@ impl ChatModel {
             .config_io
             .read_config_or_default()
             .unwrap_or_else(|_| config_for_runtime(&self.runtime));
-        if let Some(runtime) =
-            RuntimeSelection::from_session_records_and_cache(&config, &cache, records)?
-        {
-            self.runtime = runtime;
-            return Ok(());
-        }
-
-        if let Some(runtime) = RuntimeSelection::from_session_records_and_cache(
-            &config_for_runtime(&self.runtime),
-            &cache,
-            records,
-        )? {
+        if let Some(runtime) = resume_runtime(&config, &cache, records, &self.runtime)? {
             self.runtime = runtime;
             return Ok(());
         }
@@ -349,7 +339,7 @@ impl From<HistorySummary> for HistoryRowModel {
     }
 }
 
-/// Data carried with a new prompt so the renderer can show contextual footer text.
+/// Data carried with a new prompt so the TUI can show contextual footer text.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ChatPromptFooterModel {
     pub directory: PathBuf,
@@ -385,6 +375,7 @@ impl ChatPromptFooterModel {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ChatRunRequestModel {
     pub prompt: String,
+    pub prompt_event_id: Option<String>,
     pub render_user_prompt: bool,
     pub retry_existing_prompt: bool,
     pub runtime: RuntimeSelection,
@@ -406,7 +397,23 @@ fn truncate(value: &str, limit: usize) -> String {
 /// Builds a minimal config containing the active runtime for session-resume fallback logic.
 fn config_for_runtime(runtime: &RuntimeSelection) -> SpectacularConfig {
     let mut providers = BTreeMap::new();
-    let provider = match runtime.provider_auth {
+    providers.insert(
+        runtime.provider.clone(),
+        provider_config_for_runtime(runtime),
+    );
+
+    let mut models = BTreeMap::new();
+    models.insert(runtime.model_key.clone(), model_config_for_runtime(runtime));
+
+    SpectacularConfig {
+        providers,
+        models,
+        tasks: task_assignments_for_runtime(runtime),
+    }
+}
+
+fn provider_config_for_runtime(runtime: &RuntimeSelection) -> ProviderConfig {
+    match runtime.provider_auth {
         Some(ProviderAuthMode::Oauth) => ProviderConfig {
             provider_type: runtime.provider_type.clone(),
             credentials: None,
@@ -414,27 +421,37 @@ fn config_for_runtime(runtime: &RuntimeSelection) -> SpectacularConfig {
         Some(ProviderAuthMode::ApiKey) | None => {
             ProviderConfig::new(runtime.provider_type.clone(), runtime.api_key.clone())
         }
-    };
-    providers.insert(runtime.provider.clone(), provider);
-    let mut models = BTreeMap::new();
-    models.insert(
-        runtime.model_key.clone(),
-        ModelConfig::new(
-            runtime.provider.clone(),
-            runtime.model.clone(),
-            runtime.reasoning,
-        ),
-    );
-
-    SpectacularConfig {
-        providers,
-        models,
-        tasks: TaskAssignments {
-            general: None,
-            coding: Some(runtime.model_key.clone()),
-            labeling: None,
-        },
     }
+}
+
+fn model_config_for_runtime(runtime: &RuntimeSelection) -> ModelConfig {
+    ModelConfig::new(
+        runtime.provider.clone(),
+        runtime.model.clone(),
+        runtime.reasoning,
+    )
+}
+
+fn task_assignments_for_runtime(runtime: &RuntimeSelection) -> TaskAssignments {
+    TaskAssignments {
+        general: None,
+        coding: Some(runtime.model_key.clone()),
+        labeling: None,
+    }
+}
+
+fn resume_runtime(
+    config: &SpectacularConfig,
+    cache: &ModelCache,
+    records: &[ChatRecord],
+    current: &RuntimeSelection,
+) -> Result<Option<RuntimeSelection>, ChatError> {
+    if let Some(runtime) = RuntimeSelection::from_session_records_and_cache(config, cache, records)?
+    {
+        return Ok(Some(runtime));
+    }
+
+    RuntimeSelection::from_session_records_and_cache(&config_for_runtime(current), cache, records)
 }
 
 #[cfg(test)]

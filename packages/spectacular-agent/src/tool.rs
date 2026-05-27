@@ -7,12 +7,18 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
+/// Rendered text for tool calls and outputs.
 pub type ToolDisplay = String;
+
+/// Boxed async execution returned by tool implementations.
 pub type ToolExecution<'a> = Pin<Box<dyn Future<Output = Result<String, ToolError>> + Send + 'a>>;
 
+/// Callable model tool registered with the agent.
 pub trait Tool: Send + Sync {
+    /// Returns the stable function-call name.
     fn name(&self) -> &str;
 
+    /// Returns the provider-visible manifest for this tool.
     fn manifest(&self) -> ToolManifest;
 
     /// Formats the model-facing summary of the tool arguments without renderer-owned prefixes.
@@ -30,6 +36,7 @@ pub trait Tool: Send + Sync {
         format!("{} {}", self.name(), input)
     }
 
+    /// Formats visible tool output.
     fn format_output(&self, raw_output: &str, _parsed_output: Option<&Value>) -> ToolDisplay {
         raw_output.to_owned()
     }
@@ -44,15 +51,18 @@ pub trait Tool: Send + Sync {
         self.format_output(raw_output, parsed_output)
     }
 
+    /// Executes the tool with parsed JSON arguments and cooperative cancellation.
     fn execute<'a>(&'a self, arguments: Value, cancellation: Cancellation) -> ToolExecution<'a>;
 }
 
+/// Error returned by a tool implementation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ToolError {
     message: String,
 }
 
 impl ToolError {
+    /// Creates a tool error with a human-readable message.
     pub fn new(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
@@ -68,6 +78,7 @@ impl Display for ToolError {
 
 impl Error for ToolError {}
 
+/// Invalid tool registration metadata.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum ToolRegistrationError {
@@ -127,6 +138,7 @@ impl Display for ToolRegistrationError {
 
 impl Error for ToolRegistrationError {}
 
+/// Registry of callable tools available to an agent run.
 #[derive(Clone, Default)]
 pub struct ToolStorage {
     tools: BTreeMap<String, Arc<dyn Tool>>,
@@ -142,6 +154,7 @@ impl std::fmt::Debug for ToolStorage {
 }
 
 impl ToolStorage {
+    /// Creates storage pre-populated with one validated tool.
     pub fn try_with_tool<T>(tool: T) -> Result<Self, ToolRegistrationError>
     where
         T: Tool + 'static,
@@ -151,6 +164,7 @@ impl ToolStorage {
         Ok(storage)
     }
 
+    /// Validates and registers a tool by manifest name.
     pub fn register<T>(&mut self, tool: T) -> Result<(), ToolRegistrationError>
     where
         T: Tool + 'static,
@@ -167,18 +181,22 @@ impl ToolStorage {
         Ok(())
     }
 
+    /// Returns a registered tool by function-call name.
     pub fn get(&self, name: &str) -> Option<Arc<dyn Tool>> {
         self.tools.get(name).cloned()
     }
 
+    /// Returns provider-visible manifests for all registered tools.
     pub fn manifests(&self) -> Vec<ToolManifest> {
         self.tools.values().map(|tool| tool.manifest()).collect()
     }
 
+    /// Returns true when no tools are registered.
     pub fn is_empty(&self) -> bool {
         self.tools.is_empty()
     }
 
+    /// Executes a provider-requested tool call and returns provider-visible JSON output.
     pub async fn execute(
         &self,
         tool_call: &ProviderToolCall,
@@ -203,6 +221,7 @@ impl ToolStorage {
     }
 }
 
+/// Formats a provider tool-call request as JSON for transcript storage.
 pub fn format_tool_call_request(tool_call: &ProviderToolCall) -> String {
     json!({
         "id": tool_call.id,

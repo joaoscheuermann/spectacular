@@ -13,10 +13,8 @@ pub use context::{
     provider_messages_from_store, validate_context_limits, ContextLimitFailure, ContextPolicy,
     TiktokenTokenCounter, TokenCounter,
 };
-pub use error::AgentError;
-pub use event::{
-    AgentEvent, CommandDelta, CommandFinished, CommandStart, CommandStatus, ContextSummary,
-};
+pub use error::{AgentError, AgentErrorDetails, AgentErrorKind, AgentErrorReport, AgentErrorStage};
+pub use event::{AgentEvent, AgentTranscriptItemId, ContextSummary};
 pub use queue::{RunId, RunQueue, RunRequest};
 pub use schema::{OutputSchema, SchemaError};
 pub use spectacular_llms::{Cancellation, ToolManifest};

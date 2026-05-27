@@ -1,59 +1,318 @@
-fn format_config_report(config: &SpectacularConfig) -> String {
+use super::{chat, entry::AppError, terminal_style};
+use anstyle::Style;
+use spectacular_config::{
+    mask_api_key, ConfigError, ReasoningLevel, SpectacularConfig, TaskModelSlot,
+};
+use spectacular_llms::ProviderError;
+
+pub(super) fn user_facing_error(error: &AppError) -> String {
+    match error {
+        AppError::Chat(chat::ChatError::Exit) => String::new(),
+        AppError::Chat(error) => error.to_string(),
+        AppError::Config(config_error) => format_config_error(config_error),
+        AppError::DebugLog { source } => {
+            format!("Failed to create LLM debug log beside the executable: {source}.")
+        }
+        AppError::InvalidConfigCommand(message) => message.to_owned(),
+        AppError::Provider { source } => format_provider_error(source),
+    }
+}
+
+fn format_provider_error(error: &ProviderError) -> String {
+    match error {
+        ProviderError::CancellationError
+        | ProviderError::InvalidApiKey
+        | ProviderError::UnsupportedProvider { .. }
+        | ProviderError::UnsupportedValidationMode => format_general_provider_error(error),
+        ProviderError::ModelFetchFailed { .. }
+        | ProviderError::NoModelsReturned { .. }
+        | ProviderError::ProviderUnavailable { .. }
+        | ProviderError::NetworkError { .. }
+        | ProviderError::ContextLimitExceeded { .. } => format_provider_availability_error(error),
+        ProviderError::AuthenticationRequired { .. }
+        | ProviderError::AuthenticationFailed { .. } => format_provider_auth_error(error),
+        ProviderError::StreamUnavailable { provider_name } => {
+            format!("{provider_name} streaming is not available yet.")
+        }
+        ProviderError::StreamError { .. } => format_provider_stream_error(error),
+        ProviderError::MalformedResponse { .. }
+        | ProviderError::ResponseParsingFailed { .. }
+        | ProviderError::CapabilityMismatch { .. } => format_provider_response_error(error),
+    }
+}
+
+fn format_general_provider_error(error: &ProviderError) -> String {
+    match error {
+        ProviderError::CancellationError => "Provider call was cancelled.".to_owned(),
+        ProviderError::InvalidApiKey => "Invalid API key.".to_owned(),
+        ProviderError::UnsupportedProvider { provider_id } => {
+            format!("Provider `{provider_id}` is not available.")
+        }
+        ProviderError::UnsupportedValidationMode => {
+            "The selected provider does not support API key validation.".to_owned()
+        }
+        _ => unreachable!("general provider error formatter received another variant"),
+    }
+}
+
+fn format_provider_availability_error(error: &ProviderError) -> String {
+    match error {
+        ProviderError::ModelFetchFailed { provider_name, .. } => {
+            format!("Failed to fetch models from {provider_name}.")
+        }
+        ProviderError::NoModelsReturned { provider_name } => {
+            format!("{provider_name} returned no models.")
+        }
+        ProviderError::ProviderUnavailable { provider_name, .. } => {
+            format!("{provider_name} is unavailable. Try again later.")
+        }
+        ProviderError::NetworkError {
+            provider_name,
+            reason,
+            ..
+        } => format!("{provider_name} network request failed: {reason}."),
+        ProviderError::ContextLimitExceeded {
+            provider_name,
+            reason,
+        } => format!("{provider_name} context limit exceeded: {reason}."),
+        _ => unreachable!("availability formatter received another provider error"),
+    }
+}
+
+fn format_provider_auth_error(error: &ProviderError) -> String {
+    match error {
+        ProviderError::AuthenticationRequired { provider_name } => {
+            format!("{provider_name} authentication is required.")
+        }
+        ProviderError::AuthenticationFailed {
+            provider_name,
+            reason,
+            ..
+        } => format!("{provider_name} authentication failed: {reason}."),
+        _ => unreachable!("auth formatter received another provider error"),
+    }
+}
+
+fn format_provider_stream_error(error: &ProviderError) -> String {
+    let ProviderError::StreamError {
+        provider_name,
+        code,
+        message,
+        ..
+    } = error
+    else {
+        unreachable!("stream formatter received another provider error");
+    };
+
+    match code {
+        Some(code) => format!("{provider_name} stream returned error `{code}`: {message}."),
+        None => format!("{provider_name} stream returned error: {message}."),
+    }
+}
+
+fn format_provider_response_error(error: &ProviderError) -> String {
+    match error {
+        ProviderError::MalformedResponse {
+            provider_name,
+            reason,
+            ..
+        } => format!("{provider_name} returned a malformed response: {reason}."),
+        ProviderError::ResponseParsingFailed {
+            provider_name,
+            reason,
+            ..
+        } => format!("Failed to parse {provider_name} response: {reason}."),
+        ProviderError::CapabilityMismatch {
+            provider_name,
+            capability,
+        } => format!("{provider_name} does not support required capability `{capability}`."),
+        _ => unreachable!("response formatter received another provider error"),
+    }
+}
+
+const SETUP_INSTRUCTION: &str = "Run `spectacular config provider add provider:<provider> apikey:<api-key>` to configure a provider.";
+
+fn format_config_error(error: &ConfigError) -> String {
+    match error {
+        ConfigError::MissingConfigFile { .. }
+        | ConfigError::InvalidJson { .. }
+        | ConfigError::SchemaChanged
+        | ConfigError::ProviderNotConfigured { .. }
+        | ConfigError::MissingProviderApiKey { .. } => format_config_setup_error(error),
+        ConfigError::ModelNotConfigured { .. }
+        | ConfigError::ModelProviderNotConfigured { .. }
+        | ConfigError::MissingTaskModel { .. }
+        | ConfigError::InvalidTaskModelReference { .. } => format_config_model_error(error),
+        ConfigError::ConfigDirUnavailable
+        | ConfigError::ReadFailed { .. }
+        | ConfigError::WriteFailed { .. }
+        | ConfigError::SerializeFailed { .. } => format_config_io_error(error),
+        ConfigError::InvalidProviderType { .. } => format_config_shape_error(error),
+        ConfigError::EmptyValue { .. }
+        | ConfigError::ProviderAlreadyExists { .. }
+        | ConfigError::ModelAlreadyExists { .. } => error.to_string(),
+    }
+}
+
+fn format_config_setup_error(error: &ConfigError) -> String {
+    match error {
+        ConfigError::MissingConfigFile { .. } => {
+            format!("Configuration is missing. {SETUP_INSTRUCTION}")
+        }
+        ConfigError::InvalidJson { path, .. } => format!(
+            "Configuration file contains invalid JSON at {}. {SETUP_INSTRUCTION}",
+            path.display()
+        ),
+        ConfigError::SchemaChanged => format!("{error}. {SETUP_INSTRUCTION}"),
+        ConfigError::ProviderNotConfigured { provider } => format!(
+            "Configuration is incomplete: provider `{provider}` is not configured. {SETUP_INSTRUCTION}"
+        ),
+        ConfigError::MissingProviderApiKey { provider } => format!(
+            "Configuration is incomplete: provider `{provider}` has no credentials. {SETUP_INSTRUCTION}"
+        ),
+        _ => unreachable!("setup formatter received another config error"),
+    }
+}
+
+fn format_config_model_error(error: &ConfigError) -> String {
+    match error {
+        ConfigError::ModelNotConfigured { model } => format!(
+            "Configuration is incomplete: model `{model}` is not configured. Run `spectacular config model add provider:<provider> id:<model-id> reasoning:<level> [name:<name>]`."
+        ),
+        ConfigError::ModelProviderNotConfigured { model, provider } => format!(
+            "Configuration is incomplete: model `{model}` references missing provider `{provider}`."
+        ),
+        ConfigError::MissingTaskModel { slot } => format!(
+            "Configuration is incomplete: missing `{slot}` model assignment. Run `spectacular config task set task:{slot} model:<model-key>`."
+        ),
+        ConfigError::InvalidTaskModelReference { slot, model } => format!(
+            "Configuration is incomplete: `{slot}` references missing model `{model}`. Run `spectacular config task set task:{slot} model:<model-key>`."
+        ),
+        _ => unreachable!("model formatter received another config error"),
+    }
+}
+
+fn format_config_io_error(error: &ConfigError) -> String {
+    match error {
+        ConfigError::ConfigDirUnavailable => {
+            "Could not resolve the Spectacular config directory.".to_owned()
+        }
+        ConfigError::ReadFailed { path, .. } => {
+            format!("Failed to read configuration at {}.", path.display())
+        }
+        ConfigError::WriteFailed { path, .. } => {
+            format!("Failed to write configuration at {}.", path.display())
+        }
+        ConfigError::SerializeFailed { path, .. } => {
+            format!("Failed to serialize configuration at {}.", path.display())
+        }
+        _ => unreachable!("io formatter received another config error"),
+    }
+}
+
+fn format_config_shape_error(error: &ConfigError) -> String {
+    let ConfigError::InvalidProviderType { provider } = error else {
+        unreachable!("shape formatter received another config error");
+    };
+
+    format!("Configuration is incomplete: provider `{provider}` has no type.")
+}
+
+pub(super) fn format_config_report(config: &SpectacularConfig) -> String {
     let mut lines = Vec::new();
 
+    append_report_title(&mut lines);
+    append_provider_section(&mut lines, config);
+    append_model_section(&mut lines, config);
+    append_task_section(&mut lines, config);
+
+    lines.join("\n")
+}
+
+fn append_report_title(lines: &mut Vec<String>) {
     lines.push(paint(title_style(), "Spectacular config"));
     lines.push(String::new());
+}
+
+fn append_provider_section(lines: &mut Vec<String>, config: &SpectacularConfig) {
     lines.push(paint(section_style(), "Providers"));
 
     if config.providers.is_empty() {
         lines.push(format!("  {}", paint(missing_style(), "None")));
     } else {
         for (name, provider) in &config.providers {
-            let credential = match provider.auth_mode() {
-                Some(spectacular_config::ProviderAuthMode::Oauth) => "authenticated".to_owned(),
-                _ => mask_api_key(provider.api_key()),
-            };
-            lines.push(format!(
-                "  {} {} {} {}",
-                paint(provider_style(), name),
-                paint(label_style(), "type:"),
-                paint(provider_style(), &provider.provider_type),
-                paint(secret_style(), credential)
-            ));
+            append_provider_report(lines, name, provider);
         }
     }
+}
 
+fn append_provider_report(
+    lines: &mut Vec<String>,
+    name: &str,
+    provider: &spectacular_config::ProviderConfig,
+) {
+    lines.push(format!(
+        "  {} {} {} {}",
+        paint(provider_style(), name),
+        paint(label_style(), "type:"),
+        paint(provider_style(), &provider.provider_type),
+        paint(secret_style(), provider_credential(provider))
+    ));
+}
+
+fn provider_credential(provider: &spectacular_config::ProviderConfig) -> String {
+    match provider.auth_mode() {
+        Some(spectacular_config::ProviderAuthMode::Oauth) => "authenticated".to_owned(),
+        _ => mask_api_key(provider.api_key()),
+    }
+}
+
+fn append_model_section(lines: &mut Vec<String>, config: &SpectacularConfig) {
     lines.push(String::new());
     lines.push(paint(section_style(), "Models"));
+
     if config.models.is_empty() {
         lines.push(format!("  {}", paint(missing_style(), "None")));
     } else {
         for (name, model) in &config.models {
-            let provider_state = if config.providers.contains_key(&model.provider) {
-                String::new()
-            } else {
-                format!(" {}", paint(missing_style(), "(provider missing)"))
-            };
-            lines.push(format!(
-                "  {} {} {} {} {} {}{}",
-                paint(model_style(), name),
-                paint(label_style(), "provider:"),
-                paint(provider_style(), &model.provider),
-                paint(label_style(), "id:"),
-                paint(model_style(), &model.model),
-                paint_reasoning(model.reasoning, ""),
-                provider_state
-            ));
+            append_model_report(lines, config, name, model);
         }
     }
+}
 
+fn append_model_report(
+    lines: &mut Vec<String>,
+    config: &SpectacularConfig,
+    name: &str,
+    model: &spectacular_config::ModelConfig,
+) {
+    lines.push(format!(
+        "  {} {} {} {} {} {}{}",
+        paint(model_style(), name),
+        paint(label_style(), "provider:"),
+        paint(provider_style(), &model.provider),
+        paint(label_style(), "id:"),
+        paint(model_style(), &model.model),
+        paint_reasoning(model.reasoning, ""),
+        provider_state(config, &model.provider)
+    ));
+}
+
+fn provider_state(config: &SpectacularConfig, provider: &str) -> String {
+    if config.providers.contains_key(provider) {
+        String::new()
+    } else {
+        format!(" {}", paint(missing_style(), "(provider missing)"))
+    }
+}
+
+fn append_task_section(lines: &mut Vec<String>, config: &SpectacularConfig) {
     lines.push(String::new());
     lines.push(paint(section_style(), "Tasks"));
-    for slot in TaskModelSlot::ALL {
-        append_task_report(&mut lines, config, slot);
-    }
 
-    lines.join("\n")
+    for slot in TaskModelSlot::ALL {
+        append_task_report(lines, config, slot);
+    }
 }
 
 fn append_task_report(lines: &mut Vec<String>, config: &SpectacularConfig, slot: TaskModelSlot) {
@@ -83,7 +342,7 @@ fn append_task_report(lines: &mut Vec<String>, config: &SpectacularConfig, slot:
     ));
 }
 
-fn format_provider_added_output(name: &str, provider_type: &str) -> String {
+pub(super) fn format_provider_added_output(name: &str, provider_type: &str) -> String {
     format!(
         "{} {}\n  {} {}\n  {} {}",
         paint(success_style(), "[saved]"),
@@ -95,7 +354,7 @@ fn format_provider_added_output(name: &str, provider_type: &str) -> String {
     )
 }
 
-fn format_provider_removed_output(name: &str) -> String {
+pub(super) fn format_provider_removed_output(name: &str) -> String {
     format!(
         "{} {}\n  {} {}",
         paint(success_style(), "[removed]"),
@@ -105,7 +364,7 @@ fn format_provider_removed_output(name: &str) -> String {
     )
 }
 
-fn format_model_saved_output(action: &str, key: &str) -> String {
+pub(super) fn format_model_saved_output(action: &str, key: &str) -> String {
     format!(
         "{} {}\n  {} {}",
         paint(success_style(), "[saved]"),
@@ -115,7 +374,10 @@ fn format_model_saved_output(action: &str, key: &str) -> String {
     )
 }
 
-fn format_model_remove_confirmation_output(name: &str, references: &[TaskModelSlot]) -> String {
+pub(super) fn format_model_remove_confirmation_output(
+    name: &str,
+    references: &[TaskModelSlot],
+) -> String {
     if references.is_empty() {
         return format_confirmation_required_output(
             "Model removal requires confirm:true. No tasks currently reference this model.",
@@ -132,7 +394,7 @@ fn format_model_remove_confirmation_output(name: &str, references: &[TaskModelSl
     ))
 }
 
-fn format_model_removed_output(name: &str, references: &[TaskModelSlot]) -> String {
+pub(super) fn format_model_removed_output(name: &str, references: &[TaskModelSlot]) -> String {
     let warning = if references.is_empty() {
         String::new()
     } else {
@@ -160,7 +422,7 @@ fn format_model_removed_output(name: &str, references: &[TaskModelSlot]) -> Stri
     )
 }
 
-fn format_task_saved_output(slot: TaskModelSlot, model: &str) -> String {
+pub(super) fn format_task_saved_output(slot: TaskModelSlot, model: &str) -> String {
     format!(
         "{} {}\n  {} {}\n  {} {}",
         paint(success_style(), "[saved]"),
@@ -172,7 +434,7 @@ fn format_task_saved_output(slot: TaskModelSlot, model: &str) -> String {
     )
 }
 
-fn format_confirmation_required_output(message: &str) -> String {
+pub(super) fn format_confirmation_required_output(message: &str) -> String {
     format!(
         "{} {}",
         paint(missing_style(), "[confirmation required]"),

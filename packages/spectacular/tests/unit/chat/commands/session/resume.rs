@@ -1,10 +1,9 @@
     use super::*;
     use crate::chat::commands::{
-        test_support::NoopRunner, ChatCommandContext, ChatCommandControl, ChatCommandResult,
+        ChatCommandContext, ChatCommandControl, ChatCommandResult,
     };
     use crate::chat::model::ChatModel;
-    use crate::chat::renderer::Renderer;
-    use crate::chat::session::SessionManager;
+        use crate::chat::session::SessionManager;
     use crate::chat::RuntimeSelection;
     use spectacular_agent::ToolStorage;
     use spectacular_config::ReasoningLevel;
@@ -17,11 +16,9 @@
         let mut model = test_model();
         let started = model.start_new_session().unwrap();
         model.start_new_session().unwrap();
-        let renderer = Renderer::default();
         let tools = ToolStorage::default();
-        let runner = NoopRunner;
         let mut control = ChatCommandControl::default();
-        let context = ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
+        let context = ChatCommandContext::new(&mut model, &tools, &mut control);
 
         let result = execute(context, vec![started.id]).await;
 

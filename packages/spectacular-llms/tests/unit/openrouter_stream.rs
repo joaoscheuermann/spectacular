@@ -1,4 +1,19 @@
 #[test]
+fn openrouter_http_status_diagnostics_preserve_status_code_and_redacted_body() {
+    let body = r#"{"error":{"code":401,"message":"bad sk-or-v1-secret_value"}}"#;
+
+    let diagnostics = http_status_body_diagnostics(401, body, "chat_response_error_body");
+
+    assert_eq!(diagnostics.stage, Some(ProviderErrorStage::HttpStatus));
+    assert_eq!(diagnostics.http_status, Some(401));
+    assert_eq!(diagnostics.provider_code.as_deref(), Some("401"));
+    assert_eq!(diagnostics.debug_events, vec!["chat_response_error_body"]);
+    let excerpt = diagnostics.excerpt.unwrap();
+    assert!(excerpt.contains("[redacted]"));
+    assert!(!excerpt.contains("sk-or-v1-secret_value"));
+}
+
+#[test]
 fn openrouter_chat_chunks_emit_tool_calls_only_on_tool_call_finish() {
     let mut accumulator = OpenRouterToolCallAccumulator::default();
 
@@ -196,7 +211,7 @@ fn openrouter_chat_chunk_accepts_delta_finish_reason_from_tool_call_guide_shape(
 }
 
 #[test]
-fn openrouter_tool_call_finish_without_tool_data_reports_raw_response_chunk() {
+fn openrouter_tool_call_finish_without_tool_data_stores_response_chunk_diagnostics() {
     let payload = r#"{"id":"gen-1777903368-VISjaqh4vj28SScWcgcH","object":"chat.completion.chunk","created":1777903368,"model":"google/gemini-3.1-pro-preview-20260219","provider":"Google","choices":[{"index":0,"delta":{"content":"","role":"assistant"},"finish_reason":"tool_calls","native_finish_reason":"STOP"}],"usage":{"prompt_tokens":818,"completion_tokens":260,"total_tokens":1078,"cost":0.004756,"is_byok":false,"prompt_tokens_details":{"cached_tokens":0,"cache_write_tokens":0,"audio_tokens":0,"video_tokens":0},"cost_details":{"upstream_inference_cost":0.004756,"upstream_inference_prompt_cost":0.001636,"upstream_inference_completions_cost":0.00312},"completion_tokens_details":{"reasoning_tokens":228,"image_tokens":0,"audio_tokens":0}}}"#;
 
     let error = parse_openrouter_chat_chunk(payload).unwrap_err();
@@ -207,7 +222,20 @@ fn openrouter_tool_call_finish_without_tool_data_reports_raw_response_chunk() {
     assert!(message.contains("native_finish_reason=STOP"));
     assert!(message
         .contains("selected model/provider route stopped without emitting a native function call"));
-    assert!(message.contains(payload));
+    assert!(!message.contains(payload));
+    let ProviderError::MalformedResponse {
+        diagnostics: Some(diagnostics),
+        ..
+    } = error
+    else {
+        panic!("expected malformed response diagnostics");
+    };
+    assert_eq!(diagnostics.stage, Some(ProviderErrorStage::PayloadParse));
+    assert_eq!(diagnostics.excerpt.as_deref(), Some(payload));
+    assert_eq!(
+        diagnostics.debug_events,
+        vec!["sse_payload".to_owned(), "payload_parse_error".to_owned()]
+    );
 }
 
 #[test]
@@ -295,19 +323,45 @@ fn openrouter_chat_chunk_maps_content_filter_finish_reason() {
 fn openrouter_chat_chunk_reports_top_level_stream_errors() {
     let payload = r#"{"error":{"code":429,"message":"rate limited"}}"#;
     let error = parse_openrouter_chat_chunk(payload).unwrap_err();
+    let rendered = error.to_string();
 
-    assert!(matches!(error, ProviderError::StreamError { .. }));
-    let message = error.to_string();
-    assert!(message.contains("429"));
-    assert!(message.contains("rate limited"));
-    assert!(message.contains(payload));
+    let ProviderError::StreamError {
+        code,
+        message,
+        diagnostics: Some(diagnostics),
+        ..
+    } = error
+    else {
+        panic!("expected stream error");
+    };
+    assert_eq!(code.as_deref(), Some("429"));
+    assert_eq!(message, "rate limited");
+    assert!(rendered.contains("429"));
+    assert!(rendered.contains("rate limited"));
+    assert!(!rendered.contains(payload));
+    assert_eq!(diagnostics.stage, Some(ProviderErrorStage::ProviderStream));
+    assert_eq!(diagnostics.provider_code.as_deref(), Some("429"));
+    assert_eq!(diagnostics.excerpt.as_deref(), Some(payload));
+    assert_eq!(diagnostics.debug_events, vec!["sse_payload".to_owned()]);
 }
 
 #[test]
 fn malformed_openrouter_chat_chunk_returns_provider_error() {
     let error = parse_openrouter_chat_chunk("{not json").unwrap_err();
 
-    assert!(matches!(error, ProviderError::ResponseParsingFailed { .. }));
+    let ProviderError::ResponseParsingFailed {
+        diagnostics: Some(diagnostics),
+        ..
+    } = error
+    else {
+        panic!("expected parse failure");
+    };
+    assert_eq!(diagnostics.stage, Some(ProviderErrorStage::PayloadParse));
+    assert_eq!(diagnostics.excerpt.as_deref(), Some("{not json"));
+    assert_eq!(
+        diagnostics.debug_events,
+        vec!["sse_payload".to_owned(), "payload_parse_error".to_owned()]
+    );
 }
 
 #[test]

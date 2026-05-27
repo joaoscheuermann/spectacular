@@ -1,21 +1,24 @@
 use super::*;
-use crate::chat::commands::test_support::NoopRunner;
-use crate::chat::RuntimeSelection;
-use spectacular_agent::AgentEvent;
+use crate::chat::model::ChatModel;
+use crate::chat::selection::{
+    SelectionPromptAnswer, SelectionPromptChoice, SelectionPromptRequest,
+};
+use crate::chat::{ChatError, RuntimeSelection};
+use spectacular_agent::{AgentEvent, ToolStorage};
+use spectacular_commands::CommandInvocation;
 use spectacular_config::ReasoningLevel;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::sync::mpsc;
 
 /// Verifies that adapter executes registered command success.
 #[tokio::test]
 async fn adapter_executes_registered_command_success() {
     let adapter = ChatCommandAdapter::new([session::clear::command()]).unwrap();
     let mut model = test_model();
-    let renderer = Renderer::default();
     let tools = ToolStorage::default();
-    let runner = NoopRunner;
     let mut control = ChatCommandControl::default();
-    let context = ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
+    let context = ChatCommandContext::new(&mut model, &tools, &mut control);
 
     let result = adapter
         .execute(
@@ -160,17 +163,13 @@ fn provider_completion_uses_provider_type_for_add_and_auth() {
 #[test]
 fn context_append_agent_event_persists_chat_record() {
     let mut model = test_model();
-    let renderer = Renderer::default();
     let tools = ToolStorage::default();
-    let runner = NoopRunner;
     let mut control = ChatCommandControl::default();
     {
-        let context = ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
+        let context = ChatCommandContext::new(&mut model, &tools, &mut control);
 
         context
-            .append_agent_event(&AgentEvent::UserPrompt {
-                content: "persist me".to_owned(),
-            })
+            .append_agent_event(&AgentEvent::user_prompt("persist me"))
             .unwrap();
     }
 
@@ -185,29 +184,179 @@ fn context_append_agent_event_persists_chat_record() {
 #[tokio::test]
 async fn context_render_records_accepts_transient_records() {
     let mut model = test_model();
-    let renderer = Renderer::default();
     let tools = ToolStorage::default();
-    let runner = NoopRunner;
     let mut control = ChatCommandControl::default();
-    let context = ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
+    let context = ChatCommandContext::new(&mut model, &tools, &mut control);
 
     context.render_records(&[]).await.unwrap();
+}
+
+/// Verifies TUI clear screen dispatches only a visual transcript clear.
+#[test]
+fn context_clear_screen_when_tui_dispatches_transcript_cleared() {
+    let mut model = test_model();
+    let tools = ToolStorage::default();
+    let mut control = ChatCommandControl::default();
+    let (_selection_sender, mut selection_receiver) = mpsc::unbounded_channel();
+    let mut actions = Vec::new();
+
+    {
+        let mut dispatch = |action| actions.push(action);
+        let context = ChatCommandContext::new_tui(
+            &mut model,
+            &tools,
+            &mut control,
+            None,
+            &mut dispatch,
+            &mut selection_receiver,
+        );
+        context.clear_screen();
+    }
+
+    assert_eq!(
+        actions,
+        vec![spectacular_tui::ChatTuiAction::TranscriptCleared]
+    );
 }
 
 /// Verifies that context render history accepts transient history.
 #[test]
 fn context_render_history_accepts_transient_history() {
     let mut model = test_model();
-    let renderer = Renderer::default();
     let tools = ToolStorage::default();
     let table = model
         .history(crate::chat::session::HistoryQuery::FirstPage)
         .unwrap();
-    let runner = NoopRunner;
     let mut control = ChatCommandControl::default();
-    let context = ChatCommandContext::new(&mut model, &renderer, &tools, &runner, &mut control);
+    let context = ChatCommandContext::new(&mut model, &tools, &mut control);
 
     context.render_history(&table);
+}
+
+/// Verifies a TUI command context round-trips any command-owned selection request.
+#[tokio::test]
+async fn context_tui_selection_prompt_round_trips_command_request() {
+    let mut model = test_model();
+    let tools = ToolStorage::default();
+    let mut control = ChatCommandControl::default();
+    let (selection_sender, mut selection_receiver) = mpsc::unbounded_channel();
+    selection_sender
+        .send(spectacular_tui::Intent::SelectionPromptSubmitted(
+            spectacular_tui::SelectionPromptAnswer {
+                choice: spectacular_tui::SelectionPromptChoice::Custom("typed".to_owned()),
+                comment: Some("note".to_owned()),
+            },
+        ))
+        .unwrap();
+    let mut actions = Vec::new();
+
+    let answer = {
+        let mut dispatch = |action| actions.push(action);
+        let context = ChatCommandContext::new_tui(
+            &mut model,
+            &tools,
+            &mut control,
+            None,
+            &mut dispatch,
+            &mut selection_receiver,
+        );
+        context
+            .ask(
+                SelectionPromptRequest::new("Pick one", "Choose carefully", vec!["alpha".into()])
+                    .with_inputs(true, true),
+            )
+            .await
+            .unwrap()
+    };
+
+    assert_eq!(
+        answer,
+        SelectionPromptAnswer {
+            choice: SelectionPromptChoice::Custom("typed".to_owned()),
+            comment: Some("note".to_owned()),
+        }
+    );
+    assert!(matches!(
+        &actions[0],
+        spectacular_tui::ChatTuiAction::SelectionPromptChanged(Some(selection))
+            if selection.title == "Pick one"
+                && selection.description == "Choose carefully"
+                && selection.options == vec!["alpha".to_owned()]
+                && selection.allow_custom
+                && selection.allow_comment
+    ));
+    assert!(matches!(
+        actions.last(),
+        Some(spectacular_tui::ChatTuiAction::SelectionPromptSubmitted(_))
+    ));
+}
+
+/// Verifies TUI selection cancellation maps to the command prompt exit contract.
+#[tokio::test]
+async fn context_tui_selection_cancel_returns_exit() {
+    let mut model = test_model();
+    let tools = ToolStorage::default();
+    let mut control = ChatCommandControl::default();
+    let (selection_sender, mut selection_receiver) = mpsc::unbounded_channel();
+    selection_sender
+        .send(spectacular_tui::Intent::SelectionPromptCancelled)
+        .unwrap();
+    let mut actions = Vec::new();
+
+    let result = {
+        let mut dispatch = |action| actions.push(action);
+        let context = ChatCommandContext::new_tui(
+            &mut model,
+            &tools,
+            &mut control,
+            None,
+            &mut dispatch,
+            &mut selection_receiver,
+        );
+        context
+            .ask(SelectionPromptRequest::new(
+                "Pick one",
+                "",
+                vec!["alpha".into()],
+            ))
+            .await
+    };
+
+    assert!(matches!(result, Err(ChatError::Exit)));
+    assert!(matches!(
+        actions.last(),
+        Some(spectacular_tui::ChatTuiAction::SelectionPromptCancelled)
+    ));
+}
+
+/// Verifies TUI selection requests fail fast when there is no selectable answer.
+#[tokio::test]
+async fn context_tui_selection_prompt_requires_option_or_custom_input() {
+    let mut model = test_model();
+    let tools = ToolStorage::default();
+    let mut control = ChatCommandControl::default();
+    let (_selection_sender, mut selection_receiver) = mpsc::unbounded_channel();
+    let mut actions = Vec::new();
+
+    let result = {
+        let mut dispatch = |action| actions.push(action);
+        let context = ChatCommandContext::new_tui(
+            &mut model,
+            &tools,
+            &mut control,
+            None,
+            &mut dispatch,
+            &mut selection_receiver,
+        );
+        context
+            .ask(SelectionPromptRequest::new("Pick one", "", Vec::new()))
+            .await
+    };
+
+    assert!(
+        matches!(result, Err(ChatError::Session(message)) if message == "selection prompt requires an option or custom input")
+    );
+    assert!(actions.is_empty());
 }
 
 /// Builds a chat model configured for command tests.

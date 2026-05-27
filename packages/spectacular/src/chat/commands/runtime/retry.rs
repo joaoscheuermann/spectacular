@@ -31,15 +31,14 @@ fn execute<'a>(mut context: ChatCommandContext<'a>, args: Vec<String>) -> ChatCo
         }
         let request = ChatRunRequestModel {
             prompt,
+            prompt_event_id: None,
             render_user_prompt: false,
             retry_existing_prompt: true,
             runtime: context.model.runtime().clone(),
         };
 
         context.notice("retrying latest prompt...");
-        if let Err(error) = context.run_prompt(request).await {
-            return ChatCommandResult::error(error.to_string());
-        }
+        context.request_prompt_run(request);
 
         ChatCommandResult::success()
     })

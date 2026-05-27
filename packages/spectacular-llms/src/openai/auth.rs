@@ -182,6 +182,7 @@ pub fn openai_auth_error(reason: impl Into<String>) -> ProviderError {
     ProviderError::AuthenticationFailed {
         provider_name: "OpenAI".to_owned(),
         reason: reason.into(),
+        diagnostics: None,
     }
 }
 

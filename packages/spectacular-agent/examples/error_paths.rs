@@ -52,6 +52,7 @@ fn main() {
         ProviderError::NetworkError {
             provider_name: "FakeProvider".to_owned(),
             reason: "disconnect".to_owned(),
+            diagnostics: None,
         },
     );
     run_case(

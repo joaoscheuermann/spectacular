@@ -27,10 +27,11 @@ jobs:
 
       - run: npm ci
 
-      # Set up Rust toolchain for running cargo tests
+      # Set up Rust toolchain and clippy for Nx Rust lint targets
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           cache: true
+          components: clippy
 
       # Install cargo-nextest for faster/parallel test execution
       - uses: taiki-e/install-action@v2

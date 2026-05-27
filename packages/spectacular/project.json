@@ -5,16 +5,10 @@
   "sourceRoot": "packages/spectacular/src",
   "targets": {
     "build": {
-      "cache": true,
-      "executor": "@monodon/rust:build",
+      "executor": "@monodon/rust:check",
       "outputs": ["{options.target-dir}"],
       "options": {
         "target-dir": "dist/target/spectacular"
-      },
-      "configurations": {
-        "production": {
-          "release": true
-        }
       }
     },
     "test": {

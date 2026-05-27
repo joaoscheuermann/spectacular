@@ -77,34 +77,11 @@ pub fn provider_for_runtime(
     debug_logger: LlmDebugLogger,
     config_io: ChatConfigIo,
 ) -> Result<ChatProvider, ChatError> {
-    if runtime.provider_type == OPENROUTER_PROVIDER_ID {
-        return Ok(ChatProvider::OpenRouter(
-            OpenRouterProvider::with_debug_logger(runtime.api_key.clone(), debug_logger),
-        ));
+    match runtime.provider_type.as_str() {
+        OPENROUTER_PROVIDER_ID => openrouter_provider(runtime.api_key.clone(), debug_logger),
+        OPENAI_PROVIDER_ID => openai_provider_for_runtime(runtime, debug_logger, config_io),
+        provider_type => unsupported_provider_type(provider_type),
     }
-    if runtime.provider_type == OPENAI_PROVIDER_ID {
-        if runtime.provider_auth == Some(ProviderAuthMode::ApiKey) {
-            return Ok(ChatProvider::OpenAi(
-                OpenAiProvider::with_api_key_and_debug_logger(
-                    runtime.api_key.clone(),
-                    debug_logger,
-                ),
-            ));
-        }
-
-        return Ok(ChatProvider::OpenAi(OpenAiProvider::with_debug_logger(
-            Arc::new(config_openai_auth_store(
-                runtime.provider.clone(),
-                config_io,
-            )),
-            debug_logger,
-        )));
-    }
-
-    Err(ChatError::Session(format!(
-        "provider type `{}` is not supported by chat",
-        runtime.provider_type
-    )))
 }
 
 /// Builds the provider from raw config parts before a full runtime selection exists.
@@ -113,24 +90,59 @@ pub fn provider_for_parts(
     api_key: String,
     debug_logger: LlmDebugLogger,
 ) -> Result<ChatProvider, ChatError> {
-    if provider_type == OPENROUTER_PROVIDER_ID {
-        return Ok(ChatProvider::OpenRouter(
-            OpenRouterProvider::with_debug_logger(api_key, debug_logger),
+    match provider_type {
+        OPENROUTER_PROVIDER_ID => openrouter_provider(api_key, debug_logger),
+        OPENAI_PROVIDER_ID => openai_provider_for_parts(api_key, debug_logger),
+        provider_type => unsupported_provider_type(provider_type),
+    }
+}
+
+fn openrouter_provider(
+    api_key: String,
+    debug_logger: LlmDebugLogger,
+) -> Result<ChatProvider, ChatError> {
+    Ok(ChatProvider::OpenRouter(
+        OpenRouterProvider::with_debug_logger(api_key, debug_logger),
+    ))
+}
+
+fn openai_provider_for_runtime(
+    runtime: &RuntimeSelection,
+    debug_logger: LlmDebugLogger,
+    config_io: ChatConfigIo,
+) -> Result<ChatProvider, ChatError> {
+    if runtime.provider_auth == Some(ProviderAuthMode::ApiKey) {
+        return Ok(ChatProvider::OpenAi(
+            OpenAiProvider::with_api_key_and_debug_logger(runtime.api_key.clone(), debug_logger),
         ));
     }
-    if provider_type == OPENAI_PROVIDER_ID {
-        if !api_key.trim().is_empty() {
-            return Ok(ChatProvider::OpenAi(
-                OpenAiProvider::with_api_key_and_debug_logger(api_key, debug_logger),
-            ));
-        }
 
-        return Ok(ChatProvider::OpenAi(OpenAiProvider::with_debug_logger(
-            Arc::new(EmptyOpenAiAuthStore),
-            debug_logger,
-        )));
+    Ok(ChatProvider::OpenAi(OpenAiProvider::with_debug_logger(
+        Arc::new(config_openai_auth_store(
+            runtime.provider.clone(),
+            config_io,
+        )),
+        debug_logger,
+    )))
+}
+
+fn openai_provider_for_parts(
+    api_key: String,
+    debug_logger: LlmDebugLogger,
+) -> Result<ChatProvider, ChatError> {
+    if !api_key.trim().is_empty() {
+        return Ok(ChatProvider::OpenAi(
+            OpenAiProvider::with_api_key_and_debug_logger(api_key, debug_logger),
+        ));
     }
 
+    Ok(ChatProvider::OpenAi(OpenAiProvider::with_debug_logger(
+        Arc::new(EmptyOpenAiAuthStore),
+        debug_logger,
+    )))
+}
+
+fn unsupported_provider_type(provider_type: &str) -> Result<ChatProvider, ChatError> {
     Err(ChatError::Session(format!(
         "provider type `{provider_type}` is not supported by chat"
     )))

@@ -1,7 +1,7 @@
 use super::dto::OpenAiStreamMessage;
 use crate::{
-    FinishReason, MessageDelta, ProviderError, ProviderFinished, ProviderStreamEvent,
-    ReasoningDelta,
+    FinishReason, MessageDelta, ProviderError, ProviderErrorDiagnostics, ProviderErrorStage,
+    ProviderFinished, ProviderStreamEvent, ReasoningDelta,
 };
 
 /// Parses one OpenAI Responses SSE data payload into provider events.
@@ -11,7 +11,15 @@ pub(crate) fn parse_openai_response_event(
     let event: OpenAiStreamMessage =
         serde_json::from_str(payload).map_err(|error| ProviderError::ResponseParsingFailed {
             provider_name: "OpenAI".to_owned(),
-            reason: format!("{error}; OpenAI response event JSON: {payload}"),
+            reason: error.to_string(),
+            diagnostics: Some(
+                payload_diagnostics(
+                    ProviderErrorStage::PayloadParse,
+                    payload,
+                    &["sse_payload", "payload_parse_error"],
+                )
+                .boxed(),
+            ),
         })?;
 
     match event.kind.as_str() {
@@ -82,7 +90,15 @@ fn parse_output_item_done(
         item.into_provider_tool_call()
             .map_err(|error| ProviderError::MalformedResponse {
                 provider_name: "OpenAI".to_owned(),
-                reason: format!("{error}; OpenAI response event JSON: {payload}"),
+                reason: error.to_string(),
+                diagnostics: Some(
+                    payload_diagnostics(
+                        ProviderErrorStage::PayloadParse,
+                        payload,
+                        &["sse_payload", "payload_parse_error"],
+                    )
+                    .boxed(),
+                ),
             })?;
     Ok(vec![ProviderStreamEvent::Finished(ProviderFinished {
         finish_reason: FinishReason::ToolCalls,
@@ -101,7 +117,15 @@ fn openai_failed_response(event: OpenAiStreamMessage, payload: &str) -> Provider
     ProviderError::StreamError {
         provider_name: "OpenAI".to_owned(),
         code: Some(status),
-        message: format!("OpenAI response failed; OpenAI response event JSON: {payload}"),
+        message: "OpenAI response failed".to_owned(),
+        diagnostics: Some(
+            payload_diagnostics(
+                ProviderErrorStage::ProviderStream,
+                payload,
+                &["sse_payload"],
+            )
+            .boxed(),
+        ),
     }
 }
 
@@ -111,15 +135,53 @@ fn openai_stream_error(event: OpenAiStreamMessage, payload: &str) -> ProviderErr
         return ProviderError::StreamError {
             provider_name: "OpenAI".to_owned(),
             code: None,
-            message: format!("OpenAI stream returned error; OpenAI response event JSON: {payload}"),
+            message: "OpenAI stream returned error".to_owned(),
+            diagnostics: Some(
+                payload_diagnostics(
+                    ProviderErrorStage::ProviderStream,
+                    payload,
+                    &["sse_payload"],
+                )
+                .boxed(),
+            ),
         };
     };
+
+    let diagnostics = error.code.as_ref().map_or_else(
+        || {
+            payload_diagnostics(
+                ProviderErrorStage::ProviderStream,
+                payload,
+                &["sse_payload"],
+            )
+        },
+        |code| {
+            payload_diagnostics(
+                ProviderErrorStage::ProviderStream,
+                payload,
+                &["sse_payload"],
+            )
+            .with_provider_code(code)
+        },
+    );
 
     ProviderError::StreamError {
         provider_name: "OpenAI".to_owned(),
         code: error.code,
-        message: format!("{}; OpenAI response event JSON: {payload}", error.message),
+        message: error.message,
+        diagnostics: Some(diagnostics.boxed()),
     }
+}
+
+fn payload_diagnostics(
+    stage: ProviderErrorStage,
+    payload: &str,
+    debug_events: &[&str],
+) -> ProviderErrorDiagnostics {
+    debug_events.iter().fold(
+        ProviderErrorDiagnostics::new(stage).with_excerpt(payload),
+        |diagnostics, event| diagnostics.with_debug_event(*event),
+    )
 }
 
 #[cfg(test)]

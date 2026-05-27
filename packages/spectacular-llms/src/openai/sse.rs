@@ -1,4 +1,4 @@
-use crate::ProviderError;
+use crate::{ProviderError, ProviderErrorDiagnostics, ProviderErrorStage};
 
 #[derive(Default)]
 pub(crate) struct OpenAiSseParser {
@@ -18,6 +18,11 @@ impl OpenAiSseParser {
                 String::from_utf8(event).map_err(|error| ProviderError::ResponseParsingFailed {
                     provider_name: "OpenAI".to_owned(),
                     reason: error.to_string(),
+                    diagnostics: Some(
+                        ProviderErrorDiagnostics::new(ProviderErrorStage::SseDecode)
+                            .with_debug_event("sse_parse_error")
+                            .boxed(),
+                    ),
                 })?;
             if let Some(payload) = sse_payload(&event) {
                 payloads.push(payload);

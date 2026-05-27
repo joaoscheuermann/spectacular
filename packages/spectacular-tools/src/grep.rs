@@ -10,6 +10,7 @@ use spectacular_agent::{Cancellation, Tool, ToolDisplay, ToolExecution, ToolMani
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// Provider-visible name for the workspace content search tool.
 pub const GREP_TOOL_NAME: &str = "grep";
 
 const DEFAULT_LIMIT: usize = 100;
@@ -18,6 +19,7 @@ const MAX_LINE_LENGTH: usize = 500;
 
 const GREP_TOOL_DESCRIPTION: &str = "Search file contents for a pattern. Returns matching lines with file paths and line numbers. Respects .gitignore. Output is truncated to 100 matches or 50KB (whichever is hit first). Long lines are truncated to 500 chars.";
 
+/// Tool that searches workspace file contents with regex or literal patterns.
 #[derive(Clone, Debug)]
 pub struct GrepTool {
     workspace_root: PathBuf,
@@ -144,23 +146,35 @@ struct GrepInput {
     limit: Option<usize>,
 }
 
+/// One content search match with optional surrounding context.
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct GrepMatch {
+    /// Matching file path relative to the requested search root.
     pub file: String,
+    /// One-based source line containing the match.
     pub line: usize,
+    /// Matched source line, truncated when needed for output bounds.
     pub text: String,
+    /// Context lines before the match when requested.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub context_before: Vec<String>,
+    /// Context lines after the match when requested.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub context_after: Vec<String>,
 }
 
+/// Structured result returned by the content search tool.
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct GrepOutput {
+    /// Matches included in the bounded response.
     pub matches: Vec<GrepMatch>,
+    /// Number of matches included before truncation.
     pub total: usize,
+    /// Whether count or byte limits omitted additional matches.
     pub truncated: bool,
+    /// Whether one or more line values were shortened.
     pub lines_truncated: bool,
+    /// User-facing failure message for invalid inputs or missing paths.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
