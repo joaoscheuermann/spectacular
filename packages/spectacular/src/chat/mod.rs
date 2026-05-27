@@ -29,8 +29,8 @@ use std::fmt::{self, Display};
 use std::io;
 use std::path::PathBuf;
 
-/// Runs the IOCraft TUI chat loop.
-pub async fn run(debug_logger: LlmDebugLogger) -> Result<(), ChatError> {
+/// Runs the IOCraft TUI chat loop and returns the closed session ID.
+pub async fn run(debug_logger: LlmDebugLogger) -> Result<String, ChatError> {
     tui::run(debug_logger).await
 }
 

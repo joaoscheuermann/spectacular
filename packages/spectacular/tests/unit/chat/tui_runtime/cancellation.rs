@@ -32,6 +32,7 @@ async fn cancel_signal_reaches_active_prompt_run() {
     let (cancellation_sender, cancellation_receiver) = mpsc::unbounded_channel();
     let (_selection_sender, selection_receiver) = mpsc::unbounded_channel();
     let (state_sender, mut state_receiver) = mpsc::unbounded_channel();
+    let expected_session_id = controller.current_session_id().to_owned();
     let controller_loop = run_controller_loop(
         controller,
         intent_receiver,
@@ -64,7 +65,7 @@ async fn cancel_signal_reaches_active_prompt_run() {
         intent_sender.send(Intent::RequestExit).unwrap();
     };
     let (controller_result, _) = tokio::join!(controller_loop, driver);
-    controller_result.unwrap();
+    assert_eq!(controller_result.unwrap(), expected_session_id);
 }
 
 /// Verifies cancellation reaches a prompt run queued by a TUI retry command.
@@ -81,6 +82,7 @@ async fn cancel_signal_reaches_retry_follow_up_prompt_run() {
     let (cancellation_sender, cancellation_receiver) = mpsc::unbounded_channel();
     let (_selection_sender, selection_receiver) = mpsc::unbounded_channel();
     let (state_sender, mut state_receiver) = mpsc::unbounded_channel();
+    let expected_session_id = controller.current_session_id().to_owned();
     let controller_loop = run_controller_loop(
         controller,
         intent_receiver,
@@ -113,5 +115,5 @@ async fn cancel_signal_reaches_retry_follow_up_prompt_run() {
         intent_sender.send(Intent::RequestExit).unwrap();
     };
     let (controller_result, _) = tokio::join!(controller_loop, driver);
-    controller_result.unwrap();
+    assert_eq!(controller_result.unwrap(), expected_session_id);
 }

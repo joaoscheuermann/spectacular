@@ -107,6 +107,11 @@ where
         self.shell.state().clone()
     }
 
+    /// Returns the active chat session identifier.
+    pub(crate) fn current_session_id(&self) -> &str {
+        self.model.current_session_id()
+    }
+
     /// Returns the injected runner for tests that need to inspect runner effects.
     #[cfg(test)]
     pub(crate) fn runner(&self) -> &R {

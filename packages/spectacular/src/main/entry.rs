@@ -76,11 +76,16 @@ pub(super) async fn run() -> ExitCode {
 async fn handle(cli: Cli, debug_logger: LlmDebugLogger) -> Result<Option<String>, AppError> {
     match cli.command {
         None => match chat::run(debug_logger).await {
-            Ok(()) | Err(chat::ChatError::Exit) => Ok(None),
+            Ok(closed_session_id) => Ok(Some(closed_session_message(&closed_session_id))),
+            Err(chat::ChatError::Exit) => Ok(None),
             Err(error) => Err(error.into()),
         },
         Some(Command::Config(args)) => handle_config(args).map(Some),
     }
+}
+
+fn closed_session_message(session_id: &str) -> String {
+    format!("Closed session: {session_id}")
 }
 
 fn handle_config(args: ConfigArgs) -> Result<String, AppError> {

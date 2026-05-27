@@ -16,6 +16,8 @@ use tokio::sync::{mpsc, oneshot};
 
 #[path = "tui_runtime/cancellation.rs"]
 mod cancellation;
+#[path = "tui_runtime/exit.rs"]
+mod exit;
 
 /// Verifies TUI runtime state starts from controller-owned metadata and warnings.
 #[test]
@@ -118,6 +120,7 @@ async fn controller_publishes_state_while_prompt_run_is_streaming() {
     let (_cancellation_sender, cancellation_receiver) = mpsc::unbounded_channel();
     let (_selection_sender, selection_receiver) = mpsc::unbounded_channel();
     let (state_sender, mut state_receiver) = mpsc::unbounded_channel();
+    let expected_session_id = controller.current_session_id().to_owned();
     let controller_loop = run_controller_loop(
         controller,
         intent_receiver,
@@ -149,7 +152,7 @@ async fn controller_publishes_state_while_prompt_run_is_streaming() {
         intent_sender.send(Intent::RequestExit).unwrap();
     };
     let (controller_result, _) = tokio::join!(controller_loop, driver);
-    controller_result.unwrap();
+    assert_eq!(controller_result.unwrap(), expected_session_id);
 }
 
 /// Verifies TUI submit intents use the injected turn runner and reducer state.

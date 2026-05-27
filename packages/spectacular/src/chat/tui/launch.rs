@@ -33,13 +33,13 @@ enum LoopEvent {
 }
 
 /// Runs the production IOCraft render loop with the real Spectacular runtime controller.
-pub(crate) async fn run(debug_logger: LlmDebugLogger) -> Result<(), ChatError> {
+pub(crate) async fn run(debug_logger: LlmDebugLogger) -> Result<String, ChatError> {
     let bootstrap = Bootstrap::from_chat_bootstrap(ChatBootstrap::new(debug_logger)?)?;
     run_with_controller(Controller::new(bootstrap)?).await
 }
 
 /// Coordinates IOCraft-rendered terminal UI with controller-owned async runtime work.
-async fn run_with_controller<R>(controller: Controller<R>) -> Result<(), ChatError>
+async fn run_with_controller<R>(controller: Controller<R>) -> Result<String, ChatError>
 where
     R: TurnRunner + 'static,
 {
@@ -104,8 +104,8 @@ fn spawn_render_task(initial_state: State, channels: RenderChannels) -> RenderTa
 
 async fn join_runtime_tasks(
     render_task: RenderTask,
-    controller_loop: impl Future<Output = Result<(), ChatError>>,
-) -> Result<(), ChatError> {
+    controller_loop: impl Future<Output = Result<String, ChatError>>,
+) -> Result<String, ChatError> {
     let (render_result, controller_result) = tokio::join!(render_task, controller_loop);
     finish_render_task(render_result)?;
     controller_result
@@ -123,7 +123,7 @@ pub(crate) async fn run_controller_loop<R>(
     cancellation_receiver: mpsc::UnboundedReceiver<()>,
     selection_receiver: mpsc::UnboundedReceiver<Intent>,
     state_sender: mpsc::UnboundedSender<State>,
-) -> Result<(), ChatError>
+) -> Result<String, ChatError>
 where
     R: TurnRunner,
 {
@@ -138,7 +138,7 @@ where
 }
 
 impl ControllerChannels {
-    async fn run<R>(mut self, mut controller: Controller<R>) -> Result<(), ChatError>
+    async fn run<R>(mut self, mut controller: Controller<R>) -> Result<String, ChatError>
     where
         R: TurnRunner,
     {
@@ -148,10 +148,10 @@ impl ControllerChannels {
             match next_loop_event(&mut self.intent_receiver, &mut worktree_refresh).await {
                 LoopEvent::Intent(Some(intent)) => {
                     if self.handle_intent(&mut controller, intent).await? {
-                        return Ok(());
+                        return Ok(controller.current_session_id().to_owned());
                     }
                 }
-                LoopEvent::Intent(None) => return Ok(()),
+                LoopEvent::Intent(None) => return Ok(controller.current_session_id().to_owned()),
                 LoopEvent::WorktreeRefresh => {
                     controller
                         .refresh_worktree_metadata(Some(&self.state_sender))
