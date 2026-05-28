@@ -25,8 +25,8 @@ Use the minimum evidence sufficient to implement or review the requested IOCraft
 ## Decision rules
 - Prefer existing IOCraft built-ins (`View`, `Text`, `MixedText`, `TextInput`, `Button`, `ScrollView`, `Fragment`, `ContextProvider`) before writing custom low-level components.
 - Prefer simple component decomposition over clever abstractions; extract a component when it creates a meaningful UI boundary or reduces repeated layout code.
-- For TUI transcript and row rendering, prefer existing `packages/spectacular-tui/src/components/*` components before adding rendering helpers; add or improve a component when the UI concept is missing.
-- Treat `packages/spectacular-tui/src/format.rs::transcript_item_render_lines` as a legacy anti-pattern reference: do not copy its broad match-and-flatten shape, do not route new UI through it, and do not create shallow wrappers that only translate domain items into line vectors.
+- For TUI transcript and row rendering, prefer existing `packages/tui/src/components/*` components before adding rendering helpers; add or improve a component when the UI concept is missing.
+- Treat `packages/tui/src/components/transcript/projection.rs::transcript_item_render_lines` as a legacy anti-pattern reference: do not copy its broad match-and-flatten shape, do not route new UI through it, and do not create shallow wrappers that only translate domain items into line vectors.
 - Prefer borrowed props for domain data and owned state for interactive UI state.
 - Prefer `use_state` only when changes should trigger rerendering; use `use_ref` or local variables for non-render-affecting mutable data.
 - Prefer mock terminal tests for non-trivial keyboard, form, focus, or render-loop behavior.
@@ -58,4 +58,4 @@ Use Test-Driven Development for IOCraft behavior when practical, especially for 
 
 ### IOCraft Guide
 [references/iocraft-guide.md](references/iocraft-guide.md)
-Contains: core concepts, component patterns, layout, hooks, terminal events, render modes, Spectacular transcript rendering rules, context, forms, testing, and best practices.
+Contains: core concepts, component patterns, layout, hooks, terminal events, render modes, Doric transcript rendering rules, context, forms, testing, and best practices.

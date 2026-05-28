@@ -19,10 +19,10 @@ use std::{
     task::{Context, Poll, Waker},
 };
 
-const SPECTACULAR_KEY_DEBUG_ENV: &str = "SPECTACULAR_TUI_KEY_DEBUG";
-const SPECTACULAR_KEY_DEBUG_FILE: &str = "spectacular-tui-key-debug.log";
-const SPECTACULAR_FORCE_KEYBOARD_ENHANCEMENT_ENV: &str =
-    "SPECTACULAR_TUI_FORCE_KEYBOARD_ENHANCEMENT";
+const DORIC_KEY_DEBUG_ENV: &str = "DORIC_TUI_KEY_DEBUG";
+const DORIC_KEY_DEBUG_FILE: &str = "doric-tui-key-debug.log";
+const DORIC_FORCE_KEYBOARD_ENHANCEMENT_ENV: &str =
+    "DORIC_TUI_FORCE_KEYBOARD_ENHANCEMENT";
 
 // Re-exports for basic types.
 pub use crossterm::event::{KeyCode, KeyEventKind, KeyEventState, KeyModifiers, MouseEventKind};
@@ -407,7 +407,7 @@ fn keyboard_enhancement_flags() -> event::KeyboardEnhancementFlags {
 
 fn should_enable_keyboard_enhancement() -> bool {
     terminal::supports_keyboard_enhancement().unwrap_or(false)
-        || env_flag_enabled(SPECTACULAR_FORCE_KEYBOARD_ENHANCEMENT_ENV)
+        || env_flag_enabled(DORIC_FORCE_KEYBOARD_ENHANCEMENT_ENV)
         || should_enable_windows_terminal_keyboard_enhancement()
 }
 
@@ -424,11 +424,11 @@ fn debug_terminal_event(event: &Event) {
 }
 
 fn debug_terminal_note(args: fmt::Arguments<'_>) {
-    if !env_flag_enabled(SPECTACULAR_KEY_DEBUG_ENV) {
+    if !env_flag_enabled(DORIC_KEY_DEBUG_ENV) {
         return;
     }
 
-    let path = std::env::temp_dir().join(SPECTACULAR_KEY_DEBUG_FILE);
+    let path = std::env::temp_dir().join(DORIC_KEY_DEBUG_FILE);
     let Ok(mut file) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)

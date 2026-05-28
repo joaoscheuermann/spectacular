@@ -1,11 +1,11 @@
-# Spectacular
+# Doric
 
-Spectacular is a terminal AI assistant for working inside a local codebase.
+Doric is a terminal AI assistant for working inside a local codebase.
 It runs as a native chat loop, streams model output, keeps session history, and
 lets the model use built-in tools to inspect, edit, search, and run commands in
 the current workspace.
 
-The main product surface is bare `spectacular`. The longer-term direction is
+The main product surface is bare `doric`. The longer-term direction is
 spec-driven development, but the current working functionality is centered on
 chat, tool use, sessions, provider configuration, and repository workflows.
 
@@ -16,10 +16,10 @@ chat, tool use, sessions, provider configuration, and repository workflows.
 Start a fresh IOCraft TUI chat session:
 
 ```sh
-npx nx run spectacular:run
+npx nx run cli:run
 ```
 
-When using the built binary directly, run `spectacular` with no subcommand.
+When using the built binary directly, run `doric` with no subcommand.
 
 The chat experience runs in the IOCraft terminal UI. User prompts, assistant
 responses, tool calls, session state, and command output stay in one interactive
@@ -50,7 +50,7 @@ The TUI owns clipboard shortcuts inside the app:
 Some terminal hosts reserve selection shortcuts before console applications can
 read them. On Windows Terminal, `Shift+Up/Down` may be handled by the terminal
 instead of delivered as key events, while `Shift+Left/Right` still reaches the
-app. In that case Spectacular cannot select vertically from the app side because
+app. In that case Doric cannot select vertically from the app side because
 there is no `Up` or `Down` event to handle.
 
 The fullscreen TUI uses a solid white cursor. Text selections use a 70% white
@@ -59,8 +59,8 @@ By default, selected text uses the RGB complement of the selection background
 (`#4C4C4C` for `#B3B3B3`). Selection colors can be customized at startup with
 environment variables:
 
-- `SPECTACULAR_TUI_SELECTION_TEXT_COLOR`
-- `SPECTACULAR_TUI_SELECTION_BACKGROUND_COLOR`
+- `DORIC_TUI_SELECTION_TEXT_COLOR`
+- `DORIC_TUI_SELECTION_BACKGROUND_COLOR`
 
 Both accept RGB hex values as `#RRGGBB` or `RRGGBB`, case-insensitive. Invalid
 values fall back independently. If the selected-text color variable is unset or
@@ -101,7 +101,7 @@ The main chat agent exposes these tools to the model:
 | `web` | Searches the web, opens pages, and finds text in pages. |
 
 Tool calls are model-facing and currently run without an approval prompt. Use
-Spectacular in workspaces where file writes and command execution are intended.
+Doric in workspaces where file writes and command execution are intended.
 
 ### Sessions
 
@@ -117,7 +117,7 @@ Chat sessions are persisted as structured JSONL records. A session can include:
 
 Useful session behavior:
 
-- `spectacular` starts a fresh session by default.
+- `doric` starts a fresh session by default.
 - `/history` lists recent saved sessions.
 - `/resume <session-id>` restores a previous session.
 - `/retry` truncates after the latest user prompt and reruns it.
@@ -127,9 +127,9 @@ Useful session behavior:
 
 OpenRouter is the enabled provider implementation in this checkout.
 
-Spectacular stores provider settings locally and supports three model slots:
+Doric stores provider settings locally and supports three model slots:
 
-- `coding`: used by `spectacular`.
+- `coding`: used by `doric`.
 - `labeling`: used for background session titles when configured.
 - `planning`: reserved for the planning route.
 
@@ -143,21 +143,21 @@ Reasoning levels:
 Show current configuration:
 
 ```sh
-npx nx run spectacular:run --args='config'
+npx nx run cli:run --args='config'
 ```
 
 Configure OpenRouter:
 
 ```sh
-npx nx run spectacular:run --args='config --provider openrouter --key sk-or-v1-your-key'
-npx nx run spectacular:run --args='config --use openrouter'
-npx nx run spectacular:run --args='config --provider openrouter --task coding --model openrouter/your-model --reasoning medium'
+npx nx run cli:run --args='config --provider openrouter --key sk-or-v1-your-key'
+npx nx run cli:run --args='config --use openrouter'
+npx nx run cli:run --args='config --provider openrouter --task coding --model openrouter/your-model --reasoning medium'
 ```
 
 Optional title model:
 
 ```sh
-npx nx run spectacular:run --args='config --provider openrouter --task labeling --model openrouter/title-model --reasoning none'
+npx nx run cli:run --args='config --provider openrouter --task labeling --model openrouter/title-model --reasoning none'
 ```
 
 
@@ -179,21 +179,21 @@ npm ci
 Build:
 
 ```sh
-cargo build -p spectacular
+cargo build -p cli --bin doric
 ```
 
 Configure the chat model:
 
 ```sh
-npx nx run spectacular:run --args='config --provider openrouter --key sk-or-v1-your-key'
-npx nx run spectacular:run --args='config --use openrouter'
-npx nx run spectacular:run --args='config --provider openrouter --task coding --model openrouter/your-model --reasoning medium'
+npx nx run cli:run --args='config --provider openrouter --key sk-or-v1-your-key'
+npx nx run cli:run --args='config --use openrouter'
+npx nx run cli:run --args='config --provider openrouter --task coding --model openrouter/your-model --reasoning medium'
 ```
 
 Start chat:
 
 ```sh
-npx nx run spectacular:run
+npx nx run cli:run
 ```
 
 ## Local Data
@@ -203,46 +203,47 @@ Configuration and sessions are stored outside the repo.
 Windows:
 
 ```text
-%APPDATA%\spectacular\config.json
-%APPDATA%\spectacular\sessions\*.jsonl
+%APPDATA%\doric\config.json
+%APPDATA%\doric\sessions\*.jsonl
 ```
 
 macOS:
 
 ```text
-~/Library/Application Support/spectacular/config.json
-~/Library/Application Support/spectacular/sessions/*.jsonl
+~/Library/Application Support/doric/config.json
+~/Library/Application Support/doric/sessions/*.jsonl
 ```
 
 Linux:
 
 ```text
-$XDG_CONFIG_HOME/spectacular/config.json
-$XDG_CONFIG_HOME/spectacular/sessions/*.jsonl
+$XDG_CONFIG_HOME/doric/config.json
+$XDG_CONFIG_HOME/doric/sessions/*.jsonl
 ```
 
-If `XDG_CONFIG_HOME` is not set, Linux uses `~/.config/spectacular`.
+If `XDG_CONFIG_HOME` is not set, Linux uses `~/.config/doric`.
 
 API keys are stored as plain text in `config.json`.
 
 ## Development
 
-Spectacular is an Nx workspace backed by a Rust Cargo workspace.
+Doric is an Nx workspace backed by a Rust Cargo workspace.
 
 | Package | Purpose |
 | ------- | ------- |
-| `spectacular` | CLI, chat loop, prompt editor, renderer, sessions, and chat commands. |
-| `spectacular-agent` | Agent runtime, streaming, retries, continuation, tool loop, and store. |
-| `spectacular-llms` | Provider traits, provider types, registry, and OpenRouter. |
-| `spectacular-tools` | Built-in file, terminal, web, search, edit, and write tools. |
-| `spectacular-commands` | Slash-command parsing, metadata, fuzzy search, and errors. |
-| `spectacular-config` | Config schema, persistence, validation, and migration. |
+| `cli` | CLI entry point, chat composition root, sessions, config commands, and command/TUI adapters. |
+| `agent` | Agent runtime, streaming, retries, continuation, tool loop, and store. |
+| `llms` | Provider traits, provider types, registry, and OpenRouter. |
+| `tools` | Built-in file, terminal, web, search, edit, and write tools. |
+| `commands` | Slash-command parsing, metadata, fuzzy search, and errors. |
+| `config` | Config schema, persistence, validation, and migration. |
+| `tui` | IOCraft terminal UI state, reducer, renderer, prompt, selection, and transcript components. |
 
 Common commands:
 
 ```sh
 npx nx show projects
-npx nx test spectacular
+npx nx test cli
 npx nx run-many -t lint build test
 cargo test --workspace
 cargo fmt --all -- --check

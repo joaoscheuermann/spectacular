@@ -1,0 +1,7 @@
+interface:
+  display_name: "Doric"
+  short_description: "Run feature delivery through sub-agents"
+  default_prompt: "Use $doric to turn this feature idea into Doric artifacts, implementation efforts, validation, and handover with sub-agents."
+
+policy:
+  allow_implicit_invocation: true

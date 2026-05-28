@@ -2,13 +2,13 @@
 resolver = "2"
 exclude = ["packages/vendor/iocraft"]
 members = [
-    "packages/spectacular",
-    "packages/spectacular-agent",
-    "packages/spectacular-commands",
-    "packages/spectacular-llms",
-    "packages/spectacular-config",
-    "packages/spectacular-tools",
-    "packages/spectacular-tui",
+    "packages/cli",
+    "packages/agent",
+    "packages/commands",
+    "packages/llms",
+    "packages/config",
+    "packages/tools",
+    "packages/tui",
 ]
 
 [profile.release]

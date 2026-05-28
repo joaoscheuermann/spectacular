@@ -57,11 +57,11 @@ Use these files as the first verification points when their concern is relevant:
 - `nx.json`: Nx plugin and target inference configuration.
 - `packages/*/Cargo.toml`: package dependencies and crate metadata.
 - `packages/*/project.json`: package Nx targets.
-- `packages/spectacular/src/chat/provider.rs`: application-level provider composition.
-- `packages/spectacular/src/chat/runner.rs`: main agent and built-in tool assembly.
-- `packages/spectacular/src/chat/commands/registry.rs`: chat slash-command registration.
-- `packages/spectacular-llms/src/registry.rs`: enabled provider metadata.
-- `packages/spectacular-tools/src/lib.rs`: built-in tool registration and exports.
+- `packages/cli/src/chat/provider.rs`: application-level provider composition.
+- `packages/cli/src/chat/runner.rs`: main agent and built-in tool assembly.
+- `packages/cli/src/chat/commands/registry.rs`: chat slash-command registration.
+- `packages/llms/src/registry.rs`: enabled provider metadata.
+- `packages/tools/src/lib.rs`: built-in tool registration and exports.
 
 Use this skill together with `coding-conventions` when proposing or changing architecture. This skill tracks current structure; `coding-conventions` supplies design standards for simplicity, boundaries, tests, and implementation quality.
 
@@ -112,20 +112,20 @@ Use this high-level model as the starting point for architecture reasoning, then
 User terminal
    |
    v
-spectacular CLI application
+doric binary (`cli` package)
    |
-   +-- config commands ----------> spectacular-config
+   +-- config commands ----------> config
    |
-   +-- chat/TUI controller ------> spectacular-tui reducer/runtime/view
+   +-- chat/TUI controller ------> tui reducer/runtime/view
    |                                  |
    |                                  v
    |                              rendered terminal UI
    |
-   +-- agent turn runner --------> spectacular-agent
+   +-- agent turn runner --------> agent
                                       |
-                                      +-- provider calls ----> spectacular-llms
+                                      +-- provider calls ----> llms
                                       |
-                                      +-- tool calls --------> spectacular-tools
+                                      +-- tool calls --------> tools
                                       |
                                       +-- event stream ------> session persistence + TUI actions
 ```
@@ -134,13 +134,13 @@ spectacular CLI application
 
 Use this as the default package ownership model, then verify against code before making claims:
 
-- `spectacular` is the application composition root.
-- `spectacular-agent` owns agent runtime, event flow, context assembly, tool loop, queueing, retries, and cancellation.
-- `spectacular-llms` owns provider traits, provider request/stream types, provider registry, and provider implementations.
-- `spectacular-tools` owns built-in host/file/web tools that implement the agent `Tool` trait.
-- `spectacular-tui` owns UI state, actions, reducers, rendering, and IOCraft runtime glue.
-- `spectacular-commands` owns generic slash-command parsing, registration, metadata, and dispatch primitives.
-- `spectacular-config` owns persisted configuration schema, validation, provider credentials, and config IO.
+- `cli` is the application composition root and builds the `doric` binary.
+- `agent` owns agent runtime, event flow, context assembly, tool loop, queueing, retries, and cancellation.
+- `llms` owns provider traits, provider request/stream types, provider registry, and provider implementations.
+- `tools` owns built-in host/file/web tools that implement the agent `Tool` trait.
+- `tui` owns UI state, actions, reducers, rendering, and IOCraft runtime glue.
+- `commands` owns generic slash-command parsing, registration, metadata, and dispatch primitives.
+- `config` owns persisted configuration schema, validation, provider credentials, and config IO.
 - `packages/vendor/iocraft` is a vendored UI dependency patched through Cargo.
 
 ## Reporting expectations
