@@ -1,6 +1,6 @@
 # Effort: worker repo preparation
 
-Status: todo
+Status: done
 
 ## Requirement links
 
