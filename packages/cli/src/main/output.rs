@@ -1,4 +1,4 @@
-use super::{chat, entry::AppError, terminal_style};
+use super::{chat, entry::AppError, lifecycle::LifecycleDispatchMode, terminal_style};
 use ::config::{mask_api_key, ConfigError, DoricConfig, ReasoningLevel, TaskModelSlot};
 use ::llms::ProviderError;
 use anstyle::Style;
@@ -12,6 +12,7 @@ pub(super) fn user_facing_error(error: &AppError) -> String {
             format!("Failed to create LLM debug log beside the executable: {source}.")
         }
         AppError::InvalidConfigCommand(message) => message.to_owned(),
+        AppError::InvalidLifecycleCommand(message) => message.to_owned(),
         AppError::Provider { source } => format_provider_error(source),
     }
 }
@@ -427,6 +428,100 @@ pub(super) fn format_task_saved_output(slot: TaskModelSlot, model: &str) -> Stri
         paint(label_style(), "Model:"),
         paint(model_style(), model)
     )
+}
+
+pub(super) fn format_lifecycle_daemon_output(
+    addr: Option<&str>,
+    worker_root: Option<&str>,
+) -> String {
+    format_lifecycle_stub_output(
+        "daemon",
+        &[
+            ("Address", route_address(addr)),
+            ("Worker root", route_worker_root(worker_root)),
+        ],
+    )
+}
+
+pub(super) fn format_lifecycle_dispatch_output(
+    mode: LifecycleDispatchMode,
+    prompt: &str,
+    repo: &str,
+    addr: Option<&str>,
+) -> String {
+    let command = match mode {
+        LifecycleDispatchMode::Feature => "feature",
+        LifecycleDispatchMode::Debug => "debug",
+    };
+
+    format_lifecycle_stub_output(
+        command,
+        &[
+            ("Prompt", prompt.to_owned()),
+            ("Repo", repo.to_owned()),
+            ("Address", route_address(addr)),
+        ],
+    )
+}
+
+pub(super) fn format_lifecycle_list_output(addr: Option<&str>) -> String {
+    format_lifecycle_stub_output("list", &[("Address", route_address(addr))])
+}
+
+pub(super) fn format_lifecycle_worker_output(id: &str, addr: Option<&str>) -> String {
+    format_lifecycle_stub_output(
+        "worker",
+        &[("Worker", id.to_owned()), ("Address", route_address(addr))],
+    )
+}
+
+pub(super) fn format_lifecycle_answer_output(
+    worker_id: &str,
+    request_id: &str,
+    text: &str,
+    addr: Option<&str>,
+) -> String {
+    format_lifecycle_stub_output(
+        "answer",
+        &[
+            ("Worker", worker_id.to_owned()),
+            ("Request", request_id.to_owned()),
+            ("Text", text.to_owned()),
+            ("Address", route_address(addr)),
+        ],
+    )
+}
+
+fn format_lifecycle_stub_output(command: &str, fields: &[(&str, String)]) -> String {
+    let mut lines = vec![format!(
+        "{} {}",
+        paint(success_style(), "[queued]"),
+        paint(title_style(), format!("Lifecycle {command}"))
+    )];
+
+    for (label, value) in fields {
+        lines.push(format!(
+            "  {} {}",
+            paint(label_style(), format!("{label}:")),
+            paint(provider_style(), value)
+        ));
+    }
+
+    lines.push(format!(
+        "  {} {}",
+        paint(label_style(), "Status:"),
+        paint(missing_style(), "daemon client not wired")
+    ));
+
+    lines.join("\n")
+}
+
+fn route_address(addr: Option<&str>) -> String {
+    addr.unwrap_or("default").to_owned()
+}
+
+fn route_worker_root(worker_root: Option<&str>) -> String {
+    worker_root.unwrap_or("default").to_owned()
 }
 
 pub(super) fn format_confirmation_required_output(message: &str) -> String {

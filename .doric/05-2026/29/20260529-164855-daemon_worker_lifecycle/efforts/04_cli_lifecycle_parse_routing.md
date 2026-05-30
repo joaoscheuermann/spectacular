@@ -1,6 +1,6 @@
 # Effort: CLI lifecycle parse routing
 
-Status: todo
+Status: done
 
 ## Requirement links
 

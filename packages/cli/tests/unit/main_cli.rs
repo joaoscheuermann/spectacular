@@ -1,6 +1,10 @@
 use super::*;
 use clap::CommandFactory;
 use clap::error::ErrorKind;
+use crate::cli_types::{
+    Command, LifecycleAddressArgs, LifecycleAnswerArgs, LifecycleDaemonArgs,
+    LifecycleDispatchArgs, LifecycleWorkerArgs,
+};
 use ::config::{
     CachedModelMetadata, ModelCache, ModelConfig, ProviderModelCache, TaskAssignments,
 };
@@ -18,6 +22,23 @@ fn top_level_help_lists_config_without_chat_or_plan() {
     assert!(!help.contains("chat"));
     assert!(help.contains("config"));
     assert!(!help.contains("plan"));
+}
+
+#[test]
+fn top_level_help_lists_lifecycle_commands_without_chat() {
+    let mut command = Cli::command();
+    let mut buffer = Vec::new();
+
+    command.write_long_help(&mut buffer).unwrap();
+    let help = String::from_utf8(buffer).unwrap();
+
+    for subcommand in ["daemon", "feature", "debug", "list", "worker", "answer"] {
+        assert!(
+            help.contains(subcommand),
+            "top-level help should list {subcommand}: {help}"
+        );
+    }
+    assert!(!help.contains("chat"));
 }
 
 #[test]
@@ -39,6 +60,170 @@ fn tui_flag_is_not_accepted() {
     let error = Cli::try_parse_from(["doric", "--tui"]).unwrap_err();
 
     assert_eq!(error.kind(), ErrorKind::UnknownArgument);
+}
+
+#[test]
+fn try_parse_from_feature_with_prompt_and_repo_preserves_mode() {
+    let cli = Cli::try_parse_from([
+        "doric",
+        "feature",
+        "--prompt",
+        "write a prompt",
+        "--repo",
+        "C:/repo",
+    ])
+    .unwrap();
+
+    assert_eq!(
+        cli.command,
+        Some(Command::Feature(LifecycleDispatchArgs {
+            prompt: "write a prompt".to_owned(),
+            repo: "C:/repo".to_owned(),
+            addr: None,
+        }))
+    );
+}
+
+#[test]
+fn try_parse_from_debug_with_prompt_and_repo_preserves_mode() {
+    let cli = Cli::try_parse_from([
+        "doric",
+        "debug",
+        "--prompt",
+        "investigate failure",
+        "--repo",
+        "C:/repo",
+    ])
+    .unwrap();
+
+    assert_eq!(
+        cli.command,
+        Some(Command::Debug(LifecycleDispatchArgs {
+            prompt: "investigate failure".to_owned(),
+            repo: "C:/repo".to_owned(),
+            addr: None,
+        }))
+    );
+}
+
+#[test]
+fn try_parse_from_daemon_with_addr_and_worker_root_preserves_routing_fields() {
+    let cli = Cli::try_parse_from([
+        "doric",
+        "daemon",
+        "--addr",
+        "127.0.0.1:47822",
+        "--worker-root",
+        "C:/workers",
+    ])
+    .unwrap();
+
+    assert_eq!(
+        cli.command,
+        Some(Command::Daemon(LifecycleDaemonArgs {
+            addr: Some("127.0.0.1:47822".to_owned()),
+            worker_root: Some("C:/workers".to_owned()),
+        }))
+    );
+}
+
+#[test]
+fn try_parse_from_list_with_addr_preserves_routing_fields() {
+    let cli = Cli::try_parse_from(["doric", "list", "--addr", "127.0.0.1:47822"]).unwrap();
+
+    assert_eq!(
+        cli.command,
+        Some(Command::List(LifecycleAddressArgs {
+            addr: Some("127.0.0.1:47822".to_owned()),
+        }))
+    );
+}
+
+#[test]
+fn try_parse_from_worker_with_id_and_addr_preserves_routing_fields() {
+    let cli = Cli::try_parse_from(["doric", "worker", "worker-123", "--addr", "127.0.0.1:47822"])
+        .unwrap();
+
+    assert_eq!(
+        cli.command,
+        Some(Command::Worker(LifecycleWorkerArgs {
+            id: "worker-123".to_owned(),
+            addr: Some("127.0.0.1:47822".to_owned()),
+        }))
+    );
+}
+
+#[test]
+fn try_parse_from_answer_with_ids_and_text_preserves_routing_fields() {
+    let cli = Cli::try_parse_from([
+        "doric",
+        "answer",
+        "worker-123",
+        "request-456",
+        "--text",
+        "continue",
+    ])
+    .unwrap();
+
+    assert_eq!(
+        cli.command,
+        Some(Command::Answer(LifecycleAnswerArgs {
+            worker_id: "worker-123".to_owned(),
+            request_id: "request-456".to_owned(),
+            text: "continue".to_owned(),
+            addr: None,
+        }))
+    );
+}
+
+#[test]
+fn lifecycle_daemon_output_preserves_worker_root() {
+    let output = crate::lifecycle::handle_lifecycle_command(Command::Daemon(LifecycleDaemonArgs {
+        addr: Some("127.0.0.1:47822".to_owned()),
+        worker_root: Some("C:/workers".to_owned()),
+    }))
+    .unwrap();
+    let output = strip_ansi_codes(&output);
+
+    assert!(output.contains("Address: 127.0.0.1:47822"));
+    assert!(output.contains("Worker root: C:/workers"));
+}
+
+#[test]
+fn lifecycle_worker_output_preserves_worker_id() {
+    let output = crate::lifecycle::handle_lifecycle_command(Command::Worker(LifecycleWorkerArgs {
+        id: "worker-123".to_owned(),
+        addr: Some("127.0.0.1:47822".to_owned()),
+    }))
+    .unwrap();
+    let output = strip_ansi_codes(&output);
+
+    assert!(output.contains("Worker: worker-123"));
+    assert!(output.contains("Address: 127.0.0.1:47822"));
+}
+
+#[test]
+fn try_parse_from_feature_without_prompt_returns_missing_required_argument() {
+    let error = Cli::try_parse_from(["doric", "feature", "--repo", "C:/repo"]).unwrap_err();
+
+    assert_eq!(error.kind(), ErrorKind::MissingRequiredArgument);
+    assert!(error.to_string().contains("--prompt"));
+}
+
+#[test]
+fn try_parse_from_debug_without_repo_returns_missing_required_argument() {
+    let error = Cli::try_parse_from(["doric", "debug", "--prompt", "investigate"]).unwrap_err();
+
+    assert_eq!(error.kind(), ErrorKind::MissingRequiredArgument);
+    assert!(error.to_string().contains("--repo"));
+}
+
+#[test]
+fn try_parse_from_answer_without_text_returns_missing_required_argument() {
+    let error = Cli::try_parse_from(["doric", "answer", "worker-123", "request-456"]).unwrap_err();
+
+    assert_eq!(error.kind(), ErrorKind::MissingRequiredArgument);
+    assert!(error.to_string().contains("--text"));
 }
 
 #[test]

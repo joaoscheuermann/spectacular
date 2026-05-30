@@ -4,7 +4,7 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
-fn doric_process_replaces_debug_log_on_start() {
+fn doric_process_config_command_preserves_stale_debug_log_content() {
     let executable = PathBuf::from(env!("CARGO_BIN_EXE_doric"));
     let log_path = executable
         .parent()
@@ -13,11 +13,14 @@ fn doric_process_replaces_debug_log_on_start() {
 
     std::fs::write(&log_path, "stale content").unwrap();
     run_config_command(&executable, "first");
-    assert_eq!(std::fs::read_to_string(&log_path).unwrap(), "");
+    assert_eq!(std::fs::read_to_string(&log_path).unwrap(), "stale content");
 
     std::fs::write(&log_path, "second stale content").unwrap();
     run_config_command(&executable, "second");
-    assert_eq!(std::fs::read_to_string(&log_path).unwrap(), "");
+    assert_eq!(
+        std::fs::read_to_string(&log_path).unwrap(),
+        "second stale content"
+    );
 }
 
 fn run_config_command(executable: &Path, name: &str) {

@@ -17,6 +17,8 @@ mod cli_types;
 mod config_ops;
 #[path = "main/entry.rs"]
 mod entry;
+#[path = "main/lifecycle.rs"]
+mod lifecycle;
 #[path = "main/output.rs"]
 mod output;
 
