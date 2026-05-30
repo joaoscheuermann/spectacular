@@ -61,6 +61,65 @@ impl WorkerEvent {
         )
     }
 
+    pub fn prompt_artifact_written(
+        worker_id: WorkerId,
+        sequence: u64,
+        message: impl Into<String>,
+    ) -> Self {
+        Self::new(
+            worker_id,
+            sequence,
+            WorkerStatus::Running,
+            "prompt_artifact_written",
+            message,
+        )
+    }
+
+    pub fn prompt_answer_consumed(
+        worker_id: WorkerId,
+        sequence: u64,
+        request_id: RequestId,
+        message: impl Into<String>,
+    ) -> Self {
+        Self::new(
+            worker_id,
+            sequence,
+            WorkerStatus::Running,
+            "prompt_answer_consumed",
+            message,
+        )
+        .with_request_id(request_id)
+    }
+
+    pub fn prompt_agent_completed(
+        worker_id: WorkerId,
+        sequence: u64,
+        message: impl Into<String>,
+    ) -> Self {
+        Self::new(
+            worker_id,
+            sequence,
+            WorkerStatus::Succeeded,
+            "prompt_agent_completed",
+            message,
+        )
+    }
+
+    pub fn prompt_agent_failed(
+        worker_id: WorkerId,
+        sequence: u64,
+        message: impl Into<String>,
+    ) -> Self {
+        let message = redact_failure_text(&message.into());
+        Self::new(
+            worker_id,
+            sequence,
+            WorkerStatus::Failed,
+            "prompt_agent_failed",
+            message,
+        )
+    }
+
     pub fn current_activity(
         worker_id: WorkerId,
         sequence: u64,

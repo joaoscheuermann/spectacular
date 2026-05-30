@@ -25,14 +25,14 @@
 - Subject: `feat(worker): register shared tools`
 - Scope command: `git commit --only -- Cargo.lock packages/worker/Cargo.toml packages/worker/src/lib.rs packages/worker/src/tooling.rs packages/worker/tests/unit.rs packages/worker/tests/unit/tooling.rs packages/tools/tests/unit/path.rs packages/tools/tests/unit/write.rs packages/tools/tests/unit/terminal/execution_contracts.rs .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/STATE.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/104_effort_09_done_transition.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/105_effort_10_start_transition.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/106_effort_10_test_planner.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/107_effort_10_test_writer.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/108_effort_10_code_writer.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/109_effort_10_validator_refactor.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/110_effort_10_reviewer.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/111_effort_10_done_transition.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/efforts/10_worker_tooling_registration.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/validation/10_worker_tooling_registration.md`
 - Rationale: use explicit pathspec to commit only effort 10 worker/tools files, effort 10 Doric run artifacts, and the carried-forward effort 09 hash finalization artifact while preserving unrelated staged files.
-- Commit hash: `pending`
+- Commit hash: `38717261716a51e8e304fe5fd5c02a73d9df4111`
 
 ## Commit checkpoint result
 
-- Result: pending
-- Commit: `pending`
+- Result: succeeded
+- Commit: `38717261716a51e8e304fe5fd5c02a73d9df4111`
 - Subject: `feat(worker): register shared tools`
 
 ## Coordinator decision
 
-pending commit checkpoint
+accepted

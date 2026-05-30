@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::fmt::{self, Display};
+use std::io;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -18,6 +19,7 @@ pub enum WorkerFailureReason {
     ProviderUnsupported,
     ProviderUnsupportedAuth,
     ProviderSetupFailed,
+    PromptArtifactWriteFailed,
 }
 
 #[derive(Debug)]
@@ -54,6 +56,10 @@ pub enum WorkerError {
     },
     ProviderSetupFailed {
         message: String,
+    },
+    PromptArtifactWriteFailed {
+        path: PathBuf,
+        source: io::Error,
     },
 }
 
@@ -118,6 +124,10 @@ impl WorkerError {
         }
     }
 
+    pub fn prompt_artifact_write_failed(path: PathBuf, source: io::Error) -> Self {
+        Self::PromptArtifactWriteFailed { path, source }
+    }
+
     pub fn is_invalid_worker_root(&self) -> bool {
         matches!(self, Self::InvalidWorkerRoot { .. })
     }
@@ -155,6 +165,9 @@ impl WorkerError {
             Self::ProviderUnsupported { .. } => WorkerFailureReason::ProviderUnsupported,
             Self::ProviderUnsupportedAuth { .. } => WorkerFailureReason::ProviderUnsupportedAuth,
             Self::ProviderSetupFailed { .. } => WorkerFailureReason::ProviderSetupFailed,
+            Self::PromptArtifactWriteFailed { .. } => {
+                WorkerFailureReason::PromptArtifactWriteFailed
+            }
         }
     }
 
@@ -207,6 +220,13 @@ impl Display for WorkerError {
             }
             Self::ProviderSetupFailed { message } => {
                 write!(f, "provider setup failed: {message}")
+            }
+            Self::PromptArtifactWriteFailed { path, source } => {
+                write!(
+                    f,
+                    "prompt artifact write failed at {}: {source}",
+                    path.display()
+                )
             }
         }
     }

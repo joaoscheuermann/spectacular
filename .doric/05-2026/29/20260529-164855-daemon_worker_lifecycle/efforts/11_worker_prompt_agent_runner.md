@@ -1,6 +1,6 @@
 # Effort: worker prompt agent runner
 
-Status: todo
+Status: done
 
 ## Requirement links
 

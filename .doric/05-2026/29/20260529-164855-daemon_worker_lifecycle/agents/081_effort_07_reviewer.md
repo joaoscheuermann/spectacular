@@ -154,3 +154,9 @@ None. The blocking issues are implementation gaps with direct file evidence.
 ## Coordinator decision
 
 rejected
+
+## Supersession
+
+- Superseded by: `agents/085_effort_07_reviewer_retry.md`
+- Coordinator reconciliation: `agents/119_effort_11_ledger_reconciliation.md`
+- Reason: the effort 07 reviewer retry was accepted after repair, so this rejected reviewer receipt is historical evidence and no longer an active gate.

@@ -100,38 +100,82 @@ fn event_constructors_lifecycle_milestones_preserve_status_and_name() {
         "prompt agent started",
     );
     assert_worker_event(
-        WorkerEvent::current_activity(worker_id.clone(), 5, "reading requirements"),
+        WorkerEvent::prompt_artifact_written(worker_id.clone(), 5, "prompt artifact written"),
+        WorkerStatus::Running,
+        "prompt_artifact_written",
+        "prompt artifact written",
+    );
+    assert_worker_event(
+        WorkerEvent::current_activity(worker_id.clone(), 6, "reading requirements"),
         WorkerStatus::Running,
         "current_activity",
         "reading requirements",
     );
     assert_worker_event(
-        WorkerEvent::waiting_for_input(worker_id.clone(), 6, request_id, "need clarification"),
+        WorkerEvent::waiting_for_input(
+            worker_id.clone(),
+            7,
+            request_id.clone(),
+            "need clarification",
+        ),
         WorkerStatus::WaitingForInput,
         "waiting_for_input",
         "need clarification",
     );
+    let answer_event =
+        WorkerEvent::prompt_answer_consumed(worker_id.clone(), 8, request_id, "answer consumed");
+    assert_eq!(
+        answer_event.request_id().map(RequestId::as_str),
+        Some("request-01HXYZ")
+    );
     assert_worker_event(
-        WorkerEvent::failed(worker_id.clone(), 7, "repo preparation failed"),
+        answer_event,
+        WorkerStatus::Running,
+        "prompt_answer_consumed",
+        "answer consumed",
+    );
+    assert_worker_event(
+        WorkerEvent::failed(worker_id.clone(), 9, "repo preparation failed"),
         WorkerStatus::Failed,
         "failed",
         "repo preparation failed",
     );
     assert_worker_event(
-        WorkerEvent::succeeded(worker_id, 8, "prompt artifact written"),
+        WorkerEvent::prompt_agent_completed(worker_id.clone(), 10, "prompt agent completed"),
+        WorkerStatus::Succeeded,
+        "prompt_agent_completed",
+        "prompt agent completed",
+    );
+    assert_worker_event(
+        WorkerEvent::succeeded(worker_id.clone(), 11, "prompt artifact written"),
         WorkerStatus::Succeeded,
         "succeeded",
         "prompt artifact written",
     );
-    let worker_id = "worker-01HXYZ"
-        .parse::<WorkerId>()
-        .expect("worker id should parse");
     assert_worker_event(
-        WorkerEvent::stopped(worker_id, 9, "worker stopped"),
+        WorkerEvent::stopped(worker_id, 12, "worker stopped"),
         WorkerStatus::Stopped,
         "stopped",
         "worker stopped",
     );
+}
+
+#[test]
+fn event_constructors_prompt_agent_failure_redacts_secret_text() {
+    let worker_id = "worker-01HXYZ"
+        .parse::<WorkerId>()
+        .expect("worker id should parse");
+
+    let event = WorkerEvent::prompt_agent_failed(
+        worker_id,
+        13,
+        "provider returned sk-test_secret_1234567890abcdef",
+    );
+
+    assert_eq!(event.status(), WorkerStatus::Failed);
+    assert_eq!(event.name(), "prompt_agent_failed");
+    assert!(event.message().contains("[REDACTED]"));
+    assert!(!event.message().contains("sk-test_secret"));
 }
 
 #[test]
