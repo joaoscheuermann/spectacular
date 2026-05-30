@@ -1,6 +1,6 @@
 # Effort: daemon registry root
 
-Status: todo
+Status: done
 
 ## Requirement links
 

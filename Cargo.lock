@@ -516,6 +516,10 @@ dependencies = [
 [[package]]
 name = "daemon"
 version = "0.1.0"
+dependencies = [
+ "config",
+ "lifecycle",
+]
 
 [[package]]
 name = "data-encoding"
