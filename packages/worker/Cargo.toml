@@ -8,4 +8,7 @@ name = "doric-worker"
 path = "src/main.rs"
 
 [dependencies]
+agent = { path = "../agent" }
+config = { path = "../config" }
 lifecycle = { path = "../lifecycle" }
+llms = { path = "../llms" }

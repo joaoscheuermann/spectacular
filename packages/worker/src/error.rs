@@ -13,6 +13,11 @@ pub enum WorkerFailureReason {
     GitCloneFailed,
     GitCloneTimedOut,
     GitCloneCancelled,
+    ProviderConfiguration,
+    ProviderCredentials,
+    ProviderUnsupported,
+    ProviderUnsupportedAuth,
+    ProviderSetupFailed,
 }
 
 #[derive(Debug)]
@@ -35,6 +40,21 @@ pub enum WorkerError {
         duration: Duration,
     },
     GitCancelled,
+    ProviderConfiguration {
+        message: String,
+    },
+    ProviderCredentials {
+        message: String,
+    },
+    ProviderUnsupported {
+        message: String,
+    },
+    ProviderUnsupportedAuth {
+        message: String,
+    },
+    ProviderSetupFailed {
+        message: String,
+    },
 }
 
 impl WorkerError {
@@ -66,6 +86,36 @@ impl WorkerError {
 
     pub fn git_cancelled() -> Self {
         Self::GitCancelled
+    }
+
+    pub fn provider_configuration(message: impl AsRef<str>) -> Self {
+        Self::ProviderConfiguration {
+            message: redact_provider_message(message.as_ref()),
+        }
+    }
+
+    pub fn provider_credentials(message: impl AsRef<str>) -> Self {
+        Self::ProviderCredentials {
+            message: redact_provider_message(message.as_ref()),
+        }
+    }
+
+    pub fn provider_unsupported(message: impl AsRef<str>) -> Self {
+        Self::ProviderUnsupported {
+            message: redact_provider_message(message.as_ref()),
+        }
+    }
+
+    pub fn provider_unsupported_auth(message: impl AsRef<str>) -> Self {
+        Self::ProviderUnsupportedAuth {
+            message: redact_provider_message(message.as_ref()),
+        }
+    }
+
+    pub fn provider_setup_failed(message: impl AsRef<str>) -> Self {
+        Self::ProviderSetupFailed {
+            message: redact_provider_message(message.as_ref()),
+        }
     }
 
     pub fn is_invalid_worker_root(&self) -> bool {
@@ -100,6 +150,11 @@ impl WorkerError {
             Self::GitFailed { .. } => WorkerFailureReason::GitCloneFailed,
             Self::GitTimeout { .. } => WorkerFailureReason::GitCloneTimedOut,
             Self::GitCancelled => WorkerFailureReason::GitCloneCancelled,
+            Self::ProviderConfiguration { .. } => WorkerFailureReason::ProviderConfiguration,
+            Self::ProviderCredentials { .. } => WorkerFailureReason::ProviderCredentials,
+            Self::ProviderUnsupported { .. } => WorkerFailureReason::ProviderUnsupported,
+            Self::ProviderUnsupportedAuth { .. } => WorkerFailureReason::ProviderUnsupportedAuth,
+            Self::ProviderSetupFailed { .. } => WorkerFailureReason::ProviderSetupFailed,
         }
     }
 
@@ -138,6 +193,21 @@ impl Display for WorkerError {
                 )
             }
             Self::GitCancelled => f.write_str("git clone was cancelled"),
+            Self::ProviderConfiguration { message } => {
+                write!(f, "provider configuration error: {message}")
+            }
+            Self::ProviderCredentials { message } => {
+                write!(f, "provider credentials error: {message}")
+            }
+            Self::ProviderUnsupported { message } => {
+                write!(f, "unsupported provider: {message}")
+            }
+            Self::ProviderUnsupportedAuth { message } => {
+                write!(f, "unsupported provider authentication: {message}")
+            }
+            Self::ProviderSetupFailed { message } => {
+                write!(f, "provider setup failed: {message}")
+            }
         }
     }
 }
@@ -154,4 +224,28 @@ fn redacted_repo(repo_url: &str) -> String {
     RepoIdentity::from_raw_url(repo_url)
         .map(|identity| identity.to_string())
         .unwrap_or_else(|_| "[REDACTED]".to_owned())
+}
+
+fn redact_provider_message(message: &str) -> String {
+    lifecycle::redaction::redact_failure_text(&redact_provider_tokens(message))
+}
+
+fn redact_provider_tokens(message: &str) -> String {
+    message
+        .split_whitespace()
+        .map(redact_provider_word)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn redact_provider_word(word: &str) -> String {
+    let lowered = word.to_ascii_lowercase();
+    if lowered.contains("access_token")
+        || lowered.contains("refresh_token")
+        || lowered.starts_with("sk-")
+    {
+        "[REDACTED]".to_owned()
+    } else {
+        word.to_owned()
+    }
 }
