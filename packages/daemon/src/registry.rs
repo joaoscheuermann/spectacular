@@ -1,4 +1,5 @@
 use std::collections::{HashMap, VecDeque};
+use std::sync::mpsc::{self, Receiver, Sender};
 
 use lifecycle::event::StreamEvent;
 use lifecycle::identity::{RequestId, WorkerId};
@@ -138,9 +139,30 @@ pub struct Registry {
     records: HashMap<WorkerId, WorkerRecord>,
     order: Vec<WorkerId>,
     events: HashMap<WorkerId, EventLog>,
+    subscribers: HashMap<WorkerId, Vec<Sender<RegistryWorkerEvent>>>,
     pending: HashMap<WorkerId, PendingInput>,
     answered: HashMap<(WorkerId, RequestId), ()>,
     event_capacity: usize,
+}
+
+#[derive(Debug)]
+pub struct EventSubscription {
+    replay: Vec<ReplayItem>,
+    receiver: Receiver<RegistryWorkerEvent>,
+}
+
+impl EventSubscription {
+    pub fn replay(&self) -> &[ReplayItem] {
+        &self.replay
+    }
+
+    pub fn into_replay(self) -> Vec<ReplayItem> {
+        self.replay
+    }
+
+    pub fn try_next(&self) -> Option<RegistryWorkerEvent> {
+        self.receiver.try_recv().ok()
+    }
 }
 
 impl Registry {
@@ -155,6 +177,7 @@ impl Registry {
             records: HashMap::new(),
             order: Vec::new(),
             events: HashMap::new(),
+            subscribers: HashMap::new(),
             pending: HashMap::new(),
             answered: HashMap::new(),
             event_capacity: event_capacity.max(1),
@@ -170,6 +193,7 @@ impl Registry {
 
         self.events
             .insert(record.id.clone(), EventLog::new(self.event_capacity));
+        self.subscribers.insert(record.id.clone(), Vec::new());
         self.order.push(record.id.clone());
         self.records.insert(record.id.clone(), record);
 
@@ -220,6 +244,7 @@ impl Registry {
         let sequence = log.next_sequence;
         let event = event.into_worker_event(worker_id.clone(), sequence);
         log.push(event.clone());
+        self.publish_event(worker_id, event.clone());
         Ok(event)
     }
 
@@ -231,6 +256,26 @@ impl Registry {
         self.ensure_known(worker_id)?;
         let log = self.events.get(worker_id).expect("known worker has log");
         Ok(log.replay(worker_id, from_sequence))
+    }
+
+    pub fn subscribe(
+        &mut self,
+        worker_id: &WorkerId,
+        from_sequence: u64,
+    ) -> DaemonResult<EventSubscription> {
+        self.ensure_known(worker_id)?;
+        let replay = self
+            .events
+            .get(worker_id)
+            .expect("known worker has log")
+            .replay(worker_id, from_sequence);
+        let (sender, receiver) = mpsc::channel();
+        self.subscribers
+            .get_mut(worker_id)
+            .expect("known worker has subscribers")
+            .push(sender);
+
+        Ok(EventSubscription { replay, receiver })
     }
 
     pub fn request_input(&mut self, request: InputRequest) -> DaemonResult<()> {
@@ -263,43 +308,7 @@ impl Registry {
     }
 
     pub fn answer_input(&mut self, answer: InputAnswer) -> DaemonResult<()> {
-        let status = self.record(&answer.worker_id)?.status;
-
-        if self
-            .answered
-            .contains_key(&(answer.worker_id.clone(), answer.request_id.clone()))
-        {
-            return Err(DaemonError::DuplicateAnswer {
-                worker_id: answer.worker_id,
-                request_id: answer.request_id,
-            });
-        }
-
-        if is_terminal(status) {
-            return Err(DaemonError::TerminalWorker {
-                worker_id: answer.worker_id,
-            });
-        }
-
-        if status != WorkerStatus::WaitingForInput {
-            return Err(DaemonError::NotWaitingForInput {
-                worker_id: answer.worker_id,
-            });
-        }
-
-        let pending =
-            self.pending
-                .get(&answer.worker_id)
-                .ok_or_else(|| DaemonError::NoPendingInput {
-                    worker_id: answer.worker_id.clone(),
-                })?;
-
-        if pending.request_id != answer.request_id {
-            return Err(DaemonError::StaleRequest {
-                worker_id: answer.worker_id,
-                request_id: answer.request_id,
-            });
-        }
+        self.validate_answer(&answer)?;
 
         self.pending.remove(&answer.worker_id);
         self.answered
@@ -315,6 +324,48 @@ impl Registry {
             &answer.worker_id,
             RegistryEvent::answer_provided(answer.request_id),
         )?;
+
+        Ok(())
+    }
+
+    pub fn validate_answer(&self, answer: &InputAnswer) -> DaemonResult<()> {
+        let status = self.record(&answer.worker_id)?.status;
+
+        if self
+            .answered
+            .contains_key(&(answer.worker_id.clone(), answer.request_id.clone()))
+        {
+            return Err(DaemonError::DuplicateAnswer {
+                worker_id: answer.worker_id.clone(),
+                request_id: answer.request_id.clone(),
+            });
+        }
+
+        if is_terminal(status) {
+            return Err(DaemonError::TerminalWorker {
+                worker_id: answer.worker_id.clone(),
+            });
+        }
+
+        if status != WorkerStatus::WaitingForInput {
+            return Err(DaemonError::NotWaitingForInput {
+                worker_id: answer.worker_id.clone(),
+            });
+        }
+
+        let pending =
+            self.pending
+                .get(&answer.worker_id)
+                .ok_or_else(|| DaemonError::NoPendingInput {
+                    worker_id: answer.worker_id.clone(),
+                })?;
+
+        if pending.request_id != answer.request_id {
+            return Err(DaemonError::StaleRequest {
+                worker_id: answer.worker_id.clone(),
+                request_id: answer.request_id.clone(),
+            });
+        }
 
         Ok(())
     }
@@ -369,6 +420,12 @@ impl Registry {
             .ok_or_else(|| DaemonError::UnknownWorker {
                 worker_id: worker_id.clone(),
             })
+    }
+
+    fn publish_event(&mut self, worker_id: &WorkerId, event: RegistryWorkerEvent) {
+        if let Some(subscribers) = self.subscribers.get_mut(worker_id) {
+            subscribers.retain(|sender| sender.send(event.clone()).is_ok());
+        }
     }
 }
 

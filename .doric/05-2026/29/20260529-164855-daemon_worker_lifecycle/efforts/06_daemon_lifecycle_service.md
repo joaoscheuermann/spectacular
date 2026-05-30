@@ -1,6 +1,6 @@
 # Effort: daemon lifecycle service
 
-Status: todo
+Status: done
 
 ## Requirement links
 
