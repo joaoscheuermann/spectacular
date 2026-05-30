@@ -31,7 +31,7 @@
 ## Commit checkpoint
 
 - Planned message: `docs(architecture): document lifecycle package graph`
-- Commit: `pending`
+- Commit: `e59ff2ef0a094e8d1439e14dd1224271fe536a81`
 - Staged scope: `docs/architecture-and-packages.md`, effort 15 Doric artifacts, `STATE.md`, and carried-forward `agents/154_effort_14_done_transition.md` hash finalization.
 
 ## Coordinator decision

@@ -190,3 +190,9 @@ Final validation matrix:
 Product failure summary: none.
 
 Local tooling summary: all requested tools were available. Nx commands emitted Node's experimental CommonJS/ESM warning from the local npm installation, but every Nx target completed successfully.
+
+## Commit Checkpoint
+
+- Commit: `e59ff2ef0a094e8d1439e14dd1224271fe536a81`
+- Message: `docs(architecture): document lifecycle package graph`
+- Scope: `docs/architecture-and-packages.md`, effort 15 Doric artifacts, `STATE.md`, and carried-forward effort 14 hash finalization.
