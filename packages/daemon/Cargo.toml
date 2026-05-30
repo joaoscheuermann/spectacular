@@ -1,0 +1,10 @@
+[package]
+name = "daemon"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "doric-daemon"
+path = "src/main.rs"
+
+[dependencies]

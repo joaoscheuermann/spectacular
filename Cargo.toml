@@ -4,6 +4,9 @@ exclude = ["packages/vendor/iocraft"]
 members = [
     "packages/cli",
     "packages/agent",
+    "packages/lifecycle",
+    "packages/daemon",
+    "packages/worker",
     "packages/commands",
     "packages/llms",
     "packages/config",
