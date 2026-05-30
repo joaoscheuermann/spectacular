@@ -1,6 +1,6 @@
 # Effort: lifecycle domain redaction
 
-Status: todo
+Status: done
 
 ## Requirement links
 
