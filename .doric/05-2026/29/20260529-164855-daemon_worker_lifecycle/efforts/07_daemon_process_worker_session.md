@@ -1,6 +1,6 @@
 # Effort: daemon process worker session
 
-Status: todo
+Status: done
 
 ## Requirement links
 

@@ -3,7 +3,8 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::server::{build_service, ServerConfig};
+use crate::process::{ChildHandle, ProcessSpawner, WorkerBinaryConfig, WorkerBinaryResolver};
+use crate::server::{build_process_service, build_service, ServerConfig};
 use crate::service::{CommandSender, IdGenerator, WorkerLauncher};
 
 /// Verifies that daemon server config defaults to loopback lifecycle port.
@@ -52,6 +53,28 @@ fn build_service_valid_config_constructs_service_without_binding() {
     .unwrap();
 
     assert!(service.includes_lifecycle_service());
+    assert!(!service.has_bound_listener());
+}
+
+/// Verifies production-style construction wires process spawning through sessions.
+#[test]
+fn build_process_service_valid_config_uses_process_launcher_and_session_sender() {
+    let root = TempRoot::new("process-service");
+    let binary = root.touch_executable(worker_binary_name());
+    let config = ServerConfig::parse("127.0.0.1:49126", root.path()).unwrap();
+    let spawner = SharedRecordingSpawner;
+
+    let service = build_process_service(
+        config,
+        WorkerBinaryResolver::new(root.current_exe()),
+        WorkerBinaryConfig::explicit(binary),
+        spawner.clone(),
+    )
+    .unwrap();
+
+    assert!(service.includes_lifecycle_service());
+    assert!(service.uses_process_worker_launcher());
+    assert!(service.uses_session_command_sender());
     assert!(!service.has_bound_listener());
 }
 
@@ -118,6 +141,16 @@ impl TempRoot {
     fn path(&self) -> &Path {
         &self.path
     }
+
+    fn current_exe(&self) -> PathBuf {
+        self.path.join(executable_name("doric-daemon"))
+    }
+
+    fn touch_executable(&self, name: &str) -> PathBuf {
+        let path = self.path.join(executable_name(name));
+        fs::write(&path, "").unwrap();
+        path
+    }
 }
 
 impl Drop for TempRoot {
@@ -131,4 +164,28 @@ fn suffix() -> u128 {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos()
+}
+
+#[derive(Clone, Default)]
+struct SharedRecordingSpawner;
+
+impl ProcessSpawner for SharedRecordingSpawner {
+    fn spawn(
+        &self,
+        _command: crate::process::WorkerProcessCommand,
+    ) -> crate::error::DaemonResult<ChildHandle> {
+        Ok(ChildHandle::new(52))
+    }
+}
+
+fn worker_binary_name() -> &'static str {
+    "doric-worker"
+}
+
+fn executable_name(name: &str) -> String {
+    if cfg!(windows) {
+        format!("{name}.exe")
+    } else {
+        name.to_owned()
+    }
 }

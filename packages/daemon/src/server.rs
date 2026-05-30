@@ -3,16 +3,24 @@ use std::fmt::{self, Display};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use crate::error::DaemonError;
+use crate::process::{
+    OsProcessSpawner, ProcessSpawner, ProcessWorkerLauncher, WorkerBinaryConfig,
+    WorkerBinaryResolver,
+};
 use crate::registry::Registry;
 use crate::root::validate_worker_root;
 use crate::service::{
-    CommandSender, DispatchDeps, IdGenerator, LifecycleService, ServiceConfig, WorkerLauncher,
+    CommandSender, DispatchDeps, IdGenerator, LifecycleService, ServiceConfig,
+    TimestampIdGenerator, WorkerLauncher,
 };
+use crate::worker_session::{SessionCommandSender, SessionManager, WorkerSessionConfig};
 
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1:47821";
 const DEFAULT_EVENT_CAPACITY: usize = 1_000;
+const DEFAULT_ATTACH_DEADLINE: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ServerConfig {
@@ -58,10 +66,10 @@ impl Default for ServerConfig {
 }
 
 pub struct ServiceBundle {
-    #[allow(dead_code)]
     lifecycle: LifecycleService,
     bind_addr: SocketAddr,
     bound_listener: bool,
+    wiring: BundleWiring,
 }
 
 impl fmt::Debug for ServiceBundle {
@@ -78,6 +86,10 @@ impl ServiceBundle {
         true
     }
 
+    pub fn lifecycle(&self) -> &LifecycleService {
+        &self.lifecycle
+    }
+
     pub fn has_bound_listener(&self) -> bool {
         self.bound_listener
     }
@@ -85,6 +97,20 @@ impl ServiceBundle {
     pub fn bind_addr(&self) -> &SocketAddr {
         &self.bind_addr
     }
+
+    pub fn uses_process_worker_launcher(&self) -> bool {
+        self.wiring.process_worker_launcher
+    }
+
+    pub fn uses_session_command_sender(&self) -> bool {
+        self.wiring.session_command_sender
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct BundleWiring {
+    process_worker_launcher: bool,
+    session_command_sender: bool,
 }
 
 #[derive(Debug)]
@@ -158,5 +184,59 @@ where
         lifecycle,
         bind_addr: config.bind_addr,
         bound_listener: false,
+        wiring: BundleWiring::default(),
     })
+}
+
+pub fn build_process_service<S>(
+    config: ServerConfig,
+    resolver: WorkerBinaryResolver,
+    worker_binary: WorkerBinaryConfig,
+    spawner: S,
+) -> Result<ServiceBundle, ServerBuildError>
+where
+    S: ProcessSpawner,
+{
+    let worker_root = validate_worker_root(config.worker_root())?;
+    let registry = Arc::new(Mutex::new(Registry::in_memory_with_event_capacity(
+        config.event_capacity,
+    )));
+    let session_manager = SessionManager::new(WorkerSessionConfig {
+        registry: registry.clone(),
+        attach_deadline: DEFAULT_ATTACH_DEADLINE,
+    });
+    let command_sender = SessionCommandSender::new(session_manager.clone());
+    let binary = resolver.resolve(worker_binary)?;
+    let launcher = ProcessWorkerLauncher::new(
+        session_manager,
+        spawner,
+        binary.path().to_path_buf(),
+        config.bind_addr.to_string(),
+    );
+    let lifecycle = LifecycleService::new(DispatchDeps {
+        config: ServiceConfig::new(worker_root, config.event_capacity),
+        registry,
+        launcher,
+        command_sender,
+        id_generator: TimestampIdGenerator,
+    });
+
+    Ok(ServiceBundle {
+        lifecycle,
+        bind_addr: config.bind_addr,
+        bound_listener: false,
+        wiring: BundleWiring {
+            process_worker_launcher: true,
+            session_command_sender: true,
+        },
+    })
+}
+
+pub fn build_production_service(config: ServerConfig) -> Result<ServiceBundle, ServerBuildError> {
+    build_process_service(
+        config,
+        WorkerBinaryResolver::current_exe()?,
+        WorkerBinaryConfig::default(),
+        OsProcessSpawner,
+    )
 }
