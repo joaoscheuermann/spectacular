@@ -39,7 +39,7 @@
 ## Commit checkpoint
 
 - Planned message: `feat(cli): route lifecycle commands through daemon`
-- Commit: pending
+- Commit: `03622570cba2945353164912478bb7c0d05a2840`
 - Staged scope: current effort implementation/test files plus effort 13 Doric artifacts, `STATE.md`, and carried-forward `agents/131_effort_12_done_transition.md`.
 
 ## Coordinator decision

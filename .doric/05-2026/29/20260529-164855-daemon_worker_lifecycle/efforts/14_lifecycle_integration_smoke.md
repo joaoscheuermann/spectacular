@@ -1,6 +1,6 @@
 # Effort: lifecycle integration smoke
 
-Status: todo
+Status: done
 
 ## Requirement links
 

@@ -48,6 +48,8 @@ impl From<WorkerEvent> for RegistryWorkerEvent {
                 "starting" => "starting",
                 "repo_preparation" => "repo_preparation",
                 "prompt_agent_started" => "prompt_agent_started",
+                "prompt_artifact_written" => "prompt_artifact_written",
+                "prompt_agent_completed" => "prompt_agent_completed",
                 "current_activity" => "current_activity",
                 "waiting_for_input" => "waiting_for_input",
                 "failed" => "failed",
@@ -67,6 +69,8 @@ pub enum RegistryEvent {
     Starting(String),
     RepoPreparation(String),
     PromptAgentStarted(String),
+    PromptArtifactWritten(String),
+    PromptAgentCompleted(String),
     CurrentActivity(String),
     WaitingForInput {
         request_id: RequestId,
@@ -98,6 +102,14 @@ impl RegistryEvent {
         Self::PromptAgentStarted(message.into())
     }
 
+    pub fn prompt_artifact_written(message: impl Into<String>) -> Self {
+        Self::PromptArtifactWritten(message.into())
+    }
+
+    pub fn prompt_agent_completed(message: impl Into<String>) -> Self {
+        Self::PromptAgentCompleted(message.into())
+    }
+
     pub fn current_activity(message: impl Into<String>) -> Self {
         Self::CurrentActivity(message.into())
     }
@@ -125,6 +137,12 @@ impl RegistryEvent {
             }
             Self::PromptAgentStarted(message) => {
                 WorkerEvent::prompt_agent_started(worker_id, sequence, message).into()
+            }
+            Self::PromptArtifactWritten(message) => {
+                WorkerEvent::prompt_artifact_written(worker_id, sequence, message).into()
+            }
+            Self::PromptAgentCompleted(message) => {
+                WorkerEvent::prompt_agent_completed(worker_id, sequence, message).into()
             }
             Self::CurrentActivity(message) => {
                 WorkerEvent::current_activity(worker_id, sequence, message).into()

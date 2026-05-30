@@ -288,15 +288,16 @@ impl SessionManager {
         }
 
         let status = proto_status(event.status).unwrap_or(WorkerStatus::Running);
+        let name = event.name;
         let message = if event.message.trim().is_empty() {
-            event.name
+            name.clone()
         } else {
             event.message
         };
         self.registry
             .lock()
             .expect("registry lock poisoned")
-            .append_event(&worker_id, event_for_status(status, message))?;
+            .append_event(&worker_id, event_for_worker_event(&name, status, message))?;
 
         Ok(())
     }
@@ -434,6 +435,16 @@ fn event_for_status(status: WorkerStatus, message: String) -> RegistryEvent {
         WorkerStatus::Running | WorkerStatus::Unavailable | WorkerStatus::Untracked => {
             RegistryEvent::current_activity(message)
         }
+    }
+}
+
+fn event_for_worker_event(name: &str, status: WorkerStatus, message: String) -> RegistryEvent {
+    match name {
+        "repo_preparation" => RegistryEvent::repo_preparation(message),
+        "prompt_agent_started" => RegistryEvent::prompt_agent_started(message),
+        "prompt_artifact_written" => RegistryEvent::prompt_artifact_written(message),
+        "prompt_agent_completed" => RegistryEvent::prompt_agent_completed(message),
+        _ => event_for_status(status, message),
     }
 }
 

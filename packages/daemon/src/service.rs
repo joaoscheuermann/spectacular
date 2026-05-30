@@ -430,6 +430,7 @@ fn event_status(name: &str) -> i32 {
         "accepted" => status_to_proto(WorkerStatus::Accepted),
         "starting" => status_to_proto(WorkerStatus::Starting),
         "waiting_for_input" => status_to_proto(WorkerStatus::WaitingForInput),
+        "prompt_agent_completed" => status_to_proto(WorkerStatus::Succeeded),
         "failed" => status_to_proto(WorkerStatus::Failed),
         "succeeded" => status_to_proto(WorkerStatus::Succeeded),
         "stopped" => status_to_proto(WorkerStatus::Stopped),
@@ -443,6 +444,10 @@ fn event_for_name(name: &str) -> RegistryEvent {
         "starting" => RegistryEvent::starting("starting"),
         "repo_preparation" => RegistryEvent::repo_preparation("repo preparation"),
         "prompt_agent_started" => RegistryEvent::prompt_agent_started("prompt agent started"),
+        "prompt_artifact_written" => {
+            RegistryEvent::prompt_artifact_written("prompt artifact written")
+        }
+        "prompt_agent_completed" => RegistryEvent::prompt_agent_completed("prompt agent completed"),
         "failed" => RegistryEvent::Failed("failed".to_owned()),
         "succeeded" => RegistryEvent::Succeeded("succeeded".to_owned()),
         "stopped" => RegistryEvent::Stopped("stopped".to_owned()),
