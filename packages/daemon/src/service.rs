@@ -83,6 +83,10 @@ impl WorkerEventStream {
     pub fn try_next(&self) -> Option<pb::WorkerEvent> {
         self.subscription.try_next().map(worker_event_to_proto)
     }
+
+    pub fn next_blocking(&self) -> Option<pb::WorkerEvent> {
+        self.subscription.next_blocking().map(worker_event_to_proto)
+    }
 }
 
 /// Launches a worker after dispatch has been validated and recorded.
@@ -179,6 +183,12 @@ impl LifecycleService {
                 repo_identity: summary.repo().as_str().to_owned(),
                 latest_sequence: summary.last_sequence().unwrap_or_default(),
                 updated_at: None,
+                activity: summary.activity().unwrap_or_default().to_owned(),
+                terminal_reason: summary.terminal_reason().unwrap_or_default().to_owned(),
+                pending_request_id: summary
+                    .pending_request_id()
+                    .map(|request_id| request_id.as_str().to_owned())
+                    .unwrap_or_default(),
             })
             .collect();
 

@@ -19,6 +19,10 @@ mod config_ops;
 mod entry;
 #[path = "main/lifecycle.rs"]
 mod lifecycle;
+#[path = "main/lifecycle_client.rs"]
+mod lifecycle_client;
+#[path = "main/lifecycle_output.rs"]
+mod lifecycle_output;
 #[path = "main/output.rs"]
 mod output;
 

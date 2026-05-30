@@ -374,11 +374,14 @@ dependencies = [
  "commands",
  "config",
  "crossterm",
+ "daemon",
  "iocraft",
+ "lifecycle",
  "llms",
  "serde",
  "serde_json",
  "tokio",
+ "tonic",
  "tools",
  "tui",
  "unicode-width",
@@ -519,6 +522,9 @@ version = "0.1.0"
 dependencies = [
  "config",
  "lifecycle",
+ "tokio",
+ "tokio-stream",
+ "tonic",
 ]
 
 [[package]]

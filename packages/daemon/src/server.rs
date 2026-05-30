@@ -2,6 +2,7 @@ use std::error::Error;
 use std::fmt::{self, Display};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -13,10 +14,15 @@ use crate::process::{
 use crate::registry::Registry;
 use crate::root::validate_worker_root;
 use crate::service::{
-    CommandSender, DispatchDeps, IdGenerator, LifecycleService, ServiceConfig,
-    TimestampIdGenerator, WorkerLauncher,
+    CommandSender, DispatchDeps, IdGenerator, LifecycleService as CoreLifecycleService,
+    ServiceConfig, TimestampIdGenerator, WorkerLauncher,
 };
 use crate::worker_session::{SessionCommandSender, SessionManager, WorkerSessionConfig};
+use lifecycle::proto::doric::lifecycle::v1 as pb;
+use tokio::net::TcpListener;
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::{ReceiverStream, TcpListenerStream};
+use tonic::transport::Server;
 
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1:47821";
 const DEFAULT_EVENT_CAPACITY: usize = 1_000;
@@ -66,7 +72,7 @@ impl Default for ServerConfig {
 }
 
 pub struct ServiceBundle {
-    lifecycle: LifecycleService,
+    lifecycle: CoreLifecycleService,
     bind_addr: SocketAddr,
     bound_listener: bool,
     wiring: BundleWiring,
@@ -86,8 +92,12 @@ impl ServiceBundle {
         true
     }
 
-    pub fn lifecycle(&self) -> &LifecycleService {
+    pub fn lifecycle(&self) -> &CoreLifecycleService {
         &self.lifecycle
+    }
+
+    pub fn lifecycle_mut(&mut self) -> &mut CoreLifecycleService {
+        &mut self.lifecycle
     }
 
     pub fn has_bound_listener(&self) -> bool {
@@ -170,7 +180,7 @@ where
     I: IdGenerator,
 {
     let worker_root = validate_worker_root(config.worker_root())?;
-    let lifecycle = LifecycleService::new(DispatchDeps {
+    let lifecycle = CoreLifecycleService::new(DispatchDeps {
         config: ServiceConfig::new(worker_root, config.event_capacity),
         registry: Arc::new(Mutex::new(Registry::in_memory_with_event_capacity(
             config.event_capacity,
@@ -213,7 +223,7 @@ where
         binary.path().to_path_buf(),
         config.bind_addr.to_string(),
     );
-    let lifecycle = LifecycleService::new(DispatchDeps {
+    let lifecycle = CoreLifecycleService::new(DispatchDeps {
         config: ServiceConfig::new(worker_root, config.event_capacity),
         registry,
         launcher,
@@ -239,4 +249,200 @@ pub fn build_production_service(config: ServerConfig) -> Result<ServiceBundle, S
         WorkerBinaryConfig::default(),
         OsProcessSpawner,
     )
+}
+
+#[derive(Debug)]
+pub struct ServerRunError {
+    message: String,
+    source: Option<Box<dyn Error + Send + Sync>>,
+}
+
+impl ServerRunError {
+    fn new(message: impl Into<String>, source: impl Error + Send + Sync + 'static) -> Self {
+        Self {
+            message: message.into(),
+            source: Some(Box::new(source)),
+        }
+    }
+}
+
+impl Display for ServerRunError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl Error for ServerRunError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.source
+            .as_deref()
+            .map(|source| source as &(dyn Error + 'static))
+    }
+}
+
+impl From<ServerBuildError> for ServerRunError {
+    fn from(source: ServerBuildError) -> Self {
+        Self {
+            message: source.to_string(),
+            source: Some(Box::new(source)),
+        }
+    }
+}
+
+pub async fn serve_production(config: ServerConfig) -> Result<(), ServerRunError> {
+    let bundle = build_production_service(config)?;
+    serve_bundle(bundle).await
+}
+
+pub fn run_production(config: ServerConfig) -> Result<(), ServerRunError> {
+    match tokio::runtime::Handle::try_current() {
+        Ok(handle) => tokio::task::block_in_place(|| handle.block_on(serve_production(config))),
+        Err(_) => tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .map_err(|source| ServerRunError::new("failed to start daemon runtime", source))?
+            .block_on(serve_production(config)),
+    }
+}
+
+pub async fn serve_bundle(bundle: ServiceBundle) -> Result<(), ServerRunError> {
+    let listener = TcpListener::bind(bundle.bind_addr)
+        .await
+        .map_err(|source| {
+            ServerRunError::new(
+                format!("failed to bind daemon listener at {}", bundle.bind_addr),
+                source,
+            )
+        })?;
+
+    serve_bundle_on_listener(bundle, listener).await
+}
+
+pub async fn serve_bundle_on_listener(
+    bundle: ServiceBundle,
+    listener: TcpListener,
+) -> Result<(), ServerRunError> {
+    serve_bundle_on_listener_with_shutdown(bundle, listener, std::future::pending::<()>()).await
+}
+
+pub async fn serve_bundle_on_listener_with_shutdown<F>(
+    bundle: ServiceBundle,
+    listener: TcpListener,
+    shutdown: F,
+) -> Result<(), ServerRunError>
+where
+    F: std::future::Future<Output = ()> + Send + 'static,
+{
+    Server::builder()
+        .add_service(pb::lifecycle_service_server::LifecycleServiceServer::new(
+            TonicLifecycleService::new(bundle.lifecycle),
+        ))
+        .serve_with_incoming_shutdown(TcpListenerStream::new(listener), shutdown)
+        .await
+        .map_err(|source| ServerRunError::new("daemon server stopped with an error", source))
+}
+
+struct TonicLifecycleService {
+    inner: CoreLifecycleService,
+}
+
+impl TonicLifecycleService {
+    fn new(inner: CoreLifecycleService) -> Self {
+        Self { inner }
+    }
+}
+
+#[tonic::async_trait]
+impl pb::lifecycle_service_server::LifecycleService for TonicLifecycleService {
+    type StreamWorkerStream = Pin<
+        Box<
+            dyn tonic::codegen::tokio_stream::Stream<Item = Result<pb::WorkerEvent, tonic::Status>>
+                + Send,
+        >,
+    >;
+
+    async fn dispatch(
+        &self,
+        request: tonic::Request<pb::DispatchRequest>,
+    ) -> Result<tonic::Response<pb::DispatchResponse>, tonic::Status> {
+        self.inner
+            .dispatch(request.into_inner())
+            .map(tonic::Response::new)
+            .map_err(status_from_daemon)
+    }
+
+    async fn list_workers(
+        &self,
+        request: tonic::Request<pb::ListWorkersRequest>,
+    ) -> Result<tonic::Response<pb::ListWorkersResponse>, tonic::Status> {
+        self.inner
+            .list(request.into_inner())
+            .map(tonic::Response::new)
+            .map_err(status_from_daemon)
+    }
+
+    async fn stream_worker(
+        &self,
+        request: tonic::Request<pb::StreamWorkerRequest>,
+    ) -> Result<tonic::Response<Self::StreamWorkerStream>, tonic::Status> {
+        let stream = self
+            .inner
+            .stream(request.into_inner())
+            .map_err(status_from_daemon)?;
+        let (sender, receiver) = mpsc::channel(32);
+
+        tokio::task::spawn_blocking(move || {
+            let mut terminal = false;
+
+            for event in stream.replay().iter().cloned() {
+                terminal = terminal || is_terminal_event(&event);
+
+                if sender.blocking_send(Ok(event)).is_err() || terminal {
+                    return;
+                }
+            }
+
+            while let Some(event) = stream.next_blocking() {
+                terminal = is_terminal_event(&event);
+
+                if sender.blocking_send(Ok(event)).is_err() || terminal {
+                    return;
+                }
+            }
+        });
+
+        Ok(tonic::Response::new(Box::pin(ReceiverStream::new(
+            receiver,
+        ))))
+    }
+
+    async fn answer_input(
+        &self,
+        request: tonic::Request<pb::AnswerInputRequest>,
+    ) -> Result<tonic::Response<pb::AnswerInputResponse>, tonic::Status> {
+        self.inner
+            .answer_input(request.into_inner())
+            .map(tonic::Response::new)
+            .map_err(status_from_daemon)
+    }
+}
+
+fn status_from_daemon(error: DaemonError) -> tonic::Status {
+    let message = error.to_string();
+
+    match error {
+        DaemonError::RootConfiguration { .. } => tonic::Status::invalid_argument(message),
+        DaemonError::DuplicateWorker { .. } => tonic::Status::already_exists(message),
+        DaemonError::UnknownWorker { .. } => tonic::Status::not_found(message),
+        DaemonError::StaleRequest { .. } | DaemonError::NoPendingInput { .. } => {
+            tonic::Status::not_found(message)
+        }
+        DaemonError::TerminalWorker { .. }
+        | DaemonError::DuplicateAnswer { .. }
+        | DaemonError::NotWaitingForInput { .. } => tonic::Status::failed_precondition(message),
+    }
+}
+
+fn is_terminal_event(event: &pb::WorkerEvent) -> bool {
+    matches!(event.name.as_str(), "failed" | "succeeded" | "stopped")
 }

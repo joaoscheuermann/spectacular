@@ -1,6 +1,6 @@
 # Effort: CLI daemon client output
 
-Status: todo
+Status: done
 
 ## Requirement links
 
@@ -22,6 +22,7 @@ Wire CLI lifecycle commands to the daemon over gRPC and render stable, redacted,
 
 - `packages/cli/Cargo.toml`
 - `packages/cli/src/main/lifecycle.rs`
+- `packages/cli/src/main/lifecycle_output.rs`
 - `packages/cli/src/main/entry.rs`
 - `packages/cli/src/main/output.rs`
 - `packages/cli/src/main/cli_types.rs`

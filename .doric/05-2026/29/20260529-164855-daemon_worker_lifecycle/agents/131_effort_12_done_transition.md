@@ -29,7 +29,7 @@ Coordinator transition for closing `efforts/12_worker_session_runtime.md`.
 ## Commit checkpoint
 
 - Message: `feat(worker): add session runtime`
-- Commit: pending
+- Commit: `ceead4f1d24ea351be34800203f137d69e362c90`
 - Scope: worker runtime library, runtime event/status helpers, runtime tests, and effort 12 Doric artifacts.
 
 ## Coordinator decision

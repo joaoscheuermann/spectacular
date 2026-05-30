@@ -42,6 +42,35 @@ fn top_level_help_lists_lifecycle_commands_without_chat() {
 }
 
 #[test]
+fn try_parse_from_feature_and_debug_preserve_v1_prompt_only_labels() {
+    let mut command = Cli::command();
+    let mut feature_help = Vec::new();
+    let mut debug_help = Vec::new();
+
+    command
+        .find_subcommand_mut("feature")
+        .expect("feature subcommand should exist")
+        .write_long_help(&mut feature_help)
+        .unwrap();
+    command
+        .find_subcommand_mut("debug")
+        .expect("debug subcommand should exist")
+        .write_long_help(&mut debug_help)
+        .unwrap();
+    let feature_help = String::from_utf8(feature_help).unwrap();
+    let debug_help = String::from_utf8(debug_help).unwrap();
+
+    assert!(feature_help.contains("prompt/requirements"));
+    assert!(debug_help.contains("prompt/requirements"));
+    assert!(feature_help.contains("feature"));
+    assert!(debug_help.contains("debug"));
+    for unsupported_scope in ["PRD", "technical design", "implementation", "handover"] {
+        assert!(!feature_help.contains(unsupported_scope));
+        assert!(!debug_help.contains(unsupported_scope));
+    }
+}
+
+#[test]
 fn bare_invocation_defaults_to_chat() {
     let cli = Cli::try_parse_from(["doric"]).unwrap();
 
@@ -174,32 +203,6 @@ fn try_parse_from_answer_with_ids_and_text_preserves_routing_fields() {
             addr: None,
         }))
     );
-}
-
-#[test]
-fn lifecycle_daemon_output_preserves_worker_root() {
-    let output = crate::lifecycle::handle_lifecycle_command(Command::Daemon(LifecycleDaemonArgs {
-        addr: Some("127.0.0.1:47822".to_owned()),
-        worker_root: Some("C:/workers".to_owned()),
-    }))
-    .unwrap();
-    let output = strip_ansi_codes(&output);
-
-    assert!(output.contains("Address: 127.0.0.1:47822"));
-    assert!(output.contains("Worker root: C:/workers"));
-}
-
-#[test]
-fn lifecycle_worker_output_preserves_worker_id() {
-    let output = crate::lifecycle::handle_lifecycle_command(Command::Worker(LifecycleWorkerArgs {
-        id: "worker-123".to_owned(),
-        addr: Some("127.0.0.1:47822".to_owned()),
-    }))
-    .unwrap();
-    let output = strip_ansi_codes(&output);
-
-    assert!(output.contains("Worker: worker-123"));
-    assert!(output.contains("Address: 127.0.0.1:47822"));
 }
 
 #[test]

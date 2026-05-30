@@ -73,6 +73,9 @@ message WorkerSummary {
   string repo_identity = 4;
   uint64 latest_sequence = 5;
   google.protobuf.Timestamp updated_at = 6;
+  string activity = 7;
+  string terminal_reason = 8;
+  string pending_request_id = 9;
 }
 
 message WorkerEvent {

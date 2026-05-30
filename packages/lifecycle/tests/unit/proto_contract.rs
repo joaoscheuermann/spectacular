@@ -2,31 +2,29 @@ use lifecycle::proto::doric::lifecycle::v1;
 
 #[test]
 fn proto_namespace_exposes_cli_facing_messages() {
-    type DispatchRequest = v1::DispatchRequest;
-    type DispatchResponse = v1::DispatchResponse;
-    type ListWorkersRequest = v1::ListWorkersRequest;
-    type ListWorkersResponse = v1::ListWorkersResponse;
-    type StreamWorkerRequest = v1::StreamWorkerRequest;
-    type AnswerInputRequest = v1::AnswerInputRequest;
-    type AnswerInputResponse = v1::AnswerInputResponse;
-    type WorkerSummary = v1::WorkerSummary;
-    type WorkerEvent = v1::WorkerEvent;
-    type InputRequest = v1::InputRequest;
-    type JobMode = v1::JobMode;
-    type WorkerStatus = v1::WorkerStatus;
+    assert_type::<v1::DispatchRequest>();
+    assert_type::<v1::DispatchResponse>();
+    assert_type::<v1::ListWorkersRequest>();
+    assert_type::<v1::ListWorkersResponse>();
+    assert_type::<v1::StreamWorkerRequest>();
+    assert_type::<v1::AnswerInputRequest>();
+    assert_type::<v1::AnswerInputResponse>();
+    assert_type::<v1::WorkerSummary>();
+    assert_type::<v1::WorkerEvent>();
+    assert_type::<v1::InputRequest>();
+    assert_type::<v1::JobMode>();
+    assert_type::<v1::WorkerStatus>();
 
-    assert_type::<DispatchRequest>();
-    assert_type::<DispatchResponse>();
-    assert_type::<ListWorkersRequest>();
-    assert_type::<ListWorkersResponse>();
-    assert_type::<StreamWorkerRequest>();
-    assert_type::<AnswerInputRequest>();
-    assert_type::<AnswerInputResponse>();
-    assert_type::<WorkerSummary>();
-    assert_type::<WorkerEvent>();
-    assert_type::<InputRequest>();
-    assert_type::<JobMode>();
-    assert_type::<WorkerStatus>();
+    let summary = v1::WorkerSummary {
+        activity: "running prompt agent".to_owned(),
+        terminal_reason: "prompt/requirements completed".to_owned(),
+        pending_request_id: "request-1".to_owned(),
+        ..Default::default()
+    };
+
+    assert_eq!(summary.activity, "running prompt agent");
+    assert_eq!(summary.terminal_reason, "prompt/requirements completed");
+    assert_eq!(summary.pending_request_id, "request-1");
 }
 
 #[test]

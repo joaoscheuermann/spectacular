@@ -152,6 +152,20 @@ fn list_mixed_registry_returns_all_public_summaries() {
         .workers
         .iter()
         .all(|worker| !worker.repo_identity.contains("token@")));
+    let waiting = response
+        .workers
+        .iter()
+        .find(|worker| worker.worker_id == "waiting-worker")
+        .expect("waiting worker should be listed");
+    assert_eq!(waiting.activity, "waiting");
+    assert_eq!(waiting.pending_request_id, "request-1");
+
+    let failed = response
+        .workers
+        .iter()
+        .find(|worker| worker.worker_id == "failed-worker")
+        .expect("failed worker should be listed");
+    assert_eq!(failed.terminal_reason, "failed");
 }
 
 /// Verifies that stream rejects unknown workers without opening a tail.

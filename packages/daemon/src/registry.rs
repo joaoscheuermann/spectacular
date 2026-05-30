@@ -163,6 +163,10 @@ impl EventSubscription {
     pub fn try_next(&self) -> Option<RegistryWorkerEvent> {
         self.receiver.try_recv().ok()
     }
+
+    pub fn next_blocking(&self) -> Option<RegistryWorkerEvent> {
+        self.receiver.recv().ok()
+    }
 }
 
 impl Registry {
@@ -196,7 +200,6 @@ impl Registry {
         self.subscribers.insert(record.id.clone(), Vec::new());
         self.order.push(record.id.clone());
         self.records.insert(record.id.clone(), record);
-
         Ok(())
     }
 
@@ -486,9 +489,7 @@ impl EventLog {
 }
 
 fn terminal_reason(status: WorkerStatus, activity: Option<&str>) -> Option<String> {
-    is_terminal(status)
-        .then(|| activity.map(str::to_owned))
-        .flatten()
+    activity.filter(|_| is_terminal(status)).map(str::to_owned)
 }
 
 fn is_terminal(status: WorkerStatus) -> bool {

@@ -4,8 +4,12 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::process::{ChildHandle, ProcessSpawner, WorkerBinaryConfig, WorkerBinaryResolver};
-use crate::server::{build_process_service, build_service, ServerConfig};
+use crate::server::{
+    build_process_service, build_service, serve_bundle_on_listener_with_shutdown, ServerConfig,
+};
 use crate::service::{CommandSender, IdGenerator, WorkerLauncher};
+use lifecycle::proto::doric::lifecycle::v1 as pb;
+use tokio::net::TcpListener;
 
 /// Verifies that daemon server config defaults to loopback lifecycle port.
 #[test]
@@ -95,6 +99,56 @@ fn build_service_invalid_worker_root_fails_before_binding() {
 
     assert!(error.to_string().contains("worker root"));
     assert!(!error.bound_listener());
+}
+
+/// Verifies a foreground daemon server serves list over the generated gRPC path.
+#[tokio::test]
+async fn serve_bundle_generated_lifecycle_service_serves_list_over_grpc() {
+    let root = TempRoot::new("grpc-list");
+    let config = ServerConfig::parse("127.0.0.1:0", root.path()).unwrap();
+    let mut service = build_service(
+        config,
+        NoopLauncher,
+        NoopCommandSender,
+        FixedIdGenerator("server-worker".to_owned()),
+    )
+    .unwrap();
+    service
+        .lifecycle_mut()
+        .seed_for_test([(
+            "server-worker",
+            crate::registry::WorkerMode::Feature,
+            pb::WorkerStatus::WaitingForInput as i32,
+            "waiting for approval",
+        )])
+        .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let (shutdown_sender, shutdown_receiver) = tokio::sync::oneshot::channel();
+    let server = tokio::spawn(serve_bundle_on_listener_with_shutdown(
+        service,
+        listener,
+        async move {
+            let _ = shutdown_receiver.await;
+        },
+    ));
+
+    let mut client =
+        pb::lifecycle_service_client::LifecycleServiceClient::connect(format!("http://{addr}"))
+            .await
+            .unwrap();
+    let response = client
+        .list_workers(pb::ListWorkersRequest {})
+        .await
+        .unwrap()
+        .into_inner();
+
+    shutdown_sender.send(()).unwrap();
+    server.await.unwrap().unwrap();
+    assert_eq!(response.workers.len(), 1);
+    assert_eq!(response.workers[0].worker_id, "server-worker");
+    assert_eq!(response.workers[0].activity, "waiting for approval");
+    assert_eq!(response.workers[0].pending_request_id, "request-1");
 }
 
 struct NoopLauncher;

@@ -15,9 +15,9 @@ pub(super) enum Command {
     Config(ConfigArgs),
     /// Start the local lifecycle daemon.
     Daemon(LifecycleDaemonArgs),
-    /// Start a feature-development lifecycle run.
+    /// Start a feature prompt/requirements lifecycle run.
     Feature(LifecycleDispatchArgs),
-    /// Start a debugging lifecycle run.
+    /// Start a debug prompt/requirements lifecycle run.
     Debug(LifecycleDispatchArgs),
     /// List lifecycle workers and requests.
     List(LifecycleAddressArgs),
