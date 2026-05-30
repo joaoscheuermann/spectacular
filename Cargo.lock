@@ -3270,6 +3270,8 @@ dependencies = [
  "config",
  "lifecycle",
  "llms",
+ "tokio",
+ "tools",
 ]
 
 [[package]]

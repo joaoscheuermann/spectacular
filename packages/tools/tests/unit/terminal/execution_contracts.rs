@@ -25,10 +25,7 @@ async fn short_command_in_temp_workspace_returns_stdout_and_success() {
     assert_eq!(output.exit_code, 0);
     assert!(output.success);
     assert_eq!(output.schema, compact::TERMINAL_COMPACT_SCHEMA);
-    assert_eq!(
-        output.stdout.head,
-        vec!["doric-terminal-ok".to_owned()]
-    );
+    assert_eq!(output.stdout.head, vec!["doric-terminal-ok".to_owned()]);
     assert!(output.raw_output_ref.is_none());
 
     remove_workspace(workspace_root).await;
@@ -163,6 +160,34 @@ async fn command_can_write_inside_workspace_root() {
     assert!(workspace_root.join("created-by-terminal.txt").is_file());
 
     remove_workspace(workspace_root).await;
+}
+
+/// Verifies that parent working-directory traversal keeps the current lexical resolution behavior.
+#[tokio::test]
+async fn parent_working_directory_resolves_outside_workspace_root() {
+    let temp_root = temp_workspace("terminal_parent_working_directory").await;
+    let workspace_root = temp_root.join("workspace");
+    let outside_root = temp_root.join("outside");
+    tokio::fs::create_dir_all(&workspace_root).await.unwrap();
+    tokio::fs::create_dir_all(&outside_root).await.unwrap();
+    let tool = TerminalTool::new(&workspace_root);
+
+    let output = execute_terminal_compact(
+        &tool,
+        json!({
+            "command": redirect_echo_command("outside-terminal", "outside-created.txt"),
+            "working_directory": "../outside"
+        }),
+        Cancellation::default(),
+    )
+    .await;
+
+    assert_eq!(output.exit_code, 0);
+    assert!(output.success);
+    assert!(outside_root.join("outside-created.txt").is_file());
+    assert!(!workspace_root.join("outside-created.txt").exists());
+
+    remove_workspace(temp_root).await;
 }
 
 /// Verifies trace-enabled terminal execution writes exact raw output outside the compact payload.

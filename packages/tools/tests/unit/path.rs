@@ -19,6 +19,26 @@ fn dot_and_parent_components_are_normalized_lexically() {
     );
 }
 
+/// Verifies that parent traversal remains lexical and resolves outside the workspace root.
+#[test]
+fn parent_traversal_resolves_outside_workspace_root() {
+    let workspace_root = if cfg!(windows) {
+        PathBuf::from(r"C:\workspace\repo")
+    } else {
+        PathBuf::from("/workspace/repo")
+    };
+    let expected = if cfg!(windows) {
+        PathBuf::from(r"C:\workspace\outside.txt")
+    } else {
+        PathBuf::from("/workspace/outside.txt")
+    };
+
+    assert_eq!(
+        resolve_workspace_path(workspace_root, "../outside.txt"),
+        expected
+    );
+}
+
 /// Verifies that absolute paths remain host-absolute after lexical normalization.
 #[test]
 fn absolute_paths_remain_absolute() {
@@ -33,5 +53,8 @@ fn absolute_paths_remain_absolute() {
         PathBuf::from("/outside.txt")
     };
 
-    assert_eq!(resolve_workspace_path(PathBuf::from("/workspace"), absolute), expected);
+    assert_eq!(
+        resolve_workspace_path(PathBuf::from("/workspace"), absolute),
+        expected
+    );
 }

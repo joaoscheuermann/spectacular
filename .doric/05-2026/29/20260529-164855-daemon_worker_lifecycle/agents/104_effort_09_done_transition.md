@@ -25,14 +25,14 @@
 - Subject: `feat(worker): compose provider runtime`
 - Scope command: `git commit --only -- Cargo.lock packages/worker/Cargo.toml packages/worker/src/lib.rs packages/worker/src/error.rs packages/worker/src/provider.rs packages/worker/tests/unit.rs packages/worker/tests/unit/provider.rs .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/STATE.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/096_effort_08_done_transition.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/097_effort_09_start_transition.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/098_effort_09_test_planner.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/099_effort_09_test_writer.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/100_effort_09_code_writer.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/101_effort_09_provider_test_cwd_repair_writer.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/102_effort_09_validator_refactor.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/103_effort_09_reviewer.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/104_effort_09_done_transition.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/efforts/09_worker_provider_runtime.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/validation/09_worker_provider_runtime.md`
 - Rationale: use explicit pathspec to commit only effort 09 worker files, effort 09 Doric run artifacts, and the carried-forward effort 08 hash finalization artifact while preserving unrelated staged files.
-- Commit hash: `pending`
+- Commit hash: `094f0d86fa298e5bd87d0d620aa44b015a35c4af`
 
 ## Commit checkpoint result
 
-- Result: pending
-- Commit: `pending`
+- Result: succeeded
+- Commit: `094f0d86fa298e5bd87d0d620aa44b015a35c4af`
 - Subject: `feat(worker): compose provider runtime`
 
 ## Coordinator decision
 
-pending commit checkpoint
+accepted

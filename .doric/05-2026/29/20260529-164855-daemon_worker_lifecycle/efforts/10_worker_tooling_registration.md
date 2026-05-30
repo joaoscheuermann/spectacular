@@ -1,6 +1,6 @@
 # Effort: worker tooling registration
 
-Status: todo
+Status: done
 
 ## Requirement links
 

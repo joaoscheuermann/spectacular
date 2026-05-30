@@ -70,6 +70,63 @@ async fn nested_relative_path_creates_parents() {
     remove_workspace(workspace_root).await;
 }
 
+/// Verifies that absolute write paths are preserved instead of being joined to the workspace root.
+#[tokio::test]
+async fn absolute_path_writes_to_absolute_path() {
+    let temp_root = temp_workspace("absolute_path_writes_to_absolute_path").await;
+    let workspace_root = temp_root.join("workspace");
+    let absolute_path = temp_root.join("absolute-write.txt");
+    tokio::fs::create_dir_all(&workspace_root).await.unwrap();
+    let tool = WriteTool::new(&workspace_root);
+
+    let result = tool
+        .execute(
+            json!({"path": absolute_path.to_string_lossy(), "content": "absolute"}),
+            Cancellation::default(),
+        )
+        .await
+        .unwrap();
+    let output: WriteOutput = serde_json::from_str(&result).unwrap();
+
+    assert!(output.success);
+    assert_eq!(
+        tokio::fs::read_to_string(&absolute_path).await.unwrap(),
+        "absolute"
+    );
+    assert!(!workspace_root.join("absolute-write.txt").exists());
+
+    remove_workspace(temp_root).await;
+}
+
+/// Verifies that parent traversal writes using the current lexical path semantics.
+#[tokio::test]
+async fn parent_traversal_writes_outside_workspace_root() {
+    let temp_root = temp_workspace("parent_traversal_writes_outside_workspace_root").await;
+    let workspace_root = temp_root.join("workspace");
+    tokio::fs::create_dir_all(&workspace_root).await.unwrap();
+    let tool = WriteTool::new(&workspace_root);
+
+    let result = tool
+        .execute(
+            json!({"path": "../outside-write.txt", "content": "outside"}),
+            Cancellation::default(),
+        )
+        .await
+        .unwrap();
+    let output: WriteOutput = serde_json::from_str(&result).unwrap();
+
+    assert!(output.success);
+    assert_eq!(
+        tokio::fs::read_to_string(temp_root.join("outside-write.txt"))
+            .await
+            .unwrap(),
+        "outside"
+    );
+    assert!(!workspace_root.join("outside-write.txt").exists());
+
+    remove_workspace(temp_root).await;
+}
+
 /// Verifies that the write tool registers through ToolStorage with its expected manifest.
 #[test]
 fn write_manifest_registers_through_tool_storage() {
