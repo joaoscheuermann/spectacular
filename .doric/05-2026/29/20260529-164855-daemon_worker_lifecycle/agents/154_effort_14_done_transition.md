@@ -32,7 +32,7 @@
 ## Commit checkpoint
 
 - Planned message: `test(daemon): preserve worker lifecycle milestones`
-- Commit: pending
+- Commit: `f6bfbdbfc771ba8032d72cca4c15cd00360901ed`
 - Staged scope: current effort daemon source/test files plus effort 14 Doric artifacts, `STATE.md`, and carried-forward `agents/147_effort_13_done_transition.md`.
 
 ## Coordinator decision

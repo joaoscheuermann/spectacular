@@ -1,6 +1,6 @@
 # Effort: architecture docs validation
 
-Status: todo
+Status: done
 
 ## Requirement links
 
