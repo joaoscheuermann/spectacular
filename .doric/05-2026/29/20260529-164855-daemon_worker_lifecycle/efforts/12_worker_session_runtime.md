@@ -1,6 +1,6 @@
 # Effort: worker session runtime
 
-Status: todo
+Status: done
 
 ## Requirement links
 
