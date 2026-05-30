@@ -1,0 +1,139 @@
+syntax = "proto3";
+
+package doric.lifecycle.v1;
+
+import "google/protobuf/timestamp.proto";
+
+service LifecycleService {
+  rpc Dispatch(DispatchRequest) returns (DispatchResponse);
+  rpc ListWorkers(ListWorkersRequest) returns (ListWorkersResponse);
+  rpc StreamWorker(StreamWorkerRequest) returns (stream WorkerEvent);
+  rpc AnswerInput(AnswerInputRequest) returns (AnswerInputResponse);
+}
+
+service WorkerSessionService {
+  rpc Session(stream WorkerFrame) returns (stream DaemonFrame);
+}
+
+enum JobMode {
+  JOB_MODE_UNSPECIFIED = 0;
+  JOB_MODE_FEATURE = 1;
+  JOB_MODE_DEBUG = 2;
+}
+
+enum WorkerStatus {
+  WORKER_STATUS_UNSPECIFIED = 0;
+  WORKER_STATUS_ACCEPTED = 1;
+  WORKER_STATUS_STARTING = 2;
+  WORKER_STATUS_RUNNING = 3;
+  WORKER_STATUS_WAITING_FOR_INPUT = 4;
+  WORKER_STATUS_SUCCEEDED = 5;
+  WORKER_STATUS_FAILED = 6;
+  WORKER_STATUS_STOPPED = 7;
+}
+
+message DispatchRequest {
+  JobMode mode = 1;
+  string prompt = 2;
+  string repo = 3;
+}
+
+message DispatchResponse {
+  string worker_id = 1;
+  JobMode mode = 2;
+  string repo_identity = 3;
+  WorkerStatus status = 4;
+}
+
+message ListWorkersRequest {}
+
+message ListWorkersResponse {
+  repeated WorkerSummary workers = 1;
+}
+
+message StreamWorkerRequest {
+  string worker_id = 1;
+  uint64 from_sequence = 2;
+}
+
+message AnswerInputRequest {
+  string worker_id = 1;
+  string request_id = 2;
+  string text = 3;
+}
+
+message AnswerInputResponse {
+  bool accepted = 1;
+}
+
+message WorkerSummary {
+  string worker_id = 1;
+  JobMode mode = 2;
+  WorkerStatus status = 3;
+  string repo_identity = 4;
+  uint64 latest_sequence = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+message WorkerEvent {
+  string worker_id = 1;
+  uint64 sequence = 2;
+  WorkerStatus status = 3;
+  string name = 4;
+  string message = 5;
+  InputRequest input = 6;
+  google.protobuf.Timestamp occurred_at = 7;
+}
+
+message InputRequest {
+  string request_id = 1;
+  string prompt = 2;
+  repeated string choices = 3;
+}
+
+message WorkerFrame {
+  oneof frame {
+    WorkerHello hello = 1;
+    WorkerStatusUpdate status = 2;
+    WorkerEvent event = 3;
+  }
+}
+
+message DaemonFrame {
+  oneof frame {
+    StartJob start_job = 1;
+    AnswerInputCommand answer = 2;
+    ShutdownWorker shutdown = 3;
+  }
+}
+
+message WorkerHello {
+  string worker_id = 1;
+  string token = 2;
+}
+
+message WorkerStatusUpdate {
+  string worker_id = 1;
+  WorkerStatus status = 2;
+  string message = 3;
+}
+
+message StartJob {
+  string worker_id = 1;
+  JobMode mode = 2;
+  string prompt = 3;
+  string repo = 4;
+  string repo_dir = 5;
+  string state_dir = 6;
+  string artifacts_dir = 7;
+  string tool_output_dir = 8;
+}
+
+message AnswerInputCommand {
+  string request_id = 1;
+  string text = 2;
+}
+
+message ShutdownWorker {
+  string reason = 1;
+}

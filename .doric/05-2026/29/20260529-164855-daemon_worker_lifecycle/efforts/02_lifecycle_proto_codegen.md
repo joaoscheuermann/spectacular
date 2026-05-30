@@ -1,6 +1,6 @@
 # Effort: lifecycle proto codegen
 
-Status: todo
+Status: done
 
 ## Requirement links
 

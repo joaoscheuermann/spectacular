@@ -22,7 +22,14 @@
 - Subject: `chore(workspace): add lifecycle daemon worker package skeletons`
 - Scope command: `git commit --only -- Cargo.toml Cargo.lock packages/lifecycle packages/daemon packages/worker .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle`
 - Rationale: use explicit pathspec to commit only effort-owned files and Doric run artifacts while preserving unrelated staged files.
-- Commit hash: pending
+- Commit hash: `261e0a7f4cfd598b4ce15eb2e463124559b0b5a6`
+
+## Commit checkpoint result
+
+- Result: succeeded
+- Commit: `261e0a7f4cfd598b4ce15eb2e463124559b0b5a6`
+- Subject: `chore(workspace): add lifecycle daemon worker package skeletons`
+- Note: the first commit attempt placed `-m` after the pathspec separator, so Git treated the message as pathspec text and made no commit. The retry moved `-m` before `--` and succeeded.
 
 ## Coordinator decision
 

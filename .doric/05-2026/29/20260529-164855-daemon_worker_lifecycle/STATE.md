@@ -4,7 +4,7 @@
 
 - Phase: development
 - Current effort: none
-- Next effort index: 1
+- Next effort index: 2
 
 ## Approvals
 
@@ -18,7 +18,7 @@
 | Index | Effort file | Status |
 | ----- | ----------- | ------ |
 | 0 | efforts/01_workspace_package_skeletons.md | done |
-| 1 | efforts/02_lifecycle_proto_codegen.md | todo |
+| 1 | efforts/02_lifecycle_proto_codegen.md | done |
 | 2 | efforts/03_lifecycle_domain_redaction.md | todo |
 | 3 | efforts/04_cli_lifecycle_parse_routing.md | todo |
 | 4 | efforts/05_daemon_registry_root.md | todo |
@@ -37,6 +37,7 @@
 
 | Effort | Owner | Write scope | Status |
 | ------ | ----- | ----------- | ------ |
+| none | none | none | none |
 
 ## Required agents
 
@@ -69,6 +70,12 @@
 | development | efforts/01_workspace_package_skeletons.md | validator/refactor | worker | agents/028_effort_01_validator_refactor.md | 019e7641-9a93-7843-9d88-5cb80b3442d9 | accepted |
 | development | efforts/01_workspace_package_skeletons.md | reviewer | explorer | agents/029_effort_01_reviewer.md | 019e7644-516e-7f43-bbb1-4d1fb0ebbaf7 | superseded |
 | development | efforts/01_workspace_package_skeletons.md | reviewer | explorer | agents/030_effort_01_reviewer_checkpoint_retry.md | 019e7647-2285-70d0-b442-e0ad56561b21 | accepted |
+| development | efforts/02_lifecycle_proto_codegen.md | test planner | worker | agents/033_effort_02_test_planner.md | 019e764b-192c-7b23-933a-6126db89abd9 | accepted |
+| development | efforts/02_lifecycle_proto_codegen.md | test writer | worker | agents/034_effort_02_test_writer.md | 019e764d-16d3-7830-8f54-54c35b77165f | accepted |
+| development | efforts/02_lifecycle_proto_codegen.md | code writer | worker | agents/035_effort_02_code_writer.md | 019e7650-2ceb-79e3-8d36-c85b06e2aea5 | accepted |
+| development | efforts/02_lifecycle_proto_codegen.md | validator/refactor | worker | agents/036_effort_02_validator_refactor.md | 019e7655-0ddc-7b01-a335-2f44a3a1115e | accepted |
+| development | efforts/02_lifecycle_proto_codegen.md | reviewer | explorer | agents/037_effort_02_reviewer.md | 019e7657-8521-7d22-bdf7-0b7079e3cb34 | superseded |
+| development | efforts/02_lifecycle_proto_codegen.md | reviewer checkpoint retry | explorer | agents/039_effort_02_reviewer_checkpoint_retry.md | 019e765c-91a2-7c12-a818-e2da17c43104 | accepted |
 
 ## Agent receipts
 
@@ -101,15 +108,23 @@
 | agents/028_effort_01_validator_refactor.md | development | efforts/01_workspace_package_skeletons.md | validator/refactor | worker | 019e7641-9a93-7843-9d88-5cb80b3442d9 | accepted |
 | agents/029_effort_01_reviewer.md | development | efforts/01_workspace_package_skeletons.md | reviewer | explorer | 019e7644-516e-7f43-bbb1-4d1fb0ebbaf7 | superseded |
 | agents/030_effort_01_reviewer_checkpoint_retry.md | development | efforts/01_workspace_package_skeletons.md | reviewer | explorer | 019e7647-2285-70d0-b442-e0ad56561b21 | accepted |
+| agents/033_effort_02_test_planner.md | development | efforts/02_lifecycle_proto_codegen.md | test planner | worker | 019e764b-192c-7b23-933a-6126db89abd9 | accepted |
+| agents/034_effort_02_test_writer.md | development | efforts/02_lifecycle_proto_codegen.md | test writer | worker | 019e764d-16d3-7830-8f54-54c35b77165f | accepted |
+| agents/035_effort_02_code_writer.md | development | efforts/02_lifecycle_proto_codegen.md | code writer | worker | 019e7650-2ceb-79e3-8d36-c85b06e2aea5 | accepted |
+| agents/036_effort_02_validator_refactor.md | development | efforts/02_lifecycle_proto_codegen.md | validator/refactor | worker | 019e7655-0ddc-7b01-a335-2f44a3a1115e | accepted |
+| agents/037_effort_02_reviewer.md | development | efforts/02_lifecycle_proto_codegen.md | reviewer | explorer | 019e7657-8521-7d22-bdf7-0b7079e3cb34 | superseded |
+| agents/039_effort_02_reviewer_checkpoint_retry.md | development | efforts/02_lifecycle_proto_codegen.md | reviewer checkpoint retry | explorer | 019e765c-91a2-7c12-a818-e2da17c43104 | accepted |
 
 ## Validation records
 
 | Effort | Record | Red | Green | Reviewer |
 | ------ | ------ | --- | ----- | -------- |
 | efforts/01_workspace_package_skeletons.md | validation/01_workspace_package_skeletons.md | yes | yes | approved |
+| efforts/02_lifecycle_proto_codegen.md | validation/02_lifecycle_proto_codegen.md | yes | yes | approved |
 
 ## Commit checkpoints
 
 | Effort | Commit | Message | Staged scope |
 | ------ | ------ | ------- | ------------ |
-| efforts/01_workspace_package_skeletons.md | pending | chore(workspace): add lifecycle daemon worker package skeletons | `git commit --only -- Cargo.toml Cargo.lock packages/lifecycle packages/daemon packages/worker .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle` |
+| efforts/01_workspace_package_skeletons.md | 261e0a7f4cfd598b4ce15eb2e463124559b0b5a6 | chore(workspace): add lifecycle daemon worker package skeletons | `git commit --only -- Cargo.toml Cargo.lock packages/lifecycle packages/daemon packages/worker .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle` |
+| efforts/02_lifecycle_proto_codegen.md | pending | feat(lifecycle): add proto codegen contract | `git commit --only -- Cargo.lock packages/lifecycle/Cargo.toml packages/lifecycle/build.rs packages/lifecycle/proto/doric/lifecycle/v1.proto packages/lifecycle/src/lib.rs packages/lifecycle/src/proto.rs packages/lifecycle/tests/unit/proto_contract.rs .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/STATE.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/031_effort_01_done_transition.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/032_effort_02_start_transition.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/033_effort_02_test_planner.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/034_effort_02_test_writer.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/035_effort_02_code_writer.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/036_effort_02_validator_refactor.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/037_effort_02_reviewer.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/038_effort_02_checkpoint_scope_reconciliation.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/039_effort_02_reviewer_checkpoint_retry.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/agents/040_effort_02_done_transition.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/efforts/02_lifecycle_proto_codegen.md .doric/05-2026/29/20260529-164855-daemon_worker_lifecycle/validation/02_lifecycle_proto_codegen.md` |
