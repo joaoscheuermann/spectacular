@@ -1,5 +1,6 @@
 use lifecycle::event::{StreamEvent, WorkerEvent};
 use lifecycle::identity::{RequestId, WorkerId};
+use lifecycle::repo::RepoUrl;
 use lifecycle::status::WorkerStatus;
 use std::time::UNIX_EPOCH;
 
@@ -33,6 +34,141 @@ fn request_id_from_str_valid_value_round_trips_display() {
 fn request_id_from_str_blank_or_whitespace_rejects_value() {
     assert!("".parse::<RequestId>().is_err());
     assert!("   ".parse::<RequestId>().is_err());
+}
+
+#[test]
+fn repo_url_from_str_scheme_remote_urls_with_host_and_path_accepts_clone_input() {
+    let cases = [
+        (
+            "https://github.com/org/repo.git",
+            "https://github.com/org/repo.git",
+        ),
+        (
+            "http://git.example.com/org/repo",
+            "http://git.example.com/org/repo",
+        ),
+        (
+            "ssh://git@github.com/org/repo.git",
+            "ssh://github.com/org/repo.git",
+        ),
+        (
+            "git://github.com/org/repo.git",
+            "git://github.com/org/repo.git",
+        ),
+    ];
+
+    for (raw, identity) in cases {
+        let url = raw.parse::<RepoUrl>().expect("remote repo URL should parse");
+
+        assert_eq!(url.as_clone_input(), raw);
+        assert_eq!(url.identity().as_str(), identity);
+    }
+}
+
+#[test]
+fn repo_url_try_from_str_scheme_remote_url_accepts_clone_input() {
+    let raw = "https://github.com/org/repo.git";
+
+    let url = RepoUrl::try_from(raw).expect("remote repo URL should parse");
+
+    assert_eq!(url.as_clone_input(), raw);
+    assert_eq!(url.identity().as_str(), raw);
+}
+
+#[test]
+fn repo_url_from_str_scp_like_git_remote_with_host_and_path_accepts_clone_input() {
+    let raw = "git@github.com:org/repo.git";
+
+    let url = raw
+        .parse::<RepoUrl>()
+        .expect("SCP-like git remote should parse");
+
+    assert_eq!(url.as_clone_input(), raw);
+    assert_eq!(url.identity().as_str(), raw);
+}
+
+#[test]
+fn repo_url_from_str_local_and_path_like_inputs_rejects() {
+    let cases = [
+        "",
+        "   ",
+        "repo",
+        "org/repo",
+        "./repo",
+        "../repo",
+        "/tmp/repo",
+        r"C:\Users\alice\secret\repo",
+        r"\\server\share\repo",
+        "//server/share/repo",
+        "file:///tmp/repo",
+    ];
+
+    for raw in cases {
+        assert!(
+            raw.parse::<RepoUrl>().is_err(),
+            "local or path-like input should reject: {raw:?}"
+        );
+    }
+}
+
+#[test]
+fn repo_url_from_str_missing_host_or_path_rejects() {
+    let cases = [
+        "https://",
+        "https:///org/repo.git",
+        "https://github.com",
+        "https://github.com/",
+        "ssh://git@",
+        "ssh://github.com",
+        "git@github.com",
+        "git@github.com:",
+        "git@:org/repo.git",
+    ];
+
+    for raw in cases {
+        assert!(
+            raw.parse::<RepoUrl>().is_err(),
+            "remote URL missing host or path should reject: {raw:?}"
+        );
+    }
+}
+
+#[test]
+fn repo_url_from_str_path_like_error_is_understandable_without_echoing_local_details() {
+    let raw = r"C:\Users\alice\Secrets\repo";
+
+    let error = raw
+        .parse::<RepoUrl>()
+        .expect_err("path-like input should reject")
+        .to_string();
+    let lower = error.to_ascii_lowercase();
+
+    assert!(lower.contains("remote"));
+    assert!(lower.contains("url"));
+    assert!(!error.contains(raw));
+    assert!(!error.contains("alice"));
+    assert!(!error.contains("Secrets"));
+    assert!(!error.contains(r"C:\"));
+}
+
+#[test]
+fn repo_url_from_str_credential_bearing_url_retains_raw_clone_input_and_redacts_identity() {
+    let raw = "https://user:pass@github.com/org/repo.git?branch=main#readme";
+
+    let url = raw
+        .parse::<RepoUrl>()
+        .expect("credential-bearing remote URL should parse");
+
+    assert_eq!(url.as_clone_input(), raw);
+    assert_eq!(
+        url.identity().as_str(),
+        "https://github.com/org/repo.git?branch=main#readme"
+    );
+    assert_eq!(url.to_string(), url.identity().as_str());
+    assert!(!url.identity().as_str().contains("user"));
+    assert!(!url.identity().as_str().contains("pass"));
+    assert!(!url.to_string().contains("user:pass"));
+    assert!(!url.to_string().contains('@'));
 }
 
 #[test]

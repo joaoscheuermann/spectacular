@@ -1,6 +1,6 @@
 # Effort: URL-only repo validation
 
-Status: todo
+Status: done
 
 ## Requirement links
 

@@ -4,7 +4,7 @@
 
 - Phase: development
 - Current effort: none
-- Next effort index: 1
+- Next effort index: 2
 
 ## Approvals
 
@@ -19,7 +19,7 @@
 | Index | Effort file | Status |
 | ----- | ----------- | ------ |
 | 0 | 01_shared_terminal_lines.md | done |
-| 1 | 02_repo_url_validation.md | todo |
+| 1 | 02_repo_url_validation.md | done |
 | 2 | 03_daemon_dispatch_uuid_validation.md | todo |
 | 3 | 04_daemon_timestamps_logger.md | todo |
 | 4 | 05_cli_feature_list_output.md | todo |
@@ -62,6 +62,11 @@
 | development | 01_shared_terminal_lines.md | code writer | worker | 01_fix_code_writer_01 | 019e8a5c-32ee-7620-8ed1-60dd45b3647a (Lovelace) | accepted |
 | development | 01_shared_terminal_lines.md | validator/refactor | worker | 01_fix_validator_refactor_01 | 019e8a5f-3a52-75e0-8470-250e1d077338 (Faraday) | accepted |
 | development | 01_shared_terminal_lines.md | reviewer | explorer | 01_reviewer_02 | 019e8a62-6137-7da3-8eea-48553e0fbe37 (Feynman) | accepted |
+| development | 02_repo_url_validation.md | test planner | worker | 02_test_planner_01 | 019e8a67-b883-7e21-80f3-f9dc81bdbaee (Leibniz) | accepted |
+| development | 02_repo_url_validation.md | test writer | worker | 02_test_writer_01 | 019e8a69-e34e-7d30-8f96-5724f12a1b73 (Huygens) | accepted |
+| development | 02_repo_url_validation.md | code writer | worker | 02_code_writer_01 | 019e8a6c-c338-7463-96d3-4548d81145cd (Kuhn) | accepted |
+| development | 02_repo_url_validation.md | validator/refactor | worker | 02_validator_refactor_01 | 019e8a71-fb83-7112-93ee-05570f2773e8 (Nash) | accepted |
+| development | 02_repo_url_validation.md | reviewer | explorer | 02_reviewer_01 | 019e8a75-b7d4-71a2-845a-83b10a03f975 (Schrodinger) | accepted |
 
 ## Agent receipts
 
@@ -96,18 +101,25 @@
 | 01_fix_code_writer_01 | development | 01_shared_terminal_lines.md | code writer | worker | 019e8a5c-32ee-7620-8ed1-60dd45b3647a (Lovelace) | accepted | Fixed fail-closed credential URL redaction for malformed userinfo-bearing URLs; focused/full lifecycle tests, fmt, and clippy passed; used coding-conventions, implementation-standards, and Sexy Rust references. |
 | 01_fix_validator_refactor_01 | development | 01_shared_terminal_lines.md | validator/refactor | worker | 019e8a5f-3a52-75e0-8470-250e1d077338 (Faraday) | accepted | Replacement validation after the malformed URL fix passed focused tests, full lifecycle suite, fmt, and clippy; no refactors applied; used coding-conventions, implementation-standards, and Sexy Rust references. |
 | 01_reviewer_02 | development | 01_shared_terminal_lines.md | reviewer | explorer | 019e8a62-6137-7da3-8eea-48553e0fbe37 (Feynman) | accepted | Replacement review passed; prior malformed URL leak is fixed, scope and evidence are valid, and effort 01 is ready for commit checkpoint. |
+| 02_test_planner_01 | development | 02_repo_url_validation.md | test planner | worker | 019e8a67-b883-7e21-80f3-f9dc81bdbaee (Leibniz) | accepted | Planned public `RepoUrl` tests for scheme URLs, SCP-like remotes, path-like rejections, safe errors, and raw/display split; used coding-conventions and Rust boundary-type guidance. |
+| 02_test_writer_01 | development | 02_repo_url_validation.md | test writer | worker | 019e8a69-e34e-7d30-8f96-5724f12a1b73 (Huygens) | accepted | Added six red `RepoUrl` public API tests in `domain.rs`; `cargo test -p lifecycle repo_url` exited 1 for expected unresolved `RepoUrl`; used coding-conventions, implementation-standards, and Sexy Rust references. |
+| 02_code_writer_01 | development | 02_repo_url_validation.md | code writer | worker | 019e8a6c-c338-7463-96d3-4548d81145cd (Kuhn) | accepted | Implemented lifecycle `RepoUrl` in `repo.rs`; focused `repo_url`, redaction, identity, full lifecycle tests, fmt, and clippy passed; used coding-conventions, implementation-standards, and Sexy Rust references. |
+| 02_validator_refactor_01 | development | 02_repo_url_validation.md | validator/refactor | worker | 019e8a71-fb83-7112-93ee-05570f2773e8 (Nash) | accepted | Validated effort 02 with focused repo URL tests, redaction/identity tests, full lifecycle suite, fmt, and clippy; added in-scope `TryFrom` and slash-UNC test coverage; used coding-conventions references. |
+| 02_reviewer_01 | development | 02_repo_url_validation.md | reviewer | explorer | 019e8a75-b7d4-71a2-845a-83b10a03f975 (Schrodinger) | accepted | Review passed; `RepoUrl` is confined to lifecycle validation, raw/display behavior and rejection coverage match the effort, and no daemon/CLI/worker wiring or `WorkerId` changes were introduced. |
 
 ## Validation records
 
 | Effort | Record | Red | Green | Reviewer |
 | ------ | ------ | --- | ----- | -------- |
 | 01_shared_terminal_lines.md | validation/01_shared_terminal_lines.md | missing `lifecycle::terminal` APIs; malformed credential URL leak | `cargo test -p lifecycle`, fmt, and clippy passed | 01_reviewer_02 |
+| 02_repo_url_validation.md | validation/02_repo_url_validation.md | unresolved `lifecycle::repo::RepoUrl` public API | `cargo test -p lifecycle`, focused repo/redaction/identity tests, fmt, and clippy passed | 02_reviewer_01 |
 
 ## Commit checkpoints
 
 | Effort | Commit | Message | Staged scope |
 | ------ | ------ | ------- | ------------ |
-| 01_shared_terminal_lines.md | pending | feat(lifecycle): add shared terminal lifecycle lines | lifecycle terminal/redaction/lib, lifecycle unit tests, effort 01 Doric artifacts |
+| 01_shared_terminal_lines.md | 88fa06a | feat(lifecycle): add shared terminal lifecycle lines | lifecycle terminal/redaction/lib, lifecycle unit tests, effort 01 Doric artifacts |
+| 02_repo_url_validation.md | pending | feat(lifecycle): add repo URL validation | lifecycle repo module, lifecycle unit tests, effort 02 Doric artifacts |
 
 ## Coordinator notes
 
@@ -166,3 +178,15 @@
 - 2026-06-02 19:17:00: Reviewed and accepted `01_fix_validator_refactor_01`; recorded replacement green evidence and registered `01_reviewer_02`.
 - 2026-06-02 19:18:00: Spawned effort 01 replacement reviewer as `019e8a62-6137-7da3-8eea-48553e0fbe37` (`Feynman`).
 - 2026-06-02 19:21:00: Reviewed and accepted `01_reviewer_02`; marked `01_shared_terminal_lines.md` done, released active locks, set `Current effort` to `none`, advanced `Next effort index` to `1`, and prepared commit checkpoint `feat(lifecycle): add shared terminal lifecycle lines`.
+- 2026-06-02 19:23:00: Commit checkpoint succeeded for effort 01 with `88fa06a` (`feat(lifecycle): add shared terminal lifecycle lines`). Used path-limited commit scope to avoid unrelated staged changes already present in the index.
+- 2026-06-02 19:25:00: Transitioned `02_repo_url_validation.md` from `todo` to `in-progress`, set `Current effort`, recorded active locks, and registered `02_test_planner_01`.
+- 2026-06-02 19:26:00: Spawned effort 02 test planner as `019e8a67-b883-7e21-80f3-f9dc81bdbaee` (`Leibniz`).
+- 2026-06-02 19:29:00: Reviewed and accepted `02_test_planner_01`; registered `02_test_writer_01`.
+- 2026-06-02 19:30:00: Spawned effort 02 test writer as `019e8a69-e34e-7d30-8f96-5724f12a1b73` (`Huygens`).
+- 2026-06-02 19:33:00: Reviewed and accepted `02_test_writer_01`; recorded red evidence in `validation/02_repo_url_validation.md` and registered `02_code_writer_01`.
+- 2026-06-02 19:34:00: Spawned effort 02 code writer as `019e8a6c-c338-7463-96d3-4548d81145cd` (`Kuhn`).
+- 2026-06-02 19:38:00: Reviewed and accepted `02_code_writer_01`; local full lifecycle tests and clippy passed. Registered `02_validator_refactor_01`.
+- 2026-06-02 19:39:00: Spawned effort 02 validator/refactor as `019e8a71-fb83-7112-93ee-05570f2773e8` (`Nash`).
+- 2026-06-02 19:42:00: Reviewed and accepted `02_validator_refactor_01`; recorded green evidence in `validation/02_repo_url_validation.md` and registered `02_reviewer_01`.
+- 2026-06-02 19:43:00: Spawned effort 02 reviewer as `019e8a75-b7d4-71a2-845a-83b10a03f975` (`Schrodinger`).
+- 2026-06-02 19:45:00: Reviewed and accepted `02_reviewer_01`; marked `02_repo_url_validation.md` done, released active locks, set `Current effort` to `none`, advanced `Next effort index` to `2`, and prepared commit checkpoint `feat(lifecycle): add repo URL validation`.
