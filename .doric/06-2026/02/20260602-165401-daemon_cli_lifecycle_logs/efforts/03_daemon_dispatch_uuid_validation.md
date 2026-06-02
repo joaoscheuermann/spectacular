@@ -1,6 +1,6 @@
 # Effort: Daemon dispatch validation and UUIDv6 IDs
 
-Status: todo
+Status: done
 
 ## Requirement links
 

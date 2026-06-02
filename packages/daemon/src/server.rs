@@ -15,7 +15,7 @@ use crate::registry::Registry;
 use crate::root::validate_worker_root;
 use crate::service::{
     CommandSender, DispatchDeps, IdGenerator, LifecycleService as CoreLifecycleService,
-    ServiceConfig, TimestampIdGenerator, WorkerLauncher,
+    ServiceConfig, UuidV6IdGenerator, WorkerLauncher,
 };
 use crate::worker_session::{SessionCommandSender, SessionManager, WorkerSessionConfig};
 use lifecycle::proto::doric::lifecycle::v1 as pb;
@@ -228,7 +228,7 @@ where
         registry,
         launcher,
         command_sender,
-        id_generator: TimestampIdGenerator,
+        id_generator: UuidV6IdGenerator::default(),
     });
 
     Ok(ServiceBundle {

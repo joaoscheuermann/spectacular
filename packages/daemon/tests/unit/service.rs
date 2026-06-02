@@ -72,6 +72,71 @@ fn dispatch_invalid_root_rejects_without_record_or_launch() {
     assert!(fixture.launcher.lock().unwrap().is_empty());
 }
 
+/// Verifies path-like repo inputs fail before any worker creation side effects.
+#[test]
+fn dispatch_invalid_repo_urls_reject_without_id_record_layout_event_or_launch() {
+    let invalid_repos = [
+        "org/repo",
+        "repo",
+        "./repo",
+        "../repo",
+        "/tmp/repo",
+        "C:\\repos\\repo",
+        "\\\\server\\share\\repo",
+        "//server/share/repo",
+        "file:///tmp/repo",
+    ];
+
+    for repo in invalid_repos {
+        let fixture = ServiceFixture::new();
+        let service = fixture.service();
+
+        let error = service
+            .dispatch(dispatch_request(1, "write requirements", repo))
+            .unwrap_err()
+            .to_string();
+
+        assert!(
+            error.contains("source URL must be a remote URL"),
+            "unexpected error for {repo}: {error}"
+        );
+        assert!(
+            !error.contains(repo),
+            "error should not echo unsafe repo input: {error}"
+        );
+        assert!(fixture.registry.lock().unwrap().list().is_empty());
+        assert!(fixture.launcher.lock().unwrap().is_empty());
+        assert_eq!(fixture.remaining_ids(), vec!["worker-1"]);
+        assert!(!fixture.worker_layout_exists("worker-1"));
+    }
+}
+
+/// Verifies whitespace-padded remote repo input fails before worker side effects.
+#[test]
+fn dispatch_whitespace_padded_remote_repo_rejects_without_id_record_layout_event_or_launch() {
+    let fixture = ServiceFixture::new();
+    let service = fixture.service();
+    let repo = " https://example.com/org/repo.git ";
+
+    let error = service
+        .dispatch(dispatch_request(1, "write requirements", repo))
+        .unwrap_err()
+        .to_string();
+
+    assert!(
+        error.contains("source URL must be a remote URL"),
+        "unexpected error for whitespace-padded repo: {error}"
+    );
+    assert!(
+        !error.contains(repo),
+        "error should not echo whitespace-padded repo input: {error}"
+    );
+    assert!(fixture.registry.lock().unwrap().list().is_empty());
+    assert!(fixture.launcher.lock().unwrap().is_empty());
+    assert_eq!(fixture.remaining_ids(), vec!["worker-1"]);
+    assert!(!fixture.worker_layout_exists("worker-1"));
+}
+
 /// Verifies that feature dispatch returns the public summary and launches once.
 #[test]
 fn dispatch_feature_request_returns_identity_status_and_launches_once() {
@@ -104,6 +169,61 @@ fn dispatch_feature_request_returns_identity_status_and_launches_once() {
         fixture.launcher.lock().unwrap()[0].repo,
         "https://token@example.com/org/repo.git"
     );
+}
+
+/// Verifies dispatch keeps raw clone input separate from redacted display identity.
+#[test]
+fn dispatch_remote_repo_url_uses_raw_clone_input_and_redacted_identity() {
+    let cases = [
+        (
+            "https-worker",
+            "https://user:token@example.com/org/private.git",
+            "https://example.com/org/private.git",
+        ),
+        (
+            "ssh-worker",
+            "ssh://git@example.com/org/private.git",
+            "ssh://example.com/org/private.git",
+        ),
+        (
+            "git-worker",
+            "git://example.com/org/private.git",
+            "git://example.com/org/private.git",
+        ),
+        (
+            "scp-worker",
+            "git@github.com:org/private.git",
+            "git@github.com:org/private.git",
+        ),
+    ];
+    let fixture = ServiceFixture::new_with_ids(cases.map(|(id, _, _)| id.to_owned()).to_vec());
+    let service = fixture.service();
+
+    for (worker_id, raw, identity) in cases {
+        let response = service
+            .dispatch(dispatch_request(1, "write requirements", raw))
+            .unwrap();
+
+        assert_eq!(response.worker_id, worker_id);
+        assert_eq!(response.repo_identity, identity);
+    }
+
+    let launches = fixture.launcher.lock().unwrap();
+    assert_eq!(launches.len(), cases.len());
+    for (launch, (worker_id, raw, identity)) in launches.iter().zip(cases) {
+        assert_eq!(launch.worker_id, worker_id);
+        assert_eq!(launch.repo, raw);
+        assert_eq!(launch.repo_identity, identity);
+    }
+
+    let workers = service.list(pb::ListWorkersRequest {}).unwrap().workers;
+    assert_eq!(workers.len(), cases.len());
+    for (worker, (worker_id, _, identity)) in workers.iter().zip(cases) {
+        assert_eq!(worker.worker_id, worker_id);
+        assert_eq!(worker.repo_identity, identity);
+        assert!(!worker.repo_identity.contains("token"));
+    }
+    assert!(fixture.remaining_ids().is_empty());
 }
 
 /// Verifies that debug dispatch preserves the requested mode label.
@@ -331,6 +451,17 @@ impl ServiceFixture {
         Self::new_with_event_capacity(1_000)
     }
 
+    fn new_with_ids(ids: Vec<String>) -> Self {
+        Self {
+            registry: Arc::new(Mutex::new(Registry::in_memory_with_event_capacity(1_000))),
+            launcher: Arc::new(Mutex::new(Vec::new())),
+            commands: Arc::new(Mutex::new(Vec::new())),
+            ids: Arc::new(Mutex::new(ids)),
+            root: TempRoot::new("service"),
+            event_capacity: 1_000,
+        }
+    }
+
     fn new_with_event_capacity(event_capacity: usize) -> Self {
         Self {
             registry: Arc::new(Mutex::new(Registry::in_memory_with_event_capacity(
@@ -416,6 +547,14 @@ impl ServiceFixture {
             .seed_waiting_for_test(worker, WorkerMode::Feature, request, "Approve?")
             .unwrap();
     }
+
+    fn remaining_ids(&self) -> Vec<String> {
+        self.ids.lock().unwrap().clone()
+    }
+
+    fn worker_layout_exists(&self, worker_id: &str) -> bool {
+        self.root.path().join(worker_id).exists()
+    }
 }
 
 struct RecordingLauncher(Arc<Mutex<Vec<LaunchRequest>>>);
@@ -457,12 +596,13 @@ impl IdGenerator for FixedIds {
             WorkerMode::Debug => "debug-worker",
         };
 
-        Ok(self
-            .0
-            .lock()
-            .unwrap()
-            .pop()
-            .unwrap_or_else(|| fallback.to_owned()))
+        let mut ids = self.0.lock().unwrap();
+
+        Ok(if ids.is_empty() {
+            fallback.to_owned()
+        } else {
+            ids.remove(0)
+        })
     }
 }
 

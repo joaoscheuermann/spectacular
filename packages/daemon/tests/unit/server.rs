@@ -82,6 +82,37 @@ fn build_process_service_valid_config_uses_process_launcher_and_session_sender()
     assert!(!service.has_bound_listener());
 }
 
+/// Verifies production-style process services generate UUIDv6 worker ids.
+#[test]
+fn build_process_service_dispatch_generates_uuid_v6_worker_id() {
+    let root = TempRoot::new("process-service-uuid");
+    let binary = root.touch_executable(worker_binary_name());
+    let config = ServerConfig::parse("127.0.0.1:49127", root.path()).unwrap();
+
+    let service = build_process_service(
+        config,
+        WorkerBinaryResolver::new(root.current_exe()),
+        WorkerBinaryConfig::explicit(binary),
+        SharedRecordingSpawner,
+    )
+    .unwrap();
+
+    let response = service
+        .lifecycle()
+        .dispatch(pb::DispatchRequest {
+            mode: pb::JobMode::Feature as i32,
+            prompt: "write requirements".to_owned(),
+            repo: "https://example.com/org/repo.git".to_owned(),
+        })
+        .unwrap();
+
+    assert!(
+        is_uuid_v6(&response.worker_id),
+        "worker id should be UUIDv6-shaped, got {}",
+        response.worker_id
+    );
+}
+
 /// Verifies worker-root validation happens before any listener is bound.
 #[test]
 fn build_service_invalid_worker_root_fails_before_binding() {
@@ -242,4 +273,19 @@ fn executable_name(name: &str) -> String {
     } else {
         name.to_owned()
     }
+}
+
+fn is_uuid_v6(value: &str) -> bool {
+    let bytes = value.as_bytes();
+
+    bytes.len() == 36
+        && bytes[8] == b'-'
+        && bytes[13] == b'-'
+        && bytes[14] == b'6'
+        && bytes[18] == b'-'
+        && bytes[23] == b'-'
+        && bytes
+            .iter()
+            .enumerate()
+            .all(|(index, byte)| matches!(index, 8 | 13 | 18 | 23) || byte.is_ascii_hexdigit())
 }

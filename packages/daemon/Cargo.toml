@@ -13,3 +13,4 @@ lifecycle = { path = "../lifecycle" }
 tokio = { version = "1.48.0", features = ["macros", "net", "rt-multi-thread", "signal", "sync"] }
 tokio-stream = { version = "0.1.17", features = ["net"] }
 tonic = "0.14.6"
+uuid = { version = "1.18.1", features = ["v4", "v6"] }

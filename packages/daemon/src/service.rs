@@ -1,13 +1,13 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use lifecycle::event::StreamEvent;
 use lifecycle::identity::{RequestId, WorkerId};
 use lifecycle::proto::doric::lifecycle::v1 as pb;
-use lifecycle::repo::RepoIdentity;
+use lifecycle::repo::{RepoIdentity, RepoUrl, RepoUrlError};
 use lifecycle::status::WorkerStatus;
+use uuid::Uuid;
 
 use crate::error::{DaemonError, DaemonResult};
 use crate::event::{RegistryEvent, RegistryWorkerEvent, ReplayItem};
@@ -132,10 +132,10 @@ impl LifecycleService {
     pub fn dispatch(&self, request: pb::DispatchRequest) -> DaemonResult<pb::DispatchResponse> {
         let mode = parse_mode(request.mode)?;
         let prompt = parse_required(request.prompt, "prompt")?;
-        let repo = parse_required(request.repo, "repo")?;
+        let repo = parse_required_raw(request.repo, "repo")?;
+        let repo_url =
+            RepoUrl::try_from(repo.as_str()).map_err(|error| invalid_request(repo_error(error)))?;
         let root = validate_worker_root(self.config.worker_root())?;
-        let repo_identity = RepoIdentity::from_raw_url(&repo)
-            .map_err(|error| invalid_request(format!("repo is invalid: {error}")))?;
         let worker_id = WorkerId::from_str(&self.id_generator.next_worker_id(mode)?)
             .map_err(|error| invalid_request(error.to_string()))?;
         let layout = prepare_worker_layout(&root, worker_id.clone())?;
@@ -145,7 +145,7 @@ impl LifecycleService {
             registry.insert(WorkerRecord::new(
                 worker_id.clone(),
                 mode,
-                repo_identity.clone(),
+                repo_url.identity().clone(),
                 WorkerStatus::Accepted,
                 "accepted",
             ))?;
@@ -156,15 +156,15 @@ impl LifecycleService {
             worker_id: worker_id.as_str().to_owned(),
             mode,
             prompt,
-            repo,
-            repo_identity: repo_identity.as_str().to_owned(),
+            repo: repo_url.as_clone_input().to_owned(),
+            repo_identity: repo_url.identity().as_str().to_owned(),
             layout,
         })?;
 
         Ok(pb::DispatchResponse {
             worker_id: worker_id.as_str().to_owned(),
             mode: mode_to_proto(mode),
-            repo_identity: repo_identity.as_str().to_owned(),
+            repo_identity: repo_url.identity().as_str().to_owned(),
             status: status_to_proto(WorkerStatus::Accepted),
         })
     }
@@ -344,20 +344,24 @@ impl LifecycleService {
     }
 }
 
-pub struct TimestampIdGenerator;
+pub struct UuidV6IdGenerator {
+    node_id: [u8; 6],
+}
 
-impl IdGenerator for TimestampIdGenerator {
-    fn next_worker_id(&self, mode: WorkerMode) -> DaemonResult<String> {
-        let label = match mode {
-            WorkerMode::Feature => "feature",
-            WorkerMode::Debug => "debug",
-        };
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos();
+impl Default for UuidV6IdGenerator {
+    fn default() -> Self {
+        let seed = Uuid::new_v4();
+        let bytes = seed.as_bytes();
 
-        Ok(format!("{label}-{now}"))
+        Self {
+            node_id: [bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]],
+        }
+    }
+}
+
+impl IdGenerator for UuidV6IdGenerator {
+    fn next_worker_id(&self, _mode: WorkerMode) -> DaemonResult<String> {
+        Ok(Uuid::now_v6(&self.node_id).to_string())
     }
 }
 
@@ -376,6 +380,23 @@ fn parse_required(value: String, name: &'static str) -> DaemonResult<String> {
         Err(invalid_request(format!("{name} must not be blank")))
     } else {
         Ok(trimmed.to_owned())
+    }
+}
+
+fn parse_required_raw(value: String, name: &'static str) -> DaemonResult<String> {
+    if value.trim().is_empty() {
+        Err(invalid_request(format!("{name} must not be blank")))
+    } else {
+        Ok(value)
+    }
+}
+
+fn repo_error(error: RepoUrlError) -> String {
+    match error {
+        RepoUrlError::LocalOrPathLike => {
+            "source URL must be a remote URL, not a local path".to_owned()
+        }
+        _ => error.to_string(),
     }
 }
 

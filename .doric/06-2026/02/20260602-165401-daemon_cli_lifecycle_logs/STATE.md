@@ -4,7 +4,7 @@
 
 - Phase: development
 - Current effort: none
-- Next effort index: 2
+- Next effort index: 3
 
 ## Approvals
 
@@ -20,7 +20,7 @@
 | ----- | ----------- | ------ |
 | 0 | 01_shared_terminal_lines.md | done |
 | 1 | 02_repo_url_validation.md | done |
-| 2 | 03_daemon_dispatch_uuid_validation.md | todo |
+| 2 | 03_daemon_dispatch_uuid_validation.md | done |
 | 3 | 04_daemon_timestamps_logger.md | todo |
 | 4 | 05_cli_feature_list_output.md | todo |
 | 5 | 06_cli_stream_output.md | todo |
@@ -67,6 +67,16 @@
 | development | 02_repo_url_validation.md | code writer | worker | 02_code_writer_01 | 019e8a6c-c338-7463-96d3-4548d81145cd (Kuhn) | accepted |
 | development | 02_repo_url_validation.md | validator/refactor | worker | 02_validator_refactor_01 | 019e8a71-fb83-7112-93ee-05570f2773e8 (Nash) | accepted |
 | development | 02_repo_url_validation.md | reviewer | explorer | 02_reviewer_01 | 019e8a75-b7d4-71a2-845a-83b10a03f975 (Schrodinger) | accepted |
+| development | 03_daemon_dispatch_uuid_validation.md | test planner | worker | 03_test_planner_01 | 019e8a7c-1c4b-76d3-9931-31489a915a96 (Ohm) | accepted |
+| development | 03_daemon_dispatch_uuid_validation.md | test writer | worker | 03_test_writer_01 | 019e8a7e-fc53-7242-bff1-c5e03bc73c87 (Confucius) | superseded |
+| development | 03_daemon_dispatch_uuid_validation.md | test writer | worker | 03_fix_test_writer_01 | 019e8a83-3722-74d3-9eb1-b1296db0f7d3 (Volta) | accepted |
+| development | 03_daemon_dispatch_uuid_validation.md | code writer | worker | 03_code_writer_01 | 019e8a85-5bb8-7553-b67c-7a597d78a677 (Bohr) | accepted |
+| development | 03_daemon_dispatch_uuid_validation.md | validator/refactor | worker | 03_validator_refactor_01 | 019e8a89-88fd-7ad1-a2ae-5d5f2ffe0cb9 (Anscombe) | accepted |
+| development | 03_daemon_dispatch_uuid_validation.md | reviewer | explorer | 03_reviewer_01 | 019e8a8e-6620-7be3-9f81-548f65b49efb (Kepler) | blocked |
+| development | 03_daemon_dispatch_uuid_validation.md | test writer | worker | 03_trim_fix_test_writer_01 | 019e8a91-2d1a-7422-a3b3-75b65e03760e (Boole) | accepted |
+| development | 03_daemon_dispatch_uuid_validation.md | code writer | worker | 03_trim_fix_code_writer_01 | 019e8a92-fd9e-7ee2-b33f-b827d9510770 (Euclid) | accepted |
+| development | 03_daemon_dispatch_uuid_validation.md | validator/refactor | worker | 03_trim_fix_validator_refactor_01 | 019e8a95-8022-7e93-93e7-9d23f4610317 (Noether) | accepted |
+| development | 03_daemon_dispatch_uuid_validation.md | reviewer | explorer | 03_reviewer_02 | 019e8a98-d1d5-7c03-8fe1-61c7a8904190 (Harvey) | accepted |
 
 ## Agent receipts
 
@@ -106,6 +116,16 @@
 | 02_code_writer_01 | development | 02_repo_url_validation.md | code writer | worker | 019e8a6c-c338-7463-96d3-4548d81145cd (Kuhn) | accepted | Implemented lifecycle `RepoUrl` in `repo.rs`; focused `repo_url`, redaction, identity, full lifecycle tests, fmt, and clippy passed; used coding-conventions, implementation-standards, and Sexy Rust references. |
 | 02_validator_refactor_01 | development | 02_repo_url_validation.md | validator/refactor | worker | 019e8a71-fb83-7112-93ee-05570f2773e8 (Nash) | accepted | Validated effort 02 with focused repo URL tests, redaction/identity tests, full lifecycle suite, fmt, and clippy; added in-scope `TryFrom` and slash-UNC test coverage; used coding-conventions references. |
 | 02_reviewer_01 | development | 02_repo_url_validation.md | reviewer | explorer | 019e8a75-b7d4-71a2-845a-83b10a03f975 (Schrodinger) | accepted | Review passed; `RepoUrl` is confined to lifecycle validation, raw/display behavior and rejection coverage match the effort, and no daemon/CLI/worker wiring or `WorkerId` changes were introduced. |
+| 03_test_planner_01 | development | 03_daemon_dispatch_uuid_validation.md | test planner | worker | 019e8a7c-1c4b-76d3-9931-31489a915a96 (Ohm) | accepted | Planned daemon service/server red tests for side-effect-free invalid repo rejection, accepted remote raw/display flow, injected ID seam preservation, and production UUIDv6 generation. |
+| 03_test_writer_01 | development | 03_daemon_dispatch_uuid_validation.md | test writer | worker | 019e8a7e-fc53-7242-bff1-c5e03bc73c87 (Confucius) | superseded | Added effort 03 red tests and validation evidence, but missed planned invalid repo cases `repo` and `//server/share/repo`; superseded by `03_fix_test_writer_01`. |
+| 03_fix_test_writer_01 | development | 03_daemon_dispatch_uuid_validation.md | test writer | worker | 019e8a83-3722-74d3-9eb1-b1296db0f7d3 (Volta) | accepted | Added missing invalid repo cases `repo` and `//server/share/repo`; focused invalid-repo test still fails for expected pre-validation side effects and validation record was updated. |
+| 03_code_writer_01 | development | 03_daemon_dispatch_uuid_validation.md | code writer | worker | 019e8a85-5bb8-7553-b67c-7a597d78a677 (Bohr) | accepted | Implemented daemon `RepoUrl` validation before creation side effects, raw/display repo split, UUIDv6 production generator behind `IdGenerator`, daemon uuid dependency, and green evidence in validation record. |
+| 03_validator_refactor_01 | development | 03_daemon_dispatch_uuid_validation.md | validator/refactor | worker | 019e8a89-88fd-7ad1-a2ae-5d5f2ffe0cb9 (Anscombe) | accepted | Validator pass confirmed effort 03 contract and commands; reduced daemon `uuid` features to `v4` and `v6`, added worker repo command evidence, and found no blockers. |
+| 03_reviewer_01 | development | 03_daemon_dispatch_uuid_validation.md | reviewer | explorer | 019e8a8e-6620-7be3-9f81-548f65b49efb (Kepler) | blocked | Found repo input trimming before `RepoUrl` lets whitespace-padded remotes bypass lifecycle validation and loses exact raw clone input; requires fix tests and production change. |
+| 03_trim_fix_test_writer_01 | development | 03_daemon_dispatch_uuid_validation.md | test writer | worker | 019e8a91-2d1a-7422-a3b3-75b65e03760e (Boole) | accepted | Added whitespace-padded remote repo regression test; focused command failed red because daemon dispatch accepted trimmed repo input and proceeded with worker creation. |
+| 03_trim_fix_code_writer_01 | development | 03_daemon_dispatch_uuid_validation.md | code writer | worker | 019e8a92-fd9e-7ee2-b33f-b827d9510770 (Euclid) | accepted | Fixed daemon repo requiredness to preserve the original repo string for `RepoUrl`; whitespace-padded remotes now reject before side effects and focused daemon commands passed. |
+| 03_trim_fix_validator_refactor_01 | development | 03_daemon_dispatch_uuid_validation.md | validator/refactor | worker | 019e8a95-8022-7e93-93e7-9d23f4610317 (Noether) | accepted | Replacement validation passed after the trim fix; strengthened whitespace regression assertion and reran full effort daemon/lifecycle/worker/fmt/clippy command set. |
+| 03_reviewer_02 | development | 03_daemon_dispatch_uuid_validation.md | reviewer | explorer | 019e8a98-d1d5-7c03-8fe1-61c7a8904190 (Harvey) | accepted | Replacement review passed; prior trim bug is fixed, UUIDv6 production wiring and raw/display repo flow are valid, and effort 03 is ready for commit checkpoint. |
 
 ## Validation records
 
@@ -113,13 +133,15 @@
 | ------ | ------ | --- | ----- | -------- |
 | 01_shared_terminal_lines.md | validation/01_shared_terminal_lines.md | missing `lifecycle::terminal` APIs; malformed credential URL leak | `cargo test -p lifecycle`, fmt, and clippy passed | 01_reviewer_02 |
 | 02_repo_url_validation.md | validation/02_repo_url_validation.md | unresolved `lifecycle::repo::RepoUrl` public API | `cargo test -p lifecycle`, focused repo/redaction/identity tests, fmt, and clippy passed | 02_reviewer_01 |
+| 03_daemon_dispatch_uuid_validation.md | validation/03_daemon_dispatch_uuid_validation.md | invalid/path-like repo accepted before side effects; timestamp-style production IDs; whitespace-padded remote trim bypass | focused daemon tests, daemon service/server/integration tests, lifecycle repo_url, worker repo, fmt, and clippy passed | 03_reviewer_02 |
 
 ## Commit checkpoints
 
 | Effort | Commit | Message | Staged scope |
 | ------ | ------ | ------- | ------------ |
 | 01_shared_terminal_lines.md | 88fa06a | feat(lifecycle): add shared terminal lifecycle lines | lifecycle terminal/redaction/lib, lifecycle unit tests, effort 01 Doric artifacts |
-| 02_repo_url_validation.md | pending | feat(lifecycle): add repo URL validation | lifecycle repo module, lifecycle unit tests, effort 02 Doric artifacts |
+| 02_repo_url_validation.md | 6278e2e | feat(lifecycle): add repo URL validation | lifecycle repo module, lifecycle unit tests, effort 02 Doric artifacts |
+| 03_daemon_dispatch_uuid_validation.md | pending | feat(daemon): validate dispatch repo URLs and UUIDv6 IDs | daemon service/server code and tests, daemon Cargo metadata, effort 03 Doric artifacts |
 
 ## Coordinator notes
 
@@ -190,3 +212,27 @@
 - 2026-06-02 19:42:00: Reviewed and accepted `02_validator_refactor_01`; recorded green evidence in `validation/02_repo_url_validation.md` and registered `02_reviewer_01`.
 - 2026-06-02 19:43:00: Spawned effort 02 reviewer as `019e8a75-b7d4-71a2-845a-83b10a03f975` (`Schrodinger`).
 - 2026-06-02 19:45:00: Reviewed and accepted `02_reviewer_01`; marked `02_repo_url_validation.md` done, released active locks, set `Current effort` to `none`, advanced `Next effort index` to `2`, and prepared commit checkpoint `feat(lifecycle): add repo URL validation`.
+- 2026-06-02 19:46:00: Commit checkpoint succeeded for effort 02 with `6278e2e` (`feat(lifecycle): add repo URL validation`). Used path-limited commit scope to preserve unrelated staged and dirty files.
+- 2026-06-02 19:47:00: Transitioned `03_daemon_dispatch_uuid_validation.md` from `todo` to `in-progress`, set `Current effort`, recorded active locks, and registered `03_test_planner_01`.
+- 2026-06-02 19:48:00: Initial effort 03 test planner spawn hit the agent thread limit; closed completed prior sub-agent sessions and retried successfully.
+- 2026-06-02 19:49:00: Spawned effort 03 test planner as `019e8a7c-1c4b-76d3-9931-31489a915a96` (`Ohm`).
+- 2026-06-02 19:53:00: Reviewed and accepted `03_test_planner_01`; registered `03_test_writer_01`.
+- 2026-06-02 19:54:00: Spawned effort 03 test writer as `019e8a7e-fc53-7242-bff1-c5e03bc73c87` (`Confucius`).
+- 2026-06-02 20:00:00: Reviewed `03_test_writer_01` and rejected it because the red invalid-repo test missed the planned `repo` and `//server/share/repo` cases. Registered replacement `03_fix_test_writer_01`.
+- 2026-06-02 20:01:00: Spawned effort 03 replacement test writer as `019e8a83-3722-74d3-9eb1-b1296db0f7d3` (`Volta`).
+- 2026-06-02 20:04:00: Reviewed and accepted `03_fix_test_writer_01`; superseded `03_test_writer_01`, preserved its red evidence, and registered `03_code_writer_01`.
+- 2026-06-02 20:05:00: Spawned effort 03 code writer as `019e8a85-5bb8-7553-b67c-7a597d78a677` (`Bohr`).
+- 2026-06-02 20:13:00: Reviewed and accepted `03_code_writer_01`; implementation and green evidence are present. Registered `03_validator_refactor_01`.
+- 2026-06-02 20:14:00: Spawned effort 03 validator/refactor as `019e8a89-88fd-7ad1-a2ae-5d5f2ffe0cb9` (`Anscombe`).
+- 2026-06-02 20:22:00: Reviewed and accepted `03_validator_refactor_01`; validation evidence is complete, no blockers remain, and `03_reviewer_01` was registered.
+- 2026-06-02 20:23:00: Spawned effort 03 reviewer as `019e8a8e-6620-7be3-9f81-548f65b49efb` (`Kepler`).
+- 2026-06-02 20:31:00: `03_reviewer_01` blocked effort completion with a high-severity repo trimming gap before shared `RepoUrl` validation. Kept effort 03 `in-progress` and registered `03_trim_fix_test_writer_01`.
+- 2026-06-02 20:32:00: Initial trim regression test-writer spawn hit the agent thread limit; closed completed effort 03 sub-agent sessions and retried successfully.
+- 2026-06-02 20:33:00: Spawned effort 03 trim regression test writer as `019e8a91-2d1a-7422-a3b3-75b65e03760e` (`Boole`).
+- 2026-06-02 20:36:00: Reviewed and accepted `03_trim_fix_test_writer_01`; registered `03_trim_fix_code_writer_01`.
+- 2026-06-02 20:37:00: Spawned effort 03 trim fix code writer as `019e8a92-fd9e-7ee2-b33f-b827d9510770` (`Euclid`).
+- 2026-06-02 20:42:00: Reviewed and accepted `03_trim_fix_code_writer_01`; registered replacement validator/refactor `03_trim_fix_validator_refactor_01`.
+- 2026-06-02 20:43:00: Spawned effort 03 trim fix validator/refactor as `019e8a95-8022-7e93-93e7-9d23f4610317` (`Noether`).
+- 2026-06-02 20:51:00: Reviewed and accepted `03_trim_fix_validator_refactor_01`; registered replacement reviewer `03_reviewer_02`.
+- 2026-06-02 20:52:00: Spawned effort 03 replacement reviewer as `019e8a98-d1d5-7c03-8fe1-61c7a8904190` (`Harvey`).
+- 2026-06-02 21:00:00: Reviewed and accepted `03_reviewer_02`; marked `03_daemon_dispatch_uuid_validation.md` done, released active locks, set `Current effort` to `none`, advanced `Next effort index` to `3`, and prepared commit checkpoint `feat(daemon): validate dispatch repo URLs and UUIDv6 IDs`.
