@@ -1,5 +1,6 @@
 use lifecycle::redaction::{redact_failure_text, redact_repo_url};
 use lifecycle::repo::RepoIdentity;
+use lifecycle::terminal::safe_message;
 
 #[test]
 fn redact_repo_url_https_credentials_removes_userinfo() {
@@ -66,4 +67,53 @@ fn repo_identity_from_raw_url_stores_redacted_display() {
     assert!(!identity.as_str().contains("user"));
     assert!(!identity.as_str().contains("pass"));
     assert!(!identity.to_string().contains('@'));
+}
+
+#[test]
+fn safe_message_line_breaks_and_terminal_controls_render_single_display_line() {
+    let message = "provider\nfailed\rwith \u{1b}[31mcontrol\u{7} text";
+
+    let safe: String = safe_message(message);
+
+    assert!(safe.chars().all(|ch: char| !ch.is_control()));
+    assert!(safe.contains("provider"));
+    assert!(safe.contains("failed"));
+    assert!(safe.contains("control"));
+    assert!(safe.contains("text"));
+}
+
+#[test]
+fn safe_message_api_key_like_token_redacts_before_display() {
+    let safe: String = safe_message("provider failed with sk-test_secret_1234567890abcdef");
+
+    assert_eq!(safe, "provider failed with [REDACTED]");
+    assert!(!safe.contains("sk-test_secret_1234567890abcdef"));
+}
+
+#[test]
+fn safe_message_credential_bearing_url_redacts_userinfo_before_display() {
+    let safe: String = safe_message("cloning repo: https://user:pass@github.com/org/repo.git");
+
+    assert_eq!(safe, "cloning repo: https://github.com/org/repo.git");
+    assert!(!safe.contains("user:pass"));
+    assert!(!safe.contains('@'));
+}
+
+#[test]
+fn safe_message_malformed_credential_bearing_url_redacts_userinfo_before_display() {
+    let raw_url = "https://user:pass@/path";
+
+    let safe: String = safe_message("cloning repo: https://user:pass@/path");
+
+    assert!(!safe.contains("user:pass"));
+    assert!(!safe.contains(raw_url));
+    assert!(safe.contains("cloning repo:"));
+    assert!(safe.contains("/path") || safe.contains("[REDACTED]"));
+}
+
+#[test]
+fn safe_message_ordinary_text_remains_readable() {
+    let safe: String = safe_message("worker accepted: preparing repository");
+
+    assert_eq!(safe, "worker accepted: preparing repository");
 }

@@ -1,6 +1,7 @@
 use lifecycle::event::{StreamEvent, WorkerEvent};
 use lifecycle::identity::{RequestId, WorkerId};
 use lifecycle::status::WorkerStatus;
+use std::time::UNIX_EPOCH;
 
 #[test]
 fn worker_id_from_str_valid_value_round_trips_display() {
@@ -191,6 +192,26 @@ fn event_history_truncated_constructor_uses_stable_stream_event() {
     assert_eq!(event.requested_from_sequence(), 0);
     assert_eq!(event.first_available_sequence(), 42);
     assert_eq!(event.message(), "worker event history was truncated");
+}
+
+#[test]
+fn format_timestamp_unix_epoch_renders_compact_utc_rfc3339() {
+    let timestamp = lifecycle::terminal::format_timestamp(UNIX_EPOCH);
+
+    assert_eq!(timestamp, "1970-01-01T00:00:00Z");
+}
+
+#[test]
+fn format_line_fixed_timestamp_renders_timestamped_safe_message() {
+    let line = lifecycle::terminal::format_line(
+        UNIX_EPOCH,
+        "provider failed with sk-test_secret_1234567890abcdef",
+    );
+
+    assert_eq!(
+        line,
+        "[1970-01-01T00:00:00Z] provider failed with [REDACTED]"
+    );
 }
 
 fn assert_worker_event(

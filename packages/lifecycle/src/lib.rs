@@ -4,6 +4,7 @@ pub mod proto;
 pub mod redaction;
 pub mod repo;
 pub mod status;
+pub mod terminal;
 
 #[cfg(test)]
 extern crate self as lifecycle;
