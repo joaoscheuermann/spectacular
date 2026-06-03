@@ -8,6 +8,8 @@ pub enum WorkerStatus {
     Accepted,
     Starting,
     Running,
+    /// The worker is blocked on a pending input request and can accept an
+    /// answer through the lifecycle input protocol.
     WaitingForInput,
     Succeeded,
     Failed,

@@ -26,6 +26,10 @@ enum WorkerStatus {
   WORKER_STATUS_ACCEPTED = 1;
   WORKER_STATUS_STARTING = 2;
   WORKER_STATUS_RUNNING = 3;
+  // Input is currently the only actionable wait state: while a worker is in
+  // this state, the daemon exposes pending_request_id and accepts AnswerInput.
+  // If Doric grows other actionable wait modes, prefer a generic WAITING
+  // status plus a typed wait-reason enum instead of overloading this value.
   WORKER_STATUS_WAITING_FOR_INPUT = 4;
   WORKER_STATUS_SUCCEEDED = 5;
   WORKER_STATUS_FAILED = 6;
