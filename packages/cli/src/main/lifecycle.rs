@@ -3,8 +3,9 @@ use super::{
     cli_types::{Command, LifecycleAddressArgs, LifecycleAnswerArgs, LifecycleDispatchArgs},
     lifecycle_client::GrpcLifecycleDaemonClient,
     lifecycle_output::{
-        format_answer_output, format_dispatch_output, format_list_output,
-        format_worker_output_header, format_worker_output_item,
+        format_answer_output, format_connected_line, format_connecting_line,
+        format_created_worker_line, format_creating_worker_line, format_dispatch_output,
+        format_list_output, format_worker_output_header, format_worker_output_item,
     },
 };
 use std::fmt::{self, Display};
@@ -18,6 +19,7 @@ pub(super) enum LifecycleDispatchMode {
 
 #[allow(dead_code)]
 pub(super) trait LifecycleDaemonClient {
+    fn connect(&mut self, addr: Option<String>) -> Result<(), LifecycleError>;
     fn dispatch(
         &mut self,
         request: LifecycleDispatchRequest,
@@ -160,7 +162,7 @@ impl Display for LifecycleError {
 }
 
 pub(super) fn handle_lifecycle_command(command: Command) -> Result<Option<String>, LifecycleError> {
-    let mut client = GrpcLifecycleDaemonClient;
+    let mut client = GrpcLifecycleDaemonClient::default();
     let mut stdout = std::io::stdout();
 
     handle_lifecycle_command_with_writer(command, &mut client, &mut stdout)
@@ -196,15 +198,45 @@ where
     Output: Write,
 {
     match command {
-        Command::Feature(args) => handle_dispatch(LifecycleDispatchMode::Feature, args, client),
+        Command::Feature(args) => handle_feature(args, client, output),
         Command::Debug(args) => handle_dispatch(LifecycleDispatchMode::Debug, args, client),
-        Command::List(args) => handle_list(args, client),
+        Command::List(args) => handle_list(args, client, output),
         Command::Worker(args) => handle_worker(args, client, output),
         Command::Answer(args) => handle_answer(args, client),
         Command::Daemon(_) | Command::Config(_) => Err(LifecycleError::InvalidInput(
             "unsupported lifecycle command".to_owned(),
         )),
     }
+}
+
+fn handle_feature<Client, Output>(
+    args: LifecycleDispatchArgs,
+    client: &mut Client,
+    output: &mut Output,
+) -> Result<Option<String>, LifecycleError>
+where
+    Client: LifecycleDaemonClient,
+    Output: Write,
+{
+    let prompt = required_arg(args.prompt, "prompt")?;
+    let repo = required_feature_repo(args.repo)?;
+    let addr = args.addr;
+
+    write_lifecycle_line(output, format_connecting_line())?;
+    client.connect(addr.clone())?;
+    write_lifecycle_line(output, format_connected_line())?;
+    write_lifecycle_line(output, format_creating_worker_line())?;
+
+    let response = client.dispatch(LifecycleDispatchRequest {
+        mode: LifecycleDispatchMode::Feature,
+        prompt,
+        repo,
+        addr,
+    })?;
+
+    write_lifecycle_line(output, &format_created_worker_line(&response.worker_id))?;
+
+    Ok(None)
 }
 
 fn handle_dispatch<Client>(
@@ -230,13 +262,24 @@ where
 fn handle_list<Client>(
     args: LifecycleAddressArgs,
     client: &mut Client,
+    output: &mut impl Write,
 ) -> Result<Option<String>, LifecycleError>
 where
     Client: LifecycleDaemonClient,
 {
-    let response = client.list(LifecycleListRequest { addr: args.addr })?;
+    let addr = args.addr;
 
-    Ok(Some(format_list_output(&response)))
+    write_lifecycle_line(output, format_connecting_line())?;
+    client.connect(addr.clone())?;
+    write_lifecycle_line(output, format_connected_line())?;
+
+    let response = client.list(LifecycleListRequest { addr })?;
+
+    for line in format_list_output(&response).lines() {
+        write_lifecycle_line(output, line)?;
+    }
+
+    Ok(None)
 }
 
 fn handle_worker<Client, Output>(
@@ -311,6 +354,19 @@ fn required_arg(value: String, name: &'static str) -> Result<String, LifecycleEr
     }
 }
 
+fn required_feature_repo(value: String) -> Result<String, LifecycleError> {
+    if value.trim().is_empty() {
+        return Err(LifecycleError::InvalidInput(
+            "repo must not be empty".to_owned(),
+        ));
+    }
+
+    let repo = lifecycle::repo::RepoUrl::try_from(value.as_str())
+        .map_err(|error| LifecycleError::InvalidInput(error.to_string()))?;
+
+    Ok(repo.as_clone_input().to_owned())
+}
+
 pub(super) fn redact_text(value: &str) -> String {
     redact_repo_credentials(&lifecycle::redaction::redact_failure_text(value))
 }
@@ -345,5 +401,17 @@ mod tests {
     include!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/tests/unit/lifecycle_output.rs"
+    ));
+    include!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/unit/lifecycle_feature_list_output.rs"
+    ));
+    include!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/unit/lifecycle_worker_stream_output.rs"
+    ));
+    include!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/unit/lifecycle_answer_error_redaction_output.rs"
     ));
 }

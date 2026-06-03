@@ -55,7 +55,7 @@ pub(super) struct LifecycleDispatchArgs {
     /// Lifecycle prompt to hand to the daemon.
     #[arg(long)]
     pub(super) prompt: String,
-    /// Repository path for the lifecycle run.
+    /// Repository URL for the lifecycle run.
     #[arg(long)]
     pub(super) repo: String,
     /// Daemon address to route this lifecycle command to.

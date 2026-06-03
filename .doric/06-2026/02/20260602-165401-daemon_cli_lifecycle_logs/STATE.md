@@ -4,7 +4,7 @@
 
 - Phase: development
 - Current effort: none
-- Next effort index: 4
+- Next effort index: 5
 
 ## Approvals
 
@@ -22,7 +22,7 @@
 | 1 | 02_repo_url_validation.md | done |
 | 2 | 03_daemon_dispatch_uuid_validation.md | done |
 | 3 | 04_daemon_timestamps_logger.md | done |
-| 4 | 05_cli_feature_list_output.md | todo |
+| 4 | 05_cli_feature_list_output.md | done |
 | 5 | 06_cli_stream_output.md | todo |
 | 6 | 07_worker_clone_wording_regressions.md | todo |
 
@@ -92,6 +92,13 @@
 | development | 04_daemon_timestamps_logger.md | test writer | worker | 04_history_truncated_suffix_test_writer_01 | 019e8b01-485e-72b2-a30e-20d60b5e0ff5 (Ohm) | accepted |
 | development | 04_daemon_timestamps_logger.md | validator/refactor | worker | 04_fix_validator_refactor_01 | 019e8b03-d396-7a13-b633-b1031818d00d (Galileo) | accepted |
 | development | 04_daemon_timestamps_logger.md | reviewer | explorer | 04_reviewer_02 | 019e8b06-acfb-78f0-b04d-9ce90a8049e6 (Aristotle) | accepted |
+| development | 05_cli_feature_list_output.md | test planner | worker | 05_test_planner_01 | 019e8d46-0d84-7c51-b569-aedb5976a319 (Zeno) | accepted |
+| development | 05_cli_feature_list_output.md | test writer | worker | 05_test_writer_01 | 019e8d4b-32be-72b2-99fc-29fb1307a666 (Boyle) | accepted |
+| development | 05_cli_feature_list_output.md | code writer | worker | 05_code_writer_01 | 019e8d50-8471-7c62-bbac-dea2bda20120 (Euclid) | accepted |
+| development | 05_cli_feature_list_output.md | validator/refactor | worker | 05_validator_refactor_01 | 019e8d58-559f-7b52-b244-b9f1f7a17161 (Noether) | accepted |
+| development | 05_cli_feature_list_output.md | reviewer | explorer | 05_reviewer_01 | 019e8d5b-e911-7ea0-aeeb-31b116d135e1 (Sagan) | blocked |
+| development | 05_cli_feature_list_output.md | validator/refactor | worker | 05_test_split_refactor_01 | 019e8d60-66ce-7183-97fd-8ef99991f10e (Chandrasekhar) | accepted |
+| development | 05_cli_feature_list_output.md | reviewer | explorer | 05_reviewer_02 | 019e8d66-364e-7d71-a474-ab235a36d56b (Sartre) | accepted |
 
 ## Agent receipts
 
@@ -156,6 +163,13 @@
 | 04_history_truncated_suffix_test_writer_01 | development | 04_daemon_timestamps_logger.md | test writer | worker | 019e8b01-485e-72b2-a30e-20d60b5e0ff5 (Ohm) | accepted | Adjusted suffix replay assertion to keep `history_truncated` untimestamped while requiring retained worker events timestamped; `cargo test -p daemon history_truncated` and `service` passed. |
 | 04_fix_validator_refactor_01 | development | 04_daemon_timestamps_logger.md | validator/refactor | worker | 019e8b03-d396-7a13-b633-b1031818d00d (Galileo) | accepted | Replacement validation passed history_truncated, focused daemon suites, lifecycle regression, fmt, and clippy after reviewer fix; no refactors applied. |
 | 04_reviewer_02 | development | 04_daemon_timestamps_logger.md | reviewer | explorer | 019e8b06-acfb-78f0-b04d-9ce90a8049e6 (Aristotle) | accepted | Replacement review approved effort 04 for commit checkpoint; no blockers after `history_truncated` fix and full validation passed. |
+| 05_test_planner_01 | development | 05_cli_feature_list_output.md | test planner | worker | 019e8d46-0d84-7c51-b569-aedb5976a319 (Zeno) | accepted | Planned feature/list lifecycle CLI tests, red command barriers, and regressions; used coding-conventions, implementation-standards, and Sexy Rust references. |
+| 05_test_writer_01 | development | 05_cli_feature_list_output.md | test writer | worker | 019e8d4b-32be-72b2-99fc-29fb1307a666 (Boyle) | accepted | Added compile-red feature/list lifecycle tests in `packages/cli/tests/unit/lifecycle_output.rs`; focused commands exit 1 on missing `LifecycleDaemonClient::connect`; used coding-conventions, implementation-standards, and Sexy Rust references. |
+| 05_code_writer_01 | development | 05_cli_feature_list_output.md | code writer | worker | 019e8d50-8471-7c62-bbac-dea2bda20120 (Euclid) | accepted | Added CLI connect seam, feature URL prevalidation, feature lifecycle lines, list table output, and repo help wording; coordinator `cargo test -p cli handle_lifecycle` passed; used coding-conventions, implementation-standards, Sexy Rust, and architecture-principles references. |
+| 05_validator_refactor_01 | development | 05_cli_feature_list_output.md | validator/refactor | worker | 019e8d58-559f-7b52-b244-b9f1f7a17161 (Noether) | accepted | Validated feature/list focused tests, debug-log startup, lifecycle regression, daemon service matching tests, and cli clippy; no refactors applied; used coding-conventions, implementation-standards, Sexy Rust, architecture-principles, and simplicity-complexity references. |
+| 05_reviewer_01 | development | 05_cli_feature_list_output.md | reviewer | explorer | 019e8d5b-e911-7ea0-aeeb-31b116d135e1 (Sagan) | blocked | Blocked on coding-conventions file-size gate: `packages/cli/tests/unit/lifecycle_output.rs` is 852 lines after effort 05 and must be split before commit readiness. |
+| 05_test_split_refactor_01 | development | 05_cli_feature_list_output.md | validator/refactor | worker | 019e8d60-66ce-7183-97fd-8ef99991f10e (Chandrasekhar) | accepted | Split lifecycle unit tests into cohesive under-500-line include files; reran cli lifecycle, debug-log startup, lifecycle, daemon service, and cli clippy successfully; used coding-conventions, implementation-standards, and simplicity-complexity references. |
+| 05_reviewer_02 | development | 05_cli_feature_list_output.md | reviewer | explorer | 019e8d66-364e-7d71-a474-ab235a36d56b (Sartre) | accepted | Replacement review approved effort 05 for commit checkpoint; file-size blocker resolved, feature/list behavior valid, and path-limited commit scope required. |
 
 ## Validation records
 
@@ -165,6 +179,7 @@
 | 02_repo_url_validation.md | validation/02_repo_url_validation.md | unresolved `lifecycle::repo::RepoUrl` public API | `cargo test -p lifecycle`, focused repo/redaction/identity tests, fmt, and clippy passed | 02_reviewer_01 |
 | 03_daemon_dispatch_uuid_validation.md | validation/03_daemon_dispatch_uuid_validation.md | invalid/path-like repo accepted before side effects; timestamp-style production IDs; whitespace-padded remote trim bypass | focused daemon tests, daemon service/server/integration tests, lifecycle repo_url, worker repo, fmt, and clippy passed | 03_reviewer_02 |
 | 04_daemon_timestamps_logger.md | validation/04_daemon_timestamps_logger.md | missing daemon lifecycle logger/timestamp contract; synthetic `history_truncated` conversion-time timestamp | focused daemon history_truncated/registry/service/worker_session/server/integration tests, lifecycle regression, fmt, and clippy passed | 04_reviewer_02 |
+| 05_cli_feature_list_output.md | validation/05_cli_feature_list_output.md | missing `LifecycleDaemonClient::connect` explicit connection seam | focused cli feature/list/redaction/unavailable/lifecycle tests, debug-log startup, lifecycle regression, daemon service matching tests, cli clippy, and lifecycle test split line-count checks passed | 05_reviewer_02 |
 
 ## Commit checkpoints
 
@@ -173,7 +188,8 @@
 | 01_shared_terminal_lines.md | 88fa06a | feat(lifecycle): add shared terminal lifecycle lines | lifecycle terminal/redaction/lib, lifecycle unit tests, effort 01 Doric artifacts |
 | 02_repo_url_validation.md | 6278e2e | feat(lifecycle): add repo URL validation | lifecycle repo module, lifecycle unit tests, effort 02 Doric artifacts |
 | 03_daemon_dispatch_uuid_validation.md | 0345938 | feat(daemon): validate dispatch repo URLs and UUIDv6 IDs | daemon service/server code and tests, daemon Cargo metadata, effort 03 Doric artifacts |
-| 04_daemon_timestamps_logger.md | pending | feat(daemon): add lifecycle timestamps and logger | daemon event/registry/service/worker_session/server code and tests, effort 04 Doric artifacts |
+| 04_daemon_timestamps_logger.md | 5afd485 | feat(daemon): add lifecycle timestamps and logger | daemon event/registry/service/worker_session/server code and tests, effort 04 Doric artifacts |
+| 05_cli_feature_list_output.md | pending | feat(cli): add feature and list lifecycle output | cli lifecycle handler/client/output/types, split cli lifecycle unit tests, effort 05 Doric artifacts |
 
 ## Coordinator notes
 
@@ -301,3 +317,19 @@
 - 2026-06-02 22:08:18: Reviewed and accepted `04_fix_validator_refactor_01`; replacement validation passed full effort commands after the reviewer fix. Registered `04_reviewer_02`.
 - 2026-06-02 22:08:57: Spawned replacement effort 04 reviewer as `019e8b06-acfb-78f0-b04d-9ce90a8049e6` (`Aristotle`).
 - 2026-06-02 22:12:04: Reviewed and accepted `04_reviewer_02`; marked `04_daemon_timestamps_logger.md` done, released active locks, set `Current effort` to `none`, advanced `Next effort index` to `4`, and prepared commit checkpoint `feat(daemon): add lifecycle timestamps and logger`.
+- 2026-06-03 08:34:11: Commit checkpoint succeeded for effort 04 with `5afd485` (`feat(daemon): add lifecycle timestamps and logger`). Used path-limited commit scope to preserve unrelated staged and dirty files.
+- 2026-06-03 08:36:23: Transitioned `05_cli_feature_list_output.md` from `todo` to `in-progress`, set `Current effort`, recorded active locks, and registered `05_test_planner_01`.
+- 2026-06-03 08:37:25: Spawned effort 05 test planner as `019e8d46-0d84-7c51-b569-aedb5976a319` (`Zeno`).
+- 2026-06-03 08:42:08: Reviewed and accepted `05_test_planner_01`; planned feature/list lifecycle tests, red command barriers, and regression commands. Registered `05_test_writer_01`.
+- 2026-06-03 08:43:03: Spawned effort 05 test writer as `019e8d4b-32be-72b2-99fc-29fb1307a666` (`Boyle`).
+- 2026-06-03 08:48:10: Reviewed and accepted `05_test_writer_01`; recorded red evidence in `validation/05_cli_feature_list_output.md` and registered `05_code_writer_01`.
+- 2026-06-03 08:48:52: Spawned effort 05 code writer as `019e8d50-8471-7c62-bbac-dea2bda20120` (`Euclid`).
+- 2026-06-03 08:56:49: Reviewed and accepted `05_code_writer_01`; coordinator `cargo test -p cli handle_lifecycle` passed with 17 tests. Registered `05_validator_refactor_01`.
+- 2026-06-03 08:57:26: Spawned effort 05 validator/refactor as `019e8d58-559f-7b52-b244-b9f1f7a17161` (`Noether`).
+- 2026-06-03 09:00:38: Reviewed and accepted `05_validator_refactor_01`; recorded green evidence in `validation/05_cli_feature_list_output.md` and registered `05_reviewer_01`.
+- 2026-06-03 09:01:19: Spawned effort 05 reviewer as `019e8d5b-e911-7ea0-aeeb-31b116d135e1` (`Sagan`).
+- 2026-06-03 09:05:36: `05_reviewer_01` blocked commit readiness on the coding-conventions file-size gate for `packages/cli/tests/unit/lifecycle_output.rs`. Registered `05_test_split_refactor_01`.
+- 2026-06-03 09:06:12: Spawned effort 05 test split/refactor as `019e8d60-66ce-7183-97fd-8ef99991f10e` (`Chandrasekhar`).
+- 2026-06-03 09:11:25: Reviewed and accepted `05_test_split_refactor_01`; lifecycle test include files are under 500 lines and `cargo test -p cli handle_lifecycle` passed. Registered replacement reviewer `05_reviewer_02`.
+- 2026-06-03 09:12:34: Initial replacement reviewer spawn hit the agent thread limit; closed completed effort 05 agents and spawned `05_reviewer_02` as `019e8d66-364e-7d71-a474-ab235a36d56b` (`Sartre`).
+- 2026-06-03 09:16:19: Reviewed and accepted `05_reviewer_02`; marked `05_cli_feature_list_output.md` done, released active locks, set `Current effort` to `none`, advanced `Next effort index` to `5`, and prepared commit checkpoint `feat(cli): add feature and list lifecycle output`.

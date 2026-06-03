@@ -9,21 +9,33 @@ use std::future::Future;
 
 const DEFAULT_DAEMON_ADDR: &str = "127.0.0.1:47821";
 
-pub(super) struct GrpcLifecycleDaemonClient;
+type ConnectedLifecycleClient =
+    pb::lifecycle_service_client::LifecycleServiceClient<tonic::transport::Channel>;
+
+#[derive(Default)]
+pub(super) struct GrpcLifecycleDaemonClient {
+    connected: Option<ConnectedLifecycleClient>,
+}
 
 impl LifecycleDaemonClient for GrpcLifecycleDaemonClient {
+    fn connect(&mut self, addr: Option<String>) -> Result<(), LifecycleError> {
+        self.connected = Some(run_rpc(connect_client(addr.as_deref()))?);
+
+        Ok(())
+    }
+
     fn dispatch(
         &mut self,
         request: LifecycleDispatchRequest,
     ) -> Result<LifecycleDispatchResponse, LifecycleError> {
-        run_rpc(dispatch_rpc(request))
+        run_rpc(dispatch_rpc(request, self.connected.take()))
     }
 
     fn list(
         &mut self,
         request: LifecycleListRequest,
     ) -> Result<LifecycleListResponse, LifecycleError> {
-        run_rpc(list_rpc(request))
+        run_rpc(list_rpc(request, self.connected.take()))
     }
 
     fn stream_worker(
@@ -44,8 +56,12 @@ impl LifecycleDaemonClient for GrpcLifecycleDaemonClient {
 
 async fn dispatch_rpc(
     request: LifecycleDispatchRequest,
+    connected: Option<ConnectedLifecycleClient>,
 ) -> Result<LifecycleDispatchResponse, LifecycleError> {
-    let mut client = connect_client(request.addr.as_deref()).await?;
+    let mut client = match connected {
+        Some(client) => client,
+        None => connect_client(request.addr.as_deref()).await?,
+    };
     let response = client
         .dispatch(pb::DispatchRequest {
             mode: mode_to_proto(request.mode),
@@ -64,8 +80,14 @@ async fn dispatch_rpc(
     })
 }
 
-async fn list_rpc(request: LifecycleListRequest) -> Result<LifecycleListResponse, LifecycleError> {
-    let mut client = connect_client(request.addr.as_deref()).await?;
+async fn list_rpc(
+    request: LifecycleListRequest,
+    connected: Option<ConnectedLifecycleClient>,
+) -> Result<LifecycleListResponse, LifecycleError> {
+    let mut client = match connected {
+        Some(client) => client,
+        None => connect_client(request.addr.as_deref()).await?,
+    };
     let response = client
         .list_workers(pb::ListWorkersRequest {})
         .await

@@ -1,11 +1,28 @@
 use super::{
     lifecycle::{
         redact_text, LifecycleAnswerResponse, LifecycleDispatchMode, LifecycleDispatchResponse,
-        LifecycleListResponse, LifecycleStreamItem, LifecycleWorkerEvent,
+        LifecycleListResponse, LifecycleStreamItem, LifecycleWorkerEvent, LifecycleWorkerSummary,
     },
     terminal_style,
 };
+use ::lifecycle::terminal::safe_message;
 use anstyle::Style;
+
+pub(super) fn format_connecting_line() -> &'static str {
+    "connecting to daemon"
+}
+
+pub(super) fn format_connected_line() -> &'static str {
+    "connected to daemon"
+}
+
+pub(super) fn format_creating_worker_line() -> &'static str {
+    "creating worker"
+}
+
+pub(super) fn format_created_worker_line(worker_id: &str) -> String {
+    format!("created worker: {}", safe_cell(worker_id))
+}
 
 pub(super) fn format_dispatch_output(response: &LifecycleDispatchResponse) -> String {
     [
@@ -24,39 +41,19 @@ pub(super) fn format_dispatch_output(response: &LifecycleDispatchResponse) -> St
 }
 
 pub(super) fn format_list_output(response: &LifecycleListResponse) -> String {
-    if response.workers.is_empty() {
-        return format!(
-            "{} {}",
-            paint(missing_style(), "[empty]"),
-            "No lifecycle workers are tracked"
-        );
-    }
+    let rows = list_rows(response);
+    let status_width = column_width(&rows, |row| &row.status);
+    let worker_id_width = column_width(&rows, |row| &row.worker_id);
 
-    response
-        .workers
-        .iter()
-        .map(|worker| {
-            [
-                format!(
-                    "{} {}",
-                    paint(success_style(), "[worker]"),
-                    paint(title_style(), &worker.worker_id)
-                ),
-                lifecycle_field("Mode", mode_label(worker.mode)),
-                lifecycle_field("Repo", &worker.repo),
-                lifecycle_field("Status", &worker.status),
-                lifecycle_field("Sequence", &worker.latest_sequence.to_string()),
-                lifecycle_field("Activity", &worker.activity),
-                lifecycle_optional_field("Reason", worker.terminal_reason.as_deref()),
-                lifecycle_optional_field("Request", worker.pending_request_id.as_deref()),
-            ]
-            .into_iter()
-            .filter(|line| !line.is_empty())
-            .collect::<Vec<_>>()
-            .join("\n")
+    rows.into_iter()
+        .map(|row| {
+            format!(
+                "{:<status_width$}  {:<worker_id_width$}  {}",
+                row.status, row.worker_id, row.repo
+            )
         })
         .collect::<Vec<_>>()
-        .join("\n\n")
+        .join("\n")
 }
 
 pub(super) fn format_worker_output_header(worker_id: &str) -> String {
@@ -117,11 +114,42 @@ fn lifecycle_field(label: &str, value: &str) -> String {
     )
 }
 
-fn lifecycle_optional_field(label: &str, value: Option<&str>) -> String {
-    value
-        .filter(|value| !value.trim().is_empty())
-        .map(|value| lifecycle_field(label, value))
+#[derive(Debug, Eq, PartialEq)]
+struct ListRow {
+    status: String,
+    worker_id: String,
+    repo: String,
+}
+
+impl ListRow {
+    fn new(status: &str, worker_id: &str, repo: &str) -> Self {
+        Self {
+            status: safe_cell(status),
+            worker_id: safe_cell(worker_id),
+            repo: safe_cell(repo),
+        }
+    }
+}
+
+fn list_rows(response: &LifecycleListResponse) -> Vec<ListRow> {
+    std::iter::once(ListRow::new("status", "worker id", "git repo"))
+        .chain(response.workers.iter().map(worker_row))
+        .collect()
+}
+
+fn worker_row(worker: &LifecycleWorkerSummary) -> ListRow {
+    ListRow::new(&worker.status, &worker.worker_id, &worker.repo)
+}
+
+fn column_width(rows: &[ListRow], cell: impl Fn(&ListRow) -> &str) -> usize {
+    rows.iter()
+        .map(|row| cell(row).chars().count())
+        .max()
         .unwrap_or_default()
+}
+
+fn safe_cell(value: &str) -> String {
+    safe_message(value)
 }
 
 fn mode_label(mode: LifecycleDispatchMode) -> &'static str {
@@ -170,8 +198,4 @@ fn success_style() -> Style {
 
 fn provider_style() -> Style {
     terminal_style::provider_style()
-}
-
-fn missing_style() -> Style {
-    terminal_style::warning_style()
 }

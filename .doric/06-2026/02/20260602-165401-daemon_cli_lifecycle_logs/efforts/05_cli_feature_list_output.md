@@ -1,6 +1,6 @@
 # Effort: CLI feature and list lifecycle output
 
-Status: todo
+Status: done
 
 ## Requirement links
 
