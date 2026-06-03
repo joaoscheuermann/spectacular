@@ -18,6 +18,7 @@ use lifecycle::proto::doric::lifecycle::v1 as pb;
 fn lifecycle_service_worker_frames_replay_prompt_milestones_without_collapsing_names() {
     let fixture = LifecycleFixture::new();
     let service = fixture.service();
+    let clone_message = "cloning repo: https://example.com/org/repo.git";
 
     service
         .dispatch(pb::DispatchRequest {
@@ -32,7 +33,7 @@ fn lifecycle_service_worker_frames_replay_prompt_milestones_without_collapsing_n
         .unwrap();
 
     for frame in [
-        worker_event("repo_preparation", pb::WorkerStatus::Running),
+        worker_event_with_message("repo_preparation", pb::WorkerStatus::Running, clone_message),
         worker_event("prompt_agent_started", pb::WorkerStatus::Running),
         worker_event("prompt_artifact_written", pb::WorkerStatus::Running),
         worker_event("prompt_agent_completed", pb::WorkerStatus::Succeeded),
@@ -46,8 +47,12 @@ fn lifecycle_service_worker_frames_replay_prompt_milestones_without_collapsing_n
             from_sequence: 0,
         })
         .unwrap();
-    let names = replay_names(replay.replay());
+    let events = replay.replay();
+    let names = replay_names(events);
+    let repo_preparation = replay_event(events, "repo_preparation");
 
+    assert_eq!(repo_preparation.name, "repo_preparation");
+    assert_eq!(repo_preparation.message, clone_message);
     assert_eq!(
         milestone_names(&names),
         vec![
@@ -143,13 +148,21 @@ impl Drop for TempRoot {
 }
 
 fn worker_event(name: &str, status: pb::WorkerStatus) -> pb::WorkerFrame {
+    worker_event_with_message(name, status, "")
+}
+
+fn worker_event_with_message(
+    name: &str,
+    status: pb::WorkerStatus,
+    message: &str,
+) -> pb::WorkerFrame {
     pb::WorkerFrame {
         frame: Some(pb::worker_frame::Frame::Event(pb::WorkerEvent {
             worker_id: "worker-1".to_owned(),
             sequence: 0,
             status: status as i32,
             name: name.to_owned(),
-            message: String::new(),
+            message: message.to_owned(),
             input: None,
             occurred_at: None,
         })),
@@ -174,6 +187,13 @@ fn milestone_names<'a>(names: &'a [&'a str]) -> Vec<&'a str> {
             )
         })
         .collect()
+}
+
+fn replay_event<'a>(events: &'a [pb::WorkerEvent], name: &str) -> &'a pb::WorkerEvent {
+    events
+        .iter()
+        .find(|event| event.name == name)
+        .unwrap_or_else(|| panic!("expected replay event `{name}` in {events:?}"))
 }
 
 fn suffix() -> u128 {

@@ -1,6 +1,6 @@
 # Effort: Worker clone wording and regressions
 
-Status: todo
+Status: done
 
 ## Requirement links
 

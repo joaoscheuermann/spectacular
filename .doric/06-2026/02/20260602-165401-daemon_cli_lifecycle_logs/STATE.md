@@ -4,7 +4,7 @@
 
 - Phase: development
 - Current effort: none
-- Next effort index: 6
+- Next effort index: 7
 
 ## Approvals
 
@@ -24,7 +24,7 @@
 | 3 | 04_daemon_timestamps_logger.md | done |
 | 4 | 05_cli_feature_list_output.md | done |
 | 5 | 06_cli_stream_output.md | done |
-| 6 | 07_worker_clone_wording_regressions.md | todo |
+| 6 | 07_worker_clone_wording_regressions.md | done |
 
 ## Active locks
 
@@ -104,6 +104,11 @@
 | development | 06_cli_stream_output.md | code writer | worker | 06_code_writer_01 | 019e8d77-c055-76d3-95be-8a499761eb2a (Epicurus) | accepted |
 | development | 06_cli_stream_output.md | validator/refactor | worker | 06_validator_refactor_01 | 019e8d7d-fe69-7941-9445-116dfe33be06 (Arendt) | accepted |
 | development | 06_cli_stream_output.md | reviewer | explorer | 06_reviewer_01 | 019e8d81-a8b7-7432-b1e6-c4fcabe21321 (Gibbs) | accepted |
+| development | 07_worker_clone_wording_regressions.md | test planner | worker | 07_test_planner_01 | 019e8d88-9849-7262-8557-56e26ca992c5 (Lovelace) | accepted |
+| development | 07_worker_clone_wording_regressions.md | test writer | worker | 07_test_writer_01 | 019e8d90-bfd3-7732-a4c6-7d670b5d0d46 (Hilbert) | accepted |
+| development | 07_worker_clone_wording_regressions.md | code writer | worker | 07_code_writer_01 | 019e8d95-f844-7702-84c9-e8e05554e235 (Confucius) | accepted |
+| development | 07_worker_clone_wording_regressions.md | validator/refactor | worker | 07_validator_refactor_01 | 019e8d99-c337-7903-b30c-bcac46f92b7d (Ampere) | accepted |
+| development | 07_worker_clone_wording_regressions.md | reviewer | explorer | 07_reviewer_01 | 019e8d9e-206c-7732-91fe-b2967f9b4433 (Hubble) | accepted |
 
 ## Agent receipts
 
@@ -180,6 +185,11 @@
 | 06_code_writer_01 | development | 06_cli_stream_output.md | code writer | worker | 019e8d77-c055-76d3-95be-8a499761eb2a (Epicurus) | accepted | Implemented timestamped stream output, `occurred_at` model mapping, render-time fallback, one-line waiting-for-input rendering, and old stream scaffold removal; coordinator `cargo test -p cli handle_lifecycle_worker_stream` passed; used coding-conventions, implementation-standards, and Sexy Rust references. |
 | 06_validator_refactor_01 | development | 06_cli_stream_output.md | validator/refactor | worker | 019e8d7d-fe69-7941-9445-116dfe33be06 (Arendt) | accepted | Validated stream-focused tests, full cli suite, daemon service/lifecycle_service regressions, lifecycle regression, fmt, and cli clippy; no refactors applied; used coding-conventions, implementation-standards, Sexy Rust, and simplicity-complexity references. |
 | 06_reviewer_01 | development | 06_cli_stream_output.md | reviewer | explorer | 019e8d81-a8b7-7432-b1e6-c4fcabe21321 (Gibbs) | accepted | Review approved effort 06 for commit checkpoint; stream output criteria, validation evidence, file-size gate, and scope all passed; path-limited commit required. |
+| 07_test_planner_01 | development | 07_worker_clone_wording_regressions.md | test planner | worker | 019e8d88-9849-7262-8557-56e26ca992c5 (Lovelace) | accepted | Planned worker clone wording, raw clone guard, daemon replay, CLI stream regression tests and commands; used coding-conventions, implementation-standards, and Sexy Rust references. |
+| 07_test_writer_01 | development | 07_worker_clone_wording_regressions.md | test writer | worker | 019e8d90-bfd3-7732-a4c6-7d670b5d0d46 (Hilbert) | accepted | Added red worker runtime clone wording and daemon replay message tests; focused worker commands fail on old repo-preparation wording, daemon replay baseline passes; used coding-conventions, implementation-standards, and Sexy Rust references. |
+| 07_code_writer_01 | development | 07_worker_clone_wording_regressions.md | code writer | worker | 019e8d95-f844-7702-84c9-e8e05554e235 (Confucius) | accepted | Changed worker runtime repo-preparation lifecycle text to `cloning repo: <redacted-repo-url>` via existing safe rendering while preserving raw repo requests; focused worker tests passed; used coding-conventions, implementation-standards, and Sexy Rust references. |
+| 07_validator_refactor_01 | development | 07_worker_clone_wording_regressions.md | validator/refactor | worker | 019e8d99-c337-7903-b30c-bcac46f92b7d (Ampere) | accepted | Validation passed worker runtime/repo/event, daemon lifecycle_service/worker_session, CLI stream/output, lifecycle, fmt, and worker clippy; no refactors applied; used coding-conventions, implementation-standards, and Sexy Rust references. |
+| 07_reviewer_01 | development | 07_worker_clone_wording_regressions.md | reviewer | explorer | 019e8d9e-206c-7732-91fe-b2967f9b4433 (Hubble) | accepted | Review approved effort 07 for commit checkpoint; no blockers, validation evidence complete, file-size gate passed, and path-limited commit scope required. |
 
 ## Validation records
 
@@ -191,6 +201,7 @@
 | 04_daemon_timestamps_logger.md | validation/04_daemon_timestamps_logger.md | missing daemon lifecycle logger/timestamp contract; synthetic `history_truncated` conversion-time timestamp | focused daemon history_truncated/registry/service/worker_session/server/integration tests, lifecycle regression, fmt, and clippy passed | 04_reviewer_02 |
 | 05_cli_feature_list_output.md | validation/05_cli_feature_list_output.md | missing `LifecycleDaemonClient::connect` explicit connection seam | focused cli feature/list/redaction/unavailable/lifecycle tests, debug-log startup, lifecycle regression, daemon service matching tests, cli clippy, and lifecycle test split line-count checks passed | 05_reviewer_02 |
 | 06_cli_stream_output.md | validation/06_cli_stream_output.md | old `[stream]` header/no-retained-events output and missing timestamped stream item contract | focused stream/redaction/lifecycle tests, full cli suite, daemon service/lifecycle_service regressions, lifecycle regression, fmt, and cli clippy passed | 06_reviewer_01 |
+| 07_worker_clone_wording_regressions.md | validation/07_worker_clone_wording_regressions.md | worker clone wording tests fail on old repo-preparation message | focused worker/daemon/CLI regressions, lifecycle, fmt, and worker clippy passed | 07_reviewer_01 |
 
 ## Commit checkpoints
 
@@ -201,7 +212,8 @@
 | 03_daemon_dispatch_uuid_validation.md | 0345938 | feat(daemon): validate dispatch repo URLs and UUIDv6 IDs | daemon service/server code and tests, daemon Cargo metadata, effort 03 Doric artifacts |
 | 04_daemon_timestamps_logger.md | 5afd485 | feat(daemon): add lifecycle timestamps and logger | daemon event/registry/service/worker_session/server code and tests, effort 04 Doric artifacts |
 | 05_cli_feature_list_output.md | 2de1484 | feat(cli): add feature and list lifecycle output | cli lifecycle handler/client/output/types, split cli lifecycle unit tests, effort 05 Doric artifacts |
-| 06_cli_stream_output.md | pending | feat(cli): render timestamped lifecycle streams | cli lifecycle stream handler/client/output, cli lifecycle stream tests, effort 06 Doric artifacts |
+| 06_cli_stream_output.md | a2e4e18 | feat(cli): render timestamped lifecycle streams | cli lifecycle stream handler/client/output, cli lifecycle stream tests, effort 06 Doric artifacts |
+| 07_worker_clone_wording_regressions.md | pending | fix(worker): render redacted clone lifecycle wording | worker runtime, worker runtime tests, daemon lifecycle service replay test, effort 07 Doric artifacts |
 
 ## Coordinator notes
 
@@ -357,3 +369,15 @@
 - 2026-06-03 09:41:46: Reviewed and accepted `06_validator_refactor_01`; recorded green evidence in `validation/06_cli_stream_output.md` and registered `06_reviewer_01`.
 - 2026-06-03 09:42:34: Spawned effort 06 reviewer as `019e8d81-a8b7-7432-b1e6-c4fcabe21321` (`Gibbs`).
 - 2026-06-03 09:47:55: Reviewed and accepted `06_reviewer_01`; marked `06_cli_stream_output.md` done, released active locks, set `Current effort` to `none`, advanced `Next effort index` to `6`, and prepared commit checkpoint `feat(cli): render timestamped lifecycle streams`.
+- 2026-06-03 09:48:58: Commit checkpoint succeeded for effort 06 with `a2e4e18` (`feat(cli): render timestamped lifecycle streams`). Used path-limited commit scope to preserve unrelated staged and dirty files.
+- 2026-06-03 09:49:26: Transitioned `07_worker_clone_wording_regressions.md` from `todo` to `in-progress`, set `Current effort`, recorded active locks, and registered `07_test_planner_01`.
+- 2026-06-03 09:50:06: Spawned effort 07 test planner as `019e8d88-9849-7262-8557-56e26ca992c5` (`Lovelace`).
+- 2026-06-03 09:55:48: Reviewed and accepted `07_test_planner_01`; registered `07_test_writer_01` for focused worker, daemon replay, and CLI stream regression tests.
+- 2026-06-03 09:59:01: Spawned effort 07 test writer as `019e8d90-bfd3-7732-a4c6-7d670b5d0d46` (`Hilbert`).
+- 2026-06-03 10:03:15: Reviewed and accepted `07_test_writer_01`; recorded red evidence in `validation/07_worker_clone_wording_regressions.md` and registered `07_code_writer_01`.
+- 2026-06-03 10:04:42: Spawned effort 07 code writer as `019e8d95-f844-7702-84c9-e8e05554e235` (`Confucius`).
+- 2026-06-03 10:08:14: Reviewed and accepted `07_code_writer_01`; coordinator focused worker tests passed and `07_validator_refactor_01` was registered for broader validation.
+- 2026-06-03 10:08:50: Spawned effort 07 validator/refactor as `019e8d99-c337-7903-b30c-bcac46f92b7d` (`Ampere`).
+- 2026-06-03 10:12:35: Reviewed and accepted `07_validator_refactor_01`; recorded green evidence in `validation/07_worker_clone_wording_regressions.md` and registered `07_reviewer_01`.
+- 2026-06-03 10:13:38: Spawned effort 07 reviewer as `019e8d9e-206c-7732-91fe-b2967f9b4433` (`Hubble`).
+- 2026-06-03 10:17:35: Reviewed and accepted `07_reviewer_01`; marked `07_worker_clone_wording_regressions.md` done, released active locks, set `Current effort` to `none`, advanced `Next effort index` to `7`, and prepared commit checkpoint `fix(worker): render redacted clone lifecycle wording`.

@@ -4,6 +4,7 @@ use lifecycle::event::WorkerEvent;
 use lifecycle::identity::RequestId;
 use lifecycle::proto::doric::lifecycle::v1 as pb;
 use lifecycle::status::WorkerStatus;
+use lifecycle::terminal::safe_message;
 
 use crate::agents::prompt::PromptAgentEvent;
 use crate::error::{WorkerError, WorkerResult};
@@ -167,7 +168,7 @@ impl<'a, 'b> Runtime<'a, 'b> {
         self.send_event(WorkerEvent::repo_preparation(
             self.config.worker_id.clone(),
             sequence,
-            "Preparing repository for prompt requirements",
+            clone_event_message(&start.repo),
         ))?;
 
         let repo = match self.deps.repo_preparer.prepare(self.repo_request(&start)) {
@@ -401,4 +402,8 @@ fn sanitize_prompt_event(event: PromptAgentEvent, token: &str) -> PromptAgentEve
 
 fn sanitize_text(text: &str, token: &str) -> String {
     sanitize_event_text(text, token)
+}
+
+fn clone_event_message(repo: &str) -> String {
+    format!("cloning repo: {}", safe_message(repo))
 }

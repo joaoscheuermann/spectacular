@@ -59,6 +59,38 @@ fn run_worker_session_start_job_prepares_repo_before_prompt_runner() {
 }
 
 #[test]
+fn run_worker_session_start_job_emits_redacted_clone_event_with_raw_repo_request() {
+    let raw_repo = "https://user:pass@github.com/org/repo.git";
+    let mut fx = RuntimeFixture::new("worker-runtime-clone-event")
+        .with_start(raw_repo)
+        .with_prompt([PromptRunState::succeeded([
+            started(),
+            PromptAgentEvent::completed("Prompt requirements artifact completed"),
+        ])]);
+
+    let outcome = fx.run().unwrap();
+    let request = &fx.repo.requests()[0];
+    let repo_event = event_named(fx.frames(), "repo_preparation");
+
+    assert_eq!(outcome, RuntimeOutcome::Succeeded);
+    assert_eq!(
+        repo_event.message,
+        "cloning repo: https://github.com/org/repo.git"
+    );
+    assert_no_status_or_event_text_contains(fx.frames(), raw_repo);
+    assert_no_status_or_event_text_contains(fx.frames(), "user:pass");
+    assert_eq!(request.repo_url(), raw_repo);
+    assert_eq!(
+        fx.session.event_names(),
+        [
+            "repo_preparation",
+            "prompt_agent_started",
+            "prompt_agent_completed"
+        ]
+    );
+}
+
+#[test]
 fn run_worker_session_repo_preparation_failure_sends_failed_status_without_prompt_runner() {
     let mut fx = RuntimeFixture::new("worker-runtime-repo-failure")
         .with_start("https://user:pass@example.com/org/repo.git")
@@ -72,6 +104,9 @@ fn run_worker_session_repo_preparation_failure_sends_failed_status_without_promp
 
     assert_eq!(outcome, RuntimeOutcome::Failed);
     assert!(fx.prompt.jobs().is_empty());
+    assert!(status_or_event_messages(fx.frames())
+        .iter()
+        .any(|message| message == "cloning repo: https://example.com/org/repo.git"));
     assert_eq!(terminal_status_count(fx.frames()), 1);
     assert_status_sent(fx.frames(), pb::WorkerStatus::Failed);
     assert_no_frame_text_contains(fx.frames(), "sk-secret");
@@ -239,7 +274,7 @@ fn run_worker_session_blank_token_preserves_outbound_status_and_event_text() {
         .any(|message| message == "Worker session running"));
     assert!(messages
         .iter()
-        .any(|message| message == "Preparing repository for prompt requirements"));
+        .any(|message| message == "cloning repo: https://github.com/org/repo.git"));
     assert!(messages
         .iter()
         .any(|message| message == "Prompt requirements agent started"));
@@ -277,4 +312,15 @@ fn run_worker_session_success_and_failure_send_one_terminal_status() {
     assert_eq!(terminal_status_count(failure.frames()), 1);
     assert_no_status_after_terminal(success.frames());
     assert_no_status_after_terminal(failure.frames());
+}
+
+fn event_named<'a>(frames: &'a [pb::WorkerFrame], name: &str) -> &'a pb::WorkerEvent {
+    frames
+        .iter()
+        .filter_map(|frame| match frame.frame.as_ref() {
+            Some(pb::worker_frame::Frame::Event(event)) if event.name == name => Some(event),
+            _ => None,
+        })
+        .next()
+        .unwrap_or_else(|| panic!("expected event `{name}` in {frames:?}"))
 }
