@@ -9,9 +9,10 @@ use lifecycle::proto::doric::lifecycle::v1 as pb;
 use lifecycle::repo::RepoIdentity;
 use lifecycle::status::WorkerStatus;
 
+use crate::process::ChildExit;
 use crate::registry::{InputRequest, Registry, WorkerMode, WorkerRecord};
 use crate::root::prepare_worker_layout;
-use crate::service::CommandSender;
+use crate::service::{CommandSender, LifecycleLogger};
 use crate::worker_session::{
     AttachDecision, AttachRequest, SessionCommandSender, SessionManager, SessionWorker,
     WorkerSessionConfig,
@@ -37,6 +38,42 @@ fn attach_worker_valid_hello_claims_token_once_and_sends_start_job() {
     assert_eq!(start.worker_id, "worker-attach");
     assert_eq!(start.prompt, "write requirements");
     assert_eq!(start.repo, "https://secret@example.com/org/repo.git");
+}
+
+/// Verifies representative session lifecycle events emit injected logger messages.
+#[test]
+fn session_manager_worker_lifecycle_events_log_representative_messages() {
+    let fixture = SessionFixture::new();
+    let manager = fixture.manager();
+    fixture.register_worker("worker-logs", "token-1");
+
+    manager
+        .attach(AttachRequest::hello("worker-logs", "token-1"))
+        .unwrap();
+    manager
+        .record_worker_frame(worker_event(
+            "worker-logs",
+            "repo_preparation",
+            pb::WorkerStatus::Running,
+            "cloning repo: https://example.com/org/repo.git",
+        ))
+        .unwrap();
+    manager
+        .record_worker_frame(input_event("worker-logs", "request-1", "Approve?"))
+        .unwrap();
+    manager
+        .record_worker_frame(worker_status(
+            "worker-logs",
+            pb::WorkerStatus::Succeeded,
+            "prompt artifact written",
+        ))
+        .unwrap();
+
+    let logs = fixture.logs();
+    assert_contains_log(&logs, "worker attached: worker-logs");
+    assert_contains_log(&logs, "repo_preparation: worker-logs");
+    assert_contains_log(&logs, "input requested: worker-logs request-1");
+    assert_contains_log(&logs, "worker succeeded: worker-logs");
 }
 
 /// Verifies wrong-token and duplicate attaches do not receive StartJob.
@@ -129,6 +166,27 @@ fn record_worker_status_terminal_succeeded_marks_succeeded_and_closes_session() 
 
     assert_eq!(fixture.summary("worker-success").status(), WorkerStatus::Succeeded);
     assert!(!manager.is_attached("worker-success"));
+    assert_contains_log(&fixture.logs(), "worker succeeded: worker-success");
+}
+
+/// Verifies representative process failures emit injected logger messages.
+#[test]
+fn session_manager_process_failures_log_spawn_failure_and_child_exit() {
+    let fixture = SessionFixture::new();
+    let manager = fixture.manager();
+    fixture.register_worker("worker-spawn-failure", "token-1");
+    fixture.register_worker("worker-child-exit", "token-2");
+
+    manager
+        .record_spawn_failure("worker-spawn-failure", "credential=super-secret")
+        .unwrap();
+    manager
+        .record_child_exit("worker-child-exit", ChildExit::exited(7))
+        .unwrap();
+
+    let logs = fixture.logs();
+    assert_contains_log(&logs, "spawn failed: worker-spawn-failure");
+    assert_contains_log(&logs, "child exit: worker-child-exit");
 }
 
 /// Verifies daemon-validated answers are forwarded only through attached sessions.
@@ -174,20 +232,24 @@ fn send_answer_attached_or_detached_worker_forwards_or_preserves_pending_input()
 struct SessionFixture {
     registry: Arc<Mutex<Registry>>,
     manager: SessionManager,
+    logs: Arc<Mutex<Vec<String>>>,
     root: TempRoot,
 }
 
 impl SessionFixture {
     fn new() -> Self {
         let registry = Arc::new(Mutex::new(Registry::in_memory()));
+        let logs = Arc::new(Mutex::new(Vec::new()));
         let manager = SessionManager::new(WorkerSessionConfig {
             registry: registry.clone(),
             attach_deadline: Duration::from_secs(30),
+            lifecycle_logger: RecordingLifecycleLogger(logs.clone()),
         });
 
         Self {
             registry,
             manager,
+            logs,
             root: TempRoot::new("worker-session"),
         }
     }
@@ -257,6 +319,19 @@ impl SessionFixture {
     fn worker(&self, id: &str) -> SessionWorker {
         self.manager.worker_for_test(id).unwrap()
     }
+
+    fn logs(&self) -> Vec<String> {
+        self.logs.lock().unwrap().clone()
+    }
+}
+
+#[derive(Clone)]
+struct RecordingLifecycleLogger(Arc<Mutex<Vec<String>>>);
+
+impl LifecycleLogger for RecordingLifecycleLogger {
+    fn log(&self, message: &str) {
+        self.0.lock().unwrap().push(message.to_owned());
+    }
 }
 
 struct TempRoot {
@@ -303,6 +378,50 @@ fn worker_status(worker: &str, status: pb::WorkerStatus, message: &str) -> pb::W
             message: message.to_owned(),
         })),
     }
+}
+
+fn worker_event(
+    worker: &str,
+    name: &str,
+    status: pb::WorkerStatus,
+    message: &str,
+) -> pb::WorkerFrame {
+    pb::WorkerFrame {
+        frame: Some(pb::worker_frame::Frame::Event(pb::WorkerEvent {
+            worker_id: worker.to_owned(),
+            sequence: 0,
+            status: status as i32,
+            name: name.to_owned(),
+            message: message.to_owned(),
+            input: None,
+            occurred_at: None,
+        })),
+    }
+}
+
+fn input_event(worker: &str, request: &str, prompt: &str) -> pb::WorkerFrame {
+    pb::WorkerFrame {
+        frame: Some(pb::worker_frame::Frame::Event(pb::WorkerEvent {
+            worker_id: worker.to_owned(),
+            sequence: 0,
+            status: pb::WorkerStatus::WaitingForInput as i32,
+            name: "waiting_for_input".to_owned(),
+            message: prompt.to_owned(),
+            input: Some(pb::InputRequest {
+                request_id: request.to_owned(),
+                prompt: prompt.to_owned(),
+                choices: Vec::new(),
+            }),
+            occurred_at: None,
+        })),
+    }
+}
+
+fn assert_contains_log(logs: &[String], expected: &str) {
+    assert!(
+        logs.iter().any(|log| log.contains(expected)),
+        "expected log containing `{expected}`, got {logs:?}"
+    );
 }
 
 fn worker_id(value: &str) -> WorkerId {

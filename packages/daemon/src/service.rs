@@ -2,7 +2,6 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
-use lifecycle::event::StreamEvent;
 use lifecycle::identity::{RequestId, WorkerId};
 use lifecycle::proto::doric::lifecycle::v1 as pb;
 use lifecycle::repo::{RepoIdentity, RepoUrl, RepoUrlError};
@@ -10,19 +9,22 @@ use lifecycle::status::WorkerStatus;
 use uuid::Uuid;
 
 use crate::error::{DaemonError, DaemonResult};
-use crate::event::{RegistryEvent, RegistryWorkerEvent, ReplayItem};
+use crate::event::{replay_to_proto, worker_event_to_proto, RegistryEvent};
 use crate::registry::{
     EventSubscription, InputAnswer, InputRequest, Registry, WorkerMode, WorkerRecord,
 };
 use crate::root::{prepare_worker_layout, validate_worker_root, WorkerLayout};
 
+pub use crate::event::{LifecycleLogger, NoopLifecycleLogger, TerminalLifecycleLogger};
+
 /// Dependencies required by the daemon lifecycle service.
-pub struct DispatchDeps<L, C, I> {
+pub struct DispatchDeps<L, C, I, G> {
     pub config: ServiceConfig,
     pub registry: Arc<Mutex<Registry>>,
     pub launcher: L,
     pub command_sender: C,
     pub id_generator: I,
+    pub lifecycle_logger: G,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -111,14 +113,16 @@ pub struct LifecycleService {
     launcher: Arc<dyn WorkerLauncher>,
     command_sender: Arc<dyn CommandSender>,
     id_generator: Arc<dyn IdGenerator>,
+    lifecycle_logger: Arc<dyn LifecycleLogger>,
 }
 
 impl LifecycleService {
-    pub fn new<L, C, I>(deps: DispatchDeps<L, C, I>) -> Self
+    pub fn new<L, C, I, G>(deps: DispatchDeps<L, C, I, G>) -> Self
     where
         L: WorkerLauncher,
         C: CommandSender,
         I: IdGenerator,
+        G: LifecycleLogger,
     {
         Self {
             config: deps.config,
@@ -126,6 +130,7 @@ impl LifecycleService {
             launcher: Arc::new(deps.launcher),
             command_sender: Arc::new(deps.command_sender),
             id_generator: Arc::new(deps.id_generator),
+            lifecycle_logger: Arc::new(deps.lifecycle_logger),
         }
     }
 
@@ -151,6 +156,9 @@ impl LifecycleService {
             ))?;
             registry.append_event(&worker_id, RegistryEvent::accepted("accepted"))?;
         }
+
+        self.lifecycle_logger
+            .log(&format!("created worker: {}", worker_id.as_str()));
 
         self.launcher.launch(LaunchRequest {
             worker_id: worker_id.as_str().to_owned(),
@@ -182,7 +190,7 @@ impl LifecycleService {
                 status: status_to_proto(summary.status()),
                 repo_identity: summary.repo().as_str().to_owned(),
                 latest_sequence: summary.last_sequence().unwrap_or_default(),
-                updated_at: None,
+                updated_at: summary.updated_at().map(Into::into),
                 activity: summary.activity().unwrap_or_default().to_owned(),
                 terminal_reason: summary.terminal_reason().unwrap_or_default().to_owned(),
                 pending_request_id: summary
@@ -209,6 +217,9 @@ impl LifecycleService {
             .cloned()
             .map(replay_to_proto)
             .collect();
+
+        self.lifecycle_logger
+            .log(&format!("stream started: {}", worker_id.as_str()));
 
         Ok(WorkerEventStream {
             replay,
@@ -242,6 +253,12 @@ impl LifecycleService {
             .lock()
             .expect("registry lock poisoned")
             .answer_input(answer)?;
+
+        self.lifecycle_logger.log(&format!(
+            "answer provided: {} {}",
+            worker_id.as_str(),
+            request_id.as_str()
+        ));
 
         Ok(pb::AnswerInputResponse { accepted: true })
     }
@@ -406,56 +423,6 @@ fn proto_status(status: i32) -> DaemonResult<WorkerStatus> {
             WorkerStatus::try_from(value).map_err(|error| invalid_request(error.to_string()))
         }
         Err(_) => Err(invalid_request("status must be known")),
-    }
-}
-
-fn replay_to_proto(item: ReplayItem) -> pb::WorkerEvent {
-    match item {
-        ReplayItem::Worker(event) => worker_event_to_proto(event),
-        ReplayItem::HistoryTruncated(event) => truncated_to_proto(event),
-    }
-}
-
-fn worker_event_to_proto(event: RegistryWorkerEvent) -> pb::WorkerEvent {
-    let input = event.request_id().map(|request_id| pb::InputRequest {
-        request_id: request_id.as_str().to_owned(),
-        prompt: event.message().to_owned(),
-        choices: Vec::new(),
-    });
-
-    pb::WorkerEvent {
-        worker_id: event.worker_id().as_str().to_owned(),
-        sequence: event.sequence(),
-        status: event_status(event.name()),
-        name: event.name().to_owned(),
-        message: event.message().to_owned(),
-        input,
-        occurred_at: None,
-    }
-}
-
-fn truncated_to_proto(event: StreamEvent) -> pb::WorkerEvent {
-    pb::WorkerEvent {
-        worker_id: event.worker_id().as_str().to_owned(),
-        sequence: event.first_available_sequence(),
-        status: status_to_proto(WorkerStatus::Untracked),
-        name: event.name().to_owned(),
-        message: event.message().to_owned(),
-        input: None,
-        occurred_at: None,
-    }
-}
-
-fn event_status(name: &str) -> i32 {
-    match name {
-        "accepted" => status_to_proto(WorkerStatus::Accepted),
-        "starting" => status_to_proto(WorkerStatus::Starting),
-        "waiting_for_input" => status_to_proto(WorkerStatus::WaitingForInput),
-        "prompt_agent_completed" => status_to_proto(WorkerStatus::Succeeded),
-        "failed" => status_to_proto(WorkerStatus::Failed),
-        "succeeded" => status_to_proto(WorkerStatus::Succeeded),
-        "stopped" => status_to_proto(WorkerStatus::Stopped),
-        _ => status_to_proto(WorkerStatus::Running),
     }
 }
 

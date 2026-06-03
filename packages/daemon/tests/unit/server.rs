@@ -1,13 +1,16 @@
 use std::fs;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::process::{ChildHandle, ProcessSpawner, WorkerBinaryConfig, WorkerBinaryResolver};
 use crate::server::{
     build_process_service, build_service, serve_bundle_on_listener_with_shutdown, ServerConfig,
 };
-use crate::service::{CommandSender, IdGenerator, WorkerLauncher};
+use crate::service::{
+    CommandSender, IdGenerator, LifecycleLogger, TerminalLifecycleLogger, WorkerLauncher,
+};
 use lifecycle::proto::doric::lifecycle::v1 as pb;
 use tokio::net::TcpListener;
 
@@ -79,7 +82,47 @@ fn build_process_service_valid_config_uses_process_launcher_and_session_sender()
     assert!(service.includes_lifecycle_service());
     assert!(service.uses_process_worker_launcher());
     assert!(service.uses_session_command_sender());
+    assert!(service.uses_terminal_lifecycle_logger());
     assert!(!service.has_bound_listener());
+}
+
+/// Verifies injected test builders avoid real terminal logging by default.
+#[test]
+fn build_service_valid_config_uses_noop_lifecycle_logger_for_tests() {
+    let root = TempRoot::new("noop-logger");
+    let config = ServerConfig::parse("127.0.0.1:49128", root.path()).unwrap();
+
+    let service = build_service(
+        config,
+        NoopLauncher,
+        NoopCommandSender,
+        FixedIdGenerator("server-worker".to_owned()),
+    )
+    .unwrap();
+
+    assert!(service.uses_noop_lifecycle_logger());
+    assert!(!service.uses_terminal_lifecycle_logger());
+}
+
+/// Verifies terminal lifecycle logger output uses shared safe timestamped lines.
+#[test]
+fn terminal_lifecycle_logger_controlled_message_formats_redacted_one_line() {
+    let output = Arc::new(Mutex::new(Vec::new()));
+    let timestamp = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+    let logger = TerminalLifecycleLogger::for_writer(output.clone(), timestamp);
+
+    logger.log(
+        "cloning repo: https://user:secret@example.com/org/repo.git\nnext line \u{1b}[31mred",
+    );
+
+    let rendered = String::from_utf8(output.lock().unwrap().clone()).unwrap();
+    assert_eq!(
+        rendered,
+        "[2023-11-14T22:13:20Z] cloning repo: https://example.com/org/repo.git next line red\n"
+    );
+    assert!(!rendered.contains("secret"));
+    assert!(!rendered.contains('\u{1b}'));
+    assert_eq!(rendered.lines().count(), 1);
 }
 
 /// Verifies production-style process services generate UUIDv6 worker ids.

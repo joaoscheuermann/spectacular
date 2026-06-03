@@ -15,7 +15,7 @@ use crate::registry::Registry;
 use crate::root::validate_worker_root;
 use crate::service::{
     CommandSender, DispatchDeps, IdGenerator, LifecycleService as CoreLifecycleService,
-    ServiceConfig, UuidV6IdGenerator, WorkerLauncher,
+    NoopLifecycleLogger, ServiceConfig, TerminalLifecycleLogger, UuidV6IdGenerator, WorkerLauncher,
 };
 use crate::worker_session::{SessionCommandSender, SessionManager, WorkerSessionConfig};
 use lifecycle::proto::doric::lifecycle::v1 as pb;
@@ -115,12 +115,22 @@ impl ServiceBundle {
     pub fn uses_session_command_sender(&self) -> bool {
         self.wiring.session_command_sender
     }
+
+    pub fn uses_terminal_lifecycle_logger(&self) -> bool {
+        self.wiring.terminal_lifecycle_logger
+    }
+
+    pub fn uses_noop_lifecycle_logger(&self) -> bool {
+        self.wiring.noop_lifecycle_logger
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 struct BundleWiring {
     process_worker_launcher: bool,
     session_command_sender: bool,
+    terminal_lifecycle_logger: bool,
+    noop_lifecycle_logger: bool,
 }
 
 #[derive(Debug)]
@@ -188,13 +198,17 @@ where
         launcher,
         command_sender,
         id_generator,
+        lifecycle_logger: NoopLifecycleLogger,
     });
 
     Ok(ServiceBundle {
         lifecycle,
         bind_addr: config.bind_addr,
         bound_listener: false,
-        wiring: BundleWiring::default(),
+        wiring: BundleWiring {
+            noop_lifecycle_logger: true,
+            ..BundleWiring::default()
+        },
     })
 }
 
@@ -211,9 +225,11 @@ where
     let registry = Arc::new(Mutex::new(Registry::in_memory_with_event_capacity(
         config.event_capacity,
     )));
+    let lifecycle_logger = TerminalLifecycleLogger::stderr();
     let session_manager = SessionManager::new(WorkerSessionConfig {
         registry: registry.clone(),
         attach_deadline: DEFAULT_ATTACH_DEADLINE,
+        lifecycle_logger: lifecycle_logger.clone(),
     });
     let command_sender = SessionCommandSender::new(session_manager.clone());
     let binary = resolver.resolve(worker_binary)?;
@@ -229,6 +245,7 @@ where
         launcher,
         command_sender,
         id_generator: UuidV6IdGenerator::default(),
+        lifecycle_logger,
     });
 
     Ok(ServiceBundle {
@@ -238,6 +255,8 @@ where
         wiring: BundleWiring {
             process_worker_launcher: true,
             session_command_sender: true,
+            terminal_lifecycle_logger: true,
+            noop_lifecycle_logger: false,
         },
     })
 }

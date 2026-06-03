@@ -12,7 +12,7 @@ use crate::process::{
 };
 use crate::registry::{Registry, WorkerMode, WorkerRecord};
 use crate::root::prepare_worker_layout;
-use crate::service::{LaunchRequest, WorkerLauncher};
+use crate::service::{LaunchRequest, NoopLifecycleLogger, WorkerLauncher};
 use crate::worker_session::{AttachRequest, SessionManager, WorkerSessionConfig};
 
 mod support {
@@ -113,6 +113,7 @@ fn launch_worker_valid_request_registers_session_and_sends_payload_only_after_at
     let manager = SessionManager::new(WorkerSessionConfig {
         registry: registry.clone(),
         attach_deadline: Duration::from_secs(30),
+        lifecycle_logger: NoopLifecycleLogger,
     });
     let spawner = SharedRecordingSpawner::default();
     let launcher = ProcessWorkerLauncher::new(
@@ -168,6 +169,7 @@ fn launch_worker_spawn_failure_marks_worker_failed_with_redacted_reason() {
     let manager = SessionManager::new(WorkerSessionConfig {
         registry: registry.clone(),
         attach_deadline: Duration::from_secs(30),
+        lifecycle_logger: NoopLifecycleLogger,
     });
     let launcher = ProcessWorkerLauncher::with_monitor(
         manager,
@@ -229,6 +231,7 @@ fn launch_worker_child_monitor_nonzero_exit_marks_failed_and_appends_event() {
     let manager = SessionManager::new(WorkerSessionConfig {
         registry: registry.clone(),
         attach_deadline: Duration::from_secs(30),
+        lifecycle_logger: NoopLifecycleLogger,
     });
     let launcher = ProcessWorkerLauncher::with_monitor(
         manager,
@@ -285,6 +288,7 @@ fn launch_worker_child_monitor_after_terminal_success_preserves_succeeded_status
     let manager = SessionManager::new(WorkerSessionConfig {
         registry: registry.clone(),
         attach_deadline: Duration::from_secs(30),
+        lifecycle_logger: NoopLifecycleLogger,
     });
     let launcher = ProcessWorkerLauncher::with_monitor(
         manager,

@@ -1,13 +1,13 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::time::SystemTime;
 
-use lifecycle::event::StreamEvent;
 use lifecycle::identity::{RequestId, WorkerId};
 use lifecycle::repo::RepoIdentity;
 use lifecycle::status::WorkerStatus;
 
 use crate::error::{DaemonError, DaemonResult};
-use crate::event::{RegistryEvent, RegistryWorkerEvent, ReplayItem};
+use crate::event::{EventLog, RegistryEvent, RegistryWorkerEvent, ReplayItem};
 
 const DEFAULT_EVENT_CAPACITY: usize = 1_000;
 
@@ -26,6 +26,7 @@ pub struct WorkerRecord {
     activity: Option<String>,
     terminal_reason: Option<String>,
     pending_request_id: Option<RequestId>,
+    updated_at: SystemTime,
 }
 
 impl WorkerRecord {
@@ -47,6 +48,7 @@ impl WorkerRecord {
             activity,
             terminal_reason,
             pending_request_id: None,
+            updated_at: SystemTime::now(),
         }
     }
 }
@@ -61,6 +63,7 @@ pub struct WorkerSummary {
     terminal_reason: Option<String>,
     pending_request_id: Option<RequestId>,
     last_sequence: Option<u64>,
+    updated_at: SystemTime,
 }
 
 impl WorkerSummary {
@@ -94,6 +97,10 @@ impl WorkerSummary {
 
     pub fn last_sequence(&self) -> Option<u64> {
         self.last_sequence
+    }
+
+    pub fn updated_at(&self) -> Option<SystemTime> {
+        Some(self.updated_at)
     }
 }
 
@@ -189,12 +196,15 @@ impl Registry {
     }
 
     pub fn insert(&mut self, record: WorkerRecord) -> DaemonResult<()> {
+        let mut record = record;
+
         if self.records.contains_key(&record.id) {
             return Err(DaemonError::DuplicateWorker {
                 worker_id: record.id,
             });
         }
 
+        record.updated_at = SystemTime::now();
         self.events
             .insert(record.id.clone(), EventLog::new(self.event_capacity));
         self.subscribers.insert(record.id.clone(), Vec::new());
@@ -222,6 +232,7 @@ impl Registry {
         record.status = status;
         record.terminal_reason = terminal_reason(status, Some(&activity));
         record.activity = Some(activity);
+        record.updated_at = SystemTime::now();
 
         if status != WorkerStatus::WaitingForInput {
             record.pending_request_id = None;
@@ -244,8 +255,8 @@ impl Registry {
             .events
             .get_mut(worker_id)
             .expect("known worker has log");
-        let sequence = log.next_sequence;
-        let event = event.into_worker_event(worker_id.clone(), sequence);
+        let sequence = log.next_sequence();
+        let event = event.into_worker_event(worker_id.clone(), sequence, SystemTime::now());
         log.push(event.clone());
         self.publish_event(worker_id, event.clone());
         Ok(event)
@@ -294,6 +305,7 @@ impl Registry {
         record.activity = Some(request.prompt.clone());
         record.terminal_reason = None;
         record.pending_request_id = Some(request.request_id.clone());
+        record.updated_at = SystemTime::now();
         self.pending.insert(
             request.worker_id.clone(),
             PendingInput {
@@ -322,6 +334,7 @@ impl Registry {
         record.activity = Some("input answered".to_owned());
         record.terminal_reason = None;
         record.pending_request_id = None;
+        record.updated_at = SystemTime::now();
 
         self.append_event(
             &answer.worker_id,
@@ -396,6 +409,7 @@ impl Registry {
                 .events
                 .get(&record.id)
                 .and_then(EventLog::last_sequence),
+            updated_at: record.updated_at,
         }
     }
 
@@ -429,62 +443,6 @@ impl Registry {
         if let Some(subscribers) = self.subscribers.get_mut(worker_id) {
             subscribers.retain(|sender| sender.send(event.clone()).is_ok());
         }
-    }
-}
-
-struct EventLog {
-    retained: VecDeque<RegistryWorkerEvent>,
-    next_sequence: u64,
-    capacity: usize,
-}
-
-impl EventLog {
-    fn new(capacity: usize) -> Self {
-        Self {
-            retained: VecDeque::with_capacity(capacity),
-            next_sequence: 0,
-            capacity,
-        }
-    }
-
-    fn push(&mut self, event: RegistryWorkerEvent) {
-        if self.retained.len() == self.capacity {
-            self.retained.pop_front();
-        }
-
-        self.next_sequence += 1;
-        self.retained.push_back(event);
-    }
-
-    fn replay(&self, worker_id: &WorkerId, from_sequence: u64) -> Vec<ReplayItem> {
-        let mut items = Vec::new();
-        let first_available = self.retained.front().map(RegistryWorkerEvent::sequence);
-
-        if let Some(first_available) = first_available {
-            if from_sequence < first_available {
-                items.push(ReplayItem::HistoryTruncated(
-                    StreamEvent::history_truncated(
-                        worker_id.clone(),
-                        from_sequence,
-                        first_available,
-                    ),
-                ));
-            }
-        }
-
-        items.extend(
-            self.retained
-                .iter()
-                .filter(|event| event.sequence() >= from_sequence)
-                .cloned()
-                .map(ReplayItem::Worker),
-        );
-
-        items
-    }
-
-    fn last_sequence(&self) -> Option<u64> {
-        self.retained.back().map(RegistryWorkerEvent::sequence)
     }
 }
 

@@ -8,30 +8,36 @@ use lifecycle::proto::doric::lifecycle::v1 as pb;
 use lifecycle::status::WorkerStatus;
 
 use crate::error::{DaemonError, DaemonResult};
-use crate::event::RegistryEvent;
+use crate::event::{event_for_status, event_for_worker_event, RegistryEvent};
 use crate::process::ChildExit;
 use crate::registry::{Registry, WorkerMode};
 use crate::root::WorkerLayout;
-use crate::service::{AnswerCommand, CommandSender};
+use crate::service::{mode_to_proto, AnswerCommand, CommandSender, LifecycleLogger};
 
 #[derive(Clone)]
-pub struct WorkerSessionConfig {
+pub struct WorkerSessionConfig<L> {
     pub registry: Arc<Mutex<Registry>>,
     pub attach_deadline: Duration,
+    pub lifecycle_logger: L,
 }
 
 #[derive(Clone)]
 pub struct SessionManager {
     registry: Arc<Mutex<Registry>>,
     attach_deadline: Duration,
+    lifecycle_logger: Arc<dyn LifecycleLogger>,
     state: Arc<Mutex<SessionState>>,
 }
 
 impl SessionManager {
-    pub fn new(config: WorkerSessionConfig) -> Self {
+    pub fn new<L>(config: WorkerSessionConfig<L>) -> Self
+    where
+        L: LifecycleLogger,
+    {
         Self {
             registry: config.registry,
             attach_deadline: config.attach_deadline,
+            lifecycle_logger: Arc::new(config.lifecycle_logger),
             state: Arc::new(Mutex::new(SessionState::default())),
         }
     }
@@ -103,6 +109,9 @@ impl SessionManager {
             )?;
         }
 
+        self.lifecycle_logger
+            .log(&format!("worker attached: {}", request.worker_id));
+
         Ok(AttachDecision::Attached { start_job })
     }
 
@@ -141,6 +150,8 @@ impl SessionManager {
                     "attach deadline exceeded before worker session started".to_owned(),
                 ),
             )?;
+            self.lifecycle_logger
+                .log(&format!("attach deadline failed: {id}"));
         }
 
         Ok(())
@@ -156,6 +167,8 @@ impl SessionManager {
             registry.append_event(&worker_id, RegistryEvent::Failed(reason))?;
         }
 
+        self.lifecycle_logger
+            .log(&format!("spawn failed: {worker}"));
         self.close_session(worker);
         Ok(())
     }
@@ -179,6 +192,7 @@ impl SessionManager {
             )?;
         }
 
+        self.lifecycle_logger.log(&format!("child exit: {worker}"));
         self.close_session(worker);
         Ok(())
     }
@@ -263,6 +277,9 @@ impl SessionManager {
             registry.append_event(&worker_id, event_for_status(status, message))?;
         }
 
+        self.lifecycle_logger
+            .log(&status_log_message(&update.worker_id, status));
+
         if is_terminal(status) {
             self.close_session(&update.worker_id);
         }
@@ -274,6 +291,7 @@ impl SessionManager {
         let worker_id = parse_worker_id(&event.worker_id)?;
 
         if let Some(input) = event.input {
+            let request = input.request_id.clone();
             let request_id = RequestId::from_str(&input.request_id)
                 .map_err(|error| session_error(error.to_string()))?;
             return self
@@ -281,10 +299,17 @@ impl SessionManager {
                 .lock()
                 .expect("registry lock poisoned")
                 .request_input(crate::registry::InputRequest::new(
-                    worker_id,
+                    worker_id.clone(),
                     request_id,
                     input.prompt,
-                ));
+                ))
+                .map(|_| {
+                    self.lifecycle_logger.log(&format!(
+                        "input requested: {} {}",
+                        worker_id.as_str(),
+                        request
+                    ));
+                });
         }
 
         let status = proto_status(event.status).unwrap_or(WorkerStatus::Running);
@@ -298,6 +323,9 @@ impl SessionManager {
             .lock()
             .expect("registry lock poisoned")
             .append_event(&worker_id, event_for_worker_event(&name, status, message))?;
+
+        self.lifecycle_logger
+            .log(&format!("{}: {}", name, worker_id.as_str()));
 
         Ok(())
     }
@@ -424,37 +452,6 @@ fn start_job_frame(worker: &SessionWorker) -> pb::DaemonFrame {
     }
 }
 
-fn event_for_status(status: WorkerStatus, message: String) -> RegistryEvent {
-    match status {
-        WorkerStatus::Accepted => RegistryEvent::accepted(message),
-        WorkerStatus::Starting => RegistryEvent::starting(message),
-        WorkerStatus::WaitingForInput => RegistryEvent::current_activity(message),
-        WorkerStatus::Succeeded => RegistryEvent::Succeeded(message),
-        WorkerStatus::Failed => RegistryEvent::Failed(message),
-        WorkerStatus::Stopped => RegistryEvent::Stopped(message),
-        WorkerStatus::Running | WorkerStatus::Unavailable | WorkerStatus::Untracked => {
-            RegistryEvent::current_activity(message)
-        }
-    }
-}
-
-fn event_for_worker_event(name: &str, status: WorkerStatus, message: String) -> RegistryEvent {
-    match name {
-        "repo_preparation" => RegistryEvent::repo_preparation(message),
-        "prompt_agent_started" => RegistryEvent::prompt_agent_started(message),
-        "prompt_artifact_written" => RegistryEvent::prompt_artifact_written(message),
-        "prompt_agent_completed" => RegistryEvent::prompt_agent_completed(message),
-        _ => event_for_status(status, message),
-    }
-}
-
-fn mode_to_proto(mode: WorkerMode) -> i32 {
-    match mode {
-        WorkerMode::Feature => pb::JobMode::Feature as i32,
-        WorkerMode::Debug => pb::JobMode::Debug as i32,
-    }
-}
-
 fn proto_status(status: i32) -> DaemonResult<WorkerStatus> {
     let status = pb::WorkerStatus::try_from(status)
         .map_err(|_| session_error("worker status is unknown"))?;
@@ -471,6 +468,15 @@ fn is_terminal(status: WorkerStatus) -> bool {
         status,
         WorkerStatus::Succeeded | WorkerStatus::Failed | WorkerStatus::Stopped
     )
+}
+
+fn status_log_message(worker: &str, status: WorkerStatus) -> String {
+    match status {
+        WorkerStatus::Succeeded => format!("worker succeeded: {worker}"),
+        WorkerStatus::Failed => format!("worker failed: {worker}"),
+        WorkerStatus::Stopped => format!("worker stopped: {worker}"),
+        _ => format!("status update: {worker} {status}"),
+    }
 }
 
 fn session_error(message: impl Into<String>) -> DaemonError {

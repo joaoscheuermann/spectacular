@@ -4,7 +4,7 @@
 
 - Phase: development
 - Current effort: none
-- Next effort index: 3
+- Next effort index: 4
 
 ## Approvals
 
@@ -21,7 +21,7 @@
 | 0 | 01_shared_terminal_lines.md | done |
 | 1 | 02_repo_url_validation.md | done |
 | 2 | 03_daemon_dispatch_uuid_validation.md | done |
-| 3 | 04_daemon_timestamps_logger.md | todo |
+| 3 | 04_daemon_timestamps_logger.md | done |
 | 4 | 05_cli_feature_list_output.md | todo |
 | 5 | 06_cli_stream_output.md | todo |
 | 6 | 07_worker_clone_wording_regressions.md | todo |
@@ -77,6 +77,21 @@
 | development | 03_daemon_dispatch_uuid_validation.md | code writer | worker | 03_trim_fix_code_writer_01 | 019e8a92-fd9e-7ee2-b33f-b827d9510770 (Euclid) | accepted |
 | development | 03_daemon_dispatch_uuid_validation.md | validator/refactor | worker | 03_trim_fix_validator_refactor_01 | 019e8a95-8022-7e93-93e7-9d23f4610317 (Noether) | accepted |
 | development | 03_daemon_dispatch_uuid_validation.md | reviewer | explorer | 03_reviewer_02 | 019e8a98-d1d5-7c03-8fe1-61c7a8904190 (Harvey) | accepted |
+| development | 04_daemon_timestamps_logger.md | test planner | worker | 04_test_planner_01 | 019e8a9c-22f2-78d3-9f5f-b425960040c0 (Poincare) | accepted |
+| development | 04_daemon_timestamps_logger.md | test writer | worker | 04_test_writer_01 | 019e8a9e-7146-76a2-8807-e1ad04576614 (Hilbert) | accepted |
+| development | 04_daemon_timestamps_logger.md | code writer | worker | 04_code_writer_01 | 019e8aa4-d268-7e40-8563-e904279a471b (James) | superseded |
+| development | 04_daemon_timestamps_logger.md | code writer | worker | 04_code_writer_02 | 019e8aab-03f0-78c2-b565-3c4d1961a860 (Bernoulli) | superseded |
+| development | 04_daemon_timestamps_logger.md | test writer | worker | 04_compile_fix_test_writer_01 | 019e8ab0-5aab-7bd3-8508-1b94b8221805 (Curie) | accepted |
+| development | 04_daemon_timestamps_logger.md | code writer | worker | 04_code_writer_03 | 019e8ab2-7d41-7890-9525-f78ba625b259 (Lovelace) | superseded |
+| development | 04_daemon_timestamps_logger.md | code writer | worker | 04_code_writer_04 | 019e8abd-e069-77d0-8e23-9e3499341771 (Archimedes) | superseded |
+| development | 04_daemon_timestamps_logger.md | code writer | worker | 04_code_writer_05 | 019e8ada-cec4-7a91-bde1-faaa8294e69f (Godel) | accepted |
+| development | 04_daemon_timestamps_logger.md | validator/refactor | worker | 04_validator_refactor_01 | 019e8ade-497d-7df3-a9e8-9ed21842066a (Kuhn) | accepted |
+| development | 04_daemon_timestamps_logger.md | reviewer | explorer | 04_reviewer_01 | 019e8af7-914d-7340-a7b4-ef5ca53cde2d (Goodall) | blocked |
+| development | 04_daemon_timestamps_logger.md | test writer | worker | 04_history_truncated_fix_test_writer_01 | 019e8afb-f810-75b1-a966-1d16c87a4bd3 (Leibniz) | accepted |
+| development | 04_daemon_timestamps_logger.md | code writer | worker | 04_history_truncated_fix_code_writer_01 | 019e8afe-13b4-7872-86ef-dce293d27e09 (Lagrange) | accepted |
+| development | 04_daemon_timestamps_logger.md | test writer | worker | 04_history_truncated_suffix_test_writer_01 | 019e8b01-485e-72b2-a30e-20d60b5e0ff5 (Ohm) | accepted |
+| development | 04_daemon_timestamps_logger.md | validator/refactor | worker | 04_fix_validator_refactor_01 | 019e8b03-d396-7a13-b633-b1031818d00d (Galileo) | accepted |
+| development | 04_daemon_timestamps_logger.md | reviewer | explorer | 04_reviewer_02 | 019e8b06-acfb-78f0-b04d-9ce90a8049e6 (Aristotle) | accepted |
 
 ## Agent receipts
 
@@ -126,6 +141,21 @@
 | 03_trim_fix_code_writer_01 | development | 03_daemon_dispatch_uuid_validation.md | code writer | worker | 019e8a92-fd9e-7ee2-b33f-b827d9510770 (Euclid) | accepted | Fixed daemon repo requiredness to preserve the original repo string for `RepoUrl`; whitespace-padded remotes now reject before side effects and focused daemon commands passed. |
 | 03_trim_fix_validator_refactor_01 | development | 03_daemon_dispatch_uuid_validation.md | validator/refactor | worker | 019e8a95-8022-7e93-93e7-9d23f4610317 (Noether) | accepted | Replacement validation passed after the trim fix; strengthened whitespace regression assertion and reran full effort daemon/lifecycle/worker/fmt/clippy command set. |
 | 03_reviewer_02 | development | 03_daemon_dispatch_uuid_validation.md | reviewer | explorer | 019e8a98-d1d5-7c03-8fe1-61c7a8904190 (Harvey) | accepted | Replacement review passed; prior trim bug is fixed, UUIDv6 production wiring and raw/display repo flow are valid, and effort 03 is ready for commit checkpoint. |
+| 04_test_planner_01 | development | 04_daemon_timestamps_logger.md | test planner | worker | 019e8a9c-22f2-78d3-9f5f-b425960040c0 (Poincare) | accepted | Planned registry timestamp, service proto timestamp, service/session logger, production wiring, and safe one-line terminal logger tests; identified observable service/session logging boundaries. |
+| 04_test_writer_01 | development | 04_daemon_timestamps_logger.md | test writer | worker | 019e8a9e-7146-76a2-8807-e1ad04576614 (Hilbert) | accepted | Added red daemon registry/service/worker_session/server tests for timestamps, logger injection, terminal output safety, and production wiring; focused daemon commands fail on the expected missing lifecycle logger and timestamp contract. |
+| 04_code_writer_01 | development | 04_daemon_timestamps_logger.md | code writer | worker | 019e8aa4-d268-7e40-8563-e904279a471b (James) | superseded | Resume wait returned `not_found`, so no reviewable output could be accepted; replaced by `04_code_writer_02`. |
+| 04_code_writer_02 | development | 04_daemon_timestamps_logger.md | code writer | worker | 019e8aab-03f0-78c2-b565-3c4d1961a860 (Bernoulli) | superseded | Partial daemon source implementation stopped after `cargo test -p daemon registry` hit existing `WorkerSessionConfig` fixture call sites; superseded by fixture fix and `04_code_writer_05`. |
+| 04_compile_fix_test_writer_01 | development | 04_daemon_timestamps_logger.md | test writer | worker | 019e8ab0-5aab-7bd3-8508-1b94b8221805 (Curie) | accepted | Added no-op lifecycle logger injections to existing process and lifecycle integration test fixtures; `cargo test -p daemon registry` passed. |
+| 04_code_writer_03 | development | 04_daemon_timestamps_logger.md | code writer | worker | 019e8ab2-7d41-7890-9525-f78ba625b259 (Lovelace) | superseded | Sub-agent errored before running due an injected unavailable image generation model `gpt-image-2`; no output was accepted and `04_code_writer_05` superseded it. |
+| 04_code_writer_04 | development | 04_daemon_timestamps_logger.md | code writer | worker | 019e8abd-e069-77d0-8e23-9e3499341771 (Archimedes) | superseded | Agent remained running through three long waits and was shut down by the coordinator; partial source diff preserved and superseded by `04_code_writer_05`. |
+| 04_code_writer_05 | development | 04_daemon_timestamps_logger.md | code writer | worker | 019e8ada-cec4-7a91-bde1-faaa8294e69f (Godel) | accepted | Accepted current daemon source implementation; focused daemon registry/service/worker_session/server/integration commands and `cargo test -p lifecycle` passed with no blockers. |
+| 04_validator_refactor_01 | development | 04_daemon_timestamps_logger.md | validator/refactor | worker | 019e8ade-497d-7df3-a9e8-9ed21842066a (Kuhn) | accepted | Validated focused daemon/lifecycle tests, fmt, and clippy; moved shared daemon event/logger mechanics into `event.rs` while preserving import surfaces and scope. |
+| 04_reviewer_01 | development | 04_daemon_timestamps_logger.md | reviewer | explorer | 019e8af7-914d-7340-a7b4-ef5ca53cde2d (Goodall) | blocked | Blocked commit checkpoint because synthetic `history_truncated` proto conversion used `SystemTime::now()` instead of remaining untimestamped; requires focused regression and fix. |
+| 04_history_truncated_fix_test_writer_01 | development | 04_daemon_timestamps_logger.md | test writer | worker | 019e8afb-f810-75b1-a966-1d16c87a4bd3 (Leibniz) | accepted | Added focused `history_truncated` regression in `service.rs`; `cargo test -p daemon history_truncated` failed red because synthetic replay-control event had `Some(Timestamp)`. |
+| 04_history_truncated_fix_code_writer_01 | development | 04_daemon_timestamps_logger.md | code writer | worker | 019e8afe-13b4-7872-86ef-dce293d27e09 (Lagrange) | accepted | Fixed `truncated_to_proto` to leave synthetic replay-control timestamps `None`; follow-up suffix test adjustment made focused `history_truncated` and `service` commands pass. |
+| 04_history_truncated_suffix_test_writer_01 | development | 04_daemon_timestamps_logger.md | test writer | worker | 019e8b01-485e-72b2-a30e-20d60b5e0ff5 (Ohm) | accepted | Adjusted suffix replay assertion to keep `history_truncated` untimestamped while requiring retained worker events timestamped; `cargo test -p daemon history_truncated` and `service` passed. |
+| 04_fix_validator_refactor_01 | development | 04_daemon_timestamps_logger.md | validator/refactor | worker | 019e8b03-d396-7a13-b633-b1031818d00d (Galileo) | accepted | Replacement validation passed history_truncated, focused daemon suites, lifecycle regression, fmt, and clippy after reviewer fix; no refactors applied. |
+| 04_reviewer_02 | development | 04_daemon_timestamps_logger.md | reviewer | explorer | 019e8b06-acfb-78f0-b04d-9ce90a8049e6 (Aristotle) | accepted | Replacement review approved effort 04 for commit checkpoint; no blockers after `history_truncated` fix and full validation passed. |
 
 ## Validation records
 
@@ -134,6 +164,7 @@
 | 01_shared_terminal_lines.md | validation/01_shared_terminal_lines.md | missing `lifecycle::terminal` APIs; malformed credential URL leak | `cargo test -p lifecycle`, fmt, and clippy passed | 01_reviewer_02 |
 | 02_repo_url_validation.md | validation/02_repo_url_validation.md | unresolved `lifecycle::repo::RepoUrl` public API | `cargo test -p lifecycle`, focused repo/redaction/identity tests, fmt, and clippy passed | 02_reviewer_01 |
 | 03_daemon_dispatch_uuid_validation.md | validation/03_daemon_dispatch_uuid_validation.md | invalid/path-like repo accepted before side effects; timestamp-style production IDs; whitespace-padded remote trim bypass | focused daemon tests, daemon service/server/integration tests, lifecycle repo_url, worker repo, fmt, and clippy passed | 03_reviewer_02 |
+| 04_daemon_timestamps_logger.md | validation/04_daemon_timestamps_logger.md | missing daemon lifecycle logger/timestamp contract; synthetic `history_truncated` conversion-time timestamp | focused daemon history_truncated/registry/service/worker_session/server/integration tests, lifecycle regression, fmt, and clippy passed | 04_reviewer_02 |
 
 ## Commit checkpoints
 
@@ -141,7 +172,8 @@
 | ------ | ------ | ------- | ------------ |
 | 01_shared_terminal_lines.md | 88fa06a | feat(lifecycle): add shared terminal lifecycle lines | lifecycle terminal/redaction/lib, lifecycle unit tests, effort 01 Doric artifacts |
 | 02_repo_url_validation.md | 6278e2e | feat(lifecycle): add repo URL validation | lifecycle repo module, lifecycle unit tests, effort 02 Doric artifacts |
-| 03_daemon_dispatch_uuid_validation.md | pending | feat(daemon): validate dispatch repo URLs and UUIDv6 IDs | daemon service/server code and tests, daemon Cargo metadata, effort 03 Doric artifacts |
+| 03_daemon_dispatch_uuid_validation.md | 0345938 | feat(daemon): validate dispatch repo URLs and UUIDv6 IDs | daemon service/server code and tests, daemon Cargo metadata, effort 03 Doric artifacts |
+| 04_daemon_timestamps_logger.md | pending | feat(daemon): add lifecycle timestamps and logger | daemon event/registry/service/worker_session/server code and tests, effort 04 Doric artifacts |
 
 ## Coordinator notes
 
@@ -236,3 +268,36 @@
 - 2026-06-02 20:51:00: Reviewed and accepted `03_trim_fix_validator_refactor_01`; registered replacement reviewer `03_reviewer_02`.
 - 2026-06-02 20:52:00: Spawned effort 03 replacement reviewer as `019e8a98-d1d5-7c03-8fe1-61c7a8904190` (`Harvey`).
 - 2026-06-02 21:00:00: Reviewed and accepted `03_reviewer_02`; marked `03_daemon_dispatch_uuid_validation.md` done, released active locks, set `Current effort` to `none`, advanced `Next effort index` to `3`, and prepared commit checkpoint `feat(daemon): validate dispatch repo URLs and UUIDv6 IDs`.
+- 2026-06-02 21:02:00: Commit checkpoint succeeded for effort 03 with `0345938` (`feat(daemon): validate dispatch repo URLs and UUIDv6 IDs`). Used path-limited commit scope to preserve unrelated staged and dirty files.
+- 2026-06-02 21:04:00: Transitioned `04_daemon_timestamps_logger.md` from `todo` to `in-progress`, set `Current effort`, recorded active locks, and registered `04_test_planner_01`.
+- 2026-06-02 21:05:00: Spawned effort 04 test planner as `019e8a9c-22f2-78d3-9f5f-b425960040c0` (`Poincare`).
+- 2026-06-02 21:13:00: Reviewed and accepted `04_test_planner_01`; registered `04_test_writer_01` with a representative red-test scope across registry timestamps, service/session logger injection, production wiring, and safe output.
+- 2026-06-02 21:14:00: Spawned effort 04 test writer as `019e8a9e-7146-76a2-8807-e1ad04576614` (`Hilbert`).
+- 2026-06-02 20:21:02: Reviewed and accepted `04_test_writer_01`; red evidence is recorded in `validation/04_daemon_timestamps_logger.md` and the expected first barrier is the missing daemon lifecycle logger/timestamp contract. Registered `04_code_writer_01`.
+- 2026-06-02 20:21:02: Initial effort 04 code-writer spawn hit the agent thread limit; closed completed effort 03/04 sub-agent sessions and retried successfully.
+- 2026-06-02 20:21:02: Spawned effort 04 code writer as `019e8aa4-d268-7e40-8563-e904279a471b` (`James`).
+- 2026-06-02 20:28:08: Resume wait for `04_code_writer_01` returned `not_found`; marked that receipt superseded because no code-writer output was reviewable, preserved existing red-test changes, and registered replacement `04_code_writer_02`.
+- 2026-06-02 20:28:52: Spawned replacement effort 04 code writer as `019e8aab-03f0-78c2-b565-3c4d1961a860` (`Bernoulli`).
+- 2026-06-02 20:34:06: Reviewed `04_code_writer_02` blocker; partial source implementation was preserved, but compile is blocked by old `WorkerSessionConfig` and `DispatchDeps` test fixtures outside the code-writer write scope. Marked `04_code_writer_02` blocked and registered `04_compile_fix_test_writer_01` for `packages/daemon/tests/unit/process.rs` and `packages/daemon/tests/integration/lifecycle_service.rs`.
+- 2026-06-02 20:34:40: Spawned effort 04 compile fixture test writer as `019e8ab0-5aab-7bd3-8508-1b94b8221805` (`Curie`).
+- 2026-06-02 20:36:24: Reviewed and accepted `04_compile_fix_test_writer_01`; fixture-only changes align existing `WorkerSessionConfig` and `DispatchDeps` literals with the new no-op logger boundary, and `cargo test -p daemon registry` passed. Registered replacement `04_code_writer_03`.
+- 2026-06-02 20:37:03: Spawned replacement effort 04 code writer as `019e8ab2-7d41-7890-9525-f78ba625b259` (`Lovelace`).
+- 2026-06-02 20:48:48: `04_code_writer_03` errored before execution with an infrastructure tool/model error referencing unavailable `gpt-image-2`; marked it blocked, accepted no output, and registered replacement `04_code_writer_04`.
+- 2026-06-02 20:49:26: Spawned replacement effort 04 code writer as `019e8abd-e069-77d0-8e23-9e3499341771` (`Archimedes`).
+- 2026-06-02 21:20:29: `04_code_writer_04` remained running after three long wait windows; coordinator closed it while preserving the partial source diff, marked the receipt blocked, and registered continuation `04_code_writer_05`.
+- 2026-06-02 21:21:03: Spawned continuation effort 04 code writer as `019e8ada-cec4-7a91-bde1-faaa8294e69f` (`Godel`).
+- 2026-06-02 21:24:06: Reviewed and accepted `04_code_writer_05`; superseded earlier blocked code-writer attempts, recorded green command evidence in `validation/04_daemon_timestamps_logger.md`, and registered `04_validator_refactor_01`.
+- 2026-06-02 21:24:50: Spawned effort 04 validator/refactor as `019e8ade-497d-7df3-a9e8-9ed21842066a` (`Kuhn`).
+- 2026-06-02 21:51:36: Reviewed and accepted `04_validator_refactor_01`; validation passed focused daemon/lifecycle commands plus fmt and clippy, and the source-only event/logger refactor is recorded in `validation/04_daemon_timestamps_logger.md`. Registered `04_reviewer_01`.
+- 2026-06-02 21:52:30: Spawned effort 04 reviewer as `019e8af7-914d-7340-a7b4-ef5ca53cde2d` (`Goodall`).
+- 2026-06-02 21:56:04: `04_reviewer_01` blocked effort completion on synthetic `history_truncated` replay-control events receiving conversion-time timestamps. Registered `04_history_truncated_fix_test_writer_01` for a focused regression.
+- 2026-06-02 21:57:17: Initial focused regression writer spawn hit the agent thread limit; closed completed sub-agent sessions and spawned `04_history_truncated_fix_test_writer_01` as `019e8afb-f810-75b1-a966-1d16c87a4bd3` (`Leibniz`).
+- 2026-06-02 21:59:02: Reviewed and accepted `04_history_truncated_fix_test_writer_01`; focused regression fails red on `history_truncated` `occurred_at` being `Some`. Registered `04_history_truncated_fix_code_writer_01`.
+- 2026-06-02 21:59:36: Spawned focused history-truncated code writer as `019e8afe-13b4-7872-86ef-dce293d27e09` (`Lagrange`).
+- 2026-06-02 22:02:31: Reviewed `04_history_truncated_fix_code_writer_01`; source fix is limited to `event.rs`, but focused commands remain red due the suffix replay assertion treating synthetic `history_truncated` as a retained worker event. Marked receipt blocked and registered `04_history_truncated_suffix_test_writer_01`.
+- 2026-06-02 22:03:07: Spawned focused suffix assertion test writer as `019e8b01-485e-72b2-a30e-20d60b5e0ff5` (`Ohm`).
+- 2026-06-02 22:04:52: Reviewed and accepted `04_history_truncated_fix_code_writer_01` and `04_history_truncated_suffix_test_writer_01`; focused history-truncated and service commands now pass, and reviewer-fix evidence is recorded. Registered `04_fix_validator_refactor_01`.
+- 2026-06-02 22:05:52: Spawned replacement effort 04 validator/refactor as `019e8b03-d396-7a13-b633-b1031818d00d` (`Galileo`).
+- 2026-06-02 22:08:18: Reviewed and accepted `04_fix_validator_refactor_01`; replacement validation passed full effort commands after the reviewer fix. Registered `04_reviewer_02`.
+- 2026-06-02 22:08:57: Spawned replacement effort 04 reviewer as `019e8b06-acfb-78f0-b04d-9ce90a8049e6` (`Aristotle`).
+- 2026-06-02 22:12:04: Reviewed and accepted `04_reviewer_02`; marked `04_daemon_timestamps_logger.md` done, released active locks, set `Current effort` to `none`, advanced `Next effort index` to `4`, and prepared commit checkpoint `feat(daemon): add lifecycle timestamps and logger`.

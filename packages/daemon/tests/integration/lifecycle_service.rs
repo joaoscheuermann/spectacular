@@ -6,7 +6,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use daemon::error::DaemonResult;
 use daemon::registry::{Registry, WorkerMode};
 use daemon::service::{
-    DispatchDeps, IdGenerator, LaunchRequest, LifecycleService, ServiceConfig, WorkerLauncher,
+    DispatchDeps, IdGenerator, LaunchRequest, LifecycleService, NoopLifecycleLogger, ServiceConfig,
+    WorkerLauncher,
 };
 use daemon::worker_session::{
     AttachRequest, SessionCommandSender, SessionManager, SessionWorker, WorkerSessionConfig,
@@ -70,6 +71,7 @@ impl LifecycleFixture {
         let manager = SessionManager::new(WorkerSessionConfig {
             registry: registry.clone(),
             attach_deadline: Duration::from_secs(30),
+            lifecycle_logger: NoopLifecycleLogger,
         });
 
         Self {
@@ -88,6 +90,7 @@ impl LifecycleFixture {
             },
             command_sender: SessionCommandSender::new(self.manager.clone()),
             id_generator: FixedId,
+            lifecycle_logger: NoopLifecycleLogger,
         })
     }
 }

@@ -8,8 +8,8 @@ use lifecycle::status::WorkerStatus;
 
 use crate::registry::{Registry, WorkerMode};
 use crate::service::{
-    AnswerCommand, CommandSender, DispatchDeps, IdGenerator, LaunchRequest, LifecycleService,
-    ServiceConfig, WorkerLauncher,
+    AnswerCommand, CommandSender, DispatchDeps, IdGenerator, LaunchRequest, LifecycleLogger,
+    LifecycleService, ServiceConfig, WorkerLauncher,
 };
 
 /// Verifies that dispatch validates prompt before registry writes or launch.
@@ -286,6 +286,26 @@ fn list_mixed_registry_returns_all_public_summaries() {
         .find(|worker| worker.worker_id == "failed-worker")
         .expect("failed worker should be listed");
     assert_eq!(failed.terminal_reason, "failed");
+    assert!(response
+        .workers
+        .iter()
+        .all(|worker| worker.updated_at.is_some()));
+}
+
+/// Verifies list conversion preserves daemon summary update timestamps.
+#[test]
+fn list_timestamped_registry_populates_worker_summary_updated_at() {
+    let fixture = ServiceFixture::new();
+    fixture.seed_mixed_workers();
+    let service = fixture.service();
+
+    let response = service.list(pb::ListWorkersRequest {}).unwrap();
+
+    assert!(!response.workers.is_empty());
+    assert!(response
+        .workers
+        .iter()
+        .all(|worker| worker.updated_at.is_some()));
 }
 
 /// Verifies that stream rejects unknown workers without opening a tail.
@@ -304,7 +324,7 @@ fn stream_unknown_worker_returns_unknown_worker_error_without_hanging() {
 
 /// Verifies replay order, suffix replay, and explicit truncation reporting.
 #[test]
-fn stream_known_worker_replays_retained_events_and_truncation() {
+fn stream_known_worker_replays_retained_events_with_untimestamped_history_truncated() {
     let fixture = ServiceFixture::new_with_event_capacity(2);
     fixture.seed_truncated_worker();
     let service = fixture.service();
@@ -329,6 +349,17 @@ fn stream_known_worker_replays_retained_events_and_truncation() {
             "prompt_agent_started"
         ]
     );
+    let truncated = replay
+        .replay()
+        .iter()
+        .find(|event| event.name == "history_truncated")
+        .expect("history truncation notice should be replayed");
+    assert_eq!(truncated.occurred_at, None);
+    assert!(replay
+        .replay()
+        .iter()
+        .filter(|event| event.name != "history_truncated")
+        .all(|event| event.occurred_at.is_some()));
 
     let suffix = service
         .stream(pb::StreamWorkerRequest {
@@ -338,6 +369,13 @@ fn stream_known_worker_replays_retained_events_and_truncation() {
         .unwrap();
 
     assert!(suffix.replay().iter().all(|event| event.sequence >= 1));
+    assert!(suffix.replay().iter().all(|event| {
+        if event.name == "history_truncated" {
+            event.occurred_at.is_none()
+        } else {
+            event.occurred_at.is_some()
+        }
+    }));
 }
 
 /// Verifies stream returns retained replay and then receives live events appended later.
@@ -368,6 +406,44 @@ fn stream_known_worker_replays_then_tails_live_events() {
     let live = stream.try_next().expect("live event should be delivered");
     assert_eq!(live.name, "prompt_agent_started");
     assert_eq!(live.sequence, 2);
+    assert!(live.occurred_at.is_some());
+}
+
+/// Verifies service success paths emit concise lifecycle logs without answer text.
+#[test]
+fn lifecycle_service_success_paths_log_representative_events_without_answer_text() {
+    let fixture = ServiceFixture::new();
+    let service = fixture.service();
+    let response = service
+        .dispatch(dispatch_request(
+            1,
+            "write requirements",
+            "https://token@example.com/org/repo.git",
+        ))
+        .unwrap();
+    let worker_id = response.worker_id;
+
+    service
+        .stream(pb::StreamWorkerRequest {
+            worker_id: worker_id.clone(),
+            from_sequence: 0,
+        })
+        .unwrap();
+    fixture.request_input(&worker_id, "request-1", "Approve?");
+
+    service
+        .answer_input(pb::AnswerInputRequest {
+            worker_id: worker_id.clone(),
+            request_id: "request-1".to_owned(),
+            text: "super secret human answer".to_owned(),
+        })
+        .unwrap();
+
+    let logs = fixture.logs();
+    assert_contains_log(&logs, "created worker: worker-1");
+    assert_contains_log(&logs, "stream started: worker-1");
+    assert_contains_log(&logs, "answer provided: worker-1 request-1");
+    assert!(!logs.iter().any(|log| log.contains("super secret human answer")));
 }
 
 /// Verifies daemon validation before forwarding a human-input answer.
@@ -442,6 +518,7 @@ struct ServiceFixture {
     launcher: Arc<Mutex<Vec<LaunchRequest>>>,
     commands: Arc<Mutex<Vec<AnswerCommand>>>,
     ids: Arc<Mutex<Vec<String>>>,
+    logs: Arc<Mutex<Vec<String>>>,
     root: TempRoot,
     event_capacity: usize,
 }
@@ -457,6 +534,7 @@ impl ServiceFixture {
             launcher: Arc::new(Mutex::new(Vec::new())),
             commands: Arc::new(Mutex::new(Vec::new())),
             ids: Arc::new(Mutex::new(ids)),
+            logs: Arc::new(Mutex::new(Vec::new())),
             root: TempRoot::new("service"),
             event_capacity: 1_000,
         }
@@ -470,6 +548,7 @@ impl ServiceFixture {
             launcher: Arc::new(Mutex::new(Vec::new())),
             commands: Arc::new(Mutex::new(Vec::new())),
             ids: Arc::new(Mutex::new(vec!["worker-1".to_owned()])),
+            logs: Arc::new(Mutex::new(Vec::new())),
             root: TempRoot::new("service"),
             event_capacity,
         }
@@ -488,6 +567,7 @@ impl ServiceFixture {
             launcher: RecordingLauncher(self.launcher.clone()),
             command_sender: RecordingCommandSender(self.commands.clone()),
             id_generator: FixedIds(self.ids.clone()),
+            lifecycle_logger: RecordingLifecycleLogger(self.logs.clone()),
         })
     }
 
@@ -498,6 +578,7 @@ impl ServiceFixture {
             launcher: RecordingLauncher(self.launcher.clone()),
             command_sender: FailingCommandSender,
             id_generator: FixedIds(self.ids.clone()),
+            lifecycle_logger: RecordingLifecycleLogger(self.logs.clone()),
         })
     }
 
@@ -548,13 +629,47 @@ impl ServiceFixture {
             .unwrap();
     }
 
+    fn request_input(&self, worker: &str, request: &str, prompt: &str) {
+        use std::str::FromStr;
+
+        self.registry
+            .lock()
+            .unwrap()
+            .request_input(crate::registry::InputRequest::new(
+                lifecycle::identity::WorkerId::from_str(worker).unwrap(),
+                lifecycle::identity::RequestId::from_str(request).unwrap(),
+                prompt,
+            ))
+            .unwrap();
+    }
+
     fn remaining_ids(&self) -> Vec<String> {
         self.ids.lock().unwrap().clone()
+    }
+
+    fn logs(&self) -> Vec<String> {
+        self.logs.lock().unwrap().clone()
     }
 
     fn worker_layout_exists(&self, worker_id: &str) -> bool {
         self.root.path().join(worker_id).exists()
     }
+}
+
+#[derive(Clone)]
+struct RecordingLifecycleLogger(Arc<Mutex<Vec<String>>>);
+
+impl LifecycleLogger for RecordingLifecycleLogger {
+    fn log(&self, message: &str) {
+        self.0.lock().unwrap().push(message.to_owned());
+    }
+}
+
+fn assert_contains_log(logs: &[String], expected: &str) {
+    assert!(
+        logs.iter().any(|log| log.contains(expected)),
+        "expected log containing `{expected}`, got {logs:?}"
+    );
 }
 
 struct RecordingLauncher(Arc<Mutex<Vec<LaunchRequest>>>);

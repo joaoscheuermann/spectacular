@@ -44,6 +44,34 @@ fn insert_worker_valid_record_lists_summary_with_required_fields() {
     assert_eq!(summary.activity(), Some("queued"));
     assert_eq!(summary.terminal_reason(), None);
     assert_eq!(summary.last_sequence(), None);
+    assert!(summary.updated_at().is_some());
+}
+
+/// Verifies status updates refresh the worker summary timestamp.
+#[test]
+fn update_status_known_worker_refreshes_summary_updated_at() {
+    let mut registry = seeded_registry("timestamp-worker");
+    let worker_id = worker_id("timestamp-worker");
+    let inserted_at = registry
+        .list()
+        .into_iter()
+        .next()
+        .unwrap()
+        .updated_at()
+        .expect("insert should stamp summary");
+
+    registry
+        .update_status(&worker_id, WorkerStatus::Running, "running prompt")
+        .unwrap();
+
+    let updated_at = registry
+        .list()
+        .into_iter()
+        .next()
+        .unwrap()
+        .updated_at()
+        .expect("status update should refresh summary");
+    assert!(updated_at >= inserted_at);
 }
 
 /// Verifies that duplicate worker ids cannot corrupt registry state.
@@ -114,6 +142,8 @@ fn append_event_allocates_monotonic_sequences_from_zero() {
 
     assert_eq!(first.sequence(), 0);
     assert_eq!(second.sequence(), 1);
+    assert!(first.occurred_at().is_some());
+    assert!(second.occurred_at().is_some());
 }
 
 /// Verifies that replay from zero returns retained worker events in sequence order.
