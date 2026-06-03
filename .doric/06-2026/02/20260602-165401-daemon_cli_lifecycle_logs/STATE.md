@@ -4,7 +4,7 @@
 
 - Phase: development
 - Current effort: none
-- Next effort index: 5
+- Next effort index: 6
 
 ## Approvals
 
@@ -23,7 +23,7 @@
 | 2 | 03_daemon_dispatch_uuid_validation.md | done |
 | 3 | 04_daemon_timestamps_logger.md | done |
 | 4 | 05_cli_feature_list_output.md | done |
-| 5 | 06_cli_stream_output.md | todo |
+| 5 | 06_cli_stream_output.md | done |
 | 6 | 07_worker_clone_wording_regressions.md | todo |
 
 ## Active locks
@@ -99,6 +99,11 @@
 | development | 05_cli_feature_list_output.md | reviewer | explorer | 05_reviewer_01 | 019e8d5b-e911-7ea0-aeeb-31b116d135e1 (Sagan) | blocked |
 | development | 05_cli_feature_list_output.md | validator/refactor | worker | 05_test_split_refactor_01 | 019e8d60-66ce-7183-97fd-8ef99991f10e (Chandrasekhar) | accepted |
 | development | 05_cli_feature_list_output.md | reviewer | explorer | 05_reviewer_02 | 019e8d66-364e-7d71-a474-ab235a36d56b (Sartre) | accepted |
+| development | 06_cli_stream_output.md | test planner | worker | 06_test_planner_01 | 019e8d6c-e3ae-75a1-9940-f31d789c5897 (Curie) | accepted |
+| development | 06_cli_stream_output.md | test writer | worker | 06_test_writer_01 | 019e8d71-155d-7361-af9a-c321f8e11e3b (Mendel) | accepted |
+| development | 06_cli_stream_output.md | code writer | worker | 06_code_writer_01 | 019e8d77-c055-76d3-95be-8a499761eb2a (Epicurus) | accepted |
+| development | 06_cli_stream_output.md | validator/refactor | worker | 06_validator_refactor_01 | 019e8d7d-fe69-7941-9445-116dfe33be06 (Arendt) | accepted |
+| development | 06_cli_stream_output.md | reviewer | explorer | 06_reviewer_01 | 019e8d81-a8b7-7432-b1e6-c4fcabe21321 (Gibbs) | accepted |
 
 ## Agent receipts
 
@@ -170,6 +175,11 @@
 | 05_reviewer_01 | development | 05_cli_feature_list_output.md | reviewer | explorer | 019e8d5b-e911-7ea0-aeeb-31b116d135e1 (Sagan) | blocked | Blocked on coding-conventions file-size gate: `packages/cli/tests/unit/lifecycle_output.rs` is 852 lines after effort 05 and must be split before commit readiness. |
 | 05_test_split_refactor_01 | development | 05_cli_feature_list_output.md | validator/refactor | worker | 019e8d60-66ce-7183-97fd-8ef99991f10e (Chandrasekhar) | accepted | Split lifecycle unit tests into cohesive under-500-line include files; reran cli lifecycle, debug-log startup, lifecycle, daemon service, and cli clippy successfully; used coding-conventions, implementation-standards, and simplicity-complexity references. |
 | 05_reviewer_02 | development | 05_cli_feature_list_output.md | reviewer | explorer | 019e8d66-364e-7d71-a474-ab235a36d56b (Sartre) | accepted | Replacement review approved effort 05 for commit checkpoint; file-size blocker resolved, feature/list behavior valid, and path-limited commit scope required. |
+| 06_test_planner_01 | development | 06_cli_stream_output.md | test planner | worker | 019e8d6c-e3ae-75a1-9940-f31d789c5897 (Curie) | accepted | Planned timestamped stream tests, expected red barriers, and focused/regression commands; used coding-conventions, implementation-standards, and Sexy Rust references. |
+| 06_test_writer_01 | development | 06_cli_stream_output.md | test writer | worker | 019e8d71-155d-7361-af9a-c321f8e11e3b (Mendel) | accepted | Added red timestamped stream tests in `lifecycle_worker_stream_output.rs` and helper updates in `lifecycle_output.rs`; focused commands exit 1 on old stream header/no-retained-events output; used coding-conventions, implementation-standards, and Sexy Rust references. |
+| 06_code_writer_01 | development | 06_cli_stream_output.md | code writer | worker | 019e8d77-c055-76d3-95be-8a499761eb2a (Epicurus) | accepted | Implemented timestamped stream output, `occurred_at` model mapping, render-time fallback, one-line waiting-for-input rendering, and old stream scaffold removal; coordinator `cargo test -p cli handle_lifecycle_worker_stream` passed; used coding-conventions, implementation-standards, and Sexy Rust references. |
+| 06_validator_refactor_01 | development | 06_cli_stream_output.md | validator/refactor | worker | 019e8d7d-fe69-7941-9445-116dfe33be06 (Arendt) | accepted | Validated stream-focused tests, full cli suite, daemon service/lifecycle_service regressions, lifecycle regression, fmt, and cli clippy; no refactors applied; used coding-conventions, implementation-standards, Sexy Rust, and simplicity-complexity references. |
+| 06_reviewer_01 | development | 06_cli_stream_output.md | reviewer | explorer | 019e8d81-a8b7-7432-b1e6-c4fcabe21321 (Gibbs) | accepted | Review approved effort 06 for commit checkpoint; stream output criteria, validation evidence, file-size gate, and scope all passed; path-limited commit required. |
 
 ## Validation records
 
@@ -180,6 +190,7 @@
 | 03_daemon_dispatch_uuid_validation.md | validation/03_daemon_dispatch_uuid_validation.md | invalid/path-like repo accepted before side effects; timestamp-style production IDs; whitespace-padded remote trim bypass | focused daemon tests, daemon service/server/integration tests, lifecycle repo_url, worker repo, fmt, and clippy passed | 03_reviewer_02 |
 | 04_daemon_timestamps_logger.md | validation/04_daemon_timestamps_logger.md | missing daemon lifecycle logger/timestamp contract; synthetic `history_truncated` conversion-time timestamp | focused daemon history_truncated/registry/service/worker_session/server/integration tests, lifecycle regression, fmt, and clippy passed | 04_reviewer_02 |
 | 05_cli_feature_list_output.md | validation/05_cli_feature_list_output.md | missing `LifecycleDaemonClient::connect` explicit connection seam | focused cli feature/list/redaction/unavailable/lifecycle tests, debug-log startup, lifecycle regression, daemon service matching tests, cli clippy, and lifecycle test split line-count checks passed | 05_reviewer_02 |
+| 06_cli_stream_output.md | validation/06_cli_stream_output.md | old `[stream]` header/no-retained-events output and missing timestamped stream item contract | focused stream/redaction/lifecycle tests, full cli suite, daemon service/lifecycle_service regressions, lifecycle regression, fmt, and cli clippy passed | 06_reviewer_01 |
 
 ## Commit checkpoints
 
@@ -189,7 +200,8 @@
 | 02_repo_url_validation.md | 6278e2e | feat(lifecycle): add repo URL validation | lifecycle repo module, lifecycle unit tests, effort 02 Doric artifacts |
 | 03_daemon_dispatch_uuid_validation.md | 0345938 | feat(daemon): validate dispatch repo URLs and UUIDv6 IDs | daemon service/server code and tests, daemon Cargo metadata, effort 03 Doric artifacts |
 | 04_daemon_timestamps_logger.md | 5afd485 | feat(daemon): add lifecycle timestamps and logger | daemon event/registry/service/worker_session/server code and tests, effort 04 Doric artifacts |
-| 05_cli_feature_list_output.md | pending | feat(cli): add feature and list lifecycle output | cli lifecycle handler/client/output/types, split cli lifecycle unit tests, effort 05 Doric artifacts |
+| 05_cli_feature_list_output.md | 2de1484 | feat(cli): add feature and list lifecycle output | cli lifecycle handler/client/output/types, split cli lifecycle unit tests, effort 05 Doric artifacts |
+| 06_cli_stream_output.md | pending | feat(cli): render timestamped lifecycle streams | cli lifecycle stream handler/client/output, cli lifecycle stream tests, effort 06 Doric artifacts |
 
 ## Coordinator notes
 
@@ -333,3 +345,15 @@
 - 2026-06-03 09:11:25: Reviewed and accepted `05_test_split_refactor_01`; lifecycle test include files are under 500 lines and `cargo test -p cli handle_lifecycle` passed. Registered replacement reviewer `05_reviewer_02`.
 - 2026-06-03 09:12:34: Initial replacement reviewer spawn hit the agent thread limit; closed completed effort 05 agents and spawned `05_reviewer_02` as `019e8d66-364e-7d71-a474-ab235a36d56b` (`Sartre`).
 - 2026-06-03 09:16:19: Reviewed and accepted `05_reviewer_02`; marked `05_cli_feature_list_output.md` done, released active locks, set `Current effort` to `none`, advanced `Next effort index` to `5`, and prepared commit checkpoint `feat(cli): add feature and list lifecycle output`.
+- 2026-06-03 09:18:16: Commit checkpoint succeeded for effort 05 with `2de1484` (`feat(cli): add feature and list lifecycle output`). Used path-limited commit scope to preserve unrelated staged and dirty files.
+- 2026-06-03 09:19:10: Transitioned `06_cli_stream_output.md` from `todo` to `in-progress`, set `Current effort`, recorded active locks, and registered `06_test_planner_01`.
+- 2026-06-03 09:19:52: Spawned effort 06 test planner as `019e8d6c-e3ae-75a1-9940-f31d789c5897` (`Curie`).
+- 2026-06-03 09:23:46: Reviewed and accepted `06_test_planner_01`; planned stream renderer red tests and validation commands. Registered `06_test_writer_01`.
+- 2026-06-03 09:24:29: Spawned effort 06 test writer as `019e8d71-155d-7361-af9a-c321f8e11e3b` (`Mendel`).
+- 2026-06-03 09:30:54: Reviewed and accepted `06_test_writer_01`; recorded red evidence in `validation/06_cli_stream_output.md` and registered `06_code_writer_01`.
+- 2026-06-03 09:31:42: Spawned effort 06 code writer as `019e8d77-c055-76d3-95be-8a499761eb2a` (`Epicurus`).
+- 2026-06-03 09:37:47: Reviewed and accepted `06_code_writer_01`; coordinator `cargo test -p cli handle_lifecycle_worker_stream` passed with 10 tests. Registered `06_validator_refactor_01`.
+- 2026-06-03 09:38:33: Spawned effort 06 validator/refactor as `019e8d7d-fe69-7941-9445-116dfe33be06` (`Arendt`).
+- 2026-06-03 09:41:46: Reviewed and accepted `06_validator_refactor_01`; recorded green evidence in `validation/06_cli_stream_output.md` and registered `06_reviewer_01`.
+- 2026-06-03 09:42:34: Spawned effort 06 reviewer as `019e8d81-a8b7-7432-b1e6-c4fcabe21321` (`Gibbs`).
+- 2026-06-03 09:47:55: Reviewed and accepted `06_reviewer_01`; marked `06_cli_stream_output.md` done, released active locks, set `Current effort` to `none`, advanced `Next effort index` to `6`, and prepared commit checkpoint `feat(cli): render timestamped lifecycle streams`.

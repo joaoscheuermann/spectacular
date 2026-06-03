@@ -1,6 +1,6 @@
 # Effort: CLI stream lifecycle output
 
-Status: todo
+Status: done
 
 ## Requirement links
 

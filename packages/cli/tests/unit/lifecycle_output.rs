@@ -2,6 +2,7 @@ use super::*;
 use crate::cli_types::{
     Command, LifecycleAddressArgs, LifecycleAnswerArgs, LifecycleDispatchArgs, LifecycleWorkerArgs,
 };
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum ClientCall {
@@ -234,7 +235,101 @@ fn stream_event(sequence: u64, name: &str, status: &str, message: &str) -> Lifec
         status: status.to_owned(),
         message: message.to_owned(),
         request_id: None,
+        occurred_at: None,
     })
+}
+
+fn stream_event_at(
+    sequence: u64,
+    name: &str,
+    status: &str,
+    message: &str,
+    occurred_at: SystemTime,
+) -> LifecycleStreamItem {
+    LifecycleStreamItem::Event(LifecycleWorkerEvent {
+        sequence,
+        name: name.to_owned(),
+        status: status.to_owned(),
+        message: message.to_owned(),
+        request_id: None,
+        occurred_at: Some(occurred_at),
+    })
+}
+
+fn waiting_input_event(sequence: u64, message: &str, request_id: &str) -> LifecycleStreamItem {
+    LifecycleStreamItem::Event(LifecycleWorkerEvent {
+        sequence,
+        name: "waiting_for_input".to_owned(),
+        status: "waiting_for_input".to_owned(),
+        message: message.to_owned(),
+        request_id: Some(request_id.to_owned()),
+        occurred_at: None,
+    })
+}
+
+fn fixed_time(offset_seconds: u64) -> SystemTime {
+    UNIX_EPOCH + Duration::from_secs(offset_seconds)
+}
+
+fn fixed_timestamp(offset_seconds: u64) -> String {
+    ::lifecycle::terminal::format_timestamp(fixed_time(offset_seconds))
+}
+
+fn output_lines(output: &str) -> Vec<&str> {
+    output.lines().collect()
+}
+
+fn assert_line_count(output: &str, expected: usize) {
+    let lines = output_lines(output);
+
+    assert_eq!(
+        lines.len(),
+        expected,
+        "expected {expected} lifecycle output lines:\n{output}"
+    );
+}
+
+fn assert_first_timestamped_line(output: &str, expected_message: &str) {
+    let lines = output_lines(output);
+    let Some(first_line) = lines.first() else {
+        panic!("expected first lifecycle output line:\n{output}");
+    };
+
+    assert_timestamped_message(first_line, expected_message);
+}
+
+fn assert_all_lifecycle_lines_are_timestamped(output: &str) {
+    for line in output.lines() {
+        assert!(
+            timestamped_message(line).is_some(),
+            "expected timestamped lifecycle line, got `{line}`:\n{output}"
+        );
+    }
+}
+
+fn assert_timestamped_message(line: &str, expected_message: &str) {
+    let Some(message) = timestamped_message(line) else {
+        panic!("expected timestamped lifecycle line, got `{line}`");
+    };
+
+    assert_eq!(message, expected_message);
+}
+
+fn assert_timestamped_line_contains(line: &str, expected: &str) {
+    let Some(message) = timestamped_message(line) else {
+        panic!("expected timestamped lifecycle line, got `{line}`");
+    };
+
+    assert!(
+        message.contains(expected),
+        "expected timestamped line message to contain `{expected}`, got `{message}`"
+    );
+}
+
+fn assert_no_stream_scaffolding(output: &str) {
+    assert_not_contains(output, "[stream]");
+    assert_not_contains(output, "Lifecycle worker");
+    assert_not_contains(output, "No retained events");
 }
 
 fn assert_contains(output: &str, expected: &str) {
@@ -260,6 +355,30 @@ fn assert_order(output: &str, expected: &[&str]) {
         };
         search_start += index + item.len();
     }
+}
+
+fn timestamped_message(line: &str) -> Option<&str> {
+    let body = line.strip_prefix('[')?;
+    let (timestamp, message) = body.split_once("] ")?;
+
+    is_utc_timestamp(timestamp).then_some(message)
+}
+
+fn is_utc_timestamp(timestamp: &str) -> bool {
+    let bytes = timestamp.as_bytes();
+
+    bytes.len() == 20
+        && bytes[4] == b'-'
+        && bytes[7] == b'-'
+        && bytes[10] == b'T'
+        && bytes[13] == b':'
+        && bytes[16] == b':'
+        && bytes[19] == b'Z'
+        && bytes
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| ![4, 7, 10, 13, 16, 19].contains(index))
+            .all(|(_, byte)| byte.is_ascii_digit())
 }
 
 fn strip_ansi_codes(value: &str) -> String {

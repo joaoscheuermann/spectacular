@@ -5,11 +5,12 @@ use super::{
     lifecycle_output::{
         format_answer_output, format_connected_line, format_connecting_line,
         format_created_worker_line, format_creating_worker_line, format_dispatch_output,
-        format_list_output, format_worker_output_header, format_worker_output_item,
+        format_list_output, format_worker_output_item, format_worker_output_started,
     },
 };
 use std::fmt::{self, Display};
 use std::io::Write;
+use std::time::SystemTime;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum LifecycleDispatchMode {
@@ -107,6 +108,7 @@ pub(super) struct LifecycleWorkerEvent {
     pub(super) status: String,
     pub(super) message: String,
     pub(super) request_id: Option<String>,
+    pub(super) occurred_at: Option<SystemTime>,
 }
 
 #[allow(dead_code)]
@@ -292,14 +294,9 @@ where
     Output: Write,
 {
     let worker_id = args.id;
-    write_lifecycle_line(output, &format_worker_output_header(&worker_id))?;
-    let mut wrote_item = false;
+    write_lifecycle_line(output, &format_worker_output_started())?;
     let mut sink = |item| {
-        wrote_item = true;
-
-        for line in format_worker_output_item(&worker_id, &item) {
-            write_lifecycle_line(output, &line)?;
-        }
+        write_lifecycle_line(output, &format_worker_output_item(&item))?;
 
         Ok(())
     };
@@ -311,10 +308,6 @@ where
         },
         &mut sink,
     )?;
-
-    if !wrote_item {
-        write_lifecycle_line(output, "  No retained events for this worker")?;
-    }
 
     Ok(None)
 }

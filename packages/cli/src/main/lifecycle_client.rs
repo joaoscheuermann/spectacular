@@ -6,6 +6,7 @@ use super::lifecycle::{
 };
 use ::lifecycle::proto::doric::lifecycle::v1 as pb;
 use std::future::Future;
+use std::time::SystemTime;
 
 const DEFAULT_DAEMON_ADDR: &str = "127.0.0.1:47821";
 
@@ -218,6 +219,9 @@ fn stream_item_from_proto(event: pb::WorkerEvent) -> Result<LifecycleStreamItem,
         });
     }
 
+    let occurred_at: Option<SystemTime> = event
+        .occurred_at
+        .and_then(|timestamp| timestamp.try_into().ok());
     let message = event
         .input
         .as_ref()
@@ -233,6 +237,7 @@ fn stream_item_from_proto(event: pb::WorkerEvent) -> Result<LifecycleStreamItem,
         status: status_label(event.status)?.to_owned(),
         message,
         request_id,
+        occurred_at,
     }))
 }
 

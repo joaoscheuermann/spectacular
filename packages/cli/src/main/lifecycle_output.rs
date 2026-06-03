@@ -5,8 +5,9 @@ use super::{
     },
     terminal_style,
 };
-use ::lifecycle::terminal::safe_message;
+use ::lifecycle::terminal::{format_line, safe_message};
 use anstyle::Style;
+use std::time::SystemTime;
 
 pub(super) fn format_connecting_line() -> &'static str {
     "connecting to daemon"
@@ -56,34 +57,27 @@ pub(super) fn format_list_output(response: &LifecycleListResponse) -> String {
         .join("\n")
 }
 
-pub(super) fn format_worker_output_header(worker_id: &str) -> String {
-    format!(
-        "{} {}",
-        paint(success_style(), "[stream]"),
-        paint(
-            title_style(),
-            format!("Lifecycle worker {}", redact_text(worker_id))
-        )
-    )
+pub(super) fn format_worker_output_started() -> String {
+    format_line(SystemTime::now(), "started")
 }
 
-pub(super) fn format_worker_output_item(
-    worker_id: &str,
-    item: &LifecycleStreamItem,
-) -> Vec<String> {
-    let mut lines = Vec::new();
-
+pub(super) fn format_worker_output_item(item: &LifecycleStreamItem) -> String {
     match item {
         LifecycleStreamItem::HistoryTruncated {
             requested_from_sequence,
             first_available_sequence,
-        } => lines.push(format!(
-            "  history was truncated: requested sequence {requested_from_sequence}, first available sequence {first_available_sequence}"
-        )),
-        LifecycleStreamItem::Event(event) => append_worker_event(&mut lines, worker_id, event),
-    }
+        } => format_line(
+            SystemTime::now(),
+            &format!(
+                "history was truncated: requested sequence {requested_from_sequence}, first available sequence {first_available_sequence}"
+            ),
+        ),
+        LifecycleStreamItem::Event(event) => {
+            let timestamp = event.occurred_at.unwrap_or_else(SystemTime::now);
 
-    lines
+            format_line(timestamp, &worker_event_message(event))
+        }
+    }
 }
 
 pub(super) fn format_answer_output(response: &LifecycleAnswerResponse) -> String {
@@ -159,24 +153,15 @@ fn mode_label(mode: LifecycleDispatchMode) -> &'static str {
     }
 }
 
-fn append_worker_event(lines: &mut Vec<String>, worker_id: &str, event: &LifecycleWorkerEvent) {
-    lines.push(format!(
-        "  {} {} {} - {}",
-        event.sequence,
-        redact_text(&event.name),
-        redact_text(&event.status),
-        redact_text(&event.message)
-    ));
-
+fn worker_event_message(event: &LifecycleWorkerEvent) -> String {
     if let Some(request_id) = &event.request_id {
-        lines.push(lifecycle_field("Status", "waiting for input"));
-        lines.push(lifecycle_field("Request", request_id));
-        lines.push(format!(
-            "  {} doric answer {} {} --text <answer>",
-            paint(label_style(), "Answer:"),
-            redact_text(worker_id),
-            redact_text(request_id)
-        ));
+        return format!("waiting for input request {request_id}: {}", event.message);
+    }
+
+    if event.message.trim().is_empty() {
+        event.name.clone()
+    } else {
+        event.message.clone()
     }
 }
 
