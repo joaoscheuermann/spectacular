@@ -50,3 +50,4 @@
 ## Reviewer decision
 
 - 2026-06-03 09:47:55 `06_reviewer_01` approved effort 06 for commit checkpoint. Stream output starts with timestamped `started`, each item renders as one timestamped safe line, `occurred_at` is mapped and used when present, daemon stream behavior and worker clone wording emission remain scoped, touched files are under the 500-line threshold, and the commit must be path-limited to effort 06 files plus Doric artifacts.
+- 2026-06-03 09:48:58 commit checkpoint succeeded: `a2e4e18` (`feat(cli): render timestamped lifecycle streams`).

@@ -2,7 +2,7 @@
 
 ## Cursor
 
-- Phase: development
+- Phase: handover
 - Current effort: none
 - Next effort index: 7
 
@@ -213,7 +213,7 @@
 | 04_daemon_timestamps_logger.md | 5afd485 | feat(daemon): add lifecycle timestamps and logger | daemon event/registry/service/worker_session/server code and tests, effort 04 Doric artifacts |
 | 05_cli_feature_list_output.md | 2de1484 | feat(cli): add feature and list lifecycle output | cli lifecycle handler/client/output/types, split cli lifecycle unit tests, effort 05 Doric artifacts |
 | 06_cli_stream_output.md | a2e4e18 | feat(cli): render timestamped lifecycle streams | cli lifecycle stream handler/client/output, cli lifecycle stream tests, effort 06 Doric artifacts |
-| 07_worker_clone_wording_regressions.md | pending | fix(worker): render redacted clone lifecycle wording | worker runtime, worker runtime tests, daemon lifecycle service replay test, effort 07 Doric artifacts |
+| 07_worker_clone_wording_regressions.md | 8367d4d | fix(worker): render redacted clone lifecycle wording | worker runtime, worker runtime tests, daemon lifecycle service replay test, effort 07 Doric artifacts |
 
 ## Coordinator notes
 
@@ -381,3 +381,5 @@
 - 2026-06-03 10:12:35: Reviewed and accepted `07_validator_refactor_01`; recorded green evidence in `validation/07_worker_clone_wording_regressions.md` and registered `07_reviewer_01`.
 - 2026-06-03 10:13:38: Spawned effort 07 reviewer as `019e8d9e-206c-7732-91fe-b2967f9b4433` (`Hubble`).
 - 2026-06-03 10:17:35: Reviewed and accepted `07_reviewer_01`; marked `07_worker_clone_wording_regressions.md` done, released active locks, set `Current effort` to `none`, advanced `Next effort index` to `7`, and prepared commit checkpoint `fix(worker): render redacted clone lifecycle wording`.
+- 2026-06-03 10:19:18: Commit checkpoint succeeded for effort 07 with `8367d4d` (`fix(worker): render redacted clone lifecycle wording`). Used path-limited commit scope to preserve unrelated staged and dirty files.
+- 2026-06-03 10:19:53: Development phase completed with all seven efforts marked done, accepted development-agent receipts, commit checkpoints recorded, `Next effort index` equal to effort count, and no active locks. Advanced phase to `handover`.

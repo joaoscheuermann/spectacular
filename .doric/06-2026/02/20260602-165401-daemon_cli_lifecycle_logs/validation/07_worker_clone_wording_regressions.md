@@ -82,3 +82,5 @@ None. Validator/refactor found no blocker and did not edit files.
 ## Reviewer decision
 
 Approved by `07_reviewer_01` (`Hubble`). No blocking findings; reviewed red/green evidence, raw clone preservation, safe clone event display, daemon replay message coverage, CLI stream regression coverage, file-size gates, and path-limited commit scope.
+
+Commit checkpoint: `8367d4d` (`fix(worker): render redacted clone lifecycle wording`).

@@ -8,18 +8,18 @@ binary is `doric`; the Cargo package and Nx project that build it are named
 
 The Rust workspace is declared in `Cargo.toml` and contains these packages:
 
-| Package | Path | Responsibility |
-| ------- | ---- | -------------- |
-| `cli` | `packages/cli` | `doric` CLI entry point, application composition, config command output, chat orchestration, session persistence, lifecycle client commands, daemon startup command, and adapters between command, agent, TUI, provider, tool, daemon, and lifecycle packages. |
-| `agent` | `packages/agent` | Agent runtime, event stream, context assembly, request lifecycle, queueing, cancellation, retries, provider streaming, tool loop, and store contracts. |
-| `lifecycle` | `packages/lifecycle` | Shared lifecycle domain types, worker identity/status/event models, redaction helpers, repository identity parsing, and generated gRPC/protobuf client/server contracts. |
-| `daemon` | `packages/daemon` | `doric-daemon` application, lifecycle gRPC server, worker registry, worker root/layout preparation, worker process launch, authenticated worker-session attachment, command routing, and event replay/streaming. |
-| `worker` | `packages/worker` | `doric-worker` application, daemon-controlled worker runtime, repository preparation, prompt-agent execution, worker-local provider/runtime selection, shared tool registration for prepared repos, state models, and lifecycle event/status reporting. |
-| `llms` | `packages/llms` | Provider traits and types, provider registry, OpenAI/OpenRouter integrations, model metadata, streaming DTOs, auth flow, and provider debug logging. |
-| `tools` | `packages/tools` | Built-in host tools for file search, grep, tree, terminal execution, edit/write operations, diff previews, and web search/open/find. |
-| `tui` | `packages/tui` | IOCraft terminal UI state, actions, reducers, layout, rendering model, prompt editing, selection, transcript components, and runtime glue. |
-| `commands` | `packages/commands` | Generic slash-command parsing, command metadata, fuzzy search, and command dispatch primitives. |
-| `config` | `packages/config` | Persisted Doric config schema, provider/model/task validation, model cache, config path resolution, and config IO. |
+| Package     | Path                 | Responsibility                                                                                                                                                                                                                                                 |
+| ----------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cli`       | `packages/cli`       | `doric` CLI entry point, application composition, config command output, chat orchestration, session persistence, lifecycle client commands, daemon startup command, and adapters between command, agent, TUI, provider, tool, daemon, and lifecycle packages. |
+| `agent`     | `packages/agent`     | Agent runtime, event stream, context assembly, request lifecycle, queueing, cancellation, retries, provider streaming, tool loop, and store contracts.                                                                                                         |
+| `lifecycle` | `packages/lifecycle` | Shared lifecycle domain types, worker identity/status/event models, redaction helpers, repository identity parsing, and generated gRPC/protobuf client/server contracts.                                                                                       |
+| `daemon`    | `packages/daemon`    | `doric-daemon` application, lifecycle gRPC server, worker registry, worker root/layout preparation, worker process launch, authenticated worker-session attachment, command routing, and event replay/streaming.                                               |
+| `worker`    | `packages/worker`    | `doric-worker` application, daemon-controlled worker runtime, repository preparation, prompt-agent execution, worker-local provider/runtime selection, shared tool registration for prepared repos, state models, and lifecycle event/status reporting.        |
+| `llms`      | `packages/llms`      | Provider traits and types, provider registry, OpenAI/OpenRouter integrations, model metadata, streaming DTOs, auth flow, and provider debug logging.                                                                                                           |
+| `tools`     | `packages/tools`     | Built-in host tools for file search, grep, tree, terminal execution, edit/write operations, diff previews, and web search/open/find.                                                                                                                           |
+| `tui`       | `packages/tui`       | IOCraft terminal UI state, actions, reducers, layout, rendering model, prompt editing, selection, transcript components, and runtime glue.                                                                                                                     |
+| `commands`  | `packages/commands`  | Generic slash-command parsing, command metadata, fuzzy search, and command dispatch primitives.                                                                                                                                                                |
+| `config`    | `packages/config`    | Persisted Doric config schema, provider/model/task validation, model cache, config path resolution, and config IO.                                                                                                                                             |
 
 `package.json` declares the JavaScript workspace as `packages/*`; package
 `project.json` files expose the Rust crates to Nx through `@monodon/rust`

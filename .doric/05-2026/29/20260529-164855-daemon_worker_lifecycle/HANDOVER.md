@@ -12,42 +12,42 @@ Handover prerequisites from `.agents/skills/doric/references/06-handover.md` wer
 - Every effort has one commit checkpoint.
 - No active required-agent row is `pending`, `spawned`, `blocked`, or `rejected`.
 
-| Effort | Scope | Status |
-| --- | --- | --- |
-| 01 | Workspace package skeletons for `lifecycle`, `daemon`, and `worker` | done |
-| 02 | Lifecycle protobuf/codegen contract | done |
-| 03 | Lifecycle domain DTOs and redaction helpers | done |
-| 04 | CLI lifecycle command parsing and chat-safe routing | done |
-| 05 | Daemon root validation and registry state | done |
-| 06 | Daemon lifecycle service seams | done |
-| 07 | Daemon worker process/session wiring | done |
-| 08 | Worker repo preparation with injected external Git | done |
-| 09 | Worker provider/runtime composition | done |
-| 10 | Worker shared tooling registration | done |
-| 11 | Worker prompt-agent runner | done |
-| 12 | Worker session runtime | done |
-| 13 | CLI daemon client and output wiring | done |
-| 14 | Lifecycle integration smoke coverage | done |
-| 15 | Architecture documentation validation | done |
+| Effort | Scope                                                               | Status |
+| ------ | ------------------------------------------------------------------- | ------ |
+| 01     | Workspace package skeletons for `lifecycle`, `daemon`, and `worker` | done   |
+| 02     | Lifecycle protobuf/codegen contract                                 | done   |
+| 03     | Lifecycle domain DTOs and redaction helpers                         | done   |
+| 04     | CLI lifecycle command parsing and chat-safe routing                 | done   |
+| 05     | Daemon root validation and registry state                           | done   |
+| 06     | Daemon lifecycle service seams                                      | done   |
+| 07     | Daemon worker process/session wiring                                | done   |
+| 08     | Worker repo preparation with injected external Git                  | done   |
+| 09     | Worker provider/runtime composition                                 | done   |
+| 10     | Worker shared tooling registration                                  | done   |
+| 11     | Worker prompt-agent runner                                          | done   |
+| 12     | Worker session runtime                                              | done   |
+| 13     | CLI daemon client and output wiring                                 | done   |
+| 14     | Lifecycle integration smoke coverage                                | done   |
+| 15     | Architecture documentation validation                               | done   |
 
 ## Feature coverage
 
 `FEATURES.md` extracted 12 feature groups from `PROMPT.md`, `PRD.md`, repaired `TDD.md`, and `GAPS_REPORT.md`. The ordered efforts covered them as follows:
 
-| Feature | Coverage |
-| --- | --- |
-| F-01 raw lifecycle CLI and chat-safe routing | Efforts 04 and 13 |
-| F-02 lifecycle contracts, codegen, DTOs, and redaction | Efforts 02 and 03 |
-| F-03 daemon service, registry, root validation, and lifecycle authority | Efforts 05, 06, 07, 13, and 14 |
-| F-04 worker process launch and authenticated daemon session | Efforts 07, 12, and 14 |
-| F-05 feature/debug dispatch lifecycle | Efforts 04 and 13 |
-| F-06 host-root repo preparation with external Git | Efforts 05 and 08 |
-| F-07 prompt/requirements worker runtime and artifact output | Efforts 09, 11, and 12 |
-| F-08 shared tools registration without confinement claims | Effort 10 |
-| F-09 worker list, status model, event replay, and stream output | Efforts 05, 06, 13, and 14 |
-| F-10 daemon-mediated human input flow | Efforts 06, 07, 12, and 13 |
-| F-11 secret-safe and scope-honest user-visible output | Efforts 03, 08, 09, 11, and 13 |
-| F-12 test seams, validation gates, and architecture documentation | Efforts 01 through 15, with final smoke/docs coverage in 14 and 15 |
+| Feature                                                                 | Coverage                                                           |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| F-01 raw lifecycle CLI and chat-safe routing                            | Efforts 04 and 13                                                  |
+| F-02 lifecycle contracts, codegen, DTOs, and redaction                  | Efforts 02 and 03                                                  |
+| F-03 daemon service, registry, root validation, and lifecycle authority | Efforts 05, 06, 07, 13, and 14                                     |
+| F-04 worker process launch and authenticated daemon session             | Efforts 07, 12, and 14                                             |
+| F-05 feature/debug dispatch lifecycle                                   | Efforts 04 and 13                                                  |
+| F-06 host-root repo preparation with external Git                       | Efforts 05 and 08                                                  |
+| F-07 prompt/requirements worker runtime and artifact output             | Efforts 09, 11, and 12                                             |
+| F-08 shared tools registration without confinement claims               | Effort 10                                                          |
+| F-09 worker list, status model, event replay, and stream output         | Efforts 05, 06, 13, and 14                                         |
+| F-10 daemon-mediated human input flow                                   | Efforts 06, 07, 12, and 13                                         |
+| F-11 secret-safe and scope-honest user-visible output                   | Efforts 03, 08, 09, 11, and 13                                     |
+| F-12 test seams, validation gates, and architecture documentation       | Efforts 01 through 15, with final smoke/docs coverage in 14 and 15 |
 
 ## Tests added or changed
 
@@ -62,51 +62,51 @@ Handover prerequisites from `.agents/skills/doric/references/06-handover.md` wer
 
 All 15 validation records are approved with red and green evidence. Final Effort 15 validation recorded no product failures and all requested Cargo/Nx gates passing:
 
-| Command | Result |
-| --- | --- |
-| `cargo fmt --all -- --check` | pass |
-| `cargo metadata --format-version 1 --no-deps` | pass |
-| `cargo build -p lifecycle` | pass |
-| `cargo test -p lifecycle --no-fail-fast` | pass, 19 unit tests plus doc tests |
-| `cargo test -p daemon --no-fail-fast` | pass, 59 unit tests, 1 integration test, and doc tests |
-| `cargo test -p tools --no-fail-fast` | pass, 60 unit tests plus doc tests |
-| `cargo test -p worker --no-fail-fast` | pass, 59 integration/unit tests plus doc tests |
-| `cargo test -p cli --no-fail-fast` | pass, 181 unit tests and 2 debug-log startup process tests |
-| `cargo clippy --workspace --all-targets -- -D warnings` | pass |
-| `cargo build -p cli --bin doric` | pass |
-| `cargo build -p daemon --bin doric-daemon` | pass |
-| `cargo build -p worker --bin doric-worker` | pass |
-| `npx nx run lifecycle:build` | pass |
-| `npx nx run lifecycle:test` | pass |
-| `npx nx run daemon:build` | pass |
-| `npx nx run daemon:test` | pass |
-| `npx nx run tools:test` | pass |
-| `npx nx run worker:build` | pass |
-| `npx nx run worker:test` | pass |
-| `npx nx run cli:build` | pass |
-| `npx nx run cli:test` | pass |
+| Command                                                 | Result                                                     |
+| ------------------------------------------------------- | ---------------------------------------------------------- |
+| `cargo fmt --all -- --check`                            | pass                                                       |
+| `cargo metadata --format-version 1 --no-deps`           | pass                                                       |
+| `cargo build -p lifecycle`                              | pass                                                       |
+| `cargo test -p lifecycle --no-fail-fast`                | pass, 19 unit tests plus doc tests                         |
+| `cargo test -p daemon --no-fail-fast`                   | pass, 59 unit tests, 1 integration test, and doc tests     |
+| `cargo test -p tools --no-fail-fast`                    | pass, 60 unit tests plus doc tests                         |
+| `cargo test -p worker --no-fail-fast`                   | pass, 59 integration/unit tests plus doc tests             |
+| `cargo test -p cli --no-fail-fast`                      | pass, 181 unit tests and 2 debug-log startup process tests |
+| `cargo clippy --workspace --all-targets -- -D warnings` | pass                                                       |
+| `cargo build -p cli --bin doric`                        | pass                                                       |
+| `cargo build -p daemon --bin doric-daemon`              | pass                                                       |
+| `cargo build -p worker --bin doric-worker`              | pass                                                       |
+| `npx nx run lifecycle:build`                            | pass                                                       |
+| `npx nx run lifecycle:test`                             | pass                                                       |
+| `npx nx run daemon:build`                               | pass                                                       |
+| `npx nx run daemon:test`                                | pass                                                       |
+| `npx nx run tools:test`                                 | pass                                                       |
+| `npx nx run worker:build`                               | pass                                                       |
+| `npx nx run worker:test`                                | pass                                                       |
+| `npx nx run cli:build`                                  | pass                                                       |
+| `npx nx run cli:test`                                   | pass                                                       |
 
 Tooling notes from the final validation: Cargo emitted the expected temporary Git CRLF warning from a test fixture during CLI tests, and Nx emitted Node's experimental CommonJS/ESM warning from local npm internals. All targets completed successfully.
 
 ## Commit checkpoints
 
-| Effort | Commit | Subject |
-| --- | --- | --- |
-| 01 | `261e0a7f4cfd598b4ce15eb2e463124559b0b5a6` | `chore(workspace): add lifecycle daemon worker package skeletons` |
-| 02 | `01361788c4d6874937d57b947dcd3a6571aea1f0` | `feat(lifecycle): add proto codegen contract` |
-| 03 | `67df908d3a54bfb17305f20cd430dabf8dbe32c8` | `feat(lifecycle): add domain redaction helpers` |
-| 04 | `cc2498ef3819a074cd7e3ef1ce34f7733acc6d91` | `feat(cli): parse lifecycle commands before chat startup` |
-| 05 | `c98b9fecb2de495261859b25b41853c9b160d5ba` | `feat(daemon): add root validation and registry state` |
-| 06 | `8bdd6ae1c40c13f1ed05df680a05708313a188a2` | `feat(daemon): add lifecycle service seams` |
-| 07 | `d9f8e699415a908176a64ad9a2e2ceffb57e1132` | `feat(daemon): wire process worker sessions` |
-| 08 | `a813cfdc95ff5f960f5a472804d552926d07f643` | `feat(worker): prepare repos with injected git` |
-| 09 | `094f0d86fa298e5bd87d0d620aa44b015a35c4af` | `feat(worker): compose provider runtime` |
-| 10 | `38717261716a51e8e304fe5fd5c02a73d9df4111` | `feat(worker): register shared tools` |
-| 11 | `c05137ed98c07b643c4fd62e9c9ad5a0dae39e61` | `feat(worker): add prompt agent runner` |
-| 12 | `ceead4f1d24ea351be34800203f137d69e362c90` | `feat(worker): add session runtime` |
-| 13 | `03622570cba2945353164912478bb7c0d05a2840` | `feat(cli): route lifecycle commands through daemon` |
-| 14 | `f6bfbdbfc771ba8032d72cca4c15cd00360901ed` | `test(daemon): preserve worker lifecycle milestones` |
-| 15 | `e59ff2ef0a094e8d1439e14dd1224271fe536a81` | `docs(architecture): document lifecycle package graph` |
+| Effort | Commit                                     | Subject                                                           |
+| ------ | ------------------------------------------ | ----------------------------------------------------------------- |
+| 01     | `261e0a7f4cfd598b4ce15eb2e463124559b0b5a6` | `chore(workspace): add lifecycle daemon worker package skeletons` |
+| 02     | `01361788c4d6874937d57b947dcd3a6571aea1f0` | `feat(lifecycle): add proto codegen contract`                     |
+| 03     | `67df908d3a54bfb17305f20cd430dabf8dbe32c8` | `feat(lifecycle): add domain redaction helpers`                   |
+| 04     | `cc2498ef3819a074cd7e3ef1ce34f7733acc6d91` | `feat(cli): parse lifecycle commands before chat startup`         |
+| 05     | `c98b9fecb2de495261859b25b41853c9b160d5ba` | `feat(daemon): add root validation and registry state`            |
+| 06     | `8bdd6ae1c40c13f1ed05df680a05708313a188a2` | `feat(daemon): add lifecycle service seams`                       |
+| 07     | `d9f8e699415a908176a64ad9a2e2ceffb57e1132` | `feat(daemon): wire process worker sessions`                      |
+| 08     | `a813cfdc95ff5f960f5a472804d552926d07f643` | `feat(worker): prepare repos with injected git`                   |
+| 09     | `094f0d86fa298e5bd87d0d620aa44b015a35c4af` | `feat(worker): compose provider runtime`                          |
+| 10     | `38717261716a51e8e304fe5fd5c02a73d9df4111` | `feat(worker): register shared tools`                             |
+| 11     | `c05137ed98c07b643c4fd62e9c9ad5a0dae39e61` | `feat(worker): add prompt agent runner`                           |
+| 12     | `ceead4f1d24ea351be34800203f137d69e362c90` | `feat(worker): add session runtime`                               |
+| 13     | `03622570cba2945353164912478bb7c0d05a2840` | `feat(cli): route lifecycle commands through daemon`              |
+| 14     | `f6bfbdbfc771ba8032d72cca4c15cd00360901ed` | `test(daemon): preserve worker lifecycle milestones`              |
+| 15     | `e59ff2ef0a094e8d1439e14dd1224271fe536a81` | `docs(architecture): document lifecycle package graph`            |
 
 ## Modified files
 
@@ -144,16 +144,16 @@ Worktree context preserved during handover:
 
 `GAPS_REPORT.md` recorded blocking technical gaps early in TDD. They were resolved before decomposition and carried through implementation:
 
-| Gap or assumption | Resolution |
-| --- | --- |
-| Tool ownership conflicted with preserving chat | `packages/tools` remains shared; worker depends on it and does not claim confinement. |
-| Invalid/underspecified tonic/prost codegen plan | `lifecycle` uses `tonic-prost-build`, `tonic-prost`, `prost`, `prost-types`, and `protoc-bin-vendored`. |
-| Worker provider/runtime composition was missing | Worker composes providers locally from `config`, `llms`, and `agent`; lower runtime extraction is deferred. |
-| Tool root semantics were overstated as confinement | Docs/tests state repo-root defaults are not sandboxing and preserve absolute/traversal behavior. |
-| CLI entrypoint/debug-log boundary was missing | Lifecycle/config/daemon commands bypass chat debug-log startup; bare chat still creates the debug logger. |
-| Repo clone mechanism was missing | Worker repo preparation uses external Git with a fakeable `GitCommandRunner` seam. |
-| Human input command syntax was open | TDD selected `doric answer <worker-id> <request-id> --text`. |
-| Registry persistence was open | TDD selected in-memory registry with explicit restart/untracked behavior. |
+| Gap or assumption                                  | Resolution                                                                                                  |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Tool ownership conflicted with preserving chat     | `packages/tools` remains shared; worker depends on it and does not claim confinement.                       |
+| Invalid/underspecified tonic/prost codegen plan    | `lifecycle` uses `tonic-prost-build`, `tonic-prost`, `prost`, `prost-types`, and `protoc-bin-vendored`.     |
+| Worker provider/runtime composition was missing    | Worker composes providers locally from `config`, `llms`, and `agent`; lower runtime extraction is deferred. |
+| Tool root semantics were overstated as confinement | Docs/tests state repo-root defaults are not sandboxing and preserve absolute/traversal behavior.            |
+| CLI entrypoint/debug-log boundary was missing      | Lifecycle/config/daemon commands bypass chat debug-log startup; bare chat still creates the debug logger.   |
+| Repo clone mechanism was missing                   | Worker repo preparation uses external Git with a fakeable `GitCommandRunner` seam.                          |
+| Human input command syntax was open                | TDD selected `doric answer <worker-id> <request-id> --text`.                                                |
+| Registry persistence was open                      | TDD selected in-memory registry with explicit restart/untracked behavior.                                   |
 
 ## Agent receipts
 

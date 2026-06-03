@@ -98,11 +98,10 @@ Do not track changes such as:
 When updating the architecture map:
 
 1. Verify the current implementation from source, manifests, or existing docs.
-2. Identify the smallest section of `docs/architecture-and-packages.md` that must change.
-3. Edit only that section unless the change has multiple explicit architectural impacts.
-4. Keep language factual and current-tense.
-5. Preserve package boundaries and avoid adding speculative abstractions.
-6. Mention discrepancies only as observed discrepancies, not resolved facts.
+2. Edit only that section unless the change has multiple explicit architectural impacts.
+3. Keep language factual and current-tense.
+4. Preserve package boundaries and avoid adding speculative abstractions.
+5. Mention discrepancies only as observed discrepancies, not resolved facts.
 
 ## High-level architecture
 

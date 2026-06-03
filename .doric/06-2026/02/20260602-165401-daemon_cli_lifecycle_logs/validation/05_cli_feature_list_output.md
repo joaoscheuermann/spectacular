@@ -58,3 +58,4 @@
 ## Reviewer decision
 
 - 2026-06-03 09:16:19 `05_reviewer_02` approved effort 05 for commit checkpoint. The prior file-size blocker is resolved; all lifecycle test include files are under the 500-line hard threshold, feature/list behavior satisfies acceptance criteria, and commit scope should be path-limited to effort-owned files plus Doric artifacts.
+- 2026-06-03 09:18:16 commit checkpoint succeeded: `2de1484` (`feat(cli): add feature and list lifecycle output`).
