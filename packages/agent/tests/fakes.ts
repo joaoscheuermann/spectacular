@@ -1,0 +1,155 @@
+import type { AgentEvent } from '../src/index.js';
+import type {
+  LlmProvider,
+  ProviderFinished,
+  ProviderRequest,
+  ProviderStreamEvent,
+} from 'llms';
+import type {
+  JsonValue,
+  ToolCall,
+  ToolCallRequest,
+  ToolDefinition,
+  ToolStorage,
+  ToolTurn,
+} from 'tools';
+
+type ProviderFake = {
+  readonly provider: LlmProvider;
+  readonly requests: ProviderRequest[];
+};
+
+type ToolFake = {
+  readonly storage: ToolStorage;
+  readonly calls: ToolCall[];
+};
+
+export const completeFinish = (
+  text: string,
+  toolCalls: readonly ToolCallRequest[] = [],
+): ProviderFinished => ({
+  text,
+  finishReason: toolCalls.length > 0 ? 'tool_calls' : 'stop',
+  toolCalls,
+});
+
+export const call = (
+  name: string,
+  payload: JsonValue = {},
+  id = `call_${name}`,
+): ToolCallRequest => ({
+  id,
+  name,
+  arguments: JSON.stringify(payload),
+});
+
+export const createProvider = (options: {
+  readonly complete?: (
+    request: ProviderRequest,
+    index: number,
+  ) => ProviderFinished | Promise<ProviderFinished>;
+  readonly stream?: (
+    request: ProviderRequest,
+    index: number,
+  ) => AsyncIterable<ProviderStreamEvent>;
+}): ProviderFake => {
+  const requests: ProviderRequest[] = [];
+
+  return {
+    requests,
+    provider: {
+      metadata: {
+        id: 'fake',
+        name: 'Fake',
+        baseUrl: 'https://fake.invalid',
+      },
+      capabilities: {
+        streaming: true,
+        tools: true,
+        reasoning: true,
+        modelListing: true,
+        oauth: false,
+        serviceTier: false,
+      },
+      complete: async (request) => {
+        const index = requests.length;
+        requests.push(request);
+
+        return options.complete?.(request, index) ?? completeFinish('done');
+      },
+      stream: async function* (request) {
+        const index = requests.length;
+        requests.push(request);
+
+        yield* options.stream?.(request, index) ?? [];
+      },
+      models: async () => [{ id: 'fake-model' }],
+      validateModel: async (model) => ({ id: model }),
+    },
+  };
+};
+
+export const createTools = (
+  options: {
+    readonly definitions?: readonly ToolDefinition[];
+    readonly results?: Readonly<Record<string, unknown>>;
+    readonly failure?: unknown;
+  } = {},
+): ToolFake => {
+  const calls: ToolCall[] = [];
+  const storage: ToolStorage = {
+    definitions: () => options.definitions ?? [],
+    calls: (turn: ToolTurn) => (turn.toolCalls ?? []).map(parseToolCall),
+    get: () => undefined,
+    execute: async (toolCall) => {
+      const parsed = 'payload' in toolCall ? toolCall : parseToolCall(toolCall);
+      calls.push(parsed);
+
+      if (options.failure !== undefined) {
+        throw options.failure;
+      }
+
+      return options.results?.[parsed.name];
+    },
+  };
+
+  return { storage, calls };
+};
+
+const parseToolCall = (request: ToolCallRequest): ToolCall => ({
+  id: request.id,
+  name: request.name,
+  payload: JSON.parse(request.arguments) as JsonValue,
+  ...(request.index !== undefined ? { index: request.index } : {}),
+});
+
+export const streamEvents = (
+  finish: ProviderFinished,
+): AsyncIterable<ProviderStreamEvent> =>
+  (async function* () {
+    yield {
+      type: 'response.started',
+      provider: 'fake',
+      model: 'fake-model',
+    };
+    yield {
+      type: 'text.delta',
+      delta: finish.text,
+    };
+    yield {
+      type: 'response.finished',
+      finish,
+    };
+  })();
+
+export const collect = async (
+  events: AsyncIterable<AgentEvent>,
+): Promise<readonly AgentEvent[]> => {
+  const output: AgentEvent[] = [];
+
+  for await (const event of events) {
+    output.push(event);
+  }
+
+  return output;
+};

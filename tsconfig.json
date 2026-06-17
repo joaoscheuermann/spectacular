@@ -20,6 +20,9 @@
     },
     {
       "path": "./packages/state-machine"
+    },
+    {
+      "path": "./packages/agent"
     }
   ]
 }
