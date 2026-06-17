@@ -23,6 +23,27 @@
     },
     {
       "path": "./packages/agent"
+    },
+    {
+      "path": "./tools/edit"
+    },
+    {
+      "path": "./tools/find"
+    },
+    {
+      "path": "./tools/grep"
+    },
+    {
+      "path": "./tools/terminal"
+    },
+    {
+      "path": "./tools/tree"
+    },
+    {
+      "path": "./tools/web"
+    },
+    {
+      "path": "./tools/write"
     }
   ]
 }
