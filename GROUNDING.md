@@ -94,6 +94,10 @@ Current package responsibilities:
   exchange and refresh, OAuth credential rendering, explicit local callback
   server and browser opener helpers, fetch transport wiring, and OpenAI OAuth
   profile defaults.
+- `packages/state-machine` owns typed in-memory state-machine control flow for
+  the TypeScript agent core. It provides embeddable state transition execution
+  only, without persistence, external services, daemon/worker behavior, or a
+  nested workflow framework.
 - `packages/tools` owns the provider-neutral tool definition, call, storage,
   and structured tool-error contracts for the TypeScript agent core.
 
