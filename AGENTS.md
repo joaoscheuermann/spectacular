@@ -101,6 +101,9 @@ For architecture-sensitive work:
 - Verify against current source and manifests before making implementation
   claims.
 - Keep the near-term product boundary explicit: TypeScript agent core only.
+- Treat CLI, daemon, worker, lifecycle service, TUI, slash-command, Rust
+  package, service, and multi-process architecture terminology as out-of-scope
+  markers only, unless the user explicitly expands the product scope.
 - Do not reintroduce CLI, daemon, worker, lifecycle service, TUI, slash-command,
   Rust package, or multi-process architecture unless the user explicitly asks
   for that scope.
@@ -118,8 +121,8 @@ When adding or changing TypeScript packages:
   `tsconfig.json`, and existing `packages/*` projects before making package
   claims.
 - Treat `packages/<name>` as the Nx workspace location for product packages.
-  Do not add root-level product packages or revive old Rust package names
-  unless the user explicitly asks for that scope.
+  Do not add root-level product packages. Old Rust package names are out of
+  scope unless the user explicitly asks for that scope.
 - Create packages with the `@nx/js` generator when available, for example
   `npx nx generate @nx/js:library packages/<name> --bundler=tsc --config=project`.
 - After generation, inspect and keep the package-local `project.json`,
@@ -157,7 +160,7 @@ When spawning or instructing a sub-agent, pass explicit context instead of
 assuming hidden conversation state.
 
 Every handoff must explicitly tell the child agent that it is the sub-agent
-for that handoff and that its role is to execute the worker assignment
+for that handoff and that its role is to execute the handoff assignment
 described by the main agent. A sub-agent is not responsible for orchestrating
 the overall task, spawning further sub-agents, or satisfying main-agent-only
 handoff rules unless the main agent explicitly assigns that responsibility.
@@ -189,12 +192,12 @@ Use the narrowest reliable proof for the change:
   `npx nx run <project>:typecheck`, `npx nx test <project>`, or
   `npx nx build <project>`.
 - Nx/package changes: prefer documented `npx nx` targets and `npx nx show
-  projects`.
+projects`.
 - Formatting changes: use the repository formatter when configured.
 - Rust checks are only relevant when the task explicitly targets legacy Rust
   artifacts that still exist.
 
-If validation is blocked by missing tools, sandbox limits, external services,
+If validation is blocked by missing tools, sandbox limits, external integrations,
 or time, report the blocker and residual risk.
 
 ## Final Response Expectations

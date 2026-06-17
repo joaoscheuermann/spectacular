@@ -40,6 +40,11 @@ worker service, TUI, lifecycle manager, or broader software-development
 platform. Do not revive those old boundaries unless the user explicitly
 reintroduces them.
 
+When this file mentions legacy or host-surface terms such as CLI, daemon,
+worker service, lifecycle manager, TUI, slash-command, Rust package, service,
+or multi-process architecture, those terms are out-of-scope markers for the
+current product direction. They are not current architecture responsibilities.
+
 For now, "the agent" means the core runtime that can eventually own:
 
 - Prompt and message handling.
@@ -96,15 +101,15 @@ Current package responsibilities:
   profile defaults.
 - `packages/state-machine` owns typed in-memory state-machine control flow for
   the TypeScript agent core. It provides embeddable state transition execution
-  only, without persistence, external services, daemon/worker behavior, or a
+  only, without persistence, external integrations, daemon/worker behavior, or a
   nested workflow framework.
 - `packages/tools` owns the provider-neutral tool definition, call, storage,
   and structured tool-error contracts for the TypeScript agent core.
 
 If a task needs a new package layout, inspect the current manifests first and
 choose the smallest TypeScript structure that supports the agent-only goal.
-Avoid introducing multiple packages, service boundaries, command surfaces, or
-process boundaries before the agent core requires them.
+Avoid introducing multiple packages, host/runtime boundaries, command surfaces,
+or process boundaries before the agent core requires them.
 
 ## Nx Monorepo Model
 
@@ -139,7 +144,7 @@ Before adding a package, write down the responsibility that makes it deeper
 than a folder. Valid reasons include a stable public contract, a separate test
 boundary, a dependency-direction boundary, or a second concrete consumer.
 Invalid reasons include speculative reuse, future host surfaces, or simply
-matching the names of old Rust packages.
+matching the names of old out-of-scope Rust packages.
 
 Consume packages through their public package entrypoint. Do not import across
 package boundaries with `../` paths or deep imports into another package's
@@ -192,8 +197,9 @@ agent core
   `-- returns a final result or typed failure
 ```
 
-Any future CLI, service, UI, remote protocol, or orchestration layer must be
-treated as a separate later decision.
+CLI, service, UI, remote protocol, and orchestration layers are out of scope
+unless the user explicitly expands the product beyond the embeddable
+TypeScript agent core.
 
 ## Built-In Tool Model
 
@@ -217,9 +223,9 @@ provider clients.
 
 ## Worktree Model
 
-Agents share the repository with the user and possibly other workers. The
-worktree may already be dirty. Treat existing modifications as user or worker
-work unless there is direct evidence otherwise.
+Agents share the repository with the user and possibly other contributors or
+sub-agents. The worktree may already be dirty. Treat existing modifications as
+user, maintainer, or sub-agent work unless there is direct evidence otherwise.
 
 Before editing, inspect the relevant files and current status. Before staging
 or committing, inspect status again and stage only the intended files.
@@ -283,7 +289,7 @@ approval for that scope.
 
 ### HC-004 Respect Minimal Boundaries
 
-Do not add package splits, service boundaries, provider coupling, tool
+Do not add package splits, host/runtime boundaries, provider coupling, tool
 privileges, persistence layers, or process orchestration before they are
 needed by the agent core.
 
@@ -294,7 +300,7 @@ session persistence, config schema, or runtime behavior.
 ### HC-005 Preserve Unrelated Worktree Changes
 
 Do not revert, overwrite, delete, stage, or commit unrelated user, maintainer,
-or worker changes.
+or sub-agent changes.
 
 Enforcement: inspect status before edits and commits. Keep write scope small.
 Use destructive recovery only with explicit user approval and verified target
@@ -337,16 +343,16 @@ user approval.
 
 ## Convention Parameters
 
-| ID | Convention | Default | Deviation rule |
-| -- | ---------- | ------- | -------------- |
-| CP-001 | Prefer the agent-only direction. | Keep new product work focused on the TypeScript agent core. | Explain why the task needs a larger product surface. |
-| CP-002 | Prefer narrow, evidence-backed changes. | Edit only the files needed for the task and validate the behavior touched. | Explain why a broader change is required. |
-| CP-003 | Prefer TypeScript and Nx-native commands. | Use configured TypeScript, Nx, and formatter commands before ad hoc substitutes. | Explain tool absence, sandbox limits, or why a fallback proves the claim. |
-| CP-004 | Prefer small interfaces over early frameworks. | Add minimal TypeScript contracts that can be tested directly. | Explain why a larger abstraction is justified now. |
-| CP-005 | Prefer progressive discovery. | Read this grounding, task-relevant instructions, manifests, and nearby code needed for the task; avoid broad scans by default. | Broaden search only when the task crosses boundaries or evidence is missing. |
-| CP-006 | Prefer durable provenance. | Name changed files, validation commands, decisions, and generated artifacts. | Explain why provenance cannot be recorded. |
-| CP-007 | Prefer implementation over chat-only advice. | Land requested repository deliverables in files and verify them. | Explain any blocker that prevents file changes. |
-| CP-008 | Prefer Nx-managed package boundaries. | Create and consume TypeScript packages through Nx-visible `packages/*` projects and public package entrypoints. | Explain why a folder, manual scaffold, or direct source import is safer for the task. |
+| ID     | Convention                                     | Default                                                                                                                        | Deviation rule                                                                        |
+| ------ | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| CP-001 | Prefer the agent-only direction.               | Keep new product work focused on the TypeScript agent core.                                                                    | Explain why the task needs a larger product surface.                                  |
+| CP-002 | Prefer narrow, evidence-backed changes.        | Edit only the files needed for the task and validate the behavior touched.                                                     | Explain why a broader change is required.                                             |
+| CP-003 | Prefer TypeScript and Nx-native commands.      | Use configured TypeScript, Nx, and formatter commands before ad hoc substitutes.                                               | Explain tool absence, sandbox limits, or why a fallback proves the claim.             |
+| CP-004 | Prefer small interfaces over early frameworks. | Add minimal TypeScript contracts that can be tested directly.                                                                  | Explain why a larger abstraction is justified now.                                    |
+| CP-005 | Prefer progressive discovery.                  | Read this grounding, task-relevant instructions, manifests, and nearby code needed for the task; avoid broad scans by default. | Broaden search only when the task crosses boundaries or evidence is missing.          |
+| CP-006 | Prefer durable provenance.                     | Name changed files, validation commands, decisions, and generated artifacts.                                                   | Explain why provenance cannot be recorded.                                            |
+| CP-007 | Prefer implementation over chat-only advice.   | Land requested repository deliverables in files and verify them.                                                               | Explain any blocker that prevents file changes.                                       |
+| CP-008 | Prefer Nx-managed package boundaries.          | Create and consume TypeScript packages through Nx-visible `packages/*` projects and public package entrypoints.                | Explain why a folder, manual scaffold, or direct source import is safer for the task. |
 
 ## Enforcement Behavior
 
