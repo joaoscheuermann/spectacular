@@ -5,6 +5,9 @@
   "references": [
     {
       "path": "./packages/jsonl"
+    },
+    {
+      "path": "./packages/llms"
     }
   ]
 }

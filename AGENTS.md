@@ -55,6 +55,30 @@ which ones are being followed.
 - Do not silently skip validation. Run the relevant checks or state why they
   could not be run.
 
+## Agent Work Sequence
+
+For implementation-bearing work, agents should follow this sequence:
+
+1. Explore and understand the problem before proposing or editing. Read the
+   required grounding, instructions, relevant skill files, manifests, nearby
+   source, tests, and current behavior needed to identify constraints,
+   uncertainty, and the real ownership boundary.
+2. Create the architecture and define the implementation goals. State the
+   target shape, dependency direction, output files, validation proof,
+   non-goals, and stop conditions before handing off work. Keep the plan within
+   the current TypeScript agent-core scope unless the user explicitly expands
+   it.
+3. Handoff and orchestrate development to one or more sub-agents when code is
+   being changed. Give each sub-agent a bounded implementation assignment with
+   explicit context, read scope, write scope, validation expectation, and stop
+   condition. Coordinate sequencing, review returned work, and resolve
+   conflicts at the main-agent level.
+4. After implementation, orchestrate one or more focused review or validation
+   handoffs. These handoffs must review the code against
+   `.agents/skills/coding-conventions/SKILL.md`, the implementation goals,
+   `GROUNDING.md`, this `AGENTS.md`, and the relevant tests or configured
+   checks before the main agent claims completion.
+
 ## Grounding Enforcement
 
 Hard Constraints in `GROUNDING.md` are gates. If a request conflicts with a
@@ -123,10 +147,11 @@ resolve conflicts, and synthesize the final result. The main agent should not
 act as the primary code editor for code updates.
 
 Code-update delegation must cover both the implementation assignment and the
-focused validation assignment, even when the change is narrow. If a sub-agent
-mechanism is unavailable, blocked, or unsafe, stop before making code changes
-and report the blocker unless the user explicitly authorizes a scoped
-main-agent code edit.
+focused validation or review assignment, even when the change is narrow. The
+review assignment must explicitly use
+`.agents/skills/coding-conventions/SKILL.md`. If a sub-agent mechanism is
+unavailable, blocked, or unsafe, stop before making code changes and report the
+blocker unless the user explicitly authorizes a scoped main-agent code edit.
 
 When spawning or instructing a sub-agent, pass explicit context instead of
 assuming hidden conversation state.
