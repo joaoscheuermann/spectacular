@@ -88,6 +88,8 @@ Current package responsibilities:
 - `packages/llms` owns provider-facing model abstractions and provider
   adapters. Provider adapters translate neutral request contracts into native
   wire shapes.
+- `packages/messages` owns in-memory provider-ready conversation history for
+  the TypeScript agent core.
 - `packages/tools` owns the provider-neutral tool definition, call, storage,
   and structured tool-error contracts for the TypeScript agent core.
 
