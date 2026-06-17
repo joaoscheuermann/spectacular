@@ -4,6 +4,7 @@
 dist
 tmp
 out-tsc
+.doric
 
 # dependencies
 node_modules

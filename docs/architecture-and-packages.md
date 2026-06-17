@@ -10,11 +10,11 @@ The Rust workspace is declared in `Cargo.toml` and contains these packages:
 
 | Package     | Path                 | Responsibility                                                                                                                                                                                                                                                 |
 | ----------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `cli`       | `packages/cli`       | `doric` CLI entry point, application composition, config command output, chat orchestration, session persistence, lifecycle client commands, daemon startup command, and adapters between command, agent, TUI, provider, tool, daemon, and lifecycle packages. |
+| `cli`       | `packages/cli`       | `doric` CLI entry point, application composition, config command output, chat orchestration, session persistence, lifecycle client commands, workflow command subcommands, daemon startup command, and adapters between command, agent, TUI, provider, tool, daemon, and lifecycle packages. |
 | `agent`     | `packages/agent`     | Agent runtime, event stream, context assembly, request lifecycle, queueing, cancellation, retries, provider streaming, tool loop, and store contracts.                                                                                                         |
-| `lifecycle` | `packages/lifecycle` | Shared lifecycle domain types, worker identity/status/event models, redaction helpers, repository identity parsing, and generated gRPC/protobuf client/server contracts.                                                                                       |
-| `daemon`    | `packages/daemon`    | `doric-daemon` application, lifecycle gRPC server, worker registry, worker root/layout preparation, worker process launch, authenticated worker-session attachment, command routing, and event replay/streaming.                                               |
-| `worker`    | `packages/worker`    | `doric-worker` application, daemon-controlled worker runtime, repository preparation, prompt-agent execution, worker-local provider/runtime selection, shared tool registration for prepared repos, state models, and lifecycle event/status reporting.        |
+| `lifecycle` | `packages/lifecycle` | Shared lifecycle domain types, worker identity/status/event models, workflow command envelopes, redaction helpers, repository identity parsing, and generated gRPC/protobuf client/server contracts.                                                             |
+| `daemon`    | `packages/daemon`    | `doric-daemon` application, lifecycle gRPC server, worker registry, worker root/layout preparation, worker process launch, authenticated worker-session attachment, input/workflow command routing, and event replay/streaming.                                |
+| `worker`    | `packages/worker`    | `doric-worker` application, daemon-controlled worker runtime, repository preparation, worker-local workflow orchestration, prompt-agent execution, structured planning artifact output, worker-local provider/runtime selection, shared tool registration for prepared repos, state models, and lifecycle event/status reporting.        |
 | `llms`      | `packages/llms`      | Provider traits and types, provider registry, OpenAI/OpenRouter integrations, model metadata, streaming DTOs, auth flow, and provider debug logging.                                                                                                           |
 | `tools`     | `packages/tools`     | Built-in host tools for file search, grep, tree, terminal execution, edit/write operations, diff previews, and web search/open/find.                                                                                                                           |
 | `tui`       | `packages/tui`       | IOCraft terminal UI state, actions, reducers, layout, rendering model, prompt editing, selection, transcript components, and runtime glue.                                                                                                                     |
@@ -70,12 +70,14 @@ contract package. It uses `build.rs` plus the v1 protobuf stack
 `daemon` depends on `lifecycle` and `config`, but not on `worker` as a Rust
 crate. It launches the `doric-worker` binary as an external sibling process and
 passes a worker id, daemon address, one-time token, and worker root over the
-process command line.
+process command line. It serves both the lifecycle service used by the CLI and
+the worker-session service used by spawned workers.
 
 `worker` depends on `agent`, `config`, `lifecycle`, `llms`, and `tools`.
-Provider and agent runtime composition for lifecycle jobs is worker-local in
-v1, while normal interactive chat provider/runtime composition remains in
-`cli`.
+It parses daemon launch arguments, attaches to the daemon over the
+bidirectional worker-session gRPC stream, and owns worker-local provider and
+agent runtime composition for lifecycle jobs. Normal interactive chat
+provider/runtime composition remains in `cli`.
 
 ## Runtime Flow
 
@@ -97,7 +99,11 @@ doric binary (`cli`)
    |                                  v
    |                              worker process (`doric-worker`)
    |                                  |
-   |                                  +-- repo preparation using external Git
+   |                                  +-- daemon-session gRPC attach plus input/workflow command stream
+   |                                  |
+   |                                  +-- repo preparation using the worker OS-backed Git runner
+   |                                  +-- worker-local workflow state, events, gates, typed workflow commands, receipts, checkpoints, command validation evidence, scoped commit checkpoints, handover artifacts, artifact validation, and STATE.md projection
+   |                                  +-- phase-agent receipts, structured planning artifact output, and blocked rows where execution remains unavailable
    |                                  +-- worker-local provider/runtime composition
    |                                  +-- shared tools registered against worker repo
    |

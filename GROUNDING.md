@@ -88,7 +88,7 @@ The Cargo workspace contains these active packages:
 | `agent` | Model/tool runtime, context assembly, request lifecycle, event stream, queueing, cancellation, retries, provider streaming, tool loop, token accounting, and store contracts. |
 | `lifecycle` | Shared lifecycle domain types, worker identity/status/event models, redaction helpers, repository identity parsing, and generated gRPC/protobuf client and server contracts. |
 | `daemon` | `doric-daemon` binary, lifecycle gRPC server, worker registry, worker root preparation, worker process launch, authenticated worker-session attachment, command routing, and lifecycle event replay/streaming. |
-| `worker` | `doric-worker` binary, daemon-controlled worker runtime, repository preparation, prompt-agent execution, worker-local provider/runtime selection, shared tool registration for prepared repositories, worker state, and lifecycle reporting. |
+| `worker` | `doric-worker` binary, daemon-controlled worker runtime, repository preparation, worker-local workflow orchestration, prompt-agent execution, worker-local provider/runtime selection, shared tool registration for prepared repositories, worker state, and lifecycle reporting. |
 | `llms` | Provider traits and types, provider registry, OpenAI/OpenRouter integrations, model metadata, streaming data transfer objects, authentication flow, and provider debug logging. |
 | `tools` | Built-in host tools for file search, grep, tree views, terminal execution, edit/write operations, diff previews, and web search/open/find. Tools implement the agent package's tool contract. |
 | `tui` | Legacy terminal UI package. Do not add future product functionality here unless the task is explicitly retiring or maintaining existing behavior. |
@@ -171,6 +171,7 @@ daemon lifecycle service
 worker process
   |
   +-- prepare repository working area
+  +-- execute worker-local workflow orchestration
   +-- select worker-local provider/runtime
   +-- register shared tools
   +-- execute specialized lifecycle agents
@@ -212,10 +213,113 @@ Provider credentials and model slot configuration belong in `config`.
 ## Doric Workflow Model
 
 Doric's target spec-driven workflow uses durable run directories plus a
-workflow harness. Once implemented, harness-managed structured state and
-events are authoritative for legal workflow state transitions. Until that
-harness exists, this section describes the implementation contract; agents must
-not claim that current code already enforces these transitions.
+workflow harness. A first worker-local workflow orchestrator slice exists in
+`packages/worker/src/workflow`: it persists `state/workflow/events.jsonl`,
+maintains `state/workflow/snapshot.json`, writes
+`state/workflow/projection-manifest.json`, regenerates `artifacts/STATE.md`,
+starts the root workflow at `prompt`, requests the `prompt_to_prd_alignment`
+gate only after durable `PROMPT.md` records canonical prompt sections, explicit
+no-blocking-scope-question evidence, and Prompt Reflection status
+`ready_for_extraction` or `ready_with_warnings`, records an accepted prompt
+requirements receipt, registers required-agent
+receipt rows, enforces receipt status transitions, promotes accepted PRD/TDD
+artifacts only at their expected paths, verifies published artifact evidence
+exists under `artifacts/` before appending the corresponding workflow event,
+requests PRD-to-TDD and TDD-to-decomposition gates after accepted artifacts plus
+accepted receipts,
+requests decomposition-to-development
+approval after accepted decomposition receipts plus contiguous efforts, and
+requires the active development effort to be started, validated, given
+worktree and staging checkpoint evidence, unlocked, and given a commit
+checkpoint before it can be marked done. The orchestrator can write
+Git-backed worktree and staging checkpoint evidence from read-only status and
+diff commands before recording those checkpoints. It can also write
+command-backed red/green/review validation evidence from injected
+repository-local validation runners before recording those validations. It can
+create a scoped Git commit checkpoint through an injected Git runner after
+preflighting effort-completion legality and verifying staged paths are within
+caller-provided allowed scopes. The worker repo boundary includes an OS-backed
+Git command runner, and the worker runtime includes a production repo-preparer
+adapter for external clone execution. Development completion now requires
+typed red or red-exception evidence, green evidence, reviewer approval
+evidence, accepted effort-scoped development role receipts, durable worktree
+and staging checkpoint artifacts, no active locks, and a non-empty commit
+checkpoint. Completion of the final effort enters `handover`; the worker can
+generate a handover report, artifact index, and final validation summary from
+canonical workflow state, and explicit close approval can then complete the
+root workflow. The worker runtime now has a workflow execution boundary that
+runs after workflow gate answers and can generate ready handover artifacts
+without re-opening a rejected close gate. Spawned phase-agent rows preserve a
+concrete run handle as receipt evidence until a durable receipt path is
+submitted. The daemon now serves the bidirectional worker-session gRPC
+transport, and the `doric-worker` binary parses daemon launch arguments,
+attaches to that session, and runs the worker-session runtime with production
+repo preparation. The worker binary now has a production prompt runner that
+selects the worker-local provider/runtime from config and model cache, executes
+the prompt agent, writes `artifacts/PROMPT.md`, and returns prompt events to the
+session runtime. It also has a production phase-agent runner for PRD, TDD,
+decomposition, and active-effort development receipt generation: planning
+roles use read-only tools, development roles use role-appropriate tools, the
+runner advances registered required-agent rows in canonical role order,
+including PRD/TDD generation, proximity, reflection, tournament, evolution,
+and promotion roles plus decomposition extraction, impact, planning,
+proximity, validation, ranking, evolution, and publisher roles, writes
+durable receipt artifacts under `artifacts/<phase>/receipts/`, and submits and
+accepts those receipt paths through canonical workflow state. If a role starts,
+submits, blocks, or is rejected before acceptance, later same-phase roles wait.
+The runner can also consume structured phase-agent output with explicit
+`promotion_ready` plus typed `promotion_evidence`: PRD and TDD publication
+requires generation, proximity, reflection, ranking, evolution, `zero_gap`,
+and `champion_confident` evidence from the PRD/TDD promotion role, and
+decomposition publication requires extraction, impact, effort-plan,
+proximity, ranking, evolution, and `coverage_validated` evidence from the
+decomposition publisher role. It writes phase-owned artifact payloads under
+`artifacts/`, limits non-promotion planning roles to phase-local candidate,
+agent-record, log, manifest, or proximity artifacts, rejects accepted artifact
+path writes unless the promotion role sets `promotion_ready` with required
+evidence, allows PRD/TDD promotion roles to write active gap reports at
+`prd/GAPS.md` or `tdd/GAPS.md`, rejects `promotion_ready` payloads that include
+an active PRD/TDD gap report, publishes `prd/PRD.md` or `tdd/TDD.md` through the
+existing orchestrator gates only when accepted receipts and canonical artifacts
+are present and the relevant gap report is absent, empty, or explicitly
+superseded, and records a
+decomposition package from `FEATURES.md` plus contiguous `efforts/NN_*.md`
+files only after pre-write validation proves the listed effort order and
+durable effort artifact payloads match. Once decomposition-to-development approval has
+entered the root `development` step, the workflow runner can start the next
+legal `todo` effort and then execute development required-agent rows through
+the same workflow runner, producing durable accepted receipts for the active
+effort. Structured development role output can request worker-executed
+red/green/review validation commands, and the runner records validation
+evidence only after the injected command runner returns the expected status.
+When a Git runner is available, the workflow runner can then capture
+Git-backed worktree/staging checkpoint evidence for the active effort after
+accepted development receipts and red/green/review evidence exist. A
+development reviewer can also emit a structured scoped commit request; after
+checkpoint evidence exists, the runner inspects Git status for explicit
+reviewer-provided stage paths, stages only those paths through the injected Git
+runner, re-verifies staged paths against the allowed commit scope, and then
+completes the effort through the existing scoped Git commit boundary.
+The lifecycle contract and daemon session now include a typed
+`WorkflowCommand` route: the CLI can send workflow subcommands, the daemon
+service accepts an `ApplyWorkflowCommand` request, forwards it through the
+attached worker session as `DaemonFrame::WorkflowCommand`, and the worker
+applies the command through existing orchestrator methods to publish phase
+artifacts, submit or review receipts, record decomposition effort order, start
+the active development effort, run command-backed red/green/review validation
+evidence, capture Git worktree/staging checkpoints, and complete an effort via
+a scoped Git commit checkpoint.
+This is command routing only; the worker remains the authority for workflow
+legality.
+
+This is not a generic workflow engine. The current Rust implementation has the
+root workflow, linear phase subworkflow roles, evidence-gated phase promotion,
+development proof automation, and handover close flow. Dynamic nested
+supervisor engines, adaptive repair-cycle scheduling, automated reviewer agents
+beyond the current phase-agent roles, and broader autonomous command discovery
+beyond structured validation and reviewer-provided stage/commit requests remain
+target behavior unless current source proves a specific slice exists. Agents
+must not claim that current code supports those future dynamic behaviors.
 
 Each run directory still contains the durable feature artifacts: a generated
 `STATE.md` human-readable projection and audit ledger, approved prompts,
@@ -228,16 +332,17 @@ canonical workflow state once the harness exists.
 Workflow phases are ordered:
 
 ```text
-prompt -> prd -> technical_design -> decomposition -> development -> handover -> complete
+prompt -> prd -> tdd -> decomposition -> development -> handover -> complete
 ```
 
 Phase gates are real gates:
 
 - Prompt work produces an aligned prompt artifact and must stop for
   prompt-to-PRD alignment before PRD generation.
-- PRD work must produce a zero-gap accepted product artifact before technical
-  design.
-- Technical design must pass staged evaluation before decomposition.
+- PRD work must produce a champion-confident zero-gap accepted product artifact
+  before technical design.
+- Technical design must produce champion-confident zero-gap accepted technical
+  design before decomposition.
 - Decomposition must produce validated, ordered effort files before
   implementation.
 - Development processes efforts in strict numeric order, one effort at a time.

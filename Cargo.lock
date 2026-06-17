@@ -3468,7 +3468,11 @@ dependencies = [
  "config",
  "lifecycle",
  "llms",
+ "serde",
+ "serde_json",
  "tokio",
+ "tokio-stream",
+ "tonic",
  "tools",
 ]
 
