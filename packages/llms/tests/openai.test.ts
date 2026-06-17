@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { createTool, createToolStorage } from 'tools';
+import { z } from 'zod';
+
 import {
   ProviderErrorObject,
   createOpenAiProvider,
@@ -54,6 +57,36 @@ test('maps OpenAI Responses DTO with instructions tools reasoning and fast servi
       type: 'function_call_output',
       call_id: 'call_1',
       output: 'tool output',
+    },
+  ]);
+});
+
+test('accepts tool definitions from shared tool storage', () => {
+  const tools = createToolStorage([
+    createTool({
+      name: 'lookup',
+      description: 'Lookup context',
+      schema: z.object({ query: z.string() }),
+      execute: ({ query }) => query,
+    }),
+  ]);
+
+  const body = openAiBody(
+    {
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Use the tool.' }],
+      tools: tools.definitions(),
+    },
+    false,
+  );
+
+  assert.deepEqual(body.tools, [
+    {
+      type: 'function',
+      name: 'lookup',
+      description: 'Lookup context',
+      parameters: tools.definitions()[0]?.inputSchema,
+      strict: true,
     },
   ]);
 });

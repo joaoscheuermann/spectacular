@@ -10,10 +10,5 @@
     "tsBuildInfoFile": "dist-tests/tsconfig.spec.tsbuildinfo",
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts"],
-  "references": [
-    {
-      "path": "../tools/tsconfig.lib.json"
-    }
-  ]
+  "include": ["src/**/*.ts", "tests/**/*.ts"]
 }

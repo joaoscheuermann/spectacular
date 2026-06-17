@@ -1,17 +1,16 @@
 {
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
-  "name": "llms",
+  "name": "tools",
   "projectType": "library",
-  "sourceRoot": "packages/llms/src",
+  "sourceRoot": "packages/tools/src",
   "targets": {
     "test": {
       "executor": "nx:run-commands",
-      "dependsOn": ["^build"],
       "outputs": ["{projectRoot}/dist-tests"],
       "options": {
         "commands": [
-          "tsc -p packages/llms/tsconfig.spec.json",
-          "node --test packages/llms/dist-tests/tests/*.test.js"
+          "tsc -p packages/tools/tsconfig.spec.json",
+          "node --test packages/tools/dist-tests/tests/*.test.js"
         ],
         "parallel": false
       }

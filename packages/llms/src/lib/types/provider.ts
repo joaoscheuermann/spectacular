@@ -1,7 +1,9 @@
-export type JsonPrimitive = string | number | boolean | null;
-export type JsonArray = readonly JsonValue[];
-export type JsonObject = { readonly [key: string]: JsonValue };
-export type JsonValue = JsonPrimitive | JsonArray | JsonObject;
+import type {
+  ToolCallRequest,
+  ToolDefinition,
+} from 'tools';
+
+export type { JsonArray, JsonObject, JsonPrimitive, JsonValue } from 'tools';
 
 export type ProviderId = 'openai' | 'openrouter' | string;
 
@@ -46,19 +48,9 @@ export type ProviderMessage = {
   readonly toolCalls?: readonly ProviderToolCall[];
 };
 
-export type ToolManifest = {
-  readonly name: string;
-  readonly description?: string;
-  readonly inputSchema: JsonObject;
-  readonly strict?: boolean;
-};
+export type ToolManifest = ToolDefinition;
 
-export type ProviderToolCall = {
-  readonly id: string;
-  readonly name: string;
-  readonly arguments: string;
-  readonly index?: number;
-};
+export type ProviderToolCall = ToolCallRequest;
 
 export type ReasoningRequest = {
   readonly effort?: 'minimal' | 'low' | 'medium' | 'high';
@@ -157,7 +149,7 @@ export type ProviderStreamEvent =
 export type ProviderRequest = {
   readonly model: string;
   readonly messages: readonly ProviderMessage[];
-  readonly tools?: readonly ToolManifest[];
+  readonly tools?: readonly ToolDefinition[];
   readonly temperature?: number;
   readonly maxOutputTokens?: number;
   readonly flags?: ProviderCallFlags;

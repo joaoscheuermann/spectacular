@@ -8,6 +8,9 @@
     },
     {
       "path": "./packages/llms"
+    },
+    {
+      "path": "./packages/tools"
     }
   ]
 }

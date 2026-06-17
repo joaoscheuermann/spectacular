@@ -83,6 +83,14 @@ TypeScript agent core
   `-- minimal state/persistence interfaces when justified
 ```
 
+Current package responsibilities:
+
+- `packages/llms` owns provider-facing model abstractions and provider
+  adapters. Provider adapters translate neutral request contracts into native
+  wire shapes.
+- `packages/tools` owns the provider-neutral tool definition, call, storage,
+  and structured tool-error contracts for the TypeScript agent core.
+
 If a task needs a new package layout, inspect the current manifests first and
 choose the smallest TypeScript structure that supports the agent-only goal.
 Avoid introducing multiple packages, service boundaries, command surfaces, or
@@ -138,9 +146,14 @@ future host or tests
   v
 agent core contracts
   |-- provider adapters depend on core provider interfaces
+  |-- provider abstractions may depend on neutral tool contracts
   |-- tool implementations depend on core tool interfaces
   `-- shared utilities are extracted only after concrete reuse exists
 ```
+
+The current package dependency direction is `llms -> tools`. `tools` must not
+import from or depend on `llms`; provider adapters remain responsible for
+OpenAI, OpenRouter, or other provider-native tool wire shapes.
 
 The core agent package should not depend on future host surfaces, command
 surfaces, daemon/service packages, UI packages, or provider implementations

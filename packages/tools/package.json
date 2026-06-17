@@ -1,5 +1,5 @@
 {
-  "name": "llms",
+  "name": "tools",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -16,7 +16,7 @@
     }
   },
   "dependencies": {
-    "tools": "0.0.1",
-    "tslib": "^2.3.0"
+    "tslib": "^2.3.0",
+    "zod": "^4.4.3"
   }
 }
