@@ -14,12 +14,13 @@ For non-trivial work, use this order:
 
 1. `GROUNDING.md`.
 2. This `AGENTS.md`.
-3. The relevant skill under `.agents/skills/`.
-4. Nearby source, tests, manifests, schemas, generated contracts, or Doric run
-   artifacts needed for the task.
+3. The relevant skill under `.agents/skills/`, when its trigger matches the
+   task.
+4. Nearby source, tests, manifests, schemas, generated contracts, or artifacts
+   needed for the task.
 
 Read only enough context to act correctly. Broaden the search when evidence is
-missing or the task crosses package or workflow boundaries.
+missing or the task crosses package, runtime, or workflow boundaries.
 
 ## Skill Routing
 
@@ -27,10 +28,6 @@ Use repository skills when their trigger matches the task:
 
 - `.agents/skills/coding-conventions/SKILL.md` for implementation and testing
   standards.
-- `.agents/skills/doric/SKILL.md` for Doric feature workflows, sub-agent
-  coordination, PRD/TDD/decomposition/development/handover artifacts,
-  harness-owned workflow gates, generated `STATE.md` audit projections,
-  required-agent receipts, validation records, or effort checkpoints.
 - `.agents/skills/agent-skill-authoring/SKILL.md` for creating or changing
   skills.
 
@@ -44,6 +41,10 @@ which ones are being followed.
   claims.
 - Preserve unrelated dirty worktree changes.
 - Keep edits scoped to the user request and the relevant ownership boundary.
+- For code updates, follow the Sub-Agent Handoffs rule: the main agent
+  orchestrates while sub-agents perform implementation and focused validation.
+- Treat this repository as a TypeScript agent-core project unless the user
+  explicitly expands the scope.
 - Prefer existing package patterns, helper APIs, and tests before adding new
   abstractions.
 - Use `rg` or the fastest available local search tool first. Use a bounded
@@ -68,79 +69,108 @@ Convention Parameters in `GROUNDING.md` are defaults. Follow them when
 practical. When deviating, record the reason in the artifact, state ledger, or
 final response when useful.
 
-## Doric Workflow Rules
+## Architecture Work
 
-When the user asks to run or continue a Doric feature workflow:
+For architecture-sensitive work:
 
-- Load `.agents/skills/doric/SKILL.md`.
-- Treat harness-managed structured state/events as the target authority for
-  legal workflow transitions once the harness exists. Until then, use
-  `STATE.md` as the durable bootstrap projection/audit ledger and do not claim
-  current code already enforces harness transitions.
-- Use the live `.doric/<MM-YYYY>/<DD>/<timestamp>-<feature_name>/` run
-  directory when one exists.
-- Read harness state/events when available, plus generated `STATE.md`, current
-  phase, approvals, required-agent rows, agent receipts, effort order,
-  validation records, active locks, and worktree status before choosing the
-  next action.
-- Do not skip legal phase transitions.
-- Stop after `PROMPT.md` to raise open questions and record
-  `prompt_to_prd_alignment` before PRD generation.
-- Do not advance gated phases while required-agent rows are pending, spawned,
-  blocked, or rejected.
-- Process development efforts strictly in numeric order.
-- Commit only approved effort-owned changes and required Doric artifacts when
-  an effort checkpoint requires a commit.
+- Treat `GROUNDING.md` as the architecture overview and validity contract.
+- Verify against current source and manifests before making implementation
+  claims.
+- Keep the near-term product boundary explicit: TypeScript agent core only.
+- Do not reintroduce CLI, daemon, worker, lifecycle service, TUI, slash-command,
+  Rust package, or multi-process architecture unless the user explicitly asks
+  for that scope.
+- Keep dependency direction explicit when adding TypeScript modules or packages.
+- Update `GROUNDING.md` when the task intentionally changes product scope,
+  package responsibilities, dependency direction, provider composition,
+  built-in tools, event streaming, user-input handling, session persistence,
+  config schema, runtime behavior, or vendored dependency strategy.
+
+## Nx Monorepo Work
+
+When adding or changing TypeScript packages:
+
+- Inspect `package.json`, `nx.json`, `tsconfig.base.json`, root
+  `tsconfig.json`, and existing `packages/*` projects before making package
+  claims.
+- Treat `packages/<name>` as the Nx workspace location for product packages.
+  Do not add root-level product packages or revive old Rust package names
+  unless the user explicitly asks for that scope.
+- Create packages with the `@nx/js` generator when available, for example
+  `npx nx generate @nx/js:library packages/<name> --bundler=tsc --config=project`.
+- After generation, inspect and keep the package-local `project.json`,
+  `package.json`, and `tsconfig*.json` files coherent with the root solution
+  `tsconfig.json`.
+- Give each new package one clear responsibility that is deeper than a folder:
+  a stable public contract, a test boundary, a dependency-direction boundary,
+  or a proven second consumer.
+- Export package APIs through `src/index.ts` and consume sibling packages by
+  their package entrypoint, not by `../` paths or deep imports into private
+  source files.
+- Declare workspace package dependencies in the consuming package metadata
+  when metadata exists. Prefer Nx project references and package metadata over
+  ad hoc root `compilerOptions.paths` aliases.
+- Run `npx nx sync` when TypeScript project references need reconciliation, and
+  validate package changes with `npx nx show projects` plus the affected
+  `typecheck`, `test`, or `build` targets.
 
 ## Sub-Agent Handoffs
 
+For tasks that update code, explicitly delegate implementation work to
+sub-agents. The main agent's role is orchestration: define bounded assignments,
+pass the required context, coordinate sequencing, review returned changes,
+resolve conflicts, and synthesize the final result. The main agent should not
+act as the primary code editor for code updates.
+
+Code-update delegation must cover both the implementation assignment and the
+focused validation assignment, even when the change is narrow. If a sub-agent
+mechanism is unavailable, blocked, or unsafe, stop before making code changes
+and report the blocker unless the user explicitly authorizes a scoped
+main-agent code edit.
+
 When spawning or instructing a sub-agent, pass explicit context instead of
 assuming hidden conversation state.
+
+Every handoff must explicitly tell the child agent that it is the sub-agent
+for that handoff and that its role is to execute the worker assignment
+described by the main agent. A sub-agent is not responsible for orchestrating
+the overall task, spawning further sub-agents, or satisfying main-agent-only
+handoff rules unless the main agent explicitly assigns that responsibility.
+
+The sub-agent must still follow `GROUNDING.md`, the assignment scope, worktree
+safety rules, validation requirements, and any task-relevant skills or nearby
+source instructions included in the handoff.
 
 Include:
 
 - `GROUNDING.md`.
 - This `AGENTS.md`.
 - Relevant skill paths.
-- The Doric run directory and artifact paths when applicable.
 - The specific read scope, write scope, output path, validation expectation,
   and stop condition.
 - A reminder that the sub-agent is not alone in the codebase and must not
   revert edits made by others.
 
-If the required sub-agent mechanism is unavailable for a gated Doric role,
-record the role as blocked through canonical workflow state and ensure the
-`STATE.md` projection shows it; until the harness exists, mark the role blocked
-in `STATE.md` and stop. Do not fabricate sub-agent proof.
-
-## Architecture Work
-
-For architecture-sensitive work:
-
-- Treat `GROUNDING.md` as the architecture overview and validity contract.
-- Verify against source and manifests when implementation details are unclear
-  or when a task may change package responsibilities.
-- Keep dependency direction explicit.
-- Update `GROUNDING.md` when the task intentionally changes package
-  responsibilities, dependency direction, provider composition, built-in tools,
-  lifecycle command behavior, event streaming, user-input request handling,
-  session persistence, config schema, lifecycle contracts, daemon or worker
-  behavior, or vendored dependency strategy.
+If a required sub-agent mechanism is unavailable, do not fabricate proof of
+sub-agent execution. Record the blocker and continue only when the task can be
+completed safely without that proof.
 
 ## Validation
 
 Use the narrowest reliable proof for the change:
 
 - Docs-only changes: check Markdown hygiene and `git diff --check` when useful.
-- Rust changes: prefer the relevant `cargo fmt`, `cargo test`, `cargo clippy`,
-  `cargo nextest`, or package-specific command.
-- Nx/package changes: prefer documented `npx nx` targets.
-- Doric workflow changes: validate harness gates when implemented, generated
-  `STATE.md` projection, required-agent receipts, effort order, and artifact
-  consistency.
+- TypeScript changes: prefer configured Nx targets such as
+  `npx nx run <project>:typecheck`, `npx nx test <project>`, or
+  `npx nx build <project>`.
+- Nx/package changes: prefer documented `npx nx` targets and `npx nx show
+  projects`.
+- Formatting changes: use the repository formatter when configured.
+- Rust checks are only relevant when the task explicitly targets legacy Rust
+  artifacts that still exist.
 
-If validation is blocked by missing tools, sandbox limits, external services, or
-time, report the blocker and residual risk.
+If validation is blocked by missing tools, sandbox limits, external services,
+or time, report the blocker and residual risk.
 
 ## Final Response Expectations
 

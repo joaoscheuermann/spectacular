@@ -7,6 +7,8 @@ Use these standards for all implementation work unless a language-specific refer
 All tests must be placed in a dedicated `tests/` directory at the root of the relevant package, crate, or project segment.
 
 - **Format:** `tests/<test_file_name>.<ext>`
+- **TypeScript/JavaScript:** Prefer `tests/<unit-or-feature>.test.ts` or
+  `.test.js` unless project tooling requires another suffix.
 - **Rule:** Do not create inline test cases in production source files. Do not place test files alongside source files (e.g., `libs/auth/src/login.spec.ts` is forbidden).
 - **Rust Exception:** A minimal `#[cfg(test)] mod tests { include!(...) }` harness is permitted in source only to include a file from the `tests/` directory.
 
@@ -38,7 +40,15 @@ Use these rules for unit tests unless a language-specific framework imposes a st
 
 - **F.I.R.S.T.:** Tests should be fast, isolated/independent, repeatable without environmental state, and self-validating with a clear pass/fail result. Write them close to or before implementation.
 - **Arrange-Act-Assert:** Arrange preconditions, mock data, and dependencies; act by triggering one method or behavior; assert actual outcomes against expected outcomes.
-- **Naming:** Use `MethodUnderTest_Scenario_ExpectedBehavior`, adapting capitalization to the language or test framework. Test case names are exempt from context-driven brevity when this explicit scenario format improves diagnosis. Example: `withdrawFunds_whenBalanceIsSufficient_shouldDeductAmount`.
+- **Naming:** Use framework-native names that make the behavior, scenario, and
+  expected outcome clear. In TypeScript/JavaScript, prefer readable string test
+  names in `test(...)` or `it(...)`, such as
+  `writes one JSON line when append receives a record`; keep the unit under
+  test in the file name or a `describe(...)` block. Avoid compressed
+  underscore/camelCase names like
+  `append_whenCalledWithRecord_shouldWriteOneJsonLine` in TS/JS tests. In
+  identifier-based frameworks, preserve the same meaning in the language's
+  idiomatic casing.
 - **One logical concept:** Each test case should validate one scenario or concept so failures are easy to diagnose.
 
 ## 4. Unit Test Maintenance Rules

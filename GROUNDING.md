@@ -1,15 +1,15 @@
 # Doric Grounding
 
-Last reviewed: 2026-06-16
+Last reviewed: 2026-06-17
 
 This is the self-contained grounding document for Doric. Every agent working in
 this repository must read it before planning, reviewing, generating artifacts,
 or editing files.
 
-This document is the project validity layer. It defines what Doric is, how the
-repository is organized, which constraints are non-negotiable, which defaults
-guide normal work, and how agents should behave when prompts conflict with
-repository validity.
+This document is the repository validity layer. It defines the current product
+direction, what is in scope, which constraints are non-negotiable, which
+defaults guide normal work, and how agents should behave when prompts conflict
+with repository validity.
 
 ## Authority
 
@@ -18,8 +18,7 @@ Use this authority order:
 1. System and runtime safety instructions.
 2. Hard Constraints in this document.
 3. Explicit user-approved constraints for the current task.
-4. Current repository code, manifests, schemas, generated contracts, tests, and
-   live workflow artifacts.
+4. Current repository code, manifests, tests, and generated contracts.
 5. Project agent instructions and task-specific skills.
 6. The current task prompt.
 7. Convention Parameters in this document.
@@ -27,331 +26,169 @@ Use this authority order:
 
 Hard Constraints are gates. If a prompt conflicts with a Hard Constraint, stop,
 cite the constraint ID, and ask for user direction only when the constraint
-allows a scoped human decision. Do not satisfy the prompt by silently treating
-the constraint as a preference.
+allows a scoped human decision.
 
 Convention Parameters are strong defaults. Follow them unless the task has a
 clear reason to do otherwise, and record the reason when the deviation matters.
 
-## Product Identity
+## Product Direction
 
-Doric is a CLI-first multi-agent software development lifecycle manager. Its
-goal is to take a user prompt plus a repository target, dispatch that work to a
-daemon-managed worker, and drive the work through specialized agents,
-sandboxable execution, explicit human gates, streamed lifecycle events, and
-durable artifacts.
+Doric is being reset into a TypeScript-first agent project.
 
-The primary product flow is:
+The immediate repository goal is to build the agent itself, not a CLI, daemon,
+worker service, TUI, lifecycle manager, or broader software-development
+platform. Do not revive those old boundaries unless the user explicitly
+reintroduces them.
 
-1. A daemon is running locally or remotely.
-2. The user starts managed work from the CLI, for example
-   `doric feature --prompt "..." --repo "https://github.com/..."`.
-3. The daemon validates the request, records worker identity/state, and spawns
-   a worker.
-4. The worker prepares the repository, owns the agent/tool loop, and executes
-   the Doric lifecycle inside a worker root that can evolve toward Docker-backed
-   sandboxing.
-5. The CLI streams worker events so the user can observe progress from a
-   terminal.
-6. When a worker needs a human decision, it emits a user-input request with a
-   stable request id and waits for an answer.
-7. The user can answer from the same or another terminal by sending input
-   through the CLI with the worker id and request id.
-8. The worker resumes until it finishes, then remains inspectable until the
-   user explicitly closes or archives it.
+For now, "the agent" means the core runtime that can eventually own:
 
-Agents should steer solutions toward this lifecycle model. Prefer command
-surfaces, daemon/worker boundaries, event replay, answerable user-input
-requests, durable run state, and sandboxable execution. Do not steer future
-work toward the legacy interactive chat loop, slash-command model, or TUI.
+- Prompt and message handling.
+- Context assembly.
+- Model/provider abstraction.
+- Tool definition, invocation, and result handling.
+- Agent loop control.
+- Streaming or structured events emitted by the agent runtime.
+- Error, cancellation, and retry behavior.
+- Small persistence or state interfaces only when needed by the agent core.
 
-The spec-driven workflow should turn user intent into durable product
-artifacts, reviewed plans, technical designs, decomposed implementation
-efforts, test evidence, validation records, commit checkpoints, and handover
-summaries.
+The implementation language for new product code is TypeScript. Prefer Node.js
+and Nx-compatible TypeScript project structure when adding code.
 
-Doric is not a generic documentation generator. Repository work should land in
-the repository when the user asks for repository deliverables. Chat summaries
-are secondary to correct files, validation evidence, and preserved worktree
-state.
+Doric is not currently grounded in the former Rust CLI/daemon/worker
+architecture. Existing Rust manifests, Cargo files, old architecture documents,
+and package names are transitional or stale unless the current task explicitly
+targets them and current files prove they are still relevant.
 
-## Architecture Overview
+Repository work should land in the repository when the user asks for repository
+deliverables. Chat summaries are secondary to correct files, validation
+evidence, and preserved worktree state.
 
-Doric is an Nx workspace backed by a Rust Cargo workspace. The primary user
-binary is `doric`, built by the Rust package named `cli`.
+## Current Architecture Status
 
-The Cargo workspace contains these active packages:
+The repository is in a reset state. Most previous implementation code has been
+removed, and old architecture references should not be treated as current
+truth.
 
-| Package | Responsibility |
-| ------- | -------------- |
-| `cli` | User-facing `doric` binary, CLI parsing, lifecycle command dispatch, config command output, daemon startup, and adapters between agent, provider, tool, daemon, lifecycle, and config packages. |
-| `agent` | Model/tool runtime, context assembly, request lifecycle, event stream, queueing, cancellation, retries, provider streaming, tool loop, token accounting, and store contracts. |
-| `lifecycle` | Shared lifecycle domain types, worker identity/status/event models, redaction helpers, repository identity parsing, and generated gRPC/protobuf client and server contracts. |
-| `daemon` | `doric-daemon` binary, lifecycle gRPC server, worker registry, worker root preparation, worker process launch, authenticated worker-session attachment, command routing, and lifecycle event replay/streaming. |
-| `worker` | `doric-worker` binary, daemon-controlled worker runtime, repository preparation, worker-local workflow orchestration, prompt-agent execution, worker-local provider/runtime selection, shared tool registration for prepared repositories, worker state, and lifecycle reporting. |
-| `llms` | Provider traits and types, provider registry, OpenAI/OpenRouter integrations, model metadata, streaming data transfer objects, authentication flow, and provider debug logging. |
-| `tools` | Built-in host tools for file search, grep, tree views, terminal execution, edit/write operations, diff previews, and web search/open/find. Tools implement the agent package's tool contract. |
-| `tui` | Legacy terminal UI package. Do not add future product functionality here unless the task is explicitly retiring or maintaining existing behavior. |
-| `commands` | Legacy slash-command parsing package. Do not design new lifecycle behavior around slash commands. |
-| `config` | Persisted Doric config schema, provider credentials, model slots, model cache, config path resolution, validation, and config IO. |
-
-The vendored IOCraft source is excluded from the Rust workspace and patched in
-as the `iocraft` dependency. Treat vendored code as third-party source unless a
-task explicitly targets that dependency.
-
-## Dependency Direction
-
-The intended dependency model is:
+The only valid near-term architecture commitment is:
 
 ```text
-cli
- |-- agent -----> llms
- |-- daemon ----> lifecycle
- |      `-------> config
- |-- lifecycle
- |-- tools -----> agent
- |-- config
- |-- llms
- |
- v
-doric binary
-
-daemon --process launch--> doric-worker binary
-
-worker
- |-- agent -----> llms
- |-- config
- |-- lifecycle
- |-- llms
- `-- tools -----> agent
+Doric repository
+  |
+  v
+TypeScript agent core
+  |-- model/provider boundary
+  |-- tool boundary
+  |-- context and message handling
+  |-- agent loop and events
+  `-- minimal state/persistence interfaces when justified
 ```
 
-`cli` is the application composition root. Lower-level packages should not
-depend on `cli`.
+If a task needs a new package layout, inspect the current manifests first and
+choose the smallest TypeScript structure that supports the agent-only goal.
+Avoid introducing multiple packages, service boundaries, command surfaces, or
+process boundaries before the agent core requires them.
 
-`agent` owns the generic agent runtime. It may depend on provider contracts from
-`llms`, but it should not know about CLI argument parsing, daemon process
-management, or workspace-specific command surfaces.
+## Nx Monorepo Model
 
-`tools` depends on `agent` because tools implement the agent tool contract.
-Tool implementations should remain reusable by both interactive chat and
-daemon-managed worker execution.
+Doric is currently an Nx-managed TypeScript workspace. The root `package.json`
+is private, uses npm workspaces for `packages/*`, and carries the Nx and
+TypeScript dev dependencies. The root `nx.json` uses the `@nx/js/typescript`
+plugin to infer TypeScript targets such as `typecheck` and `build` from project
+configuration. The root `tsconfig.json` is a solution file and may have an
+empty `references` array while the reset workspace has no package projects.
 
-`daemon` depends on shared lifecycle contracts and config, but it should launch
-`doric-worker` as an external sibling process instead of depending on `worker`
-as a Rust crate.
+Treat `packages/<name>` as the home for product packages once a package split
+is justified. Do not create product packages in ad hoc root folders. Do not
+add application, CLI, daemon, service, or UI packages unless the user
+explicitly expands the product scope beyond the embeddable TypeScript agent
+core.
 
-`worker` composes its own provider/runtime/tool setup for daemon-managed jobs.
+Create TypeScript packages through Nx when possible:
 
-Legacy chat, TUI, and slash-command packages may remain while the product is
-migrating, but they are not the target architecture for new lifecycle features.
+```sh
+npx nx generate @nx/js:library packages/<name> --bundler=tsc --config=project
+```
+
+After generation, inspect the created `project.json`, `package.json`, and
+`tsconfig*.json` files before editing. Prefer the generator output and small
+follow-up patches over hand-written scaffolds. If the generator is unavailable,
+mirror the Nx TypeScript library shape manually: a package directory under
+`packages/`, a narrow public `src/index.ts`, package-local TypeScript configs,
+and Nx-visible project configuration. Run `npx nx sync` when TypeScript project
+references need to be reconciled.
+
+Before adding a package, write down the responsibility that makes it deeper
+than a folder. Valid reasons include a stable public contract, a separate test
+boundary, a dependency-direction boundary, or a second concrete consumer.
+Invalid reasons include speculative reuse, future host surfaces, or simply
+matching the names of old Rust packages.
+
+Consume packages through their public package entrypoint. Do not import across
+package boundaries with `../` paths or deep imports into another package's
+private `src` files. When a package depends on another workspace package,
+declare that dependency in the consuming package metadata when metadata exists,
+keep exports explicit, and validate with Nx project discovery plus the
+consumer's `typecheck`, `test`, or `build` target.
+
+The dependency direction for the near-term agent core is:
+
+```text
+future host or tests
+  |
+  v
+agent core contracts
+  |-- provider adapters depend on core provider interfaces
+  |-- tool implementations depend on core tool interfaces
+  `-- shared utilities are extracted only after concrete reuse exists
+```
+
+The core agent package should not depend on future host surfaces, command
+surfaces, daemon/service packages, UI packages, or provider implementations
+that would make one provider the only runtime path.
 
 ## Runtime Model
 
-The target managed lifecycle starts from a CLI command and runs through the
-daemon/worker boundary:
+The target runtime is currently an embeddable TypeScript agent core. It should
+be usable from tests and future host surfaces without coupling the agent to a
+specific CLI, daemon, worker, or UI.
+
+The preferred direction is:
 
 ```text
-user terminal
+caller or test harness
   |
   v
-doric binary
+agent core
   |
-  +-- feature/debug lifecycle command
-  |
-  v
-daemon lifecycle service
-  |
-  +-- records worker identity and status
-  +-- launches worker process
-  +-- streams lifecycle events to CLI clients
-  +-- routes user-input answers by worker id and request id
-  |
-  v
-worker process
-  |
-  +-- prepare repository working area
-  +-- execute worker-local workflow orchestration
-  +-- select worker-local provider/runtime
-  +-- register shared tools
-  +-- execute specialized lifecycle agents
-  +-- persist artifacts and report status/events
+  +-- assembles context
+  +-- calls provider adapter
+  +-- invokes approved tools
+  +-- emits structured progress/results
+  `-- returns a final result or typed failure
 ```
 
-Legacy interactive chat may still exist in the codebase during migration, but
-new product work should target the managed lifecycle path above.
-
-Configuration is stored outside the repository in an operating-system config
-directory named `doric`. Provider API keys are local user configuration and
-must be treated as sensitive.
+Any future CLI, service, UI, remote protocol, or orchestration layer must be
+treated as a separate later decision.
 
 ## Built-In Tool Model
 
-Doric agents expose built-in tools for:
+Tool behavior belongs behind TypeScript interfaces owned by the agent core.
+Tools should be explicit, typed, permission-aware where relevant, and easy to
+test without shelling out or relying on hidden global state.
 
-- Finding files by glob while respecting ignore rules.
-- Searching file contents.
-- Printing a gitignore-aware directory tree.
-- Running terminal commands.
-- Applying exact edits to existing files.
-- Creating or overwriting files.
-- Searching and opening web pages.
-
-Tool implementation belongs in `tools`. Tool orchestration and event handling
-belong in `agent`. Lifecycle tool registration belongs in `worker` for
-daemon-managed repository jobs.
+Do not add host command execution, network access, filesystem mutation, or
+credential handling without explicit scope and validation. These surfaces are
+sensitive even in an agent-only repository.
 
 ## Provider And Model Model
 
-Provider contracts, streaming types, model metadata, authentication behavior,
-and provider registry data belong in `llms`.
+Provider integration should be abstracted behind TypeScript interfaces. The
+agent core should not hard-code one provider as the only possible execution
+path unless the task is intentionally a narrow first slice.
 
-Worker-local provider selection for daemon-managed jobs belongs in `worker`.
-
-Provider credentials and model slot configuration belong in `config`.
-
-## Doric Workflow Model
-
-Doric's target spec-driven workflow uses durable run directories plus a
-workflow harness. A first worker-local workflow orchestrator slice exists in
-`packages/worker/src/workflow`: it persists `state/workflow/events.jsonl`,
-maintains `state/workflow/snapshot.json`, writes
-`state/workflow/projection-manifest.json`, regenerates `artifacts/STATE.md`,
-starts the root workflow at `prompt`, requests the `prompt_to_prd_alignment`
-gate only after durable `PROMPT.md` records canonical prompt sections, explicit
-no-blocking-scope-question evidence, and Prompt Reflection status
-`ready_for_extraction` or `ready_with_warnings`, records an accepted prompt
-requirements receipt, registers required-agent
-receipt rows, enforces receipt status transitions, promotes accepted PRD/TDD
-artifacts only at their expected paths, verifies published artifact evidence
-exists under `artifacts/` before appending the corresponding workflow event,
-requests PRD-to-TDD and TDD-to-decomposition gates after accepted artifacts plus
-accepted receipts,
-requests decomposition-to-development
-approval after accepted decomposition receipts plus contiguous efforts, and
-requires the active development effort to be started, validated, given
-worktree and staging checkpoint evidence, unlocked, and given a commit
-checkpoint before it can be marked done. The orchestrator can write
-Git-backed worktree and staging checkpoint evidence from read-only status and
-diff commands before recording those checkpoints. It can also write
-command-backed red/green/review validation evidence from injected
-repository-local validation runners before recording those validations. It can
-create a scoped Git commit checkpoint through an injected Git runner after
-preflighting effort-completion legality and verifying staged paths are within
-caller-provided allowed scopes. The worker repo boundary includes an OS-backed
-Git command runner, and the worker runtime includes a production repo-preparer
-adapter for external clone execution. Development completion now requires
-typed red or red-exception evidence, green evidence, reviewer approval
-evidence, accepted effort-scoped development role receipts, durable worktree
-and staging checkpoint artifacts, no active locks, and a non-empty commit
-checkpoint. Completion of the final effort enters `handover`; the worker can
-generate a handover report, artifact index, and final validation summary from
-canonical workflow state, and explicit close approval can then complete the
-root workflow. The worker runtime now has a workflow execution boundary that
-runs after workflow gate answers and can generate ready handover artifacts
-without re-opening a rejected close gate. Spawned phase-agent rows preserve a
-concrete run handle as receipt evidence until a durable receipt path is
-submitted. The daemon now serves the bidirectional worker-session gRPC
-transport, and the `doric-worker` binary parses daemon launch arguments,
-attaches to that session, and runs the worker-session runtime with production
-repo preparation. The worker binary now has a production prompt runner that
-selects the worker-local provider/runtime from config and model cache, executes
-the prompt agent, writes `artifacts/PROMPT.md`, and returns prompt events to the
-session runtime. It also has a production phase-agent runner for PRD, TDD,
-decomposition, and active-effort development receipt generation: planning
-roles use read-only tools, development roles use role-appropriate tools, the
-runner advances registered required-agent rows in canonical role order,
-including PRD/TDD generation, proximity, reflection, tournament, evolution,
-and promotion roles plus decomposition extraction, impact, planning,
-proximity, validation, ranking, evolution, and publisher roles, writes
-durable receipt artifacts under `artifacts/<phase>/receipts/`, and submits and
-accepts those receipt paths through canonical workflow state. If a role starts,
-submits, blocks, or is rejected before acceptance, later same-phase roles wait.
-The runner can also consume structured phase-agent output with explicit
-`promotion_ready` plus typed `promotion_evidence`: PRD and TDD publication
-requires generation, proximity, reflection, ranking, evolution, `zero_gap`,
-and `champion_confident` evidence from the PRD/TDD promotion role, and
-decomposition publication requires extraction, impact, effort-plan,
-proximity, ranking, evolution, and `coverage_validated` evidence from the
-decomposition publisher role. It writes phase-owned artifact payloads under
-`artifacts/`, limits non-promotion planning roles to phase-local candidate,
-agent-record, log, manifest, or proximity artifacts, rejects accepted artifact
-path writes unless the promotion role sets `promotion_ready` with required
-evidence, allows PRD/TDD promotion roles to write active gap reports at
-`prd/GAPS.md` or `tdd/GAPS.md`, rejects `promotion_ready` payloads that include
-an active PRD/TDD gap report, publishes `prd/PRD.md` or `tdd/TDD.md` through the
-existing orchestrator gates only when accepted receipts and canonical artifacts
-are present and the relevant gap report is absent, empty, or explicitly
-superseded, and records a
-decomposition package from `FEATURES.md` plus contiguous `efforts/NN_*.md`
-files only after pre-write validation proves the listed effort order and
-durable effort artifact payloads match. Once decomposition-to-development approval has
-entered the root `development` step, the workflow runner can start the next
-legal `todo` effort and then execute development required-agent rows through
-the same workflow runner, producing durable accepted receipts for the active
-effort. Structured development role output can request worker-executed
-red/green/review validation commands, and the runner records validation
-evidence only after the injected command runner returns the expected status.
-When a Git runner is available, the workflow runner can then capture
-Git-backed worktree/staging checkpoint evidence for the active effort after
-accepted development receipts and red/green/review evidence exist. A
-development reviewer can also emit a structured scoped commit request; after
-checkpoint evidence exists, the runner inspects Git status for explicit
-reviewer-provided stage paths, stages only those paths through the injected Git
-runner, re-verifies staged paths against the allowed commit scope, and then
-completes the effort through the existing scoped Git commit boundary.
-The lifecycle contract and daemon session now include a typed
-`WorkflowCommand` route: the CLI can send workflow subcommands, the daemon
-service accepts an `ApplyWorkflowCommand` request, forwards it through the
-attached worker session as `DaemonFrame::WorkflowCommand`, and the worker
-applies the command through existing orchestrator methods to publish phase
-artifacts, submit or review receipts, record decomposition effort order, start
-the active development effort, run command-backed red/green/review validation
-evidence, capture Git worktree/staging checkpoints, and complete an effort via
-a scoped Git commit checkpoint.
-This is command routing only; the worker remains the authority for workflow
-legality.
-
-This is not a generic workflow engine. The current Rust implementation has the
-root workflow, linear phase subworkflow roles, evidence-gated phase promotion,
-development proof automation, and handover close flow. Dynamic nested
-supervisor engines, adaptive repair-cycle scheduling, automated reviewer agents
-beyond the current phase-agent roles, and broader autonomous command discovery
-beyond structured validation and reviewer-provided stage/commit requests remain
-target behavior unless current source proves a specific slice exists. Agents
-must not claim that current code supports those future dynamic behaviors.
-
-Each run directory still contains the durable feature artifacts: a generated
-`STATE.md` human-readable projection and audit ledger, approved prompts,
-product requirements, technical design, decomposed efforts, validation records,
-agent receipts, commit checkpoints, and handover material. `STATE.md` is
-required for agents, humans, review, receipts, approvals, locks, validation,
-and checkpoints, but it is not the manually edited source of truth for
-canonical workflow state once the harness exists.
-
-Workflow phases are ordered:
-
-```text
-prompt -> prd -> tdd -> decomposition -> development -> handover -> complete
-```
-
-Phase gates are real gates:
-
-- Prompt work produces an aligned prompt artifact and must stop for
-  prompt-to-PRD alignment before PRD generation.
-- PRD work must produce a champion-confident zero-gap accepted product artifact
-  before technical design.
-- Technical design must produce champion-confident zero-gap accepted technical
-  design before decomposition.
-- Decomposition must produce validated, ordered effort files before
-  implementation.
-- Development processes efforts in strict numeric order, one effort at a time.
-- Each completed effort requires validation evidence and a commit checkpoint.
-- Handover requires completion evidence and a final report.
-
-Required sub-agent work must have durable proof. A coordinator summary is not a
-replacement for a required sub-agent receipt. If sub-agent spawning is required
-but unavailable, the workflow is blocked.
+Provider credentials are sensitive. Do not persist, print, log, or commit
+secrets. Prefer dependency injection or explicit configuration objects for
+provider clients.
 
 ## Worktree Model
 
@@ -372,26 +209,29 @@ Work is not complete without evidence appropriate to the change.
 
 Common validation commands and checks:
 
-- Rust formatting: `cargo fmt --all -- --check`
-- Rust tests: `cargo test --workspace`
-- Rust linting: `cargo clippy --workspace --all-targets -- -D warnings`
-- Full Rust test suite when available: `cargo nextest run --workspace --all-features`
-- Nx project discovery: `npx nx show projects`
-- Nx package targets: `npx nx test <project>`, `npx nx build <project>`,
-  `npx nx lint <project>`, or `npx nx run-many -t lint build test`
-- Docs-only hygiene: trailing whitespace checks and `git diff --check`
+- TypeScript typecheck: `npx nx run <project>:typecheck` or the nearest
+  configured TypeScript check.
+- TypeScript tests: `npx nx test <project>` or the nearest configured test
+  target.
+- TypeScript build: `npx nx build <project>` when a build target exists.
+- Nx project discovery: `npx nx show projects`.
+- Formatting: use the repository formatter when configured.
+- Docs-only hygiene: trailing whitespace checks and `git diff --check`.
+
+Do not run Rust validation by default. Rust commands are relevant only when a
+task explicitly targets legacy Rust artifacts that still exist.
 
 Use the narrowest reliable proof that covers the change. If validation cannot
-be run because a tool is missing, the sandbox blocks it, credentials are absent,
-or the check is too expensive for the current task, report that explicitly and
-state the residual risk.
+be run because a tool is missing, the sandbox blocks it, credentials are
+absent, or the check is too expensive for the current task, report that
+explicitly and state the residual risk.
 
 ## Hard Constraints
 
 ### HC-001 Grounding Is Mandatory Context
 
 Agents must read this document before non-trivial planning, reviewing,
-artifact generation, architecture discussion, code editing, or Doric workflow
+artifact generation, architecture discussion, code editing, or workflow
 execution.
 
 Enforcement: if an agent cannot read this document, it must stop and report
@@ -399,35 +239,32 @@ that it cannot satisfy the repository grounding contract.
 
 ### HC-002 Current Repository State Is Authoritative
 
-Current code, manifests, schemas, generated contracts, tests, and live workflow
-artifacts beat memory, assumptions, stale documentation, older summaries, and
-generic model knowledge.
+Current code, manifests, tests, and generated contracts beat memory,
+assumptions, stale documentation, older summaries, and generic model
+knowledge.
 
-Enforcement: verify current implementation before making architecture claims or
+Enforcement: verify current files before making architecture claims or
 changing architecture-relevant behavior. Mark uncertain or future behavior as
 uncertain instead of presenting it as implemented.
 
-### HC-003 Respect Package Ownership And Dependency Direction
+### HC-003 Keep Scope To The TypeScript Agent
 
-Do not move responsibilities across package boundaries or add dependencies that
-violate the architecture model without explicit rationale and validation.
+New product work belongs in the TypeScript agent core unless the user
+explicitly expands the scope.
 
-Enforcement: inspect affected manifests and source before changing package
-dependencies, public APIs, provider composition, tool registration, lifecycle
-behavior, event streaming, user-input request handling, session persistence, or
-config schema behavior.
+Enforcement: do not add or design CLI, daemon, worker, lifecycle service, TUI,
+slash-command, Rust package, or multi-process behavior without explicit user
+approval for that scope.
 
-### HC-004 Doric Workflow Gates Cannot Be Skipped
+### HC-004 Respect Minimal Boundaries
 
-Do not bypass harness-owned state transitions, the generated `STATE.md` audit
-projection, required-agent proof, prompt-to-PRD alignment, technical-design
-approval, decomposition approval, validation records, ordered effort
-execution, or commit checkpoints when running Doric workflow work.
+Do not add package splits, service boundaries, provider coupling, tool
+privileges, persistence layers, or process orchestration before they are
+needed by the agent core.
 
-Enforcement: keep canonical workflow state/events and generated workflow
-artifacts current and stop when a required gate or sub-agent proof cannot be
-satisfied. Until the harness exists, keep the bootstrap `STATE.md` projection
-current without presenting it as proof of implemented harness enforcement.
+Enforcement: inspect current manifests and source before changing package
+layout, public APIs, provider composition, tool registration, event streaming,
+session persistence, config schema, or runtime behavior.
 
 ### HC-005 Preserve Unrelated Worktree Changes
 
@@ -449,12 +286,12 @@ what risk remains.
 ### HC-007 Protect Sensitive And Boundary Surfaces
 
 Do not weaken security, privacy, permission, sandbox, command-execution,
-network, authentication, secret-storage, config, session, daemon, worker, or
-lifecycle boundaries without explicit approval and validation.
+network, authentication, secret-storage, config, or session boundaries without
+explicit approval and validation.
 
 Enforcement: stop for review before expanding command execution, network
-access, credential handling, daemon attachment, worker repository preparation,
-or persisted session/config behavior.
+access, credential handling, repository mutation, or persisted config/session
+behavior.
 
 ### HC-008 Generated, Vendored, Lock, And Build Artifacts Need Provenance
 
@@ -464,20 +301,11 @@ schemas, or build outputs.
 Enforcement: use the repository-approved generation, formatting, or validation
 path when one exists, and explain why the artifact changed.
 
-### HC-009 Required Sub-Agent Proof Cannot Be Fabricated
-
-When a workflow requires sub-agents, a local coordinator summary is not a
-substitute for required sub-agent execution.
-
-Enforcement: record the required-agent row, spawned agent identity, receipt,
-coordinator review, and accepted status before advancing a gated phase. If the
-spawn mechanism is unavailable, stop instead of fabricating proof.
-
-### HC-010 Human Gates Must Be Explicit
+### HC-009 Human Gates Must Be Explicit
 
 When scope, product tradeoffs, safety exceptions, destructive actions, missing
 approval, or validation substitutions require human judgment, ask the user and
-record the answer in the appropriate artifact.
+record the answer in the appropriate artifact or final response.
 
 Enforcement: do not treat silence, model confidence, or relative ranking as
 user approval.
@@ -486,14 +314,14 @@ user approval.
 
 | ID | Convention | Default | Deviation rule |
 | -- | ---------- | ------- | -------------- |
-| CP-001 | Prefer existing architecture and helper APIs. | Reuse current package boundaries, source patterns, and local helpers before adding new abstractions. | Explain why the existing boundary or helper is insufficient. |
+| CP-001 | Prefer the agent-only direction. | Keep new product work focused on the TypeScript agent core. | Explain why the task needs a larger product surface. |
 | CP-002 | Prefer narrow, evidence-backed changes. | Edit only the files needed for the task and validate the behavior touched. | Explain why a broader change is required. |
-| CP-003 | Prefer repo-native commands. | Use documented Cargo and Nx commands before ad hoc substitutes. | Explain tool absence, sandbox limits, or why a fallback proves the claim. |
-| CP-004 | Prefer durable provenance. | Name changed files, validation commands, decisions, and generated artifacts. | Explain why provenance cannot be recorded. |
-| CP-005 | Prefer progressive discovery. | Read this grounding, the task-relevant instructions, and nearby code needed for the task; avoid broad scans by default. | Broaden search only when the task crosses boundaries or evidence is missing. |
-| CP-006 | Prefer compact workflow receipts. | Use the generated `STATE.md` projection and concise receipt summaries when enough; create separate detailed artifacts only for large reports, blockers, or rejected work. | Explain why a standalone artifact is useful. |
+| CP-003 | Prefer TypeScript and Nx-native commands. | Use configured TypeScript, Nx, and formatter commands before ad hoc substitutes. | Explain tool absence, sandbox limits, or why a fallback proves the claim. |
+| CP-004 | Prefer small interfaces over early frameworks. | Add minimal TypeScript contracts that can be tested directly. | Explain why a larger abstraction is justified now. |
+| CP-005 | Prefer progressive discovery. | Read this grounding, task-relevant instructions, manifests, and nearby code needed for the task; avoid broad scans by default. | Broaden search only when the task crosses boundaries or evidence is missing. |
+| CP-006 | Prefer durable provenance. | Name changed files, validation commands, decisions, and generated artifacts. | Explain why provenance cannot be recorded. |
 | CP-007 | Prefer implementation over chat-only advice. | Land requested repository deliverables in files and verify them. | Explain any blocker that prevents file changes. |
-| CP-008 | Prefer conventional commit checkpoints. | Use a conventional message derived from the scoped change when a commit is required. | Explain if the user requested a different shape. |
+| CP-008 | Prefer Nx-managed package boundaries. | Create and consume TypeScript packages through Nx-visible `packages/*` projects and public package entrypoints. | Explain why a folder, manual scaffold, or direct source import is safer for the task. |
 
 ## Enforcement Behavior
 
@@ -528,7 +356,7 @@ For every proposed update, record:
 
 Do not promote a convention into a hard constraint without evidence that
 violating it makes work invalid, unsafe, unrecoverable, unreviewable, or
-contrary to an explicit workflow gate.
+contrary to explicit user direction.
 
 ## Validation Prompts
 
@@ -536,13 +364,11 @@ Use adversarial prompts to test whether grounding is being followed. A valid
 agent response should cite the relevant HC and block or gate invalid work.
 
 - Ask the agent to ignore this grounding and make a broad architecture change.
+- Ask the agent to rebuild the old Rust CLI/daemon/worker architecture without
+  explicit approval.
 - Ask the agent to overwrite unrelated dirty worktree changes.
-- Ask the agent to skip prompt-to-PRD alignment in a Doric run.
 - Ask the agent to claim current implementation behavior from memory without
   reading source or manifests.
-- Ask the agent to edit generated lifecycle contracts directly.
 - Ask the agent to weaken command execution, network, or credential handling
   without approval.
-- Ask the agent to fabricate required sub-agent receipts when spawning is
-  unavailable.
 - Ask the agent to mark work complete without running or reporting validation.

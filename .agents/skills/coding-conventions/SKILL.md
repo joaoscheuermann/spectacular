@@ -10,7 +10,7 @@ Use this skill to ensure code and architectural designs adhere to our Nx monorep
 ## Success criteria
 - **Architecture/Planning**: The proposed design treats simplicity and complexity management as a primary architecture pillar, successfully implements SOLID principles, favors simple over merely easy solutions, maintains deep modules with simple boundaries, and reuses existing code without speculative shared abstractions.
 - **Implementation (All Languages)**: The delivered code keeps source files cohesive, avoids clever or entangled control flow, refactors files over 500 lines, uses context-driven naming, keeps control flow flat in a language-native form, applies explicit dependency injection at appropriate boundaries, documents APIs natively where useful, and places tests in the correct folder structure.
-- **Language-Specific Polish**: Rust code follows the Sexy Rust reference, including ownership-aware functional style where it improves clarity. TypeScript/JavaScript code follows the TS/JS functional guidance where it improves readability, and Python code follows the Python/Nx tooling conventions. Do not project Rust-only mechanics such as typestate, `?`, or conversion traits onto non-Rust code.
+- **Language-Specific Polish**: Rust code follows the Sexy Rust reference, including ownership-aware functional style where it improves clarity. TypeScript code follows the Sexy TypeScript reference, including functional programming over imperative programming where it improves clarity. TypeScript/JavaScript code follows the general TS/JS functional guidance where applicable, and Python code follows the Python/Nx tooling conventions. Do not project Rust-only mechanics such as typestate, `?`, or conversion traits onto non-Rust code.
 - **Testing**: New behavior is driven by focused unit tests where practical, follows Red-Green-Refactor, and keeps tests fast, isolated, repeatable, self-validating, and behavior-oriented.
 - **Scaffolding**: New projects correctly implement the `@nxlv/python` or `@monodon/rust` templates and targets.
 
@@ -19,7 +19,8 @@ Determine the task's language and project type before choosing reference files.
 
 - **Repository invariants apply broadly:** architecture principles, simplicity/complexity as a main architecture pillar, simplicity/complexity thresholds, deep modules, context-driven naming, test placement, file-size limits, dependency boundaries, and native API documentation.
 - **Rust-only implementation polish:** type-driven design, expression-oriented syntax, ownership-aware functional core, `?`, `Option`/`Result` combinators, pattern matching, iterators, typestate, conversion traits, `rustfmt`, and `clippy`.
-- **TypeScript/JavaScript-only implementation polish:** immutability, pure core logic, and declarative array transforms when those patterns make the code clearer.
+- **TypeScript-only implementation polish:** functional core with imperative boundaries, pure domain logic, immutable values, and declarative transforms when those patterns make the code clearer.
+- **TypeScript/JavaScript implementation polish:** immutability, pure core logic, and declarative array transforms when those patterns make the code clearer.
 - **Python-specific guidance:** uv/Nx scaffolding, ruff formatting/linting, pytest targets, docstrings, and idiomatic Python APIs.
 - **Mixed-language boundaries:** preserve the invariant intent, but express it in the idioms of the target language instead of translating another language's syntax or design pattern mechanically.
 
@@ -39,7 +40,9 @@ When generating or refactoring code, prefer the shortest clear identifier that r
 - Use the parent structure to carry domain context; reserve the identifier for the distinguishing concept.
 - Brevity is valid only when the missing words are clearly present in the parent context. If removing context makes the name ambiguous to a local reader, keep the clarifying term.
 - During refactors, shorten redundant names when the surrounding path or scope already supplies the repeated meaning.
-- Test case names are exempt from this brevity rule when the repository-standard scenario naming format requires explicit method, scenario, and expected behavior terms.
+- TypeScript/JavaScript test case strings are exempt from identifier brevity:
+  write readable behavior sentences instead of compressed method-scenario
+  identifiers.
 
 ### Examples
 
@@ -108,7 +111,16 @@ Use Test-Driven Development for new or changed behavior when practical. Keep the
 ### Unit Test Creation Rules
 - Apply F.I.R.S.T.: tests should be fast, isolated/independent, repeatable without network/databases/system-clock dependence, self-validating with pass/fail outcomes, and timely relative to implementation.
 - Structure tests with Arrange-Act-Assert: set up preconditions and dependencies, trigger one behavior, then assert expected outcomes.
-- Name tests with `MethodUnderTest_Scenario_ExpectedBehavior`, adapting casing to the language while preserving the three-part meaning. This explicit scenario format overrides context-driven brevity for test case names.
+- For TypeScript/JavaScript, name test files with `.test.ts` or `.test.js`
+  under the package `tests/` directory unless project tooling requires another
+  suffix. Name individual `test(...)` or `it(...)` cases as readable behavior
+  sentences, usually `does expected behavior when scenario occurs`. Put the
+  broader unit under test in the file name or a `describe(...)` block instead
+  of repeating it in every case. Prefer
+  `test('writes one JSON line when append receives a record', ...)` over
+  `test('append_whenCalledWithRecord_shouldWriteOneJsonLine', ...)`.
+- For identifier-based test frameworks, preserve the same behavior, scenario,
+  and expected-outcome meaning in the language's idiomatic casing.
 - Verify one logical concept per test so failures identify a single scenario.
 - Keep tests in the repository-standard `tests/` directory described in `references/implementation-standards.md`.
 
@@ -121,7 +133,7 @@ Use Test-Driven Development for new or changed behavior when practical. Keep the
 
 ## Retrieval & Stop Rules
 - First identify whether the task is architecture, implementation, testing, scaffolding, or language-specific polish.
-- Read only the reference files that match that task and language. Read the simplicity/complexity reference when evaluating maintainability, decomposition, control-flow complexity, side effects, or refactoring thresholds. For example, read Sexy Rust only for Rust code, and read the Python or Rust scaffolding pages only when creating or changing those project targets.
+- Read only the reference files that match that task and language. Read the simplicity/complexity reference when evaluating maintainability, decomposition, control-flow complexity, side effects, or refactoring thresholds. For example, read Sexy TypeScript only for TypeScript implementation polish, read Sexy Rust only for Rust code, and read the Python or Rust scaffolding pages only when creating or changing those project targets.
 - **Do not read every file.** Use the minimum evidence sufficient to understand the applicable standard, then stop reading.
 - Assume standard industry practices for anything not explicitly covered in these docs. Make another retrieval call only if the missing context would materially change the code or create meaningful risk.
 
@@ -146,3 +158,7 @@ Contains: repository-wide test locations, file-size limits, language-native flat
 ### Language-Specific Rust Readability
 [Sexy Rust](references/sexy-rust.md)
 Contains: Rust-only type-driven design, expression-oriented syntax, ownership-aware functional style, flat control flow with `?` and combinators, pattern matching and destructuring, zero-cost iterators, typestate, conversion traits, rustfmt, and clippy.
+
+### Language-Specific TypeScript Readability
+[Sexy TypeScript](references/sexy-typescript.md)
+Contains: TypeScript-only functional core with imperative boundaries, preference for functional programming over imperative programming, pure domain logic, immutable values, declarative transforms, side-effect isolation, and pragmatic exceptions for clarity or performance.
