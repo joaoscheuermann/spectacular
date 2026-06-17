@@ -1,0 +1,20 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "tool-terminal",
+  "projectType": "library",
+  "sourceRoot": "tools/terminal/src",
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "outputs": ["{projectRoot}/dist-tests"],
+      "options": {
+        "commands": [
+          "tsc -p tools/terminal/tsconfig.spec.json",
+          "node --test tools/terminal/dist-tests/tests/*.test.js"
+        ],
+        "parallel": false
+      }
+    }
+  },
+  "tags": []
+}
