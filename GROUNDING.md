@@ -90,6 +90,10 @@ Current package responsibilities:
   wire shapes.
 - `packages/messages` owns in-memory provider-ready conversation history for
   the TypeScript agent core.
+- `packages/oauth` owns generic OAuth 2 authorization-code + PKCE flows, token
+  exchange and refresh, OAuth credential rendering, explicit local callback
+  server and browser opener helpers, fetch transport wiring, and OpenAI OAuth
+  profile defaults.
 - `packages/tools` owns the provider-neutral tool definition, call, storage,
   and structured tool-error contracts for the TypeScript agent core.
 
@@ -153,7 +157,9 @@ agent core contracts
   `-- shared utilities are extracted only after concrete reuse exists
 ```
 
-The current package dependency direction is `llms -> tools`. `tools` must not
+The current package dependency direction is `llms -> tools`. `oauth` has no
+product-package dependency and is composed by future host surfaces or tests
+that pass rendered credentials into provider configuration. `tools` must not
 import from or depend on `llms`; provider adapters remain responsible for
 OpenAI, OpenRouter, or other provider-native tool wire shapes.
 

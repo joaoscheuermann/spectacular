@@ -21,7 +21,6 @@ test('finds providers and chooses enabled provider name from explicit availabili
   assert.equal(providerById('missing'), undefined);
   assert.equal(enabledProviderName({ openRouterApiKey: 'key' }), 'openrouter');
   assert.equal(enabledProviderName({ openAiApiKey: 'key' }), 'openai');
-  assert.equal(enabledProviderName({ openAiOAuth: true }), 'openai');
   assert.equal(enabledProviderName({}), undefined);
 });
 

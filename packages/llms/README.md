@@ -1,9 +1,8 @@
 # llms
 
 Provider-neutral model and streaming boundaries for Doric's TypeScript
-agent core. The package keeps provider credentials, HTTP, browser opening,
-time, and callback handling injected so tests can use fakes and host surfaces
-can own sensitive behavior.
+agent core. The package keeps provider credentials and HTTP injected so tests
+can use fakes and host surfaces can own sensitive behavior.
 
 ## OpenRouter with an API key
 
@@ -53,37 +52,30 @@ for await (const event of provider.stream({
 `*-fast` OpenAI model aliases are sent to the Responses API without the
 suffix and with `service_tier: "priority"`.
 
-## OpenAI OAuth setup
+## OpenAI with a rendered authorization header
 
 ```ts
-import {
-  createFetchTransport,
-  runOpenAiOAuthCallbackFlow,
-  type OpenAiAuthStore,
-} from 'llms';
+import { createFetchTransport, createOpenAiProvider } from 'llms';
+import { createOpenAiOAuth } from 'oauth';
 
-const authStore: OpenAiAuthStore = {
-  async load() {
-    return undefined;
-  },
-  async save(record) {
-    // Persist in host-owned secure storage.
-    console.log(record.expiresAt);
-  },
-};
-
-await runOpenAiOAuthCallbackFlow({
+const openai = createOpenAiOAuth({
   transport: createFetchTransport(),
-  authStore,
+  tokenStore,
   clientId: 'client-id',
   redirectUri: 'http://127.0.0.1:3000/callback',
-  browserOpener: (url) => open(url),
+  browserOpener,
   callbackServer: localCallbackServer,
+});
+
+const credential = await openai.oauth();
+const provider = createOpenAiProvider({
+  transport: createFetchTransport(),
+  authorization: credential.authorization,
 });
 ```
 
-The OAuth helpers support PKCE, refresh-before-use, and provider retry after a
-401 when an `authStore` is injected into `createOpenAiProvider`.
+OAuth is owned by the `oauth` package. `llms` only accepts an API key rendered
+as `Bearer ${apiKey}` or an exact `authorization` header supplied by the host.
 
 ## Fake transport tests
 

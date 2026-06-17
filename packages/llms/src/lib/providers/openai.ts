@@ -1,4 +1,3 @@
-import { getOpenAiAuthHeader, type OpenAiAuthStore } from '../auth/openai.js';
 import { ProviderErrorObject } from '../classes/provider-error.js';
 import type { LlmDebugLogger } from '../debug.js';
 import type { HttpTransport } from '../types/http.js';
@@ -31,13 +30,9 @@ export type SecretSource = string | (() => string | Promise<string>);
 export type OpenAiProviderDeps = {
   readonly transport: HttpTransport;
   readonly apiKey?: SecretSource;
-  readonly authStore?: OpenAiAuthStore;
-  readonly clientId?: string;
-  readonly clientSecret?: string;
+  readonly authorization?: SecretSource;
   readonly baseUrl?: string;
-  readonly tokenEndpoint?: string;
   readonly debugLogger?: LlmDebugLogger;
-  readonly clock?: () => number;
 };
 
 export const openAiMetadata: ProviderMetadata = {
@@ -51,7 +46,7 @@ export const openAiCapabilities: ProviderCapabilities = {
   tools: true,
   reasoning: true,
   modelListing: true,
-  oauth: true,
+  oauth: false,
   serviceTier: true,
 };
 
@@ -62,9 +57,8 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
   const send = async (
     request: ProviderRequest,
     body: Record<string, unknown>,
-    forceRefresh = false,
   ): Promise<Record<string, unknown>> => {
-    const auth = await authorization(deps, forceRefresh);
+    const auth = await authorization(deps);
     const response = await deps.transport.request({
       method: 'POST',
       url: `${baseUrl}/responses`,
@@ -83,10 +77,6 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
       event: 'http.response',
       fields: { status: response.status, body: response.body },
     });
-
-    if (response.status === 401 && deps.authStore !== undefined && !forceRefresh) {
-      return send(request, body, true);
-    }
 
     if (response.status >= 400) {
       throw httpError('openai', response.status, response.body);
@@ -389,33 +379,42 @@ const parseOpenAiFinished = (
 
 const authorization = async (
   deps: OpenAiProviderDeps,
-  forceRefresh = false,
 ): Promise<string> => {
-  if (deps.apiKey !== undefined) {
-    const value =
-      typeof deps.apiKey === 'function' ? await deps.apiKey() : deps.apiKey;
-    return `Bearer ${value}`;
+  if (deps.apiKey !== undefined && deps.authorization !== undefined) {
+    throw new ProviderErrorObject({
+      provider: 'openai',
+      code: 'auth_ambiguous',
+      message: 'OpenAI provider accepts either apiKey or authorization, not both.',
+    });
   }
 
-  if (deps.authStore !== undefined) {
-    return getOpenAiAuthHeader(
-      {
-        transport: deps.transport,
-        authStore: deps.authStore,
-        clientId: deps.clientId,
-        clientSecret: deps.clientSecret,
-        tokenEndpoint: deps.tokenEndpoint,
-        clock: deps.clock,
-      },
-      { forceRefresh },
-    );
+  if (deps.apiKey !== undefined) {
+    return `Bearer ${await secret(deps.apiKey)}`;
+  }
+
+  if (deps.authorization !== undefined) {
+    return secret(deps.authorization);
   }
 
   throw new ProviderErrorObject({
     provider: 'openai',
     code: 'auth_missing',
-    message: 'OpenAI provider requires an API key or OAuth auth store.',
+    message: 'OpenAI provider requires an API key or authorization header.',
   });
+};
+
+const secret = async (source: SecretSource): Promise<string> => {
+  const value = typeof source === 'function' ? await source() : source;
+
+  if (value.trim() === '') {
+    throw new ProviderErrorObject({
+      provider: 'openai',
+      code: 'auth_missing',
+      message: 'OpenAI provider received an empty auth value.',
+    });
+  }
+
+  return value;
 };
 
 const fastAlias = (

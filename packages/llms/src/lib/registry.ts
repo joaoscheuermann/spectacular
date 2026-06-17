@@ -10,7 +10,6 @@ export const providerById = (id: string): ProviderMetadata | undefined =>
 export type ProviderAvailability = {
   readonly openRouterApiKey?: string;
   readonly openAiApiKey?: string;
-  readonly openAiOAuth?: boolean;
 };
 
 export const enabledProviderName = (
@@ -20,10 +19,7 @@ export const enabledProviderName = (
     return 'openrouter';
   }
 
-  if (
-    (availability.openAiApiKey !== undefined && availability.openAiApiKey !== '') ||
-    availability.openAiOAuth === true
-  ) {
+  if (availability.openAiApiKey !== undefined && availability.openAiApiKey !== '') {
     return 'openai';
   }
 

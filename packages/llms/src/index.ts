@@ -1,4 +1,3 @@
-export * from './lib/auth/openai.js';
 export * from './lib/classes/provider-error.js';
 export * from './lib/debug.js';
 export * from './lib/http.js';

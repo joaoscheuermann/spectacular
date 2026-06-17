@@ -158,6 +158,61 @@ test('parses OpenAI completion output usage reasoning and tool calls', async () 
   ]);
 });
 
+test('sends OpenAI API key auth as bearer token', async () => {
+  const transport = fakeTransport({
+    responses: [response({ status: 'completed', output_text: 'ok', output: [] })],
+  });
+  const provider = createOpenAiProvider({ transport, apiKey: 'sk-testSecret123' });
+
+  await provider.complete({
+    model: 'gpt-5',
+    messages: [{ role: 'user', content: 'Hi' }],
+  });
+
+  assert.equal(
+    transport.requests[0]?.headers?.authorization,
+    'Bearer sk-testSecret123',
+  );
+});
+
+test('sends exact OpenAI authorization header when supplied', async () => {
+  const transport = fakeTransport({
+    responses: [response({ status: 'completed', output_text: 'ok', output: [] })],
+  });
+  const provider = createOpenAiProvider({
+    transport,
+    authorization: 'Custom credential-value',
+  });
+
+  await provider.complete({
+    model: 'gpt-5',
+    messages: [{ role: 'user', content: 'Hi' }],
+  });
+
+  assert.equal(
+    transport.requests[0]?.headers?.authorization,
+    'Custom credential-value',
+  );
+});
+
+test('rejects ambiguous OpenAI auth configuration', async () => {
+  const provider = createOpenAiProvider({
+    transport: fakeTransport({}),
+    apiKey: 'sk-testSecret123',
+    authorization: 'Bearer token',
+  });
+
+  await assert.rejects(
+    provider.complete({
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Hi' }],
+    }),
+    (error: unknown) =>
+      error instanceof ProviderErrorObject &&
+      error.data.code === 'auth_ambiguous',
+  );
+});
+
 test('streams OpenAI text reasoning usage finish and tool calls', async () => {
   const stream = [
     sse({ type: 'response.output_text.delta', delta: 'Hel' }),
@@ -218,41 +273,25 @@ test('streams OpenAI text reasoning usage finish and tool calls', async () => {
   assert.equal(events.at(-1)?.type, 'response.finished');
 });
 
-test('retries OpenAI OAuth request after 401 by refreshing before the second call', async () => {
-  const saved: unknown[] = [];
+test('does not refresh OpenAI auth after 401 responses', async () => {
   const transport = fakeTransport({
-    responses: [
-      response({ error: 'expired' }, 401),
-      response({ access_token: 'next.token.value', expires_in: 3600 }),
-      response({ status: 'completed', output_text: 'ok', output: [] }),
-    ],
+    responses: [response({ error: 'expired' }, 401)],
   });
   const provider = createOpenAiProvider({
     transport,
-    authStore: {
-      async load() {
-        return {
-          accessToken: 'old.token.value',
-          refreshToken: 'refresh-token',
-          expiresAt: Date.now() + 120_000,
-        };
-      },
-      async save(record) {
-        saved.push(record);
-      },
-    },
-    clientId: 'client',
+    authorization: 'Bearer expired-token',
   });
 
-  const result = await provider.complete({
-    model: 'gpt-5',
-    messages: [{ role: 'user', content: 'Hi' }],
-  });
-
-  assert.equal(result.text, 'ok');
-  assert.equal(transport.requests.length, 3);
-  assert.equal(transport.requests[1]?.url, 'https://auth.openai.com/oauth/token');
-  assert.equal(saved.length, 1);
+  await assert.rejects(
+    provider.complete({
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Hi' }],
+    }),
+    (error: unknown) =>
+      error instanceof ProviderErrorObject &&
+      error.data.code === 'auth_failed',
+  );
+  assert.equal(transport.requests.length, 1);
 });
 
 test('returns stream error event for malformed OpenAI stream payloads', async () => {
