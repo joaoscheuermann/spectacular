@@ -7,6 +7,12 @@
       "path": "./packages/jsonl"
     },
     {
+      "path": "./packages/docker"
+    },
+    {
+      "path": "./packages/sandbox"
+    },
+    {
       "path": "./packages/llms"
     },
     {

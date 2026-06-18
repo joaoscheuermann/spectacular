@@ -92,6 +92,10 @@ TypeScript agent core
 
 Current package responsibilities:
 
+- `packages/docker` owns the narrow Docker Engine client used by Doric runtime
+  code. It wraps Docker HTTP/IPC operations over local Unix sockets or Windows
+  named pipes without depending on agent, provider, model, or host command
+  surfaces.
 - `packages/llms` owns provider-facing model abstractions and provider
   adapters. Provider adapters translate neutral request contracts into native
   wire shapes.
@@ -101,6 +105,10 @@ Current package responsibilities:
   exchange and refresh, OAuth credential rendering, explicit local callback
   server and browser opener helpers, fetch transport wiring, and OpenAI OAuth
   profile defaults.
+- `packages/sandbox` owns disposable Docker-backed coding sandbox sessions for
+  the TypeScript agent core. It depends on `packages/docker` and exposes
+  injected, explicit workspace operations such as command execution, file
+  exchange, repository cloning, diffs, and cleanup.
 - `packages/state-machine` owns typed in-memory state-machine control flow for
   the TypeScript agent core. It provides embeddable state transition execution
   only, without persistence, external integrations, daemon/worker behavior, or a
@@ -172,11 +180,13 @@ agent core contracts
   `-- shared utilities are extracted only after concrete reuse exists
 ```
 
-The current package dependency direction is `llms -> tools`. `oauth` has no
-product-package dependency and is composed by future host surfaces or tests
-that pass rendered credentials into provider configuration. `tools` must not
-import from or depend on `llms`; provider adapters remain responsible for
-OpenAI, OpenRouter, or other provider-native tool wire shapes.
+The current package dependency directions are `llms -> tools` and
+`sandbox -> docker`. `oauth` has no product-package dependency and is composed
+by future host surfaces or tests that pass rendered credentials into provider
+configuration. `tools` must not import from or depend on `llms`; provider
+adapters remain responsible for OpenAI, OpenRouter, or other provider-native
+tool wire shapes. `docker` must not import from or depend on `sandbox`, agent,
+provider, or model packages.
 
 The core agent package should not depend on future host surfaces, command
 surfaces, daemon/service packages, UI packages, or provider implementations
