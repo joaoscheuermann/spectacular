@@ -2,7 +2,9 @@
   "name": "@org/source",
   "version": "0.0.0",
   "license": "MIT",
-  "scripts": {},
+  "scripts": {
+    "openai:oauth": "node --conditions=@org/source --import @swc-node/register/esm-register scripts/openai-oauth.mjs"
+  },
   "private": true,
   "devDependencies": {
     "@monodon/rust": "^2.3.0",

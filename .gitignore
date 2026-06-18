@@ -6,6 +6,7 @@ dist-tests
 tmp
 out-tsc
 .doric
+/.env
 
 # dependencies
 node_modules
