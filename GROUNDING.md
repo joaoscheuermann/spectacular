@@ -38,7 +38,9 @@ Doric is being reset into a TypeScript-first agent project.
 The immediate repository goal is to build the agent itself, not a CLI, daemon,
 worker service, TUI, lifecycle manager, or broader software-development
 platform. Do not revive those old boundaries unless the user explicitly
-reintroduces them.
+reintroduces them. As of 2026-06-18, `agents/doric` may host the explicitly
+requested minimal A2A protocol scaffold for the Doric agent; this does not add
+CLI, daemon, provider, persistence, or broader host-surface scope.
 
 When this file mentions legacy or host-surface terms such as CLI, daemon,
 worker service, lifecycle manager, TUI, slash-command, Rust package, service,
@@ -105,6 +107,9 @@ Current package responsibilities:
   nested workflow framework.
 - `packages/tools` owns the provider-neutral tool definition, call, storage,
   and structured tool-error contracts for the TypeScript agent core.
+- `agents/doric` owns the minimal A2A protocol scaffold for the Doric agent:
+  Agent Card discovery plus JSON-RPC `SendMessage` returning a hello-world
+  message only.
 
 If a task needs a new package layout, inspect the current manifests first and
 choose the smallest TypeScript structure that supports the agent-only goal.
@@ -114,8 +119,9 @@ or process boundaries before the agent core requires them.
 ## Nx Monorepo Model
 
 Doric is currently an Nx-managed TypeScript workspace. The root `package.json`
-is private, uses npm workspaces for `packages/*`, and carries the Nx and
-TypeScript dev dependencies. The root `nx.json` uses the `@nx/js/typescript`
+is private, uses npm workspaces for `agents/*`, `packages/*`, `tools/*`, and
+`workflows/*`, and carries the Nx and TypeScript dev dependencies. The root
+`nx.json` uses the `@nx/js/typescript`
 plugin to infer TypeScript targets such as `typecheck` and `build` from project
 configuration. The root `tsconfig.json` is a solution file and may have an
 empty `references` array while the reset workspace has no package projects.

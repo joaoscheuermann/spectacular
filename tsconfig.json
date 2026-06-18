@@ -25,6 +25,9 @@
       "path": "./packages/agent"
     },
     {
+      "path": "./agents/doric"
+    },
+    {
       "path": "./tools/edit"
     },
     {
@@ -50,6 +53,9 @@
     },
     {
       "path": "./workflows/prompt"
+    },
+    {
+      "path": "./packages/config"
     }
   ]
 }

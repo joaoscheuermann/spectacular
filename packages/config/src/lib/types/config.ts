@@ -1,0 +1,44 @@
+export type GithubConfig = {
+  readonly repo: {
+    readonly url: string;
+  };
+  readonly token: string;
+};
+
+export type ProviderConfig = {
+  readonly id: string;
+  readonly type: string;
+  readonly token: string;
+};
+
+export type ModelConfig = {
+  readonly id: string;
+  readonly provider: string;
+  readonly model: string;
+  readonly reasoning?: string;
+  readonly internal_key?: string;
+};
+
+export type TaskConfig = {
+  readonly id: string;
+  readonly model: string;
+};
+
+export type AgentConfig = {
+  readonly github: GithubConfig;
+  readonly providers: readonly ProviderConfig[];
+  readonly models: readonly ModelConfig[];
+  readonly tasks: readonly TaskConfig[];
+};
+
+export type ConfigDataPart = {
+  readonly kind: 'data';
+  readonly data: {
+    readonly type: 'config';
+    readonly data: AgentConfig;
+  };
+};
+
+export type InitialMessage = {
+  readonly parts: readonly unknown[];
+};
