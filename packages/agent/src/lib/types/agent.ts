@@ -1,10 +1,13 @@
 import type {
   FinishReason,
+  JsonValue,
   LlmProvider,
   ProviderCallFlags,
   ProviderFinished,
   ProviderStreamEvent,
   ReasoningMetadata,
+  StructuredOutputSchema,
+  StructuredOutputValue,
   UsageMetadata,
 } from 'llms';
 import type { MessageStorage } from 'messages';
@@ -21,38 +24,72 @@ export type AgentOptions = {
   readonly maxOutputTokens?: number;
 };
 
-export type AgentRunOptions = {
+export type AgentRunOptions<
+  Output = JsonValue,
+  Schema extends StructuredOutputSchema = StructuredOutputSchema,
+> = {
   readonly signal?: AbortSignal;
+  readonly schema?: Schema;
 };
 
 export type Agent = {
-  readonly complete: (
-    input: string,
-    options?: AgentRunOptions,
-  ) => Promise<AgentResponse>;
-  readonly stream: (
-    input: string,
-    options?: AgentRunOptions,
-  ) => AsyncIterable<AgentEvent>;
+  readonly complete: {
+    <
+      Schema extends StructuredOutputSchema,
+      Output = StructuredOutputValue<Schema>,
+    >(
+      input: string,
+      options: AgentRunOptions<Output, Schema> & {
+        readonly schema: Schema;
+      },
+    ): Promise<AgentResponse<Output>>;
+    <Output = JsonValue>(
+      input: string,
+      options?: AgentRunOptions<Output>,
+    ): Promise<AgentResponse<Output>>;
+  };
+  readonly stream: {
+    <
+      Schema extends StructuredOutputSchema,
+      Output = StructuredOutputValue<Schema>,
+    >(
+      input: string,
+      options: AgentRunOptions<Output, Schema> & {
+        readonly schema: Schema;
+      },
+    ): AsyncIterable<AgentEvent<Output>>;
+    <Output = JsonValue>(
+      input: string,
+      options?: AgentRunOptions<Output>,
+    ): AsyncIterable<AgentEvent<Output>>;
+  };
 };
 
-export type AgentResponse = {
+export type AgentComplete = Agent['complete'];
+
+export type AgentStream = Agent['stream'];
+
+export type AgentResponse<Output = JsonValue> = {
   readonly text: string;
   readonly finishReason: FinishReason;
   readonly usage?: UsageMetadata;
   readonly reasoning?: ReasoningMetadata;
   readonly refusal?: string;
-  readonly finish: ProviderFinished;
+  readonly structured?: Output;
+  readonly finish: ProviderFinished<Output>;
 };
 
-export type AgentEvent =
-  | ProviderStreamEvent
+export type AgentEvent<Output = JsonValue> =
+  | ProviderStreamEvent<Output>
   | {
       readonly type: 'agent.started';
       readonly model: string;
       readonly input: string;
     }
-  | { readonly type: 'agent.finished'; readonly response: AgentResponse }
+  | {
+      readonly type: 'agent.finished';
+      readonly response: AgentResponse<Output>;
+    }
   | { readonly type: 'tool.started'; readonly call: ToolCall }
   | {
       readonly type: 'tool.finished';

@@ -1,18 +1,23 @@
 import { ProviderErrorObject } from '../classes/provider-error.js';
 import type {
   FinishReason,
+  JsonObject,
+  JsonValue,
   ProviderError,
+  ProviderFinished,
   ProviderId,
   ProviderMessage,
   ProviderRequest,
+  StructuredOutputSchema,
   UsageMetadata,
 } from '../types/provider.js';
 import { diagnosticExcerpt } from '../utils/diagnostics.js';
 import { asRecord, numberField, recordField } from '../utils/json.js';
+import { z } from 'zod';
 
 export const requireRequestInput = (
   provider: ProviderId,
-  request: ProviderRequest,
+  request: ProviderRequest<unknown>,
 ): void => {
   if (request.model.trim() === '') {
     throw new ProviderErrorObject({
@@ -67,7 +72,8 @@ export const streamErrorEvent = (
     provider,
     code,
     message,
-    diagnostic: diagnostic === undefined ? undefined : diagnosticExcerpt(diagnostic),
+    diagnostic:
+      diagnostic === undefined ? undefined : diagnosticExcerpt(diagnostic),
   },
 });
 
@@ -90,7 +96,9 @@ export const parseUsage = (
   const totalTokens = numberField(usage, 'total_tokens');
   const reasoningTokens =
     numberField(usage, 'reasoning_tokens') ??
-    (details === undefined ? undefined : numberField(details, 'reasoning_tokens'));
+    (details === undefined
+      ? undefined
+      : numberField(details, 'reasoning_tokens'));
   const cachedInputTokens =
     promptDetails === undefined
       ? undefined
@@ -155,3 +163,142 @@ export const parseJsonBody = (
     diagnostic: diagnosticExcerpt(body),
   });
 };
+
+export const structuredJsonSchema = (
+  provider: ProviderId,
+  schema: StructuredOutputSchema | undefined,
+): JsonObject | undefined => {
+  if (schema === undefined) {
+    return undefined;
+  }
+
+  if (!(schema instanceof z.ZodObject)) {
+    throw new ProviderErrorObject({
+      provider,
+      code: 'invalid_structured_schema',
+      message: `${provider} structured output schema must be a Zod object.`,
+    });
+  }
+
+  let value: unknown;
+
+  try {
+    value = z.toJSONSchema(schema, {
+      io: 'output',
+      unrepresentable: 'throw',
+    });
+  } catch (cause) {
+    throw new ProviderErrorObject(
+      {
+        provider,
+        code: 'invalid_structured_schema',
+        message: `${provider} structured output schema cannot be represented as JSON Schema.`,
+      },
+      { cause },
+    );
+  }
+
+  const json = asJsonObject(value);
+
+  if (json?.type !== 'object') {
+    throw new ProviderErrorObject({
+      provider,
+      code: 'invalid_structured_schema',
+      message: `${provider} structured output schema must produce an object JSON Schema.`,
+    });
+  }
+
+  return json;
+};
+
+export const parseStructuredOutput = <Output = JsonValue>(
+  provider: ProviderId,
+  request: ProviderRequest<Output>,
+  finish: ProviderFinished,
+): ProviderFinished<Output> => {
+  const schema = request.schema;
+
+  if (schema === undefined) {
+    return finish as ProviderFinished<Output>;
+  }
+
+  if (finish.refusal !== undefined || finish.toolCalls.length > 0) {
+    return finish as ProviderFinished<Output>;
+  }
+
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(finish.text) as unknown;
+  } catch (cause) {
+    throw new ProviderErrorObject(
+      {
+        provider,
+        code: 'invalid_structured_output',
+        message: `${provider} returned invalid structured output.`,
+        diagnostic: diagnosticExcerpt(finish.text),
+      },
+      { cause },
+    );
+  }
+
+  return {
+    ...finish,
+    structured: validateStructuredOutput(provider, schema, parsed) as Output,
+  };
+};
+
+const validateStructuredOutput = <Schema extends StructuredOutputSchema>(
+  provider: ProviderId,
+  schema: Schema,
+  value: unknown,
+): z.output<Schema> => {
+  const parsed = schema.safeParse(value);
+
+  if (parsed.success) {
+    return parsed.data;
+  }
+
+  throw new ProviderErrorObject({
+    provider,
+    code: 'invalid_structured_output',
+    message: `${provider} structured output failed schema validation.`,
+    diagnostic: parsed.error.issues.map(issueDiagnostic).join('; '),
+  });
+};
+
+const issueDiagnostic = (issue: z.core.$ZodIssue): string => {
+  const path = issue.path.map(String).join('.');
+
+  return path === '' ? issue.message : `${path}: ${issue.message}`;
+};
+
+const isJsonValue = (value: unknown): value is JsonValue => {
+  if (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return Number.isFinite(value) || typeof value !== 'number';
+  }
+
+  if (Array.isArray(value)) {
+    return value.every(isJsonValue);
+  }
+
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    Object.values(value).every(isJsonValue)
+  );
+};
+
+const asJsonObject = (value: unknown): JsonObject | undefined =>
+  value !== null &&
+  typeof value === 'object' &&
+  !Array.isArray(value) &&
+  isJsonValue(value)
+    ? (value as JsonObject)
+    : undefined;

@@ -1,7 +1,9 @@
 import type {
+  JsonValue,
   ToolCallRequest,
   ToolDefinition,
 } from 'tools';
+import type { z } from 'zod';
 
 export type { JsonArray, JsonObject, JsonPrimitive, JsonValue } from 'tools';
 
@@ -20,6 +22,7 @@ export type ProviderCapabilities = {
   readonly modelListing: boolean;
   readonly oauth: boolean;
   readonly serviceTier: boolean;
+  readonly structuredOutputs: boolean;
 };
 
 export type Model = {
@@ -57,6 +60,10 @@ export type ReasoningRequest = {
   readonly summary?: 'auto' | 'concise' | 'detailed';
 };
 
+export type StructuredOutputSchema = z.ZodObject;
+export type StructuredOutputValue<Schema extends StructuredOutputSchema> =
+  z.output<Schema>;
+
 export type ProviderCallFlags = {
   readonly reasoning?: boolean | ReasoningRequest;
   readonly serviceTier?: 'auto' | 'default' | 'priority';
@@ -86,13 +93,14 @@ export type ReasoningMetadata = {
   readonly summary?: string;
 };
 
-export type ProviderFinished = {
+export type ProviderFinished<Output = JsonValue> = {
   readonly text: string;
   readonly finishReason: FinishReason;
   readonly usage?: UsageMetadata;
   readonly reasoning?: ReasoningMetadata;
   readonly refusal?: string;
   readonly toolCalls: readonly ProviderToolCall[];
+  readonly structured?: Output;
 };
 
 export type ProviderError = {
@@ -104,7 +112,7 @@ export type ProviderError = {
   readonly diagnostic?: string;
 };
 
-export type ProviderStreamEvent =
+export type ProviderStreamEvent<Output = JsonValue> =
   | {
       readonly type: 'response.started';
       readonly provider: ProviderId;
@@ -139,17 +147,21 @@ export type ProviderStreamEvent =
     }
   | {
       readonly type: 'response.finished';
-      readonly finish: ProviderFinished;
+      readonly finish: ProviderFinished<Output>;
     }
   | {
       readonly type: 'error';
       readonly error: ProviderError;
     };
 
-export type ProviderRequest = {
+export type ProviderRequest<
+  Output = JsonValue,
+  Schema extends StructuredOutputSchema = StructuredOutputSchema,
+> = {
   readonly model: string;
   readonly messages: readonly ProviderMessage[];
   readonly tools?: readonly ToolDefinition[];
+  readonly schema?: Schema;
   readonly temperature?: number;
   readonly maxOutputTokens?: number;
   readonly flags?: ProviderCallFlags;
@@ -161,9 +173,28 @@ export interface LlmProvider {
   readonly metadata: ProviderMetadata;
   readonly capabilities: ProviderCapabilities;
 
-  complete(request: ProviderRequest): Promise<ProviderFinished>;
+  complete<
+    Schema extends StructuredOutputSchema,
+    Output = z.output<Schema>,
+  >(
+    request: ProviderRequest<Output, Schema> & {
+      readonly schema: Schema;
+    },
+  ): Promise<ProviderFinished<Output>>;
 
-  stream(request: ProviderRequest): AsyncIterable<ProviderStreamEvent>;
+  complete<Output = JsonValue>(
+    request: ProviderRequest<Output>,
+  ): Promise<ProviderFinished<Output>>;
+
+  stream<Schema extends StructuredOutputSchema, Output = z.output<Schema>>(
+    request: ProviderRequest<Output, Schema> & {
+      readonly schema: Schema;
+    },
+  ): AsyncIterable<ProviderStreamEvent<Output>>;
+
+  stream<Output = JsonValue>(
+    request: ProviderRequest<Output>,
+  ): AsyncIterable<ProviderStreamEvent<Output>>;
 
   models(signal?: AbortSignal): Promise<readonly Model[]>;
 

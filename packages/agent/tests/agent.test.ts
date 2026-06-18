@@ -6,6 +6,7 @@ import {
   createAgent,
   type AgentEvent,
 } from '../src/index.js';
+import { z } from 'zod';
 import {
   call,
   collect,
@@ -111,6 +112,39 @@ test('complete executes requested tools and calls the provider again with tool r
   assert.deepEqual(fake.requests[1]?.messages, messages.list().slice(0, 3));
 });
 
+test('complete passes run structured output to provider requests and returns parsed output', async () => {
+  const schema = z.object({ answer: z.string() });
+  const finish: ProviderFinished<z.output<typeof schema>> = {
+    ...completeFinish('{"answer":"Done"}'),
+    structured: { answer: 'Done' },
+  };
+  const fake = createProvider({ complete: () => finish });
+  const messages = createMessageStorage();
+  const agent = createAgent({
+    provider: fake.provider,
+    tools: createTools().storage,
+    messages,
+    system: '',
+    model: 'fake-model',
+  });
+
+  const response = await agent.complete('Return JSON.', { schema });
+  const structured: { readonly answer: string } | undefined =
+    response.structured;
+
+  // @ts-expect-error structured output is inferred from the Zod schema.
+  const invalid: number | undefined = response.structured;
+  void invalid;
+
+  assert.equal(fake.requests[0]?.schema, schema);
+  assert.deepEqual(structured, { answer: 'Done' });
+  assert.equal(response.finish, finish);
+  assert.deepEqual(messages.list(), [
+    { role: 'user', content: 'Return JSON.' },
+    { role: 'assistant', content: '{"answer":"Done"}' },
+  ]);
+});
+
 test('stream yields provider events tool events and final agent event across a tool loop', async () => {
   const lookup = call('lookup', { query: 'stream' });
   const fake = createProvider({
@@ -164,6 +198,41 @@ test('stream yields provider events tool events and final agent event across a t
     final?.type === 'agent.finished' ? final.response.text : undefined,
     'Stream done.',
   );
+});
+
+test('stream passes run structured output to provider requests and emits parsed output', async () => {
+  const schema = z.object({ answer: z.string() });
+  const finish: ProviderFinished<z.output<typeof schema>> = {
+    ...completeFinish('{"answer":"Done"}'),
+    structured: { answer: 'Done' },
+  };
+  const fake = createProvider({
+    stream: () => streamEvents(finish),
+  });
+  const messages = createMessageStorage();
+  const agent = createAgent({
+    provider: fake.provider,
+    tools: createTools().storage,
+    messages,
+    system: '',
+    model: 'fake-model',
+  });
+
+  const events = await collect(agent.stream('Return JSON.', { schema }));
+  const final = events.at(-1);
+
+  assert.equal(fake.requests[0]?.schema, schema);
+  assert.equal(final?.type, 'agent.finished');
+
+  if (final?.type !== 'agent.finished') {
+    assert.fail('Expected final agent.finished event.');
+  }
+
+  assert.deepEqual(final.response.structured, { answer: 'Done' });
+  assert.deepEqual(messages.list(), [
+    { role: 'user', content: 'Return JSON.' },
+    { role: 'assistant', content: '{"answer":"Done"}' },
+  ]);
 });
 
 test('does not persist the system prompt into external message storage', async () => {

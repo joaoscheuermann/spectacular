@@ -1,0 +1,21 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "workflow-prompt",
+  "projectType": "library",
+  "sourceRoot": "workflows/prompt/src",
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["^build"],
+      "outputs": ["{projectRoot}/dist-tests"],
+      "options": {
+        "commands": [
+          "tsc -p workflows/prompt/tsconfig.spec.json",
+          "node --test workflows/prompt/dist-tests/tests/*.test.js"
+        ],
+        "parallel": false
+      }
+    }
+  },
+  "tags": []
+}

@@ -2,6 +2,7 @@ import { ProviderErrorObject } from '../classes/provider-error.js';
 import type { LlmDebugLogger } from '../debug.js';
 import type { HttpTransport } from '../types/http.js';
 import type {
+  JsonValue,
   LlmProvider,
   Model,
   ProviderCapabilities,
@@ -11,17 +12,27 @@ import type {
   ProviderStreamEvent,
   ProviderToolCall,
 } from '../types/provider.js';
-import { asRecord, arrayField, numberField, recordField, stringField } from '../utils/json.js';
+import {
+  asRecord,
+  arrayField,
+  numberField,
+  recordField,
+  stringField,
+} from '../utils/json.js';
 import { parseSseEvents } from '../utils/sse.js';
 import {
   finishReason,
   httpError,
   messageText,
   parseJsonBody,
+  parseStructuredOutput,
   parseUsage,
   requireRequestInput,
   streamErrorEvent,
+  structuredJsonSchema,
 } from './common.js';
+
+const structuredOutputName = 'structured_output';
 
 export type OpenRouterProviderDeps = {
   readonly transport: HttpTransport;
@@ -43,6 +54,7 @@ export const openRouterCapabilities: ProviderCapabilities = {
   modelListing: true,
   oauth: false,
   serviceTier: false,
+  structuredOutputs: true,
 };
 
 export const createOpenRouterProvider = (
@@ -52,7 +64,7 @@ export const createOpenRouterProvider = (
   const logger = deps.debugLogger;
 
   const post = async (
-    request: ProviderRequest,
+    request: ProviderRequest<unknown>,
     body: Record<string, unknown>,
   ): Promise<Record<string, unknown>> => {
     const response = await deps.transport.request({
@@ -85,7 +97,9 @@ export const createOpenRouterProvider = (
     metadata: openRouterMetadata,
     capabilities: openRouterCapabilities,
 
-    async complete(request: ProviderRequest): Promise<ProviderFinished> {
+    async complete<Output = JsonValue>(
+      request: ProviderRequest<Output>,
+    ): Promise<ProviderFinished<Output>> {
       requireRequestInput('openrouter', request);
       const body = openRouterBody(request, false);
       await logger?.log({
@@ -95,10 +109,16 @@ export const createOpenRouterProvider = (
         fields: { body },
       });
 
-      return parseOpenRouterFinished(await post(request, body));
+      return parseStructuredOutput(
+        'openrouter',
+        request,
+        parseOpenRouterFinished(await post(request, body)),
+      );
     },
 
-    async *stream(request: ProviderRequest): AsyncIterable<ProviderStreamEvent> {
+    async *stream<Output = JsonValue>(
+      request: ProviderRequest<Output>,
+    ): AsyncIterable<ProviderStreamEvent<Output>> {
       requireRequestInput('openrouter', request);
       const body = openRouterBody(request, true);
       const chunks = deps.transport.stream({
@@ -112,9 +132,18 @@ export const createOpenRouterProvider = (
         body: JSON.stringify(body),
         signal: request.signal,
       });
-      const state: StreamState = { text: [], reasoning: [], refusal: [], calls: new Map() };
+      const state: StreamState = {
+        text: [],
+        reasoning: [],
+        refusal: [],
+        calls: new Map(),
+      };
 
-      yield { type: 'response.started', provider: 'openrouter', model: request.model };
+      yield {
+        type: 'response.started',
+        provider: 'openrouter',
+        model: request.model,
+      };
 
       for await (const event of parseSseEvents(chunks)) {
         if (event.done) {
@@ -126,12 +155,21 @@ export const createOpenRouterProvider = (
         try {
           payload = parseJsonBody('openrouter', event.data);
         } catch {
-          yield streamErrorEvent('openrouter', 'malformed_stream_event', event.data);
+          yield streamErrorEvent(
+            'openrouter',
+            'malformed_stream_event',
+            event.data,
+          );
           return;
         }
 
         if (recordField(payload, 'error') !== undefined) {
-          yield streamErrorEvent('openrouter', 'provider_error', 'OpenRouter stream error.', event.data);
+          yield streamErrorEvent(
+            'openrouter',
+            'provider_error',
+            'OpenRouter stream error.',
+            event.data,
+          );
           return;
         }
 
@@ -146,14 +184,14 @@ export const createOpenRouterProvider = (
 
       yield {
         type: 'response.finished',
-        finish: {
+        finish: parseStructuredOutput('openrouter', request, {
           text: state.text.join(''),
           reasoning: { text: state.reasoning.join('') },
           refusal: state.refusal.join('') || undefined,
           finishReason: state.finishReason ?? 'unknown',
           usage: state.usage,
           toolCalls: [...state.calls.values()],
-        },
+        }),
       };
     },
 
@@ -179,7 +217,9 @@ export const createOpenRouterProvider = (
     },
 
     async validateModel(model: string, signal?: AbortSignal): Promise<Model> {
-      const found = (await this.models(signal)).find((item) => item.id === model);
+      const found = (await this.models(signal)).find(
+        (item) => item.id === model,
+      );
 
       if (found === undefined) {
         throw new ProviderErrorObject({
@@ -195,10 +235,11 @@ export const createOpenRouterProvider = (
 };
 
 export const openRouterBody = (
-  request: ProviderRequest,
+  request: ProviderRequest<unknown>,
   stream: boolean,
 ): Record<string, unknown> => {
   requireRequestInput('openrouter', request);
+  const schema = structuredJsonSchema('openrouter', request.schema);
 
   return prune({
     model: request.model,
@@ -226,16 +267,34 @@ export const openRouterBody = (
     temperature: request.temperature,
     max_tokens: request.maxOutputTokens,
     reasoning: reasoningRequest(request),
+    response_format:
+      request.schema === undefined
+        ? undefined
+        : {
+            type: 'json_schema',
+            json_schema: {
+              name: structuredOutputName,
+              strict: true,
+              schema,
+            },
+          },
     stream,
-    stream_options: request.flags?.includeUsage === false ? undefined : { include_usage: true },
+    stream_options:
+      request.flags?.includeUsage === false
+        ? undefined
+        : { include_usage: true },
   });
 };
 
-const parseOpenRouterFinished = (response: Record<string, unknown>): ProviderFinished => {
+const parseOpenRouterFinished = (
+  response: Record<string, unknown>,
+): ProviderFinished => {
   const choice = asRecord(arrayField(response, 'choices')[0]) ?? {};
   const message = recordField(choice, 'message') ?? {};
   const content = stringField(message, 'content') ?? '';
-  const reasoning = stringField(message, 'reasoning') ?? stringField(message, 'reasoning_content');
+  const reasoning =
+    stringField(message, 'reasoning') ??
+    stringField(message, 'reasoning_content');
   const refusal = stringField(message, 'refusal');
   const toolCalls = arrayField(message, 'tool_calls')
     .map(asRecord)
@@ -273,8 +332,14 @@ type StreamState = {
 const openRouterStreamEvents = (
   payload: Record<string, unknown>,
   state: StreamState,
-): readonly ProviderStreamEvent[] => {
-  const events: ProviderStreamEvent[] = [];
+): readonly Exclude<
+  ProviderStreamEvent,
+  { readonly type: 'response.finished' }
+>[] => {
+  const events: Exclude<
+    ProviderStreamEvent,
+    { readonly type: 'response.finished' }
+  >[] = [];
   const usage = parseUsage(recordField(payload, 'usage'));
 
   if (usage !== undefined) {
@@ -282,11 +347,14 @@ const openRouterStreamEvents = (
     events.push({ type: 'usage', usage });
   }
 
-  for (const choice of arrayField(payload, 'choices').map(asRecord).filter(isRecord)) {
+  for (const choice of arrayField(payload, 'choices')
+    .map(asRecord)
+    .filter(isRecord)) {
     const delta = recordField(choice, 'delta') ?? {};
     const content = stringField(delta, 'content');
     const reasoning =
-      stringField(delta, 'reasoning') ?? stringField(delta, 'reasoning_content');
+      stringField(delta, 'reasoning') ??
+      stringField(delta, 'reasoning_content');
     const refusal = stringField(delta, 'refusal');
 
     if (content !== undefined) {
@@ -304,7 +372,9 @@ const openRouterStreamEvents = (
       events.push({ type: 'refusal.delta', delta: refusal });
     }
 
-    for (const call of arrayField(delta, 'tool_calls').map(asRecord).filter(isRecord)) {
+    for (const call of arrayField(delta, 'tool_calls')
+      .map(asRecord)
+      .filter(isRecord)) {
       const index = numberField(call, 'index') ?? 0;
       const fn = recordField(call, 'function') ?? {};
       const previous = state.calls.get(index);
@@ -340,8 +410,12 @@ const modelFromRecord = (model: Record<string, unknown>): Model => {
     name: stringField(model, 'name'),
     contextWindow:
       numberField(model, 'context_length') ??
-      (topProvider === undefined ? undefined : numberField(topProvider, 'context_length')) ??
-      (architecture === undefined ? undefined : numberField(architecture, 'context_length')) ??
+      (topProvider === undefined
+        ? undefined
+        : numberField(topProvider, 'context_length')) ??
+      (architecture === undefined
+        ? undefined
+        : numberField(architecture, 'context_length')) ??
       4096,
     provider: 'openrouter',
     raw: model,
@@ -365,7 +439,7 @@ const secret = async (
 };
 
 const reasoningRequest = (
-  request: ProviderRequest,
+  request: ProviderRequest<unknown>,
 ): Record<string, unknown> | undefined => {
   const value = request.flags?.reasoning;
 
@@ -373,7 +447,9 @@ const reasoningRequest = (
     return undefined;
   }
 
-  return value === true ? {} : prune({ effort: value.effort, summary: value.summary });
+  return value === true
+    ? {}
+    : prune({ effort: value.effort, summary: value.summary });
 };
 
 const prune = (value: Record<string, unknown>): Record<string, unknown> =>
@@ -381,5 +457,6 @@ const prune = (value: Record<string, unknown>): Record<string, unknown> =>
     Object.entries(value).filter(([, child]) => child !== undefined),
   );
 
-const isRecord = (value: Record<string, unknown> | undefined): value is Record<string, unknown> =>
-  value !== undefined;
+const isRecord = (
+  value: Record<string, unknown> | undefined,
+): value is Record<string, unknown> => value !== undefined;

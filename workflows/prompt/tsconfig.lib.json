@@ -1,0 +1,39 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/tsconfig.lib.tsbuildinfo",
+    "emitDeclarationOnly": false,
+    "forceConsistentCasingInFileNames": true,
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"],
+  "references": [
+    {
+      "path": "../../packages/artifacts/tsconfig.lib.json"
+    },
+    {
+      "path": "../../packages/agent/tsconfig.lib.json"
+    },
+    {
+      "path": "../../packages/llms/tsconfig.lib.json"
+    },
+    {
+      "path": "../../packages/messages/tsconfig.lib.json"
+    },
+    {
+      "path": "../../packages/tools/tsconfig.lib.json"
+    },
+    {
+      "path": "../../tools/find/tsconfig.lib.json"
+    },
+    {
+      "path": "../../tools/grep/tsconfig.lib.json"
+    },
+    {
+      "path": "../../tools/tree/tsconfig.lib.json"
+    }
+  ]
+}

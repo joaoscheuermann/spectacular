@@ -1,4 +1,9 @@
-import type { ProviderFinished, ProviderMessage, ProviderRequest } from 'llms';
+import type {
+  JsonValue,
+  ProviderFinished,
+  ProviderMessage,
+  ProviderRequest,
+} from 'llms';
 
 import { AgentErrorObject } from './classes/agent-error.js';
 import type {
@@ -28,7 +33,9 @@ export const createAgent = (options: AgentOptions): Agent => {
     running = false;
   };
 
-  const buildRequest = (signal?: AbortSignal): ProviderRequest => {
+  const buildRequest = <Output = JsonValue>(
+    runOptions: AgentRunOptions<Output>,
+  ): ProviderRequest<Output> => {
     const system: readonly ProviderMessage[] =
       options.system.length > 0
         ? [{ role: 'system', content: options.system }]
@@ -46,7 +53,8 @@ export const createAgent = (options: AgentOptions): Agent => {
         ? { maxOutputTokens: options.maxOutputTokens }
         : {}),
       ...(options.flags !== undefined ? { flags: options.flags } : {}),
-      ...(signal !== undefined ? { signal } : {}),
+      ...(runOptions.schema !== undefined ? { schema: runOptions.schema } : {}),
+      ...(runOptions.signal !== undefined ? { signal: runOptions.signal } : {}),
     };
   };
 
@@ -58,7 +66,16 @@ export const createAgent = (options: AgentOptions): Agent => {
     });
   };
 
-  const runTools = async (finish: ProviderFinished): Promise<void> => {
+  const storeAssistant = (finish: ProviderFinished<unknown>): void => {
+    options.messages.push({
+      role: 'assistant',
+      content:
+        finish.text.length > 0 ? finish.text : (finish.refusal ?? finish.text),
+      ...(finish.toolCalls.length > 0 ? { toolCalls: finish.toolCalls } : {}),
+    });
+  };
+
+  const runTools = async (finish: ProviderFinished<unknown>): Promise<void> => {
     for (const call of options.tools.calls(finish)) {
       const result = await options.tools.execute(call);
       pushToolResult(call.id, serializeToolResult(result));
@@ -66,10 +83,10 @@ export const createAgent = (options: AgentOptions): Agent => {
   };
 
   return {
-    complete: async (
+    complete: async <Output = JsonValue>(
       input: string,
-      runOptions: AgentRunOptions = {},
-    ): Promise<AgentResponse> => {
+      runOptions: AgentRunOptions<Output> = {},
+    ): Promise<AgentResponse<Output>> => {
       acquire();
 
       try {
@@ -77,9 +94,9 @@ export const createAgent = (options: AgentOptions): Agent => {
 
         while (true) {
           const finish = await options.provider.complete(
-            buildRequest(runOptions.signal),
+            buildRequest(runOptions),
           );
-          options.messages.push(finish);
+          storeAssistant(finish);
 
           if (finish.toolCalls.length === 0) {
             return responseFromFinish(finish);
@@ -92,7 +109,10 @@ export const createAgent = (options: AgentOptions): Agent => {
       }
     },
 
-    stream: async function* (input: string, runOptions: AgentRunOptions = {}) {
+    stream: async function* <Output = JsonValue>(
+      input: string,
+      runOptions: AgentRunOptions<Output> = {},
+    ) {
       acquire();
 
       try {
@@ -104,10 +124,10 @@ export const createAgent = (options: AgentOptions): Agent => {
         } as const;
 
         while (true) {
-          let finish: ProviderFinished | undefined;
+          let finish: ProviderFinished<Output> | undefined;
 
           for await (const event of options.provider.stream(
-            buildRequest(runOptions.signal),
+            buildRequest(runOptions),
           )) {
             yield event;
 
@@ -124,7 +144,7 @@ export const createAgent = (options: AgentOptions): Agent => {
             });
           }
 
-          options.messages.push(finish);
+          storeAssistant(finish);
 
           const calls = options.tools.calls(finish);
 
@@ -174,11 +194,14 @@ export const createAgent = (options: AgentOptions): Agent => {
   };
 };
 
-const responseFromFinish = (finish: ProviderFinished): AgentResponse => ({
+const responseFromFinish = <Output = JsonValue>(
+  finish: ProviderFinished<Output>,
+): AgentResponse<Output> => ({
   text: finish.text,
   finishReason: finish.finishReason,
   usage: finish.usage,
   reasoning: finish.reasoning,
   refusal: finish.refusal,
+  structured: finish.structured,
   finish,
 });

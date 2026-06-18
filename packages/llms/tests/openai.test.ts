@@ -59,6 +59,33 @@ test('maps OpenAI Responses DTO with instructions tools reasoning and fast servi
       output: 'tool output',
     },
   ]);
+  assert.equal('text' in body, false);
+});
+
+test('maps OpenAI structured output schemas to text format DTOs', () => {
+  const body = openAiBody(
+    {
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Return JSON.' }],
+      schema: z.object({ answer: z.string() }),
+    },
+    false,
+  );
+
+  assert.deepEqual(body.text, {
+    format: {
+      type: 'json_schema',
+      name: 'structured_output',
+      strict: true,
+      schema: {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        properties: { answer: { type: 'string' } },
+        required: ['answer'],
+        additionalProperties: false,
+      },
+    },
+  });
 });
 
 test('accepts tool definitions from shared tool storage', () => {
@@ -98,7 +125,10 @@ test('rejects OpenAI requests that are missing model or input', async () => {
   });
 
   await assert.rejects(
-    provider.complete({ model: '', messages: [{ role: 'user', content: 'hi' }] }),
+    provider.complete({
+      model: '',
+      messages: [{ role: 'user', content: 'hi' }],
+    }),
     (error: unknown) =>
       error instanceof ProviderErrorObject &&
       error.data.code === 'missing_model',
@@ -136,7 +166,10 @@ test('parses OpenAI completion output usage reasoning and tool calls', async () 
       }),
     ],
   });
-  const provider = createOpenAiProvider({ transport, apiKey: 'sk-testSecret123' });
+  const provider = createOpenAiProvider({
+    transport,
+    apiKey: 'sk-testSecret123',
+  });
 
   const result = await provider.complete({
     model: 'gpt-5',
@@ -158,11 +191,69 @@ test('parses OpenAI completion output usage reasoning and tool calls', async () 
   ]);
 });
 
+test('returns parsed OpenAI structured output from completions', async () => {
+  const transport = fakeTransport({
+    responses: [
+      response({
+        status: 'completed',
+        output_text: '{"answer":"Done"}',
+        output: [],
+      }),
+    ],
+  });
+  const provider = createOpenAiProvider({
+    transport,
+    apiKey: 'sk-testSecret123',
+  });
+
+  const result = await provider.complete({
+    model: 'gpt-5',
+    messages: [{ role: 'user', content: 'Hi' }],
+    schema: z.object({ answer: z.string() }),
+  });
+
+  assert.deepEqual(result.structured, { answer: 'Done' });
+});
+
+test('returns OpenAI refusals without structured parsing', async () => {
+  const transport = fakeTransport({
+    responses: [
+      response({
+        status: 'completed',
+        output: [
+          {
+            type: 'message',
+            content: [{ type: 'refusal', refusal: 'No.' }],
+          },
+        ],
+      }),
+    ],
+  });
+  const provider = createOpenAiProvider({
+    transport,
+    apiKey: 'sk-testSecret123',
+  });
+
+  const result = await provider.complete({
+    model: 'gpt-5',
+    messages: [{ role: 'user', content: 'Hi' }],
+    schema: z.object({ answer: z.string() }),
+  });
+
+  assert.equal(result.refusal, 'No.');
+  assert.equal(result.structured, undefined);
+});
+
 test('sends OpenAI API key auth as bearer token', async () => {
   const transport = fakeTransport({
-    responses: [response({ status: 'completed', output_text: 'ok', output: [] })],
+    responses: [
+      response({ status: 'completed', output_text: 'ok', output: [] }),
+    ],
   });
-  const provider = createOpenAiProvider({ transport, apiKey: 'sk-testSecret123' });
+  const provider = createOpenAiProvider({
+    transport,
+    apiKey: 'sk-testSecret123',
+  });
 
   await provider.complete({
     model: 'gpt-5',
@@ -177,7 +268,9 @@ test('sends OpenAI API key auth as bearer token', async () => {
 
 test('sends exact OpenAI authorization header when supplied', async () => {
   const transport = fakeTransport({
-    responses: [response({ status: 'completed', output_text: 'ok', output: [] })],
+    responses: [
+      response({ status: 'completed', output_text: 'ok', output: [] }),
+    ],
   });
   const provider = createOpenAiProvider({
     transport,
@@ -263,7 +356,11 @@ test('streams OpenAI text reasoning usage finish and tool calls', async () => {
 
   assert.equal(events[0]?.type, 'response.started');
   assert.deepEqual(
-    events.filter((event): event is ProviderStreamEvent & { type: 'text.delta' } => event.type === 'text.delta')
+    events
+      .filter(
+        (event): event is ProviderStreamEvent & { type: 'text.delta' } =>
+          event.type === 'text.delta',
+      )
       .map((event) => event.delta),
     ['Hel', 'lo'],
   );
@@ -271,6 +368,158 @@ test('streams OpenAI text reasoning usage finish and tool calls', async () => {
   assert.ok(events.some((event) => event.type === 'tool_call.done'));
   assert.ok(events.some((event) => event.type === 'usage'));
   assert.equal(events.at(-1)?.type, 'response.finished');
+});
+
+test('returns parsed OpenAI structured output from stream finishes', async () => {
+  const provider = createOpenAiProvider({
+    transport: fakeTransport({
+      streams: [
+        [
+          sse({ type: 'response.output_text.delta', delta: '{"answer"' }),
+          sse({ type: 'response.output_text.delta', delta: ':"Done"}' }),
+          sse({
+            type: 'response.completed',
+            response: {
+              status: 'completed',
+              output_text: '{"answer":"Done"}',
+              usage: { input_tokens: 1, output_tokens: 2, total_tokens: 3 },
+            },
+          }),
+        ],
+      ],
+    }),
+    apiKey: 'sk-testSecret123',
+  });
+
+  const events = await collect(
+    provider.stream({
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Hi' }],
+      schema: z.object({ answer: z.string() }),
+    }),
+  );
+  const finished = events.at(-1);
+
+  assert.equal(finished?.type, 'response.finished');
+
+  if (finished?.type !== 'response.finished') {
+    assert.fail('Expected final response.finished event.');
+  }
+
+  assert.deepEqual(finished.finish.structured, { answer: 'Done' });
+});
+
+test('returns OpenAI stream refusals without structured parsing', async () => {
+  const provider = createOpenAiProvider({
+    transport: fakeTransport({
+      streams: [
+        [
+          sse({ type: 'response.refusal.delta', delta: 'No.' }),
+          sse({
+            type: 'response.completed',
+            response: {
+              status: 'completed',
+            },
+          }),
+        ],
+      ],
+    }),
+    apiKey: 'sk-testSecret123',
+  });
+
+  const events = await collect(
+    provider.stream({
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Hi' }],
+      schema: z.object({ answer: z.string() }),
+    }),
+  );
+  const finished = events.at(-1);
+
+  assert.equal(finished?.type, 'response.finished');
+
+  if (finished?.type !== 'response.finished') {
+    assert.fail('Expected final response.finished event.');
+  }
+
+  assert.equal(finished.finish.refusal, 'No.');
+  assert.equal(finished.finish.structured, undefined);
+});
+
+test('rejects invalid OpenAI structured JSON', async () => {
+  const completeProvider = createOpenAiProvider({
+    transport: fakeTransport({
+      responses: [
+        response({
+          status: 'completed',
+          output_text: 'not-json',
+          output: [],
+        }),
+      ],
+    }),
+    apiKey: 'sk-testSecret123',
+  });
+  const streamProvider = createOpenAiProvider({
+    transport: fakeTransport({
+      streams: [
+        [
+          sse({
+            type: 'response.completed',
+            response: {
+              status: 'completed',
+              output_text: 'not-json',
+            },
+          }),
+        ],
+      ],
+    }),
+    apiKey: 'sk-testSecret123',
+  });
+  const request = {
+    model: 'gpt-5',
+    messages: [{ role: 'user', content: 'Hi' }],
+    schema: z.object({ answer: z.string() }),
+  } as const;
+
+  await assert.rejects(
+    completeProvider.complete(request),
+    (error: unknown) =>
+      error instanceof ProviderErrorObject &&
+      error.data.code === 'invalid_structured_output',
+  );
+  await assert.rejects(
+    collect(streamProvider.stream(request)),
+    (error: unknown) =>
+      error instanceof ProviderErrorObject &&
+      error.data.code === 'invalid_structured_output',
+  );
+});
+
+test('rejects schema-invalid OpenAI structured JSON', async () => {
+  const provider = createOpenAiProvider({
+    transport: fakeTransport({
+      responses: [
+        response({
+          status: 'completed',
+          output_text: '{"answer":123}',
+          output: [],
+        }),
+      ],
+    }),
+    apiKey: 'sk-testSecret123',
+  });
+
+  await assert.rejects(
+    provider.complete({
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Hi' }],
+      schema: z.object({ answer: z.string() }),
+    }),
+    (error: unknown) =>
+      error instanceof ProviderErrorObject &&
+      error.data.code === 'invalid_structured_output' &&
+      error.data.diagnostic?.includes('answer') === true,
+  );
 });
 
 test('does not refresh OpenAI auth after 401 responses', async () => {
@@ -288,8 +537,7 @@ test('does not refresh OpenAI auth after 401 responses', async () => {
       messages: [{ role: 'user', content: 'Hi' }],
     }),
     (error: unknown) =>
-      error instanceof ProviderErrorObject &&
-      error.data.code === 'auth_failed',
+      error instanceof ProviderErrorObject && error.data.code === 'auth_failed',
   );
   assert.equal(transport.requests.length, 1);
 });

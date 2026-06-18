@@ -14,13 +14,20 @@ For non-trivial work, use this order:
 
 1. `GROUNDING.md`.
 2. This `AGENTS.md`.
-3. The relevant skill under `.agents/skills/`, when its trigger matches the
+3. Any nested `AGENTS.md` files that apply to the target files or folders.
+   Search the relevant subtree or path before acting, and read applicable files
+   from broadest to most specific.
+4. The relevant skill under `.agents/skills/`, when its trigger matches the
    task.
-4. Nearby source, tests, manifests, schemas, generated contracts, or artifacts
+5. Nearby source, tests, manifests, schemas, generated contracts, or artifacts
    needed for the task.
 
 Read only enough context to act correctly. Broaden the search when evidence is
 missing or the task crosses package, runtime, or workflow boundaries.
+
+Nested `AGENTS.md` files may define folder-specific context, goals, ownership,
+or validation expectations. They contextualize work in their subtree without
+removing the requirement to follow `GROUNDING.md` and this root `AGENTS.md`.
 
 ## Skill Routing
 
@@ -41,6 +48,8 @@ which ones are being followed.
   claims.
 - Preserve unrelated dirty worktree changes.
 - Keep edits scoped to the user request and the relevant ownership boundary.
+- When work targets a nested folder, search for and read applicable nested
+  `AGENTS.md` files before planning, editing, or validating that work.
 - For code updates, follow the Sub-Agent Handoffs rule: the main agent
   orchestrates while sub-agents perform implementation and focused validation.
 - Treat this repository as a TypeScript agent-core project unless the user

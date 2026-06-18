@@ -44,6 +44,12 @@
     },
     {
       "path": "./tools/write"
+    },
+    {
+      "path": "./packages/artifacts"
+    },
+    {
+      "path": "./workflows/prompt"
     }
   ]
 }

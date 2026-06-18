@@ -1,5 +1,5 @@
 {
-  "name": "llms",
+  "name": "workflow-prompt",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -16,6 +16,13 @@
     }
   },
   "dependencies": {
+    "agent": "0.0.1",
+    "artifacts": "0.0.1",
+    "llms": "0.0.1",
+    "messages": "0.0.1",
+    "tool-find": "0.0.1",
+    "tool-grep": "0.0.1",
+    "tool-tree": "0.0.1",
     "tools": "0.0.1",
     "tslib": "^2.3.0",
     "zod": "^4.4.3"

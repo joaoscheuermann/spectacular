@@ -16,7 +16,7 @@ import type {
 
 type ProviderFake = {
   readonly provider: LlmProvider;
-  readonly requests: ProviderRequest[];
+  readonly requests: ProviderRequest<unknown>[];
 };
 
 type ToolFake = {
@@ -45,15 +45,15 @@ export const call = (
 
 export const createProvider = (options: {
   readonly complete?: (
-    request: ProviderRequest,
+    request: ProviderRequest<unknown>,
     index: number,
-  ) => ProviderFinished | Promise<ProviderFinished>;
+  ) => ProviderFinished<unknown> | Promise<ProviderFinished<unknown>>;
   readonly stream?: (
-    request: ProviderRequest,
+    request: ProviderRequest<unknown>,
     index: number,
-  ) => AsyncIterable<ProviderStreamEvent>;
+  ) => AsyncIterable<ProviderStreamEvent<unknown>>;
 }): ProviderFake => {
-  const requests: ProviderRequest[] = [];
+  const requests: ProviderRequest<unknown>[] = [];
 
   return {
     requests,
@@ -70,18 +70,26 @@ export const createProvider = (options: {
         modelListing: true,
         oauth: false,
         serviceTier: false,
+        structuredOutputs: true,
       },
-      complete: async (request) => {
+      complete: async <Output = JsonValue>(
+        request: ProviderRequest<Output>,
+      ) => {
         const index = requests.length;
         requests.push(request);
 
-        return options.complete?.(request, index) ?? completeFinish('done');
+        return (options.complete?.(request, index) ??
+          completeFinish('done')) as ProviderFinished<Output>;
       },
-      stream: async function* (request) {
+      stream: async function* <Output = JsonValue>(
+        request: ProviderRequest<Output>,
+      ) {
         const index = requests.length;
         requests.push(request);
 
-        yield* options.stream?.(request, index) ?? [];
+        yield* (options.stream?.(request, index) ?? []) as AsyncIterable<
+          ProviderStreamEvent<Output>
+        >;
       },
       models: async () => [{ id: 'fake-model' }],
       validateModel: async (model) => ({ id: model }),
@@ -124,8 +132,8 @@ const parseToolCall = (request: ToolCallRequest): ToolCall => ({
 });
 
 export const streamEvents = (
-  finish: ProviderFinished,
-): AsyncIterable<ProviderStreamEvent> =>
+  finish: ProviderFinished<unknown>,
+): AsyncIterable<ProviderStreamEvent<unknown>> =>
   (async function* () {
     yield {
       type: 'response.started',
@@ -142,10 +150,10 @@ export const streamEvents = (
     };
   })();
 
-export const collect = async (
-  events: AsyncIterable<AgentEvent>,
-): Promise<readonly AgentEvent[]> => {
-  const output: AgentEvent[] = [];
+export const collect = async <Output = JsonValue>(
+  events: AsyncIterable<AgentEvent<Output>>,
+): Promise<readonly AgentEvent<Output>[]> => {
+  const output: AgentEvent<Output>[] = [];
 
   for await (const event of events) {
     output.push(event);
