@@ -1,8 +1,6 @@
 export type ConfigParseErrorCode =
   | 'invalid_message'
-  | 'missing_first_part'
-  | 'invalid_first_part_kind'
-  | 'invalid_config_type'
+  | 'missing_configuration'
   | 'invalid_config_field';
 
 export type ConfigParseIssue = {

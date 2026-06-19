@@ -5,18 +5,17 @@ import {
   ConfigParseError,
   parseConfig,
   parseInitialMessageConfig,
+  parseMessageConfigUpdate,
   type AgentConfig,
 } from '../src/index.js';
 
-test('returns config data when the first message part is config data', () => {
+test('returns config data when message metadata contains configuration', () => {
   const config = sampleConfig();
 
   assert.deepEqual(
     parseInitialMessageConfig({
-      parts: [
-        { kind: 'data', data: { type: 'config', data: config } },
-        { kind: 'text', text: 'Build the agent' },
-      ],
+      metadata: { configuration: config },
+      parts: [{ kind: 'text', text: 'Build the agent' }],
     }),
     config,
   );
@@ -38,44 +37,70 @@ test('parses config objects directly when the payload is valid', () => {
   assert.deepEqual(parseConfig(config), config);
 });
 
-test('rejects messages without a first part', () => {
+test('returns config update when later message metadata contains configuration', () => {
+  const config = sampleConfig();
+
+  assert.deepEqual(
+    parseMessageConfigUpdate({
+      metadata: { configuration: config },
+      parts: [{ kind: 'text', text: 'Continue' }],
+    }),
+    config,
+  );
+});
+
+test('returns undefined when later message omits metadata configuration', () => {
+  assert.equal(
+    parseMessageConfigUpdate({
+      metadata: {},
+      parts: [{ kind: 'text', text: 'Continue' }],
+    }),
+    undefined,
+  );
+});
+
+test('rejects messages without metadata configuration', () => {
   assertConfigError(
     () => parseInitialMessageConfig({ parts: [] }),
-    'missing_first_part',
-    'message.parts[0]',
+    'missing_configuration',
+    'message.metadata.configuration',
   );
 });
 
-test('rejects messages whose first part is not data', () => {
+test('rejects metadata without configuration', () => {
   assertConfigError(
     () =>
-      parseInitialMessageConfig({ parts: [{ kind: 'text', text: 'hello' }] }),
-    'invalid_first_part_kind',
-    'message.parts[0].kind',
+      parseInitialMessageConfig({
+        metadata: {},
+        parts: [{ kind: 'text', text: 'hello' }],
+      }),
+    'missing_configuration',
+    'message.metadata.configuration',
   );
 });
 
-test('rejects first data parts whose internal type is not config', () => {
+test('rejects non-object metadata configuration', () => {
+  assertConfigError(
+    () =>
+      parseInitialMessageConfig({
+        metadata: { configuration: 'not an object' },
+        parts: [{ kind: 'text', text: 'hello' }],
+      }),
+    'invalid_config_field',
+    'message.metadata.configuration',
+  );
+});
+
+test('rejects first-part config data when metadata configuration is missing', () => {
   assertConfigError(
     () =>
       parseInitialMessageConfig({
         parts: [
-          { kind: 'data', data: { type: 'prompt', data: sampleConfig() } },
+          { kind: 'data', data: { type: 'config', data: sampleConfig() } },
         ],
       }),
-    'invalid_config_type',
-    'message.parts[0].data.type',
-  );
-});
-
-test('rejects config data parts without a nested config payload', () => {
-  assertConfigError(
-    () =>
-      parseInitialMessageConfig({
-        parts: [{ kind: 'data', data: { type: 'config' } }],
-      }),
-    'invalid_config_field',
-    'message.parts[0].data.data',
+    'missing_configuration',
+    'message.metadata.configuration',
   );
 });
 
@@ -85,21 +110,16 @@ test('rejects malformed config fields with the invalid field path', () => {
   assertConfigError(
     () =>
       parseInitialMessageConfig({
-        parts: [
-          {
-            kind: 'data',
-            data: {
-              type: 'config',
-              data: {
-                ...config,
-                models: [{ id: 'planning', provider: 'openai', model: 1 }],
-              },
-            },
+        metadata: {
+          configuration: {
+            ...config,
+            models: [{ id: 'planning', provider: 'openai', model: 1 }],
           },
-        ],
+        },
+        parts: [{ kind: 'text', text: 'Build the agent' }],
       }),
     'invalid_config_field',
-    'message.parts[0].data.data.models[0].model',
+    'message.metadata.configuration.models[0].model',
   );
 });
 

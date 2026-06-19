@@ -5,7 +5,11 @@ import {
 } from '@a2a-js/sdk/server';
 
 import type { AgentConfig } from 'config';
-import { ConfigParseError, parseInitialMessageConfig } from 'config';
+import {
+  ConfigParseError,
+  parseInitialMessageConfig,
+  parseMessageConfigUpdate,
+} from 'config';
 
 import type { SessionStore } from 'session';
 
@@ -22,7 +26,7 @@ import {
 
 export type DoricSessionContext = {
   readonly repo: ClonedRepo;
-  readonly config: AgentConfig;
+  config: AgentConfig;
   readonly sandbox: SandboxSession;
 };
 
@@ -59,14 +63,21 @@ export const createExecutor = ({
 };
 
 // Makes sure the session is initialized or stored!
-const ensureSession = (
+const ensureSession = async (
   requestContext: RequestContext,
   dependencies: ResolvedDependencies,
 ): Promise<DoricSessionContext> => {
   const existing = dependencies.sessions.load(requestContext.contextId);
 
   if (existing !== undefined) {
-    return existing;
+    const session = await existing;
+    const config = parseConfigUpdate(requestContext);
+
+    if (config !== undefined) {
+      session.config = config;
+    }
+
+    return session;
   }
 
   const config = parseInitialConfig(requestContext);
@@ -97,6 +108,23 @@ const ensureSession = (
 const parseInitialConfig = (requestContext: RequestContext): AgentConfig => {
   try {
     return parseInitialMessageConfig(requestContext.userMessage);
+  } catch (error) {
+    if (error instanceof ConfigParseError) {
+      throw A2AError.invalidParams(error.message, {
+        code: error.code,
+        path: error.path,
+      });
+    }
+
+    throw error;
+  }
+};
+
+const parseConfigUpdate = (
+  requestContext: RequestContext,
+): AgentConfig | undefined => {
+  try {
+    return parseMessageConfigUpdate(requestContext.userMessage);
   } catch (error) {
     if (error instanceof ConfigParseError) {
       throw A2AError.invalidParams(error.message, {

@@ -183,16 +183,8 @@ const createMessageParams = (env) => {
       messageId: randomUUID(),
       role: 'user',
       ...(contextId === undefined ? {} : { contextId }),
-      parts: [
-        {
-          kind: 'data',
-          data: {
-            type: 'config',
-            data: createConfig(env),
-          },
-        },
-        { kind: 'text', text: required(env, 'DORIC_INITIAL_PROMPT') },
-      ],
+      metadata: { configuration: createConfig(env) },
+      parts: [{ kind: 'text', text: required(env, 'DORIC_INITIAL_PROMPT') }],
     },
   };
 };

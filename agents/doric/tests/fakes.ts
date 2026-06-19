@@ -125,16 +125,25 @@ export const createEventBus = (): CapturingEventBus => {
 export const createRequestContext = (
   options: {
     readonly contextId?: string;
+    readonly config?: AgentConfig;
+    readonly metadata?: Message['metadata'] | null;
     readonly message?: Message;
     readonly parts?: Message['parts'];
   } = {},
 ): RequestContext => {
   const contextId = options.contextId ?? randomUUID();
+  const metadata =
+    options.metadata === null
+      ? undefined
+      : (options.metadata ?? {
+          configuration: options.config ?? createConfig(),
+        });
   const message =
     options.message ??
     createUserMessage({
       contextId,
-      parts: options.parts ?? [createConfigPart()],
+      metadata,
+      parts: options.parts ?? [createTextPart()],
     });
 
   return new RequestContext(message, randomUUID(), contextId);
@@ -142,26 +151,22 @@ export const createRequestContext = (
 
 export const createUserMessage = (options: {
   readonly contextId?: string;
+  readonly metadata?: Message['metadata'];
   readonly parts: Message['parts'];
 }): Message => ({
   kind: 'message',
   messageId: randomUUID(),
   role: 'user',
   ...(options.contextId === undefined ? {} : { contextId: options.contextId }),
+  ...(options.metadata === undefined ? {} : { metadata: options.metadata }),
   parts: options.parts,
 });
 
-export const createConfigPart = (
-  overrides: Partial<AgentConfig['github']> & {
-    readonly repoUrl?: string;
-    readonly token?: string;
-  } = {},
+export const createTextPart = (
+  text = 'Build the agent',
 ): Message['parts'][number] => ({
-  kind: 'data',
-  data: {
-    type: 'config',
-    data: createConfig(overrides),
-  },
+  kind: 'text',
+  text,
 });
 
 export const createConfig = (

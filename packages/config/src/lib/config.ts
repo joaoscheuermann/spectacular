@@ -12,62 +12,43 @@ import { at, isRecord } from './utils/object.js';
 export { ConfigParseError } from './classes/parse-error.js';
 export type {
   AgentConfig,
-  ConfigDataPart,
   GithubConfig,
-  InitialMessage,
   ModelConfig,
   ProviderConfig,
   TaskConfig,
 } from './types/config.js';
 export type { ConfigParseErrorCode, ConfigParseIssue } from './types/error.js';
 
-/** Parses the config data from the first part of an initial agent message. */
+const MESSAGE_METADATA_PATH = 'message.metadata';
+const MESSAGE_CONFIGURATION_PATH = 'message.metadata.configuration';
+
+/** Parses the required config from an initial agent message's metadata. */
 export function parseInitialMessageConfig(message: unknown): AgentConfig {
-  if (!isRecord(message)) {
+  const metadata = messageMetadata(message);
+  const configuration = metadata['configuration'];
+
+  if (configuration === undefined) {
     throw invalid(
-      'invalid_message',
-      'message',
-      'Initial message must be an object',
+      'missing_configuration',
+      MESSAGE_CONFIGURATION_PATH,
+      'Initial message metadata must include configuration',
     );
   }
 
-  const parts = message['parts'];
+  return parseConfig(configuration, MESSAGE_CONFIGURATION_PATH);
+}
 
-  if (!Array.isArray(parts) || parts.length === 0) {
-    throw invalid(
-      'missing_first_part',
-      'message.parts[0]',
-      'Initial message must start with a config data part',
-    );
+/** Parses a later message config update when metadata includes configuration. */
+export function parseMessageConfigUpdate(
+  message: unknown,
+): AgentConfig | undefined {
+  const metadata = optionalMessageMetadata(message);
+
+  if (metadata === undefined || metadata['configuration'] === undefined) {
+    return undefined;
   }
 
-  const firstPart = parts[0];
-
-  if (!isRecord(firstPart) || firstPart['kind'] !== 'data') {
-    throw invalid(
-      'invalid_first_part_kind',
-      'message.parts[0].kind',
-      'First message part must be a data part',
-    );
-  }
-
-  const dataPath = 'message.parts[0].data';
-  const data = object(firstPart['data'], dataPath);
-  const type = string(
-    data['type'],
-    at(dataPath, 'type'),
-    'invalid_config_type',
-  );
-
-  if (type !== 'config') {
-    throw invalid(
-      'invalid_config_type',
-      at(dataPath, 'type'),
-      'Config data type must be "config"',
-    );
-  }
-
-  return parseConfig(data['data'], at(dataPath, 'data'));
+  return parseConfig(metadata['configuration'], MESSAGE_CONFIGURATION_PATH);
 }
 
 /** Parses an agent config payload and validates every supported config field. */
@@ -137,6 +118,34 @@ function parseTask(value: unknown, path: string): TaskConfig {
   };
 }
 
+function messageMetadata(message: unknown): Record<string, unknown> {
+  const metadata = optionalMessageMetadata(message);
+
+  if (metadata === undefined) {
+    throw invalid(
+      'missing_configuration',
+      MESSAGE_CONFIGURATION_PATH,
+      'Initial message metadata must include configuration',
+    );
+  }
+
+  return metadata;
+}
+
+function optionalMessageMetadata(
+  message: unknown,
+): Record<string, unknown> | undefined {
+  if (!isRecord(message)) {
+    throw invalid('invalid_message', 'message', 'Message must be an object');
+  }
+
+  if (message['metadata'] === undefined) {
+    return undefined;
+  }
+
+  return object(message['metadata'], MESSAGE_METADATA_PATH);
+}
+
 function object(value: unknown, path: string): Record<string, unknown> {
   if (!isRecord(value)) {
     throw invalid('invalid_config_field', path, 'Expected an object');
@@ -153,13 +162,9 @@ function array(value: unknown, path: string): readonly unknown[] {
   return value;
 }
 
-function string(
-  value: unknown,
-  path: string,
-  code: ConfigParseErrorCode = 'invalid_config_field',
-): string {
+function string(value: unknown, path: string): string {
   if (typeof value !== 'string') {
-    throw invalid(code, path, 'Expected a string');
+    throw invalid('invalid_config_field', path, 'Expected a string');
   }
 
   return value;

@@ -48,6 +48,11 @@ product scope and current files support the change.
 for the Doric agent. That scaffold does not by itself add CLI, daemon,
 provider, persistence, or broader host-surface scope.
 
+`agents/doric` receives first-message config and later config replacements from
+`requestContext.userMessage.metadata.configuration`. Sandbox creation, Git
+setup, repository cloning, and initial workdir state are tied to session
+creation; later config replacement updates only the stored session config.
+
 ## Repository Shape
 
 Doric is an Nx-managed TypeScript workspace with npm workspaces for

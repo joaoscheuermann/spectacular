@@ -30,15 +30,3 @@ export type AgentConfig = {
   readonly models: readonly ModelConfig[];
   readonly tasks: readonly TaskConfig[];
 };
-
-export type ConfigDataPart = {
-  readonly kind: 'data';
-  readonly data: {
-    readonly type: 'config';
-    readonly data: AgentConfig;
-  };
-};
-
-export type InitialMessage = {
-  readonly parts: readonly unknown[];
-};

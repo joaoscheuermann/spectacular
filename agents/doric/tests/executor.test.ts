@@ -6,10 +6,11 @@ import { createSessionStore } from 'session';
 
 import type { DoricSessionContext } from '../src/lib/executor.js';
 import {
-  createConfigPart,
+  createConfig,
   createDoricTestHarness,
   createEventBus,
   createRequestContext,
+  createTextPart,
 } from './fakes.js';
 
 test('initializes a sandbox session and clones the configured repo on the first message', async () => {
@@ -20,7 +21,6 @@ test('initializes a sandbox session and clones the configured repo on the first 
   await harness.executor.execute(
     createRequestContext({
       contextId: 'context-1',
-      parts: [createConfigPart()],
     }),
     eventBus,
   );
@@ -51,7 +51,6 @@ test('normalizes context IDs before using them as Docker container names', async
   await harness.executor.execute(
     createRequestContext({
       contextId: 'workspace:feature/one',
-      parts: [createConfigPart()],
     }),
     createEventBus(),
   );
@@ -65,14 +64,14 @@ test('reuses an existing context without requiring config on later messages', as
   await harness.executor.execute(
     createRequestContext({
       contextId: 'context-1',
-      parts: [createConfigPart()],
     }),
     createEventBus(),
   );
   await harness.executor.execute(
     createRequestContext({
       contextId: 'context-1',
-      parts: [{ kind: 'text', text: 'continue' }],
+      metadata: null,
+      parts: [createTextPart('continue')],
     }),
     createEventBus(),
   );
@@ -88,24 +87,20 @@ test('isolates sessions across context IDs', async () => {
   await harness.executor.execute(
     createRequestContext({
       contextId: 'context-a',
-      parts: [
-        createConfigPart({
-          repoUrl: 'https://github.com/example/repo-a',
-          token: 'token-a',
-        }),
-      ],
+      config: createConfig({
+        repoUrl: 'https://github.com/example/repo-a',
+        token: 'token-a',
+      }),
     }),
     createEventBus(),
   );
   await harness.executor.execute(
     createRequestContext({
       contextId: 'context-b',
-      parts: [
-        createConfigPart({
-          repoUrl: 'https://github.com/example/repo-b',
-          token: 'token-b',
-        }),
-      ],
+      config: createConfig({
+        repoUrl: 'https://github.com/example/repo-b',
+        token: 'token-b',
+      }),
     }),
     createEventBus(),
   );
@@ -125,7 +120,8 @@ test('rejects missing config when the context is unknown', async () => {
     harness.executor.execute(
       createRequestContext({
         contextId: 'context-1',
-        parts: [{ kind: 'text', text: 'missing config' }],
+        metadata: null,
+        parts: [createTextPart('missing config')],
       }),
       createEventBus(),
     ),
@@ -133,8 +129,8 @@ test('rejects missing config when the context is unknown', async () => {
       assert.ok(error instanceof A2AError);
       assert.equal(error.code, -32602);
       assert.deepEqual(error.data, {
-        code: 'invalid_first_part_kind',
-        path: 'message.parts[0].kind',
+        code: 'missing_configuration',
+        path: 'message.metadata.configuration',
       });
 
       return true;
@@ -148,14 +144,14 @@ test('does not require config for an in-flight context', async () => {
   const first = harness.executor.execute(
     createRequestContext({
       contextId: 'context-1',
-      parts: [createConfigPart()],
     }),
     createEventBus(),
   );
   const second = harness.executor.execute(
     createRequestContext({
       contextId: 'context-1',
-      parts: [{ kind: 'text', text: 'continue' }],
+      metadata: null,
+      parts: [createTextPart('continue')],
     }),
     createEventBus(),
   );
@@ -165,12 +161,99 @@ test('does not require config for an in-flight context', async () => {
   assert.equal(harness.dockerCreateCount(), 1);
 });
 
+test('updates only stored config when later message includes configuration', async () => {
+  const sessions = createSessionStore<DoricSessionContext>();
+  const harness = createDoricTestHarness({ sessions });
+  const initialConfig = createConfig({
+    repoUrl: 'https://github.com/example/initial',
+    token: 'initial-token',
+  });
+  const updatedConfig = createConfig({
+    repoUrl: 'https://github.com/example/updated',
+    token: 'updated-token',
+  });
+
+  await harness.executor.execute(
+    createRequestContext({
+      contextId: 'context-1',
+      config: initialConfig,
+    }),
+    createEventBus(),
+  );
+  const session = sessions.get('context-1');
+
+  await harness.executor.execute(
+    createRequestContext({
+      contextId: 'context-1',
+      config: updatedConfig,
+      parts: [createTextPart('continue')],
+    }),
+    createEventBus(),
+  );
+
+  assert.equal(harness.dockerCreateCount(), 1);
+  assert.equal(sessions.get('context-1'), session);
+  assert.deepEqual(sessions.get('context-1')?.config, updatedConfig);
+  assert.deepEqual(harness.sandboxes[0]?.clones, [
+    {
+      url: 'https://github.com/example/initial',
+      auth: { kind: 'token', token: 'initial-token' },
+    },
+  ]);
+  assert.deepEqual(sessions.get('context-1')?.repo, {
+    path: '/workspace/repo',
+    commit: 'abc123',
+  });
+});
+
+test('rejects invalid later config and leaves stored config unchanged', async () => {
+  const sessions = createSessionStore<DoricSessionContext>();
+  const harness = createDoricTestHarness({ sessions });
+  const initialConfig = createConfig();
+
+  await harness.executor.execute(
+    createRequestContext({
+      contextId: 'context-1',
+      config: initialConfig,
+    }),
+    createEventBus(),
+  );
+
+  await assert.rejects(
+    harness.executor.execute(
+      createRequestContext({
+        contextId: 'context-1',
+        metadata: {
+          configuration: {
+            ...initialConfig,
+            models: [{ id: 'planning', provider: 'openai', model: 1 }],
+          },
+        },
+        parts: [createTextPart('continue')],
+      }),
+      createEventBus(),
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof A2AError);
+      assert.equal(error.code, -32602);
+      assert.deepEqual(error.data, {
+        code: 'invalid_config_field',
+        path: 'message.metadata.configuration.models[0].model',
+      });
+
+      return true;
+    },
+  );
+
+  assert.deepEqual(sessions.get('context-1')?.config, initialConfig);
+  assert.equal(harness.dockerCreateCount(), 1);
+  assert.equal(harness.sandboxes[0]?.clones.length, 1);
+});
+
 test('uses SDK-generated context IDs as session keys', async () => {
   const sessions = createSessionStore<DoricSessionContext>();
   const harness = createDoricTestHarness({ sessions });
-  const requestContext = createRequestContext({
-    parts: [createConfigPart()],
-  });
+  const requestContext = createRequestContext({});
 
   await harness.executor.execute(requestContext, createEventBus());
 
@@ -181,12 +264,7 @@ test('uses SDK-generated context IDs as session keys', async () => {
 test('skips Git installation when Git is already available', async () => {
   const harness = createDoricTestHarness({ hasGit: true });
 
-  await harness.executor.execute(
-    createRequestContext({
-      parts: [createConfigPart()],
-    }),
-    createEventBus(),
-  );
+  await harness.executor.execute(createRequestContext(), createEventBus());
 
   assert.deepEqual(
     harness.sandboxes[0]?.execs.map((input) => input.cmd.join(' ')),
@@ -197,12 +275,7 @@ test('skips Git installation when Git is already available', async () => {
 test('installs Git and CA certificates when Git is missing', async () => {
   const harness = createDoricTestHarness({ hasGit: false });
 
-  await harness.executor.execute(
-    createRequestContext({
-      parts: [createConfigPart()],
-    }),
-    createEventBus(),
-  );
+  await harness.executor.execute(createRequestContext(), createEventBus());
 
   assert.deepEqual(
     harness.sandboxes[0]?.execs.map((input) => input.cmd.join(' ')),
@@ -226,7 +299,6 @@ test('does not save a session when Git setup fails', async () => {
     harness.executor.execute(
       createRequestContext({
         contextId: 'context-1',
-        parts: [createConfigPart()],
       }),
       createEventBus(),
     ),
@@ -247,7 +319,6 @@ test('does not save a session when cloning fails', async () => {
     harness.executor.execute(
       createRequestContext({
         contextId: 'context-1',
-        parts: [createConfigPart()],
       }),
       createEventBus(),
     ),
