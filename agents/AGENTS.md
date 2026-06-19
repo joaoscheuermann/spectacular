@@ -24,4 +24,5 @@ this file only adds local conventions for agent packages.
 - `executor.ts` contains only the main executor logic.
 - A2A Agent Card definitions live in `card.ts`.
 - Message object factories live under `lib/messages/`.
+- Constant variables live under `lib/constants/`.
 - Supporting logic lives in `lib/utils/<utility>.ts`.

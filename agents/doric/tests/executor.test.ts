@@ -4,30 +4,13 @@ import test from 'node:test';
 import { A2AError } from '@a2a-js/sdk/server';
 import { createSessionStore } from 'session';
 
-import { createExecutor, type DoricSessionContext } from '../src/index.js';
+import type { DoricSessionContext } from '../src/index.js';
 import {
   createConfigPart,
   createDoricTestHarness,
   createEventBus,
   createRequestContext,
 } from './fakes.js';
-
-test('rejects execution when no session store is provided', async () => {
-  const executor = createExecutor();
-  const eventBus = createEventBus();
-
-  await assert.rejects(
-    executor.execute(
-      createRequestContext({
-        parts: [createConfigPart()],
-      }),
-      eventBus,
-    ),
-    /Doric executor requires a session store/u,
-  );
-  assert.deepEqual(eventBus.events, []);
-  assert.equal(eventBus.finishedCount, 0);
-});
 
 test('initializes a sandbox session and clones the configured repo on the first message', async () => {
   const sessions = createSessionStore<DoricSessionContext>();

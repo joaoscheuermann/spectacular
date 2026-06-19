@@ -9,7 +9,7 @@
       "dependsOn": ["build"],
       "continuous": true,
       "options": {
-        "command": "node agents/doric/dist/main.js"
+        "command": "node agents/doric/dist/index.js"
       }
     },
     "test": {

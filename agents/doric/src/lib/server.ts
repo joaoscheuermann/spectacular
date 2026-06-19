@@ -10,7 +10,8 @@ import { jsonRpcHandler, UserBuilder } from '@a2a-js/sdk/server/express';
 import express, { type Request } from 'express';
 import { createSessionStore } from 'session';
 
-import { createAgentCard, RPC_PATH } from './card.js';
+import { createAgentCard } from './card.js';
+import { RPC_PATH } from './constants/agent.js';
 import { createExecutor, type DoricSessionContext } from './executor.js';
 
 export type DoricServerOptions = {

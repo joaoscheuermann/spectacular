@@ -1,6 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
-import type { Message } from '@a2a-js/sdk';
 import {
   A2AError,
   type AgentExecutor,
@@ -13,7 +10,12 @@ import { createSandbox } from 'sandbox';
 import type { ClonedRepo, CreateSandboxOptions, SandboxSession } from 'sandbox';
 import type { SessionStore } from 'session';
 
-import { HELLO_WORLD_TEXT } from './card.js';
+import {
+  DEFAULT_IMAGE,
+  GIT_INSTALL_COMMAND,
+  GIT_PROBE_COMMAND,
+} from './constants/sandbox.js';
+import { createHelloWorldMessage } from './messages/hello-world.js';
 
 export type DoricSessionContext = {
   readonly config: AgentConfig;
@@ -22,26 +24,16 @@ export type DoricSessionContext = {
 };
 
 export type DoricExecutorDependencies = {
-  readonly sessions?: SessionStore<DoricSessionContext>;
+  readonly sessions: SessionStore<DoricSessionContext>;
   readonly createDockerClient?: typeof createDockerClient;
   readonly createSandbox?: (
     options: CreateSandboxOptions,
   ) => Promise<SandboxSession>;
 };
 
-const DEFAULT_IMAGE = 'node:slim';
-const GIT_PROBE_COMMAND = ['sh', '-lc', 'command -v git >/dev/null 2>&1'];
-const GIT_INSTALL_COMMAND = [
-  'sh',
-  '-lc',
-  'apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*',
-];
-const MISSING_SESSION_STORE_MESSAGE =
-  'Doric executor requires a session store. Pass sessions to createExecutor({ sessions }).';
-
-/** Creates Doric's A2A executor. Execution requires an injected session store. */
+/** Creates Doric's A2A executor with its required session store dependency. */
 export const createExecutor = (
-  dependencies: DoricExecutorDependencies = {},
+  dependencies: DoricExecutorDependencies,
 ): AgentExecutor => {
   const sessions = dependencies.sessions;
   const dockerClient = dependencies.createDockerClient ?? createDockerClient;
@@ -49,10 +41,6 @@ export const createExecutor = (
 
   return {
     async execute(requestContext, eventBus) {
-      if (sessions === undefined) {
-        throw new Error(MISSING_SESSION_STORE_MESSAGE);
-      }
-
       await ensureSession(requestContext, {
         sessions,
         createDockerClient: dockerClient,
@@ -66,7 +54,13 @@ export const createExecutor = (
   };
 };
 
-type ResolvedDependencies = Required<DoricExecutorDependencies>;
+type ResolvedDependencies = {
+  readonly sessions: SessionStore<DoricSessionContext>;
+  readonly createDockerClient: typeof createDockerClient;
+  readonly createSandbox: (
+    options: CreateSandboxOptions,
+  ) => Promise<SandboxSession>;
+};
 
 const ensureSession = (
   requestContext: RequestContext,
@@ -151,11 +145,3 @@ const formatExecFailure = (
   message: string,
   result: Awaited<ReturnType<SandboxSession['exec']>>,
 ): string => `${message}: ${result.stderr || result.stdout}`.trim();
-
-const createHelloWorldMessage = (contextId: string): Message => ({
-  kind: 'message',
-  messageId: randomUUID(),
-  role: 'agent',
-  parts: [{ kind: 'text', text: HELLO_WORLD_TEXT }],
-  contextId,
-});

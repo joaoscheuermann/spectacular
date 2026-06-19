@@ -1,9 +1,14 @@
 import type { Server } from 'node:http';
 
+import {
+  DEFAULT_HOST,
+  DEFAULT_PORT,
+  MAX_PORT,
+  PORT_PATTERN,
+} from './constants/server.js';
 import { createServer as createA2aServer } from './server.js';
 
-export const DEFAULT_HOST = '127.0.0.1';
-export const DEFAULT_PORT = 4123;
+export { DEFAULT_HOST, DEFAULT_PORT } from './constants/server.js';
 
 export type ListenOptions = {
   readonly host: string;
@@ -22,9 +27,6 @@ export type StartedServer = ListenOptions & {
 };
 
 type ServerEnv = Readonly<Record<string, string | undefined>>;
-
-const MAX_PORT = 65_535;
-const PORT_PATTERN = /^\d+$/u;
 
 /** Resolves host and port settings for the local Doric A2A server. */
 export const resolveListenOptions = (

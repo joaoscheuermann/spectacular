@@ -1,7 +1,6 @@
 import type { AgentCard } from '@a2a-js/sdk';
 
-export const HELLO_WORLD_TEXT = 'Hello world from Doric.';
-export const RPC_PATH = '/rpc';
+export { HELLO_WORLD_TEXT, RPC_PATH } from './constants/agent.js';
 
 export const createAgentCard = (url: string): AgentCard => ({
   name: 'doric',
@@ -12,21 +11,22 @@ export const createAgentCard = (url: string): AgentCard => ({
   additionalInterfaces: [{ url, transport: 'JSONRPC' }],
   provider: {
     organization: 'Doric',
-    url: 'https://github.com/joaoscheuermann/spectacular',
+    url: 'https://github.com/joaoscheuermann/doric',
   },
   version: '0.0.1',
   capabilities: {
-    pushNotifications: false,
-    streaming: false,
+    streaming: true,
+    pushNotifications: true,
   },
   defaultInputModes: ['text'],
   defaultOutputModes: ['text'],
   skills: [
     {
-      id: 'hello-world',
-      name: 'Hello world',
-      description: 'Returns a hello world message.',
-      tags: ['hello-world', 'text'],
+      id: 'feature',
+      name: 'Feature Development Especialist',
+      description:
+        'Develops a Feature for you, using PRD, TDD and task decompoisition',
+      tags: ['feature', 'coding', 'tdd', 'prd'],
       inputModes: ['text'],
       outputModes: ['text'],
     },
