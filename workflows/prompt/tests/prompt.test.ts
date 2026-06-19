@@ -5,13 +5,20 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { createPromptArtifact, prompt } from '../src/index.js';
-import type {
-  LlmProvider,
-  Model,
-  ProviderFinished,
-  ProviderRequest,
-  ProviderStreamEvent,
-} from 'llms';
+import {
+  createProvider,
+  createUnstructuredProvider,
+  exploration,
+  finishWithToolCalls,
+  intent,
+  messageText,
+  requestUnderstanding,
+  responsesWithQuestions,
+  responsesWithoutQuestions,
+  toolCall,
+  toolText,
+  workflowOptions,
+} from './fake-provider.js';
 
 test('starts prompt artifacts with only the initial user prompt in data', () => {
   const artifact = createPromptArtifact('Build the prompt workflow.');
@@ -27,9 +34,7 @@ test('runs split passes and gates requirements when open questions exist', async
   const provider = createProvider(responsesWithQuestions());
 
   const result = await prompt(artifact, {
-    provider: provider.provider,
-    model: 'fake-model',
-    workspaceRoot: root,
+    ...workflowOptions(provider.provider, root),
     maxQuestions: 1,
   });
 
@@ -66,9 +71,7 @@ test('blocks requirement extraction when returned questions are capped to zero',
   const result = await prompt(
     createPromptArtifact('Refactor workflow-prompt.'),
     {
-      provider: provider.provider,
-      model: 'fake-model',
-      workspaceRoot: root,
+      ...workflowOptions(provider.provider, root),
       maxQuestions: 0,
     },
   );
@@ -85,9 +88,7 @@ test('extracts product and technical requirements only when questions are empty'
   const provider = createProvider(responsesWithoutQuestions());
 
   const result = await prompt(createPromptArtifact('Ship the workflow.'), {
-    provider: provider.provider,
-    model: 'fake-model',
-    workspaceRoot: root,
+    ...workflowOptions(provider.provider, root),
   });
 
   assert.deepEqual(result.data.openQuestions, []);
@@ -107,12 +108,19 @@ test('executes exploration tools through workflow-safe wrappers', async () => {
   await write(root, 'AGENTS.md', 'AGENTS_SENTINEL');
   await write(root, 'README.md', 'README_SENTINEL');
   await write(root, 'docs/guide.md', 'DOCS_SENTINEL');
+  await write(root, 'docs/leak.ts', 'DOCS_TS_SENTINEL');
   await write(root, '.agents/skills/example/SKILL.md', 'SKILL_SENTINEL');
+  await write(root, '.agents/skills/example/leak.ts', 'AGENTS_TS_SENTINEL');
   await write(root, 'src/index.ts', 'export const marker = "SAFE_SENTINEL";');
   const provider = createProvider([
     finishWithToolCalls([
       toolCall('find', { pattern: '**/*', path: '.' }, 'call_find_root'),
       toolCall('grep', { pattern: 'SENTINEL', path: '.' }, 'call_grep_root'),
+      toolCall(
+        'grep',
+        { pattern: 'SENTINEL', path: '.', glob: '**/*.ts' },
+        'call_grep_typescript',
+      ),
       toolCall('tree', { path: '.' }, 'call_tree_root'),
       toolCall('find', { pattern: '**/*', path: 'docs' }, 'call_find_docs'),
       toolCall(
@@ -127,13 +135,12 @@ test('executes exploration tools through workflow-safe wrappers', async () => {
   ]);
 
   await prompt(createPromptArtifact('Inspect the repo safely.'), {
-    provider: provider.provider,
-    model: 'fake-model',
-    workspaceRoot: root,
+    ...workflowOptions(provider.provider, root),
   });
 
   const rootFind = toolText(provider, 'call_find_root');
   const rootGrep = toolText(provider, 'call_grep_root');
+  const rootGrepTypescript = toolText(provider, 'call_grep_typescript');
   const rootTree = toolText(provider, 'call_tree_root');
   const docsFind = toolText(provider, 'call_find_docs');
   const groundingGrep = toolText(provider, 'call_grep_grounding');
@@ -147,7 +154,12 @@ test('executes exploration tools through workflow-safe wrappers', async () => {
   assert.match(rootGrep, /clearly non-markdown file path/);
   assert.doesNotMatch(
     rootGrep,
-    /GROUNDING_SENTINEL|AGENTS_SENTINEL|README_SENTINEL|DOCS_SENTINEL|SKILL_SENTINEL/,
+    /GROUNDING_SENTINEL|AGENTS_SENTINEL|README_SENTINEL|DOCS_SENTINEL|DOCS_TS_SENTINEL|SKILL_SENTINEL|AGENTS_TS_SENTINEL/,
+  );
+  assert.match(rootGrepTypescript, /SAFE_SENTINEL/);
+  assert.doesNotMatch(
+    rootGrepTypescript,
+    /DOCS_TS_SENTINEL|AGENTS_TS_SENTINEL/,
   );
   assert.match(rootTree, /src/);
   assert.doesNotMatch(
@@ -165,9 +177,7 @@ test('exposes find grep and tree only to the exploration provider request', asyn
   const provider = createProvider(responsesWithoutQuestions());
 
   await prompt(createPromptArtifact('Inspect the repo.'), {
-    provider: provider.provider,
-    model: 'fake-model',
-    workspaceRoot: root,
+    ...workflowOptions(provider.provider, root),
   });
 
   assert.deepEqual(
@@ -186,9 +196,10 @@ test('does not write PROMPT.md during prompt execution', async () => {
   const root = await workspace('prompt-no-write');
 
   await prompt(createPromptArtifact('Do not persist yet.'), {
-    provider: createProvider(responsesWithoutQuestions()).provider,
-    model: 'fake-model',
-    workspaceRoot: root,
+    ...workflowOptions(
+      createProvider(responsesWithoutQuestions()).provider,
+      root,
+    ),
   });
 
   await assert.rejects(access(path.join(root, 'PROMPT.md')));
@@ -200,9 +211,7 @@ test('fails clearly when a pass does not return structured output', async () => 
 
   await assert.rejects(
     prompt(createPromptArtifact('Invalid JSON.'), {
-      provider: createUnstructuredProvider('not json').provider,
-      model: 'fake-model',
-      workspaceRoot: root,
+      ...workflowOptions(createUnstructuredProvider('not json').provider, root),
     }),
     /Exploration pass did not return structured output/,
   );
@@ -228,9 +237,7 @@ test('fails clearly when an open question contains unexpected fields', async () 
 
   await assert.rejects(
     prompt(createPromptArtifact('Invalid open question.'), {
-      provider: provider.provider,
-      model: 'fake-model',
-      workspaceRoot: root,
+      ...workflowOptions(provider.provider, root),
     }),
     /Fake provider response 3 failed schema validation/,
   );
@@ -250,9 +257,7 @@ test('ignores repository markdown fixtures unless tools discover them', async ()
   const provider = createProvider(responsesWithoutQuestions());
 
   await prompt(createPromptArtifact('Use embedded pass instructions.'), {
-    provider: provider.provider,
-    model: 'fake-model',
-    workspaceRoot: root,
+    ...workflowOptions(provider.provider, root),
   });
 
   const text = messageText(provider);
@@ -267,232 +272,6 @@ test('ignores repository markdown fixtures unless tools discover them', async ()
   assert.equal(text.includes('Return strict JSON'), false);
   await rm(root, { recursive: true, force: true });
 });
-
-const responsesWithQuestions = (): readonly unknown[] => [
-  exploration(),
-  requestUnderstanding(),
-  intent(),
-  {
-    questions: [
-      {
-        question:
-          'Which exact requirement fields should downstream agents use?',
-        impact: 'Requirement extraction could choose an incompatible schema.',
-        recommendation: 'Confirm the public artifact schema first.',
-      },
-      {
-        question: 'Should any old state-machine behavior be preserved?',
-        recommendation:
-          'Keep the split-pipeline contract unless told otherwise.',
-      },
-    ],
-  },
-];
-
-const responsesWithoutQuestions = (): readonly unknown[] => [
-  exploration(),
-  requestUnderstanding(),
-  intent(),
-  { questions: [] },
-  {
-    requirements: [
-      'Preserve the initial request for downstream workflow steps.',
-    ],
-  },
-  {
-    requirements: [
-      'Run each extraction pass with a fresh agent and message storage.',
-    ],
-  },
-];
-
-const exploration = () => ({
-  summary: 'The workspace contains a prompt workflow package.',
-  facts: [
-    {
-      fact: 'The prompt workflow source is under workflows/prompt.',
-      evidencePaths: ['workflows/prompt/src/lib/prompt.ts'],
-    },
-  ],
-});
-
-const requestUnderstanding = () => ({
-  summary: 'The user asked to refactor workflow-prompt into explicit passes.',
-});
-
-const intent = () => ({
-  goal: 'Refactor workflow-prompt.',
-  scope: 'workflows/prompt',
-});
-
-type ProviderFake = {
-  readonly provider: LlmProvider;
-  readonly requests: ProviderRequest<unknown>[];
-};
-
-type FakeResponse = unknown | ProviderFinished<unknown>;
-
-const createProvider = (responses: readonly FakeResponse[]): ProviderFake => {
-  const requests: ProviderRequest<unknown>[] = [];
-  let next = 0;
-
-  return {
-    requests,
-    provider: {
-      metadata: {
-        id: 'fake',
-        name: 'Fake',
-        baseUrl: 'https://fake.invalid',
-      },
-      capabilities: {
-        streaming: true,
-        tools: true,
-        reasoning: false,
-        modelListing: false,
-        oauth: false,
-        serviceTier: false,
-        structuredOutputs: true,
-      },
-      complete: async <Output = unknown>(
-        request: ProviderRequest<Output>,
-      ): Promise<ProviderFinished<Output>> => {
-        const index = next;
-        const value = responses[index];
-
-        if (value === undefined) {
-          throw new Error(`Missing fake provider response ${index}.`);
-        }
-
-        next += 1;
-        requests.push(request as ProviderRequest<unknown>);
-
-        if (isFinished(value)) {
-          return value as ProviderFinished<Output>;
-        }
-
-        if (request.schema === undefined) {
-          throw new Error(`Missing fake provider schema ${index}.`);
-        }
-
-        const parsed = request.schema.safeParse(value);
-
-        if (!parsed.success) {
-          throw new Error(
-            `Fake provider response ${index} failed schema validation.`,
-          );
-        }
-
-        return {
-          text: '',
-          finishReason: 'stop',
-          toolCalls: [],
-          structured: parsed.data as Output,
-        } as ProviderFinished<Output>;
-      },
-      stream: async function* <Output = unknown>(): AsyncIterable<
-        ProviderStreamEvent<Output>
-      > {},
-      models: async (): Promise<readonly Model[]> => [{ id: 'fake-model' }],
-      validateModel: async (model): Promise<Model> => ({ id: model }),
-    },
-  };
-};
-
-const finishWithToolCalls = (
-  toolCalls: readonly ReturnType<typeof toolCall>[],
-): ProviderFinished<unknown> => ({
-  text: 'Need exploration tools.',
-  finishReason: 'tool_calls',
-  toolCalls,
-});
-
-const toolCall = (
-  name: string,
-  payload: Record<string, unknown>,
-  id: string,
-) => ({
-  id,
-  name,
-  arguments: JSON.stringify(payload),
-});
-
-const isFinished = (value: unknown): value is ProviderFinished<unknown> => {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-
-  const candidate = value as Partial<ProviderFinished<unknown>>;
-
-  return (
-    typeof candidate.text === 'string' &&
-    typeof candidate.finishReason === 'string' &&
-    Array.isArray(candidate.toolCalls)
-  );
-};
-
-const createUnstructuredProvider = (text: string): ProviderFake => {
-  const requests: ProviderRequest<unknown>[] = [];
-
-  return {
-    requests,
-    provider: {
-      metadata: {
-        id: 'fake',
-        name: 'Fake',
-        baseUrl: 'https://fake.invalid',
-      },
-      capabilities: {
-        streaming: true,
-        tools: true,
-        reasoning: false,
-        modelListing: false,
-        oauth: false,
-        serviceTier: false,
-        structuredOutputs: false,
-      },
-      complete: async <Output = unknown>(
-        request: ProviderRequest<Output>,
-      ): Promise<ProviderFinished<Output>> => {
-        requests.push(request as ProviderRequest<unknown>);
-
-        return {
-          text,
-          finishReason: 'stop',
-          toolCalls: [],
-        };
-      },
-      stream: async function* <Output = unknown>(): AsyncIterable<
-        ProviderStreamEvent<Output>
-      > {},
-      models: async (): Promise<readonly Model[]> => [{ id: 'fake-model' }],
-      validateModel: async (model): Promise<Model> => ({ id: model }),
-    },
-  };
-};
-
-const messageText = (provider: ProviderFake): string =>
-  provider.requests
-    .flatMap((request) => request.messages)
-    .map((message) =>
-      typeof message.content === 'string'
-        ? message.content
-        : JSON.stringify(message.content ?? ''),
-    )
-    .join('\n');
-
-const toolText = (provider: ProviderFake, id: string): string => {
-  const value = provider.requests
-    .flatMap((request) => request.messages)
-    .find(
-      (message) => message.role === 'tool' && message.toolCallId === id,
-    )?.content;
-
-  if (typeof value !== 'string') {
-    assert.fail(`Expected tool message text for ${id}.`);
-  }
-
-  return value;
-};
 
 const workspace = async (name: string): Promise<string> =>
   mkdtemp(path.join(os.tmpdir(), `doric-${name}-`));

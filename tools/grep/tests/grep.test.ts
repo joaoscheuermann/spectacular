@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import { createTool } from '../src/index.js';
+import { WORKSPACE_ROOT, createFakeSandbox } from './fake-sandbox.js';
 
 describe('grep tool', () => {
   test('finds matching lines with requested context and glob filtering', async () => {
@@ -16,7 +17,10 @@ describe('grep tool', () => {
     );
     await write(root, 'src/two.txt', 'Target\n');
 
-    const result = await createTool({ workspaceRoot: root }).execute({
+    const result = await createTool({
+      workspaceRoot: WORKSPACE_ROOT,
+      sandbox: createFakeSandbox(root),
+    }).execute({
       pattern: 'Target',
       path: 'src',
       glob: '*.ts',
@@ -36,7 +40,10 @@ describe('grep tool', () => {
 
   test('returns a structured error for invalid regular expressions', async () => {
     const root = await workspace('grep-invalid-regex');
-    const result = await createTool({ workspaceRoot: root }).execute({
+    const result = await createTool({
+      workspaceRoot: WORKSPACE_ROOT,
+      sandbox: createFakeSandbox(root),
+    }).execute({
       pattern: '[',
     });
 
@@ -51,7 +58,10 @@ describe('grep tool', () => {
     await write(root, 'ignored.txt', 'Target\n');
     await write(root, 'keep.txt', 'Target\n');
 
-    const result = await createTool({ workspaceRoot: root }).execute({
+    const result = await createTool({
+      workspaceRoot: WORKSPACE_ROOT,
+      sandbox: createFakeSandbox(root),
+    }).execute({
       pattern: 'Target',
       glob: '*.txt',
     });

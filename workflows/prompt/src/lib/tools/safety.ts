@@ -1,5 +1,4 @@
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
+import { posix as path } from 'node:path';
 
 export type IgnorePattern = {
   readonly base: string;
@@ -35,8 +34,8 @@ export const resolveTarget = (
   workspaceRoot: string,
   value: string,
 ): SafeTarget => {
-  const root = path.resolve(workspaceRoot);
-  const absolutePath = path.resolve(
+  const root = normalizePath(workspaceRoot);
+  const absolutePath = normalizePath(
     path.isAbsolute(value) ? value : path.join(root, value),
   );
   const relative = path.relative(root, absolutePath);
@@ -98,25 +97,6 @@ export const isClearlyNonMarkdownGlob = (glob: string | undefined): boolean => {
   return /\.[a-z0-9]+$/i.test(glob);
 };
 
-export const readIgnores = async (
-  dir: string,
-): Promise<readonly IgnorePattern[]> => {
-  const text = await readFile(path.join(dir, '.gitignore'), 'utf8').catch(
-    () => '',
-  );
-
-  return text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line !== '' && !line.startsWith('#'))
-    .map((line) => ({
-      base: dir,
-      pattern: line.startsWith('!') ? line.slice(1) : line,
-      negated: line.startsWith('!'),
-    }))
-    .filter((ignore) => ignore.pattern !== '');
-};
-
 export const isIgnored = (
   fullPath: string,
   isDirectory: boolean,
@@ -128,6 +108,10 @@ export const isIgnored = (
       ? ignore.pattern.slice(0, -1)
       : ignore.pattern;
     if (ignore.pattern.endsWith('/') && !isDirectory) {
+      continue;
+    }
+
+    if (!contains(ignore.base, fullPath)) {
       continue;
     }
 
@@ -182,8 +166,7 @@ export const compileGlob = (pattern: string): RegExp | string => {
 export const escapeRegExp = (value: string): string =>
   value.replace(/[\\^$+?.()|{}]/g, '\\$&');
 
-export const toPosix = (value: string): string =>
-  value.replaceAll(path.sep, '/');
+export const toPosix = (value: string): string => value.replaceAll('\\', '/');
 
 const isForbiddenName = (name: string): boolean =>
   name === 'agents.md' ||
@@ -193,3 +176,12 @@ const isForbiddenName = (name: string): boolean =>
   name.endsWith('.md') ||
   name.endsWith('.mdx') ||
   name.endsWith('.markdown');
+
+const normalizePath = (value: string): string => {
+  const resolved = path.normalize(path.isAbsolute(value) ? value : `/${value}`);
+
+  return resolved === '/' ? resolved : resolved.replace(/\/+$/, '');
+};
+
+const contains = (root: string, child: string): boolean =>
+  child === root || child.startsWith(`${root}/`);

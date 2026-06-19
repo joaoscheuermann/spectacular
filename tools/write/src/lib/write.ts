@@ -1,6 +1,6 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import path from 'node:path';
+import { posix as path } from 'node:path';
 
+import type { SandboxSession } from 'sandbox';
 import { createTool as defineTool } from 'tools';
 import { z } from 'zod';
 
@@ -23,19 +23,22 @@ export type WriteOutput = {
 
 type Options = {
   readonly workspaceRoot: string;
+  readonly sandbox: SandboxSession;
 };
 
 /** Creates the provider-neutral file write tool. */
-export const createTool = ({ workspaceRoot }: Options) =>
+export const createTool = ({ workspaceRoot, sandbox }: Options) =>
   defineTool({
     name: 'write',
     description,
     schema,
-    execute: (input): Promise<WriteOutput> => execute(workspaceRoot, input),
+    execute: (input): Promise<WriteOutput> =>
+      execute(workspaceRoot, sandbox, input),
   });
 
 const execute = async (
   workspaceRoot: string,
+  sandbox: SandboxSession,
   input: z.output<typeof schema>,
 ): Promise<WriteOutput> => {
   if (input.path === '') {
@@ -43,21 +46,10 @@ const execute = async (
   }
 
   const filePath = resolvePath(workspaceRoot, input.path);
-  const parent = path.dirname(filePath);
-  if (parent === '') {
-    return writeError('Invalid path: no parent directory');
-  }
+  const oldContent = await sandbox.readFile(filePath).catch(() => '');
 
   try {
-    await mkdir(parent, { recursive: true });
-  } catch (error) {
-    return writeError(`Failed to create parent directories: ${message(error)}`);
-  }
-
-  const oldContent = await readFile(filePath, 'utf8').catch(() => '');
-
-  try {
-    await writeFile(filePath, input.content, 'utf8');
+    await sandbox.writeFile(filePath, input.content);
   } catch (error) {
     return writeError(`Failed to write file: ${message(error)}`);
   }

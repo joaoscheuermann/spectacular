@@ -1,16 +1,22 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
-import path from 'node:path';
+import hostPath from 'node:path';
+import { posix as path } from 'node:path';
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
+
+import type { SandboxSession } from 'sandbox';
 
 import { createTool } from '../src/index.js';
 
 describe('write tool', () => {
   test('creates parent directories and returns byte count with diff', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'doric-write-'));
+    const sandbox = await fakeSandbox('write');
 
-    const result = await createTool({ workspaceRoot: root }).execute({
+    const result = await createTool({
+      workspaceRoot: '/workspace/repo',
+      sandbox,
+    }).execute({
       path: 'notes/today.txt',
       content: 'hello',
     });
@@ -19,16 +25,21 @@ describe('write tool', () => {
     assert.equal(result.bytes_written, 5);
     assert.match(result.diff ?? '', /1 \+hello/);
     assert.equal(
-      await readFile(path.join(root, 'notes/today.txt'), 'utf8'),
+      await sandbox.readHost('/workspace/repo/notes/today.txt'),
       'hello',
     );
-    await rm(root, { recursive: true, force: true });
+    assert.deepEqual(sandbox.reads, ['/workspace/repo/notes/today.txt']);
+    assert.deepEqual(sandbox.writes, ['/workspace/repo/notes/today.txt']);
+    await sandbox.dispose();
   });
 
   test('rejects empty paths with structured error output', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'doric-write-empty-'));
+    const sandbox = await fakeSandbox('write-empty');
 
-    const result = await createTool({ workspaceRoot: root }).execute({
+    const result = await createTool({
+      workspaceRoot: '/workspace/repo',
+      sandbox,
+    }).execute({
       path: '',
       content: 'hello',
     });
@@ -38,6 +49,79 @@ describe('write tool', () => {
       bytes_written: 0,
       error: 'Path must not be empty',
     });
-    await rm(root, { recursive: true, force: true });
+    assert.deepEqual(sandbox.reads, []);
+    assert.deepEqual(sandbox.writes, []);
+    await sandbox.dispose();
   });
 });
+
+type FakeSandbox = SandboxSession & {
+  readonly reads: string[];
+  readonly writes: string[];
+  readHost(path: string): Promise<string>;
+};
+
+const fakeSandbox = async (name: string): Promise<FakeSandbox> => {
+  const root = await mkdtemp(hostPath.join(os.tmpdir(), `doric-${name}-`));
+  const reads: string[] = [];
+  const writes: string[] = [];
+
+  const target = (sandboxPath: string): string => {
+    const resolved = path.normalize(
+      path.isAbsolute(sandboxPath)
+        ? sandboxPath
+        : path.join('/workspace', sandboxPath),
+    );
+    const relative =
+      resolved === '/workspace' ? '' : resolved.slice('/workspace/'.length);
+
+    return hostPath.join(root, ...relative.split('/'));
+  };
+
+  return {
+    id: 'fake-sandbox',
+    root: '/workspace',
+    reads,
+    writes,
+
+    async exec() {
+      throw new Error('fake sandbox does not execute commands');
+    },
+
+    async cloneRepo() {
+      throw new Error('fake sandbox does not clone repositories');
+    },
+
+    async readFile(sandboxPath) {
+      reads.push(sandboxPath);
+      return readFile(target(sandboxPath), 'utf8');
+    },
+
+    async writeFile(sandboxPath, content) {
+      writes.push(sandboxPath);
+      const host = target(sandboxPath);
+      await mkdir(hostPath.dirname(host), { recursive: true });
+      await writeFile(host, content, 'utf8');
+    },
+
+    async putFile() {
+      throw new Error('fake sandbox does not put binary files');
+    },
+
+    async getFile() {
+      throw new Error('fake sandbox does not get binary files');
+    },
+
+    async diff() {
+      return '';
+    },
+
+    async dispose() {
+      await rm(root, { recursive: true, force: true });
+    },
+
+    readHost(sandboxPath) {
+      return readFile(target(sandboxPath), 'utf8');
+    },
+  };
+};

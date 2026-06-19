@@ -1,6 +1,6 @@
-import { lstat, readdir, readFile } from 'node:fs/promises';
-import path from 'node:path';
+import { posix as path } from 'node:path';
 
+import type { SandboxSession } from 'sandbox';
 import { createTool as defineTool } from 'tools';
 import { z } from 'zod';
 
@@ -18,6 +18,7 @@ export const schema = z
 
 type Options = {
   readonly workspaceRoot: string;
+  readonly sandbox: SandboxSession;
 };
 
 type Entry = {
@@ -31,29 +32,36 @@ type IgnorePattern = {
   readonly negated: boolean;
 };
 
+type PathKind = 'directory' | 'file' | 'missing' | 'other';
+
 /** Creates the provider-neutral ASCII tree tool. */
-export const createTool = ({ workspaceRoot }: Options) =>
+export const createTool = ({ workspaceRoot, sandbox }: Options) =>
   defineTool({
     name: 'tree',
     description,
     schema,
-    execute: (input): Promise<string> => execute(workspaceRoot, input),
+    execute: (input): Promise<string> => execute(workspaceRoot, sandbox, input),
   });
 
 const execute = async (
   workspaceRoot: string,
+  sandbox: SandboxSession,
   input: z.output<typeof schema>,
 ): Promise<string> => {
   const rawPath = input.path ?? '';
   const displayPath = rawPath === '' ? '.' : rawPath;
   const root = resolvePath(workspaceRoot, displayPath);
-  const rootStat = await lstat(root).catch(() => undefined);
 
-  if (rootStat === undefined) {
+  if (typeof root === 'string') {
+    return `Error: ${root}`;
+  }
+
+  const kind = await pathKind(sandbox, workspaceRoot, root.path);
+  if (kind === 'missing') {
     return `Error: path not found: ${displayPath}`;
   }
 
-  if (!rootStat.isDirectory()) {
+  if (kind !== 'directory') {
     return `Error: path is not a directory: ${displayPath}`;
   }
 
@@ -65,25 +73,31 @@ const execute = async (
     return invalid;
   }
 
-  const rootName = path.basename(root);
+  const rootName = path.basename(root.path);
   if ((excludes as RegExp[]).some((pattern) => pattern.test(rootName))) {
     return `Error: exclude pattern matches the root directory: ${rootName}`;
   }
 
-  const lines = [toPosix(path.resolve(root))];
-  await appendTree(root, '', [], excludes as RegExp[], lines);
+  const entries = await visibleEntries(
+    sandbox,
+    workspaceRoot,
+    root.path,
+    excludes as RegExp[],
+  );
+  const children = groupEntries(entries);
+  const lines = [root.path];
+  appendTree(root.path, '', children, lines);
+
   return `${lines.join('\n')}\n`;
 };
 
-const appendTree = async (
+const appendTree = (
   dir: string,
   prefix: string,
-  parentIgnores: readonly IgnorePattern[],
-  excludes: readonly RegExp[],
+  children: ReadonlyMap<string, readonly Entry[]>,
   lines: string[],
-): Promise<void> => {
-  const ignores = [...parentIgnores, ...(await readIgnores(dir))];
-  const entries = await sortedEntries(dir, ignores, excludes);
+): void => {
+  const entries = children.get(dir) ?? [];
 
   for (const [index, entry] of entries.entries()) {
     const isLast = index === entries.length - 1;
@@ -98,7 +112,7 @@ const appendTree = async (
     const mark = lines.length;
     lines.push(`${prefix}${connector}${name}/`);
     const childPrefix = isLast ? `${prefix}    ` : `${prefix}|   `;
-    await appendTree(entry.path, childPrefix, ignores, excludes, lines);
+    appendTree(entry.path, childPrefix, children, lines);
 
     if (lines.length === mark + 1) {
       lines[mark] = `${lines[mark]} (empty)`;
@@ -106,69 +120,172 @@ const appendTree = async (
   }
 };
 
-const sortedEntries = async (
-  dir: string,
-  ignores: readonly IgnorePattern[],
+const visibleEntries = async (
+  sandbox: SandboxSession,
+  workspaceRoot: string,
+  root: string,
   excludes: readonly RegExp[],
 ): Promise<readonly Entry[]> => {
-  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
-  const visible = await Promise.all(
-    entries.map(async (entry): Promise<Entry | undefined> => {
-      const name = entry.name;
-      if (name.startsWith('.') && !HIDDEN_EXCEPTIONS.has(name)) {
-        return undefined;
-      }
+  const [directories, files, ignores] = await Promise.all([
+    listPaths(sandbox, workspaceRoot, root, 'd'),
+    listPaths(sandbox, workspaceRoot, root, 'f'),
+    readIgnores(sandbox, workspaceRoot, root),
+  ]);
+  const entries = [
+    ...directories
+      .filter((entry) => entry !== root)
+      .map((entry) => ({ path: entry, isDirectory: true })),
+    ...files.map((entry) => ({ path: entry, isDirectory: false })),
+  ];
 
-      const fullPath = path.join(dir, name);
-      const stats = await lstat(fullPath).catch(() => undefined);
-      if (stats === undefined || stats.isSymbolicLink()) {
-        return undefined;
-      }
-
-      const isDirectory = stats.isDirectory();
-      if (
-        isIgnored(fullPath, isDirectory, ignores) ||
-        isExcluded(fullPath, excludes)
-      ) {
-        return undefined;
-      }
-
-      return stats.isFile() || isDirectory
-        ? { path: fullPath, isDirectory }
-        : undefined;
-    }),
+  return entries.filter(
+    (entry) =>
+      !isHidden(root, entry.path) &&
+      !isIgnoredWithAncestors(root, entry.path, entry.isDirectory, ignores) &&
+      !isExcluded(entry.path, excludes),
   );
-
-  return visible
-    .filter((entry): entry is Entry => entry !== undefined)
-    .sort((left, right) => {
-      if (left.isDirectory !== right.isDirectory) {
-        return left.isDirectory ? -1 : 1;
-      }
-
-      return path
-        .basename(left.path)
-        .localeCompare(path.basename(right.path), undefined, {
-          sensitivity: 'accent',
-        });
-    });
 };
 
-const readIgnores = async (dir: string): Promise<readonly IgnorePattern[]> => {
-  const text = await readFile(path.join(dir, '.gitignore'), 'utf8').catch(
-    () => '',
+const groupEntries = (
+  entries: readonly Entry[],
+): ReadonlyMap<string, readonly Entry[]> => {
+  const groups = new Map<string, Entry[]>();
+
+  for (const entry of entries) {
+    const parent = path.dirname(entry.path);
+    groups.set(parent, [...(groups.get(parent) ?? []), entry]);
+  }
+
+  return new Map(
+    [...groups.entries()].map(([parent, values]) => [parent, sorted(values)]),
+  );
+};
+
+const sorted = (entries: readonly Entry[]): readonly Entry[] =>
+  [...entries].sort((left, right) => {
+    if (left.isDirectory !== right.isDirectory) {
+      return left.isDirectory ? -1 : 1;
+    }
+
+    return path
+      .basename(left.path)
+      .localeCompare(path.basename(right.path), undefined, {
+        sensitivity: 'accent',
+      });
+  });
+
+const listPaths = async (
+  sandbox: SandboxSession,
+  workspaceRoot: string,
+  root: string,
+  type: 'd' | 'f',
+): Promise<readonly string[]> => {
+  const result = await sandbox.exec({
+    cwd: workspaceRoot,
+    cmd: [
+      'find',
+      root,
+      '(',
+      '-name',
+      '.git',
+      ')',
+      '-prune',
+      '-o',
+      '-type',
+      type,
+      '-print',
+    ],
+  });
+
+  if (result.exitCode !== 0) {
+    return [];
+  }
+
+  return lines(result.stdout).map(normalizePath).sort();
+};
+
+const readIgnores = async (
+  sandbox: SandboxSession,
+  workspaceRoot: string,
+  root: string,
+): Promise<readonly IgnorePattern[]> => {
+  const result = await sandbox.exec({
+    cwd: workspaceRoot,
+    cmd: [
+      'find',
+      root,
+      '(',
+      '-name',
+      '.git',
+      ')',
+      '-prune',
+      '-o',
+      '-type',
+      'f',
+      '-name',
+      '.gitignore',
+      '-print',
+    ],
+  });
+
+  if (result.exitCode !== 0) {
+    return [];
+  }
+
+  const files = lines(result.stdout).map(normalizePath).sort();
+  const groups = await Promise.all(
+    files.map(async (file) =>
+      parseIgnores(
+        path.dirname(file),
+        await sandbox.readFile(file).catch(() => ''),
+      ),
+    ),
   );
 
-  return text
+  return groups.flat();
+};
+
+const parseIgnores = (base: string, text: string): readonly IgnorePattern[] =>
+  text
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line !== '' && !line.startsWith('#'))
     .map((line) => ({
-      base: dir,
+      base,
       pattern: line.startsWith('!') ? line.slice(1) : line,
       negated: line.startsWith('!'),
     }))
     .filter((ignore) => ignore.pattern !== '');
+
+const isHidden = (root: string, fullPath: string): boolean =>
+  path
+    .relative(root, fullPath)
+    .split('/')
+    .some((part) => part.startsWith('.') && !HIDDEN_EXCEPTIONS.has(part));
+
+const isIgnoredWithAncestors = (
+  root: string,
+  fullPath: string,
+  isDirectory: boolean,
+  ignores: readonly IgnorePattern[],
+): boolean => {
+  const ignoredAncestor = ancestors(root, fullPath).some((ancestor) =>
+    isIgnored(ancestor, true, ignores),
+  );
+
+  return ignoredAncestor || isIgnored(fullPath, isDirectory, ignores);
+};
+
+const ancestors = (root: string, fullPath: string): readonly string[] => {
+  const values: string[] = [];
+  let current = path.dirname(fullPath);
+
+  while (contains(root, current) && current !== root) {
+    values.unshift(current);
+    current = path.dirname(current);
+  }
+
+  return values;
 };
 
 const isIgnored = (
@@ -185,8 +302,12 @@ const isIgnored = (
       continue;
     }
 
+    if (!contains(ignore.base, fullPath)) {
+      continue;
+    }
+
     const glob = compileGlob(pattern);
-    const relative = toPosix(path.relative(ignore.base, fullPath));
+    const relative = path.relative(ignore.base, fullPath);
     const matched =
       glob instanceof RegExp
         ? glob.test(relative) || glob.test(path.basename(fullPath))
@@ -201,9 +322,8 @@ const isIgnored = (
 
 const isExcluded = (fullPath: string, excludes: readonly RegExp[]): boolean => {
   const name = path.basename(fullPath);
-  const posixPath = toPosix(fullPath);
   return excludes.some(
-    (pattern) => pattern.test(name) || pattern.test(posixPath),
+    (pattern) => pattern.test(name) || pattern.test(fullPath),
   );
 };
 
@@ -226,9 +346,67 @@ const compileGlob = (pattern: string): RegExp | string => {
   return new RegExp(`^${source}$`);
 };
 
-const resolvePath = (workspaceRoot: string, value: string): string =>
-  path.normalize(
-    path.isAbsolute(value) ? value : path.join(workspaceRoot, value),
+const resolvePath = (
+  workspaceRoot: string,
+  value: string,
+): { readonly path: string } | string => {
+  const root = normalizePath(workspaceRoot);
+  const resolved = normalizePath(
+    path.isAbsolute(value) ? value : path.join(root, value),
   );
 
-const toPosix = (value: string): string => value.replaceAll(path.sep, '/');
+  if (!contains(root, resolved)) {
+    return `Path escapes workspace: ${value}`;
+  }
+
+  return { path: resolved };
+};
+
+const pathKind = async (
+  sandbox: SandboxSession,
+  workspaceRoot: string,
+  value: string,
+): Promise<PathKind> => {
+  const result = await sandbox.exec({
+    cwd: workspaceRoot,
+    cmd: [
+      'sh',
+      '-c',
+      'if [ -d "$1" ]; then printf directory; elif [ -f "$1" ]; then printf file; elif [ -e "$1" ]; then printf other; else printf missing; fi',
+      'sh',
+      value,
+    ],
+  });
+
+  if (result.exitCode !== 0) {
+    return 'missing';
+  }
+
+  return parsePathKind(result.stdout);
+};
+
+const parsePathKind = (value: string): PathKind => {
+  const normalized = value.trim();
+
+  if (
+    normalized === 'directory' ||
+    normalized === 'file' ||
+    normalized === 'missing' ||
+    normalized === 'other'
+  ) {
+    return normalized;
+  }
+
+  return 'missing';
+};
+
+const contains = (root: string, child: string): boolean =>
+  child === root || child.startsWith(`${root}/`);
+
+const lines = (value: string): readonly string[] =>
+  value.split(/\r?\n/).filter((line) => line !== '');
+
+const normalizePath = (value: string): string => {
+  const resolved = path.normalize(path.isAbsolute(value) ? value : `/${value}`);
+  return resolved === '/' ? resolved : resolved.replace(/\/+$/, '');
+};

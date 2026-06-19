@@ -25,6 +25,9 @@
       "path": "../../packages/messages/tsconfig.lib.json"
     },
     {
+      "path": "../../packages/sandbox/tsconfig.lib.json"
+    },
+    {
       "path": "../../packages/tools/tsconfig.lib.json"
     },
     {

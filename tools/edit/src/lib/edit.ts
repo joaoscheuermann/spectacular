@@ -1,6 +1,6 @@
-import { readFile, writeFile } from 'node:fs/promises';
-import path from 'node:path';
+import { posix as path } from 'node:path';
 
+import type { SandboxSession } from 'sandbox';
 import { createTool as defineTool } from 'tools';
 import { z } from 'zod';
 
@@ -40,6 +40,7 @@ export type EditOutput = {
 
 type Options = {
   readonly workspaceRoot: string;
+  readonly sandbox: SandboxSession;
 };
 
 type NormalizedEdit = {
@@ -59,20 +60,22 @@ type ReadResult =
   | { readonly ok: false; readonly error: string };
 
 /** Creates the provider-neutral exact replacement edit tool. */
-export const createTool = ({ workspaceRoot }: Options) =>
+export const createTool = ({ workspaceRoot, sandbox }: Options) =>
   defineTool({
     name: 'edit',
     description,
     schema,
-    execute: (input): Promise<EditOutput> => execute(workspaceRoot, input),
+    execute: (input): Promise<EditOutput> =>
+      execute(workspaceRoot, sandbox, input),
   });
 
 const execute = async (
   workspaceRoot: string,
+  sandbox: SandboxSession,
   input: z.output<typeof schema>,
 ): Promise<EditOutput> => {
   const filePath = resolvePath(workspaceRoot, input.path);
-  const readResult = await readTarget(filePath, input.path);
+  const readResult = await readTarget(sandbox, filePath, input.path);
 
   if (!readResult.ok) {
     return errorOutput(readResult.error);
@@ -105,14 +108,12 @@ const execute = async (
     );
   }
 
-  const writeError = await writeFile(
-    filePath,
-    `${bom}${restoreLineEndings(newContent, ending)}`,
-    'utf8',
-  ).then(
-    () => undefined,
-    (error: unknown) => `Failed to write file: ${errorMessage(error)}`,
-  );
+  const writeError = await sandbox
+    .writeFile(filePath, `${bom}${restoreLineEndings(newContent, ending)}`)
+    .then(
+      () => undefined,
+      (error: unknown) => `Failed to write file: ${errorMessage(error)}`,
+    );
   if (writeError !== undefined) {
     return errorOutput(writeError);
   }
@@ -125,11 +126,12 @@ const execute = async (
 };
 
 const readTarget = async (
+  sandbox: SandboxSession,
   filePath: string,
   displayPath: string,
 ): Promise<ReadResult> => {
   try {
-    return { ok: true, content: await readFile(filePath, 'utf8') };
+    return { ok: true, content: await sandbox.readFile(filePath) };
   } catch (error) {
     return { ok: false, error: readFailure(displayPath, error) };
   }

@@ -1,6 +1,6 @@
-import { readdir, readFile, stat } from 'node:fs/promises';
-import path from 'node:path';
+import { posix as path } from 'node:path';
 
+import type { SandboxSession } from 'sandbox';
 import { createTool as defineTool } from 'tools';
 import { z } from 'zod';
 
@@ -41,6 +41,7 @@ export type GrepOutput = {
 
 type Options = {
   readonly workspaceRoot: string;
+  readonly sandbox: SandboxSession;
 };
 
 type IgnorePattern = {
@@ -49,23 +50,32 @@ type IgnorePattern = {
   readonly negated: boolean;
 };
 
+type PathKind = 'directory' | 'file' | 'missing' | 'other';
+
 /** Creates the provider-neutral content search tool. */
-export const createTool = ({ workspaceRoot }: Options) =>
+export const createTool = ({ workspaceRoot, sandbox }: Options) =>
   defineTool({
     name: 'grep',
     description,
     schema,
-    execute: (input): Promise<GrepOutput> => execute(workspaceRoot, input),
+    execute: (input): Promise<GrepOutput> =>
+      execute(workspaceRoot, sandbox, input),
   });
 
 const execute = async (
   workspaceRoot: string,
+  sandbox: SandboxSession,
   input: z.output<typeof schema>,
 ): Promise<GrepOutput> => {
   const searchDir = input.path ?? '.';
   const searchPath = resolvePath(workspaceRoot, searchDir);
 
-  if (!(await exists(searchPath))) {
+  if (typeof searchPath === 'string') {
+    return empty(searchPath);
+  }
+
+  const kind = await pathKind(sandbox, workspaceRoot, searchPath.path);
+  if (kind === 'missing') {
     return empty(`Path not found: ${searchDir}`);
   }
 
@@ -79,13 +89,16 @@ const execute = async (
     return empty(`Invalid glob pattern '${input.glob}': ${glob}`);
   }
 
-  const files = (await stat(searchPath)).isFile()
-    ? [searchPath]
-    : await collectFiles(searchPath, []);
+  const files =
+    kind === 'file'
+      ? [searchPath.path]
+      : await visibleFiles(sandbox, workspaceRoot, searchPath.path);
 
   return collect(
-    searchPath,
+    sandbox,
+    searchPath.path,
     files,
+    kind === 'file',
     regex,
     glob,
     input.context ?? 0,
@@ -94,14 +107,15 @@ const execute = async (
 };
 
 const collect = async (
+  sandbox: SandboxSession,
   searchPath: string,
   files: readonly string[],
+  isSingleFile: boolean,
   regex: RegExp,
   glob: RegExp | undefined,
   context: number,
   limit: number,
 ): Promise<GrepOutput> => {
-  const isSingleFile = (await stat(searchPath)).isFile();
   const matches: GrepMatch[] = [];
   let totalBytes = 0;
   let truncated = false;
@@ -110,7 +124,7 @@ const collect = async (
   for (const file of files) {
     const relative = isSingleFile
       ? path.basename(file)
-      : toPosix(path.relative(searchPath, file));
+      : path.relative(searchPath, file);
     if (
       glob !== undefined &&
       !glob.test(relative) &&
@@ -119,7 +133,7 @@ const collect = async (
       continue;
     }
 
-    const text = await readFile(file, 'utf8').catch(() => undefined);
+    const text = await sandbox.readFile(file).catch(() => undefined);
     if (text === undefined) {
       continue;
     }
@@ -168,32 +182,49 @@ const collect = async (
   };
 };
 
-const collectFiles = async (
-  dir: string,
-  parentIgnores: readonly IgnorePattern[],
+const visibleFiles = async (
+  sandbox: SandboxSession,
+  workspaceRoot: string,
+  searchPath: string,
 ): Promise<readonly string[]> => {
-  const ignores = [...parentIgnores, ...(await readIgnores(dir))];
-  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
-  const nested = await Promise.all(
-    entries.map(async (entry) => {
-      if (entry.name === '.git' || entry.name === 'node_modules') {
-        return [];
-      }
+  const files = await listFiles(sandbox, workspaceRoot, searchPath);
+  const ignores = await readIgnores(sandbox, workspaceRoot, searchPath);
 
-      const fullPath = path.join(dir, entry.name);
-      if (isIgnored(fullPath, entry.isDirectory(), ignores)) {
-        return [];
-      }
-
-      if (entry.isDirectory()) {
-        return collectFiles(fullPath, ignores);
-      }
-
-      return entry.isFile() ? [fullPath] : [];
-    }),
+  return files.filter(
+    (file) => !isIgnoredWithAncestors(searchPath, file, false, ignores),
   );
+};
 
-  return nested.flat();
+const listFiles = async (
+  sandbox: SandboxSession,
+  workspaceRoot: string,
+  searchPath: string,
+): Promise<readonly string[]> => {
+  const result = await sandbox.exec({
+    cwd: workspaceRoot,
+    cmd: [
+      'find',
+      searchPath,
+      '(',
+      '-name',
+      '.git',
+      '-o',
+      '-name',
+      'node_modules',
+      ')',
+      '-prune',
+      '-o',
+      '-type',
+      'f',
+      '-print',
+    ],
+  });
+
+  if (result.exitCode !== 0) {
+    return [];
+  }
+
+  return lines(result.stdout).map(normalizePath).sort();
 };
 
 const compileSearch = (input: z.output<typeof schema>): RegExp | string => {
@@ -241,21 +272,73 @@ const truncateLine = (line: string): [string, boolean] => {
   return [`${line.slice(0, MAX_LINE_LENGTH)}... [truncated]`, true];
 };
 
-const readIgnores = async (dir: string): Promise<readonly IgnorePattern[]> => {
-  const text = await readFile(path.join(dir, '.gitignore'), 'utf8').catch(
-    () => '',
+const readIgnores = async (
+  sandbox: SandboxSession,
+  workspaceRoot: string,
+  searchPath: string,
+): Promise<readonly IgnorePattern[]> => {
+  const result = await sandbox.exec({
+    cwd: workspaceRoot,
+    cmd: [
+      'find',
+      searchPath,
+      '(',
+      '-name',
+      '.git',
+      '-o',
+      '-name',
+      'node_modules',
+      ')',
+      '-prune',
+      '-o',
+      '-type',
+      'f',
+      '-name',
+      '.gitignore',
+      '-print',
+    ],
+  });
+
+  if (result.exitCode !== 0) {
+    return [];
+  }
+
+  const files = lines(result.stdout).map(normalizePath).sort();
+  const groups = await Promise.all(
+    files.map(async (file) =>
+      parseIgnores(
+        path.dirname(file),
+        await sandbox.readFile(file).catch(() => ''),
+      ),
+    ),
   );
 
-  return text
+  return groups.flat();
+};
+
+const parseIgnores = (base: string, text: string): readonly IgnorePattern[] =>
+  text
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line !== '' && !line.startsWith('#'))
     .map((line) => ({
-      base: dir,
+      base,
       pattern: line.startsWith('!') ? line.slice(1) : line,
       negated: line.startsWith('!'),
     }))
     .filter((ignore) => ignore.pattern !== '');
+
+const isIgnoredWithAncestors = (
+  root: string,
+  fullPath: string,
+  isDirectory: boolean,
+  ignores: readonly IgnorePattern[],
+): boolean => {
+  const ignoredAncestor = ancestors(root, fullPath).some((ancestor) =>
+    isIgnored(ancestor, true, ignores),
+  );
+
+  return ignoredAncestor || isIgnored(fullPath, isDirectory, ignores);
 };
 
 const isIgnored = (
@@ -273,7 +356,11 @@ const isIgnored = (
     }
 
     const glob = compileGlob(pattern);
-    const relative = toPosix(path.relative(ignore.base, fullPath));
+    if (!contains(ignore.base, fullPath)) {
+      continue;
+    }
+
+    const relative = path.relative(ignore.base, fullPath);
     const matched =
       glob instanceof RegExp
         ? glob.test(relative) || glob.test(path.basename(fullPath))
@@ -319,16 +406,82 @@ const compileGlob = (pattern: string): RegExp | string => {
   return new RegExp(`^${source}$`);
 };
 
-const resolvePath = (workspaceRoot: string, value: string): string =>
-  path.normalize(
-    path.isAbsolute(value) ? value : path.join(workspaceRoot, value),
+const resolvePath = (
+  workspaceRoot: string,
+  value: string,
+): { readonly path: string } | string => {
+  const root = normalizePath(workspaceRoot);
+  const resolved = normalizePath(
+    path.isAbsolute(value) ? value : path.join(root, value),
   );
 
-const exists = async (value: string): Promise<boolean> =>
-  stat(value).then(
-    () => true,
-    () => false,
-  );
+  if (!contains(root, resolved)) {
+    return `Path escapes workspace: ${value}`;
+  }
+
+  return { path: resolved };
+};
+
+const pathKind = async (
+  sandbox: SandboxSession,
+  workspaceRoot: string,
+  value: string,
+): Promise<PathKind> => {
+  const result = await sandbox.exec({
+    cwd: workspaceRoot,
+    cmd: [
+      'sh',
+      '-c',
+      'if [ -d "$1" ]; then printf directory; elif [ -f "$1" ]; then printf file; elif [ -e "$1" ]; then printf other; else printf missing; fi',
+      'sh',
+      value,
+    ],
+  });
+
+  if (result.exitCode !== 0) {
+    return 'missing';
+  }
+
+  return parsePathKind(result.stdout);
+};
+
+const parsePathKind = (value: string): PathKind => {
+  const normalized = value.trim();
+
+  if (
+    normalized === 'directory' ||
+    normalized === 'file' ||
+    normalized === 'missing' ||
+    normalized === 'other'
+  ) {
+    return normalized;
+  }
+
+  return 'missing';
+};
+
+const ancestors = (root: string, fullPath: string): readonly string[] => {
+  const values: string[] = [];
+  let current = path.dirname(fullPath);
+
+  while (contains(root, current) && current !== root) {
+    values.unshift(current);
+    current = path.dirname(current);
+  }
+
+  return values;
+};
+
+const contains = (root: string, child: string): boolean =>
+  child === root || child.startsWith(`${root}/`);
+
+const lines = (value: string): readonly string[] =>
+  value.split(/\r?\n/).filter((line) => line !== '');
+
+const normalizePath = (value: string): string => {
+  const resolved = path.normalize(path.isAbsolute(value) ? value : `/${value}`);
+  return resolved === '/' ? resolved : resolved.replace(/\/+$/, '');
+};
 
 const empty = (error: string): GrepOutput => ({
   matches: [],
@@ -340,4 +493,3 @@ const empty = (error: string): GrepOutput => ({
 
 const escapeRegExp = (value: string): string =>
   value.replace(/[\\^$+?.()|{}]/g, '\\$&');
-const toPosix = (value: string): string => value.replaceAll(path.sep, '/');

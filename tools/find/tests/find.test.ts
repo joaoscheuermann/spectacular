@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import { createTool } from '../src/index.js';
+import { WORKSPACE_ROOT, createFakeSandbox } from './fake-sandbox.js';
 
 describe('find tool', () => {
   test('returns matching files relative to the requested search path', async () => {
@@ -13,7 +14,10 @@ describe('find tool', () => {
     await write(root, 'src/nested/b.ts', 'b');
     await write(root, 'src/c.txt', 'c');
 
-    const result = await createTool({ workspaceRoot: root }).execute({
+    const result = await createTool({
+      workspaceRoot: WORKSPACE_ROOT,
+      sandbox: createFakeSandbox(root),
+    }).execute({
       pattern: '*.ts',
       path: 'src',
     });
@@ -33,7 +37,10 @@ describe('find tool', () => {
     await write(root, 'ignored.txt', 'ignored');
     await write(root, 'keep.txt', 'keep');
 
-    const result = await createTool({ workspaceRoot: root }).execute({
+    const result = await createTool({
+      workspaceRoot: WORKSPACE_ROOT,
+      sandbox: createFakeSandbox(root),
+    }).execute({
       pattern: '*.txt',
     });
 

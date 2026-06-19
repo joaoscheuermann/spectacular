@@ -1,17 +1,26 @@
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
-import path from 'node:path';
+import hostPath from 'node:path';
+import { posix as path } from 'node:path';
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
+
+import type { SandboxSession } from 'sandbox';
 
 import { createTool } from '../src/index.js';
 
 describe('edit tool', () => {
   test('updates a unique exact match and returns first changed line', async () => {
-    const root = await workspace('edit-exact');
-    await write(root, 'src/lib.ts', 'one\noldCall();\nthree\n');
+    const sandbox = await fakeSandbox('edit-exact');
+    await sandbox.seed(
+      '/workspace/repo/src/lib.ts',
+      'one\noldCall();\nthree\n',
+    );
 
-    const result = await createTool({ workspaceRoot: root }).execute({
+    const result = await createTool({
+      workspaceRoot: '/workspace/repo',
+      sandbox,
+    }).execute({
       path: 'src/lib.ts',
       edits: [{ oldText: 'oldCall();', newText: 'newCall();' }],
     });
@@ -21,30 +30,38 @@ describe('edit tool', () => {
     assert.match(result.diff, /2 -oldCall\(\);/);
     assert.match(result.diff, /2 \+newCall\(\);/);
     assert.equal(
-      await readFile(path.join(root, 'src/lib.ts'), 'utf8'),
+      await sandbox.readHost('/workspace/repo/src/lib.ts'),
       'one\nnewCall();\nthree\n',
     );
-    await rm(root, { recursive: true, force: true });
+    assert.deepEqual(sandbox.reads, ['/workspace/repo/src/lib.ts']);
+    assert.deepEqual(sandbox.writes, ['/workspace/repo/src/lib.ts']);
+    await sandbox.dispose();
   });
 
   test('rejects duplicate old text with context guidance', async () => {
-    const root = await workspace('edit-duplicate');
-    await write(root, 'same.txt', 'same\nsame\n');
+    const sandbox = await fakeSandbox('edit-duplicate');
+    await sandbox.seed('/workspace/repo/same.txt', 'same\nsame\n');
 
-    const result = await createTool({ workspaceRoot: root }).execute({
+    const result = await createTool({
+      workspaceRoot: '/workspace/repo',
+      sandbox,
+    }).execute({
       path: 'same.txt',
       edits: [{ old_text: 'same', new_text: 'changed' }],
     });
 
     assert.equal(result.success, false);
     assert.match(result.error ?? '', /Please provide more context/);
-    await rm(root, { recursive: true, force: true });
+    await sandbox.dispose();
   });
 
   test('distinguishes missing files from other read failures', async () => {
-    const root = await workspace('edit-read-errors');
-    await mkdir(path.join(root, 'src'), { recursive: true });
-    const tool = createTool({ workspaceRoot: root });
+    const sandbox = await fakeSandbox('edit-read-errors');
+    await sandbox.mkdir('/workspace/repo/src');
+    const tool = createTool({
+      workspaceRoot: '/workspace/repo',
+      sandbox,
+    });
 
     const missing = await tool.execute({
       path: 'missing.txt',
@@ -57,19 +74,95 @@ describe('edit tool', () => {
 
     assert.match(missing.error ?? '', /^File not found: missing\.txt$/);
     assert.match(directory.error ?? '', /^Failed to read file:/);
-    await rm(root, { recursive: true, force: true });
+    await sandbox.dispose();
   });
 });
 
-const workspace = (name: string): Promise<string> =>
-  mkdtemp(path.join(os.tmpdir(), `doric-${name}-`));
-
-const write = async (
-  root: string,
-  file: string,
-  content: string,
-): Promise<void> => {
-  const target = path.join(root, file);
-  await mkdir(path.dirname(target), { recursive: true });
-  await writeFile(target, content, 'utf8');
+type FakeSandbox = SandboxSession & {
+  readonly reads: string[];
+  readonly writes: string[];
+  seed(path: string, content: string): Promise<void>;
+  mkdir(path: string): Promise<void>;
+  readHost(path: string): Promise<string>;
 };
+
+const fakeSandbox = async (name: string): Promise<FakeSandbox> => {
+  const root = await workspace(name);
+  const reads: string[] = [];
+  const writes: string[] = [];
+
+  const target = (sandboxPath: string): string => {
+    const resolved = path.normalize(
+      path.isAbsolute(sandboxPath)
+        ? sandboxPath
+        : path.join('/workspace', sandboxPath),
+    );
+    const relative =
+      resolved === '/workspace' ? '' : resolved.slice('/workspace/'.length);
+
+    return hostPath.join(root, ...relative.split('/'));
+  };
+
+  const writeHost = async (
+    sandboxPath: string,
+    content: string,
+  ): Promise<void> => {
+    const host = target(sandboxPath);
+    await mkdir(hostPath.dirname(host), { recursive: true });
+    await writeFile(host, content, 'utf8');
+  };
+
+  return {
+    id: 'fake-sandbox',
+    root: '/workspace',
+    reads,
+    writes,
+
+    async exec() {
+      throw new Error('fake sandbox does not execute commands');
+    },
+
+    async cloneRepo() {
+      throw new Error('fake sandbox does not clone repositories');
+    },
+
+    async readFile(sandboxPath) {
+      reads.push(sandboxPath);
+      return readFile(target(sandboxPath), 'utf8');
+    },
+
+    async writeFile(sandboxPath, content) {
+      writes.push(sandboxPath);
+      await writeHost(sandboxPath, content);
+    },
+
+    async putFile() {
+      throw new Error('fake sandbox does not put binary files');
+    },
+
+    async getFile() {
+      throw new Error('fake sandbox does not get binary files');
+    },
+
+    async diff() {
+      return '';
+    },
+
+    async dispose() {
+      await rm(root, { recursive: true, force: true });
+    },
+
+    seed: writeHost,
+
+    async mkdir(sandboxPath) {
+      await mkdir(target(sandboxPath), { recursive: true });
+    },
+
+    readHost(sandboxPath) {
+      return readFile(target(sandboxPath), 'utf8');
+    },
+  };
+};
+
+const workspace = (name: string): Promise<string> =>
+  mkdtemp(hostPath.join(os.tmpdir(), `doric-${name}-`));

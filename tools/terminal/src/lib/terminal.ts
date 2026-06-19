@@ -1,11 +1,9 @@
-import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 
 import { createTool as defineTool } from 'tools';
+import type { SandboxExecResult, SandboxSession } from 'sandbox';
 import { z } from 'zod';
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -18,7 +16,7 @@ const DIAGNOSTIC_LINE_LIMIT = 20;
 const DIAGNOSTIC_CONTEXT_RADIUS = 2;
 
 const description =
-  'Executes shell commands on the host machine. Returns compact stdout/stderr summaries, diagnostics, exit_code, duration, and a raw_output_ref when trace storage is enabled.';
+  'Executes shell commands inside the injected sandbox session. Returns compact stdout/stderr summaries, diagnostics, exit_code, duration, and a raw_output_ref when trace storage is enabled.';
 
 export const schema = z
   .object({
@@ -71,6 +69,7 @@ export type TerminalDiagnostic = {
 
 type Options = {
   readonly workspaceRoot: string;
+  readonly sandbox: SandboxSession;
   readonly traceDir?: string;
 };
 
@@ -83,18 +82,19 @@ type Execution = {
   readonly durationMs: number;
 };
 
-/** Creates the provider-neutral host terminal tool. */
-export const createTool = ({ workspaceRoot, traceDir }: Options) =>
+/** Creates the provider-neutral sandbox terminal tool. */
+export const createTool = ({ workspaceRoot, sandbox, traceDir }: Options) =>
   defineTool({
     name: 'terminal',
     description,
     schema,
     execute: (input): Promise<TerminalOutput> =>
-      execute(workspaceRoot, traceDir, input),
+      execute(workspaceRoot, sandbox, traceDir, input),
   });
 
 const execute = async (
   workspaceRoot: string,
+  sandbox: SandboxSession,
   traceDir: string | undefined,
   input: z.output<typeof schema>,
 ): Promise<TerminalOutput> => {
@@ -109,6 +109,7 @@ const execute = async (
     MAX_TIMEOUT_MS,
   );
   const execution = await runCommand(
+    sandbox,
     input.command,
     workingDirectory,
     timeoutMs,
@@ -116,92 +117,57 @@ const execute = async (
   return compact(execution, await writeTrace(traceDir, execution));
 };
 
-const runCommand = (
+const runCommand = async (
+  sandbox: SandboxSession,
   command: string,
   workingDirectory: string,
   timeoutMs: number,
-): Promise<Execution> =>
-  new Promise((resolve) => {
-    const started = Date.now();
-    const shell = shellCommand(command);
-    const child = spawn(shell.program, shell.args, {
+): Promise<Execution> => {
+  const started = Date.now();
+
+  try {
+    const result = await sandbox.exec({
+      cmd: ['sh', '-lc', command],
       cwd: workingDirectory,
-      detached: os.platform() !== 'win32',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
-    const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
-    let completed = false;
-
-    child.stdout?.on('data', (data: Buffer) => stdout.push(data));
-    child.stderr?.on('data', (data: Buffer) => stderr.push(data));
-    child.on('error', (error) => {
-      if (completed) {
-        return;
-      }
-
-      completed = true;
-      clearTimeout(timeout);
-      resolve(
-        finish(
-          command,
-          workingDirectory,
-          stdout,
-          [Buffer.from(`Failed to spawn command: ${error.message}`)],
-          -1,
-          started,
-        ),
-      );
-    });
-    child.on('close', (code) => {
-      if (completed) {
-        return;
-      }
-
-      completed = true;
-      clearTimeout(timeout);
-      resolve(
-        finish(command, workingDirectory, stdout, stderr, code ?? -1, started),
-      );
+      timeoutMs,
     });
 
-    const timeout = setTimeout(() => {
-      if (completed) {
-        return;
-      }
-
-      completed = true;
-      void terminate(child.pid).finally(() => {
-        resolve(
-          finish(
-            command,
-            workingDirectory,
-            stdout,
-            [...stderr, Buffer.from(`Command timed out after ${timeoutMs}ms`)],
-            -1,
-            started,
-          ),
-        );
-      });
-    }, timeoutMs);
-  });
+    return finish(command, workingDirectory, result, started);
+  } catch (error) {
+    return failedExecution(command, workingDirectory, error, started);
+  }
+};
 
 const finish = (
   command: string,
   workingDirectory: string,
-  stdout: readonly Buffer[],
-  stderr: readonly Buffer[],
-  exitCode: number,
+  result: SandboxExecResult,
   started: number,
 ): Execution => ({
   command,
   workingDirectory,
-  stdout: Buffer.concat(stdout).toString('utf8'),
-  stderr: Buffer.concat(stderr).toString('utf8'),
-  exitCode,
+  stdout: result.stdout,
+  stderr: result.stderr,
+  exitCode: result.exitCode ?? -1,
   durationMs: Date.now() - started,
 });
+
+const failedExecution = (
+  command: string,
+  workingDirectory: string,
+  error: unknown,
+  started: number,
+): Execution => ({
+  command,
+  workingDirectory,
+  stdout: '',
+  stderr: `Failed to execute command in sandbox: ${errorMessage(error)}`,
+  exitCode: -1,
+  durationMs: Date.now() - started,
+});
+
+const errorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
 
 const compact = (
   execution: Execution,
@@ -299,77 +265,6 @@ const writeTrace = async (
     };
   }
 };
-
-const shellCommand = (
-  command: string,
-): { readonly program: string; readonly args: readonly string[] } => {
-  if (os.platform() !== 'win32') {
-    return { program: 'bash', args: ['-lc', command] };
-  }
-
-  const pwsh = findExecutable('pwsh') ?? findExecutable('powershell.exe');
-  if (pwsh !== undefined) {
-    return {
-      program: pwsh,
-      args: ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', command],
-    };
-  }
-
-  return { program: process.env.ComSpec ?? 'cmd.exe', args: ['/C', command] };
-};
-
-const findExecutable = (command: string): string | undefined => {
-  const paths = (process.env.PATH ?? '').split(path.delimiter);
-  const extensions =
-    path.extname(command) === '' ? ['.EXE', '.CMD', '.BAT', ''] : [''];
-  return paths
-    .flatMap((directory) =>
-      extensions.map((extension) =>
-        path.join(directory, `${command}${extension}`),
-      ),
-    )
-    .find((candidate) => existsSync(candidate));
-};
-
-const terminate = async (pid: number | undefined): Promise<void> => {
-  if (pid === undefined) {
-    return;
-  }
-
-  if (os.platform() === 'win32') {
-    await taskkill(pid);
-    killPid(pid);
-    return;
-  }
-
-  killPid(-pid, 'SIGTERM');
-  await delay(50);
-  killPid(-pid, 'SIGKILL');
-  killPid(pid, 'SIGKILL');
-};
-
-const taskkill = (pid: number): Promise<void> =>
-  new Promise((resolve) => {
-    const child = spawn('taskkill', ['/T', '/F', '/PID', String(pid)], {
-      stdio: 'ignore',
-      windowsHide: true,
-    });
-    child.on('error', () => resolve());
-    child.on('close', () => resolve());
-  });
-
-const killPid = (pid: number, signal?: NodeJS.Signals): void => {
-  try {
-    process.kill(pid, signal);
-  } catch {
-    // Process may already have exited.
-  }
-};
-
-const delay = (ms: number): Promise<void> =>
-  new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
 
 const reduceDiagnostics = (
   execution: Execution,
@@ -542,6 +437,8 @@ const capLine = (line: string): string =>
     : `${line.slice(0, MAX_LINE_CHARS)} [line truncated; ${line.length - MAX_LINE_CHARS} chars omitted]`;
 
 const resolvePath = (workspaceRoot: string, value: string): string =>
-  path.normalize(
-    path.isAbsolute(value) ? value : path.join(workspaceRoot, value),
+  path.posix.normalize(
+    path.posix.isAbsolute(value)
+      ? value
+      : path.posix.join(workspaceRoot, value),
   );

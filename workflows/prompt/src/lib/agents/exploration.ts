@@ -1,10 +1,7 @@
 import { z } from 'zod';
 
 import { createSafeExplorationTools } from '../tools/exploration.js';
-import type {
-  PromptArtifact,
-  PromptWorkflowOptions,
-} from '../types/prompt.js';
+import type { PromptArtifact, PromptWorkflowOptions } from '../types/prompt.js';
 import { withData } from '../utils/artifacts.js';
 import { completePass } from '../utils/pass.js';
 
@@ -39,7 +36,10 @@ export const withExploration = async (
 ): Promise<PromptArtifact> => {
   const response = await completePass(artifact, options, {
     ...explorationAgent,
-    tools: createSafeExplorationTools(options.workspaceRoot),
+    tools: createSafeExplorationTools({
+      workspaceRoot: options.workspaceRoot,
+      sandbox: options.sandbox,
+    }),
   });
 
   return withData(artifact, {

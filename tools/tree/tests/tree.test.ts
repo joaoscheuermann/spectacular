@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import { createTool } from '../src/index.js';
+import { WORKSPACE_ROOT, createFakeSandbox } from './fake-sandbox.js';
 
 describe('tree tool', () => {
   test('renders ascii tree and includes .agents while hiding other dot paths', async () => {
@@ -14,7 +15,10 @@ describe('tree tool', () => {
     await write(root, 'src/lib.ts', 'lib');
     await write(root, 'visible.txt', 'visible');
 
-    const output = await createTool({ workspaceRoot: root }).execute({
+    const output = await createTool({
+      workspaceRoot: WORKSPACE_ROOT,
+      sandbox: createFakeSandbox(root),
+    }).execute({
       path: '.',
     });
 
@@ -32,7 +36,10 @@ describe('tree tool', () => {
     await write(root, 'ignored.txt', 'ignored');
     await write(root, 'keep.txt', 'keep');
 
-    const output = await createTool({ workspaceRoot: root }).execute({
+    const output = await createTool({
+      workspaceRoot: WORKSPACE_ROOT,
+      sandbox: createFakeSandbox(root),
+    }).execute({
       path: '.',
     });
 
