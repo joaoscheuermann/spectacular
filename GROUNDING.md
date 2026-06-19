@@ -109,6 +109,9 @@ Current package responsibilities:
   the TypeScript agent core. It depends on `packages/docker` and exposes
   injected, explicit workspace operations such as command execution, file
   exchange, repository cloning, diffs, and cleanup.
+- `packages/session` owns generic process-local in-memory session storage keyed
+  by caller-owned string IDs. It has no product-package dependencies and does
+  not persist sessions outside the current process.
 - `packages/state-machine` owns typed in-memory state-machine control flow for
   the TypeScript agent core. It provides embeddable state transition execution
   only, without persistence, external integrations, daemon/worker behavior, or a

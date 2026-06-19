@@ -10,18 +10,5 @@
     "types": ["node"]
   },
   "include": ["src/**/*.ts"],
-  "references": [
-    {
-      "path": "../../packages/config/tsconfig.lib.json"
-    },
-    {
-      "path": "../../packages/docker/tsconfig.lib.json"
-    },
-    {
-      "path": "../../packages/sandbox/tsconfig.lib.json"
-    },
-    {
-      "path": "../../packages/session/tsconfig.lib.json"
-    }
-  ]
+  "references": []
 }

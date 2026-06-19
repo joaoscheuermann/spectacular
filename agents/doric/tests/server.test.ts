@@ -7,6 +7,7 @@ import type { Message, Task } from '@a2a-js/sdk';
 import { ClientFactory } from '@a2a-js/sdk/client';
 
 import { createServer, HELLO_WORLD_TEXT } from '../src/index.js';
+import { createConfigPart, createDoricTestHarness } from './fakes.js';
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
@@ -114,7 +115,38 @@ test('returns a hello world message when JSON-RPC message send is posted', async
   });
 });
 
-test('rejects JSON-RPC message send when the first message part is text', async () => {
+test('returns a hello world message when the SDK generates a context ID', async () => {
+  await withServer(async (origin) => {
+    const response = await postJson(origin, {
+      jsonrpc: '2.0',
+      id: 'send-message',
+      method: 'message/send',
+      params: {
+        message: {
+          kind: 'message',
+          messageId: randomUUID(),
+          role: 'user',
+          parts: [createConfigPart(), { kind: 'text', text: 'Hello?' }],
+        },
+      },
+    });
+
+    assert.equal(response.status, 200);
+
+    const body = (await response.json()) as JsonRpcResponse;
+    const message = assertJsonRpcMessage(body);
+
+    assert.match(message.contextId ?? '', UUID_PATTERN);
+    assert.deepEqual(message.parts, [
+      {
+        kind: 'text',
+        text: HELLO_WORLD_TEXT,
+      },
+    ]);
+  });
+});
+
+test('returns a failed task when the first message part is text', async () => {
   await withServer(async (origin) => {
     const response = await postJson(origin, {
       jsonrpc: '2.0',
@@ -133,15 +165,18 @@ test('rejects JSON-RPC message send when the first message part is text', async 
 
     assert.equal(response.status, 200);
     const body = (await response.json()) as JsonRpcResponse;
-    const error = assertJsonRpcError(body);
+    const task = assertJsonRpcTask(body);
 
     assert.equal(body.jsonrpc, '2.0');
     assert.equal(body.id, 'send-message');
-    assert.equal(error.code, -32602);
-    assert.deepEqual(error.data, {
-      code: 'invalid_first_part_kind',
-      path: 'message.parts[0].kind',
-    });
+    assert.equal(task.status.state, 'failed');
+    assert.equal(task.status.message?.parts[0]?.kind, 'text');
+    assert.match(
+      task.status.message?.parts[0]?.kind === 'text'
+        ? task.status.message.parts[0].text
+        : '',
+      /First message part must be a data part/u,
+    );
   });
 });
 
@@ -182,41 +217,6 @@ type JsonRpcResponse = {
   };
 };
 
-const createConfigPart = (): Message['parts'][number] => ({
-  kind: 'data',
-  data: {
-    type: 'config',
-    data: {
-      github: {
-        repo: {
-          url: 'https://github.com/example/repo',
-        },
-        token: 'github-token',
-      },
-      providers: [
-        {
-          id: 'openai',
-          type: 'openai',
-          token: 'provider-token',
-        },
-      ],
-      models: [
-        {
-          id: 'default',
-          provider: 'openai',
-          model: 'gpt-5',
-        },
-      ],
-      tasks: [
-        {
-          id: 'coding',
-          model: 'default',
-        },
-      ],
-    },
-  },
-});
-
 const assertMessage = (result: Message | Task): Message => {
   if (result.kind !== 'message') {
     assert.fail('expected direct message response');
@@ -233,6 +233,18 @@ const assertJsonRpcMessage = (body: JsonRpcResponse): Message => {
   return assertMessage(body.result);
 };
 
+const assertJsonRpcTask = (body: JsonRpcResponse): Task => {
+  if (body.result === undefined) {
+    assert.fail('expected JSON-RPC result response');
+  }
+
+  if (body.result.kind !== 'task') {
+    assert.fail('expected JSON-RPC task response');
+  }
+
+  return body.result;
+};
+
 const assertJsonRpcError = (
   body: JsonRpcResponse,
 ): NonNullable<JsonRpcResponse['error']> => {
@@ -246,7 +258,8 @@ const assertJsonRpcError = (
 const withServer = async (
   run: (origin: string) => Promise<void>,
 ): Promise<void> => {
-  const server = createServer();
+  const harness = createDoricTestHarness();
+  const server = createServer({ executor: harness.executor });
   await listen(server);
 
   const address = server.address();
