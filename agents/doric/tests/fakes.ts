@@ -21,7 +21,10 @@ import type {
   SandboxSession,
 } from 'sandbox';
 
-import { createExecutor, type DoricSessionContext } from '../src/index.js';
+import {
+  createExecutor,
+  type DoricSessionContext,
+} from '../src/lib/executor.js';
 
 export type FakeSandbox = SandboxSession & {
   readonly execs: SandboxExecInput[];
@@ -45,6 +48,7 @@ export type CapturingEventBus = ExecutionEventBus & {
 type HarnessOptions = {
   readonly sessions?: SessionStore<DoricSessionContext>;
   readonly hasGit?: boolean;
+  readonly gitInstallFailure?: Error;
   readonly cloneFailure?: Error;
 };
 
@@ -74,11 +78,12 @@ export const createDoricTestHarness = (
 
         return docker;
       },
-      createSandbox: async (input) => {
+      createSandbox: async (input: CreateSandboxOptions) => {
         sandboxOptions.push(input);
 
         const sandbox = createFakeSandbox({
           hasGit: options.hasGit ?? true,
+          gitInstallFailure: options.gitInstallFailure,
           cloneFailure: options.cloneFailure,
         });
 
@@ -211,6 +216,7 @@ const failed = (stderr = ''): SandboxExecResult => ({
 
 const createFakeSandbox = (options: {
   readonly hasGit: boolean;
+  readonly gitInstallFailure: Error | undefined;
   readonly cloneFailure: Error | undefined;
 }): FakeSandbox => {
   const execs: SandboxExecInput[] = [];
@@ -232,6 +238,10 @@ const createFakeSandbox = (options: {
       }
 
       if (input.cmd.join(' ') === GIT_INSTALL_COMMAND) {
+        if (options.gitInstallFailure !== undefined) {
+          return failed(options.gitInstallFailure.message);
+        }
+
         gitInstalled = true;
 
         return ok();

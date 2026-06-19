@@ -28,11 +28,14 @@ type SandboxState = {
 };
 
 const decoder = new TextDecoder();
+const CONTAINER_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]+$/u;
 
 /** Creates and starts an empty disposable coding sandbox container. */
 export const createSandbox = async (
   options: CreateSandboxOptions,
 ): Promise<SandboxSession> => {
+  validateName(options.name);
+
   const root = options.root ?? '/workspace';
   const container = await options.docker.createContainer(
     containerInput(options, root),
@@ -247,6 +250,7 @@ const containerInput = (
   const network = options.network ?? { mode: 'disabled' };
 
   return {
+    name: options.name,
     image: options.image,
     cmd: ['sh', '-lc', 'while :; do sleep 3600; done'],
     workingDir: root,
@@ -267,6 +271,16 @@ const containerInput = (
     }),
     networkDisabled: network.mode === 'disabled',
   };
+};
+
+const validateName = (name: string | undefined): void => {
+  if (name === undefined || CONTAINER_NAME_PATTERN.test(name)) {
+    return;
+  }
+
+  throw new Error(
+    `Docker container name must match ${CONTAINER_NAME_PATTERN}: ${name}`,
+  );
 };
 
 const networkMode = (policy: SandboxNetworkPolicy): string => {

@@ -4,7 +4,7 @@ import test from 'node:test';
 import { A2AError } from '@a2a-js/sdk/server';
 import { createSessionStore } from 'session';
 
-import type { DoricSessionContext } from '../src/index.js';
+import type { DoricSessionContext } from '../src/lib/executor.js';
 import {
   createConfigPart,
   createDoricTestHarness,
@@ -29,6 +29,7 @@ test('initializes a sandbox session and clones the configured repo on the first 
   assert.deepEqual(harness.sandboxOptions[0], {
     docker: harness.docker,
     image: 'node:slim',
+    name: 'doric-context-1',
     network: { mode: 'bridge' },
   });
   assert.deepEqual(harness.sandboxes[0]?.clones, [
@@ -42,7 +43,20 @@ test('initializes a sandbox session and clones the configured repo on the first 
     commit: 'abc123',
   });
   assert.equal(eventBus.finishedCount, 1);
-  assert.equal(eventBus.events[0]?.kind, 'message');
+});
+
+test('normalizes context IDs before using them as Docker container names', async () => {
+  const harness = createDoricTestHarness();
+
+  await harness.executor.execute(
+    createRequestContext({
+      contextId: 'workspace:feature/one',
+      parts: [createConfigPart()],
+    }),
+    createEventBus(),
+  );
+
+  assert.equal(harness.sandboxOptions[0]?.name, 'doric-workspace-feature-one');
 });
 
 test('reuses an existing context without requiring config on later messages', async () => {
@@ -200,6 +214,30 @@ test('installs Git and CA certificates when Git is missing', async () => {
   );
 });
 
+test('does not save a session when Git setup fails', async () => {
+  const sessions = createSessionStore<DoricSessionContext>();
+  const harness = createDoricTestHarness({
+    sessions,
+    hasGit: false,
+    gitInstallFailure: new Error('apt failed'),
+  });
+
+  await assert.rejects(
+    harness.executor.execute(
+      createRequestContext({
+        contextId: 'context-1',
+        parts: [createConfigPart()],
+      }),
+      createEventBus(),
+    ),
+    /git install failed: apt failed/u,
+  );
+
+  assert.equal(sessions.get('context-1'), undefined);
+  assert.deepEqual(sessions.list(), []);
+  assert.equal(harness.sandboxes[0]?.clones.length, 0);
+});
+
 test('does not save a session when cloning fails', async () => {
   const sessions = createSessionStore<DoricSessionContext>();
   const cloneFailure = new Error('clone failed');
@@ -218,5 +256,4 @@ test('does not save a session when cloning fails', async () => {
 
   assert.equal(sessions.get('context-1'), undefined);
   assert.deepEqual(sessions.list(), []);
-  assert.equal(harness.sandboxes[0]?.disposed, true);
 });

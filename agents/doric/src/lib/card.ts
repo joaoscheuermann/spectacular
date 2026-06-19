@@ -1,14 +1,12 @@
 import type { AgentCard } from '@a2a-js/sdk';
 
-export { HELLO_WORLD_TEXT, RPC_PATH } from './constants/agent.js';
-
-export const createAgentCard = (url: string): AgentCard => ({
+export const createAgentCard = (host: string): AgentCard => ({
   name: 'doric',
   description: 'Doric A2A Coding Agent.',
   protocolVersion: '0.3.0',
-  url,
+  url: `http://${host}/rpc`,
   preferredTransport: 'JSONRPC',
-  additionalInterfaces: [{ url, transport: 'JSONRPC' }],
+  additionalInterfaces: [{ url: `http://${host}/rpc`, transport: 'JSONRPC' }],
   provider: {
     organization: 'Doric',
     url: 'https://github.com/joaoscheuermann/doric',

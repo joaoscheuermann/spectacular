@@ -3,9 +3,13 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
+    "doric:spawn-agent": "node scripts/spawn-agent.mjs",
     "openai:oauth": "node --conditions=@org/source --import @swc-node/register/esm-register scripts/openai-oauth.mjs"
   },
   "private": true,
+  "dependencies": {
+    "@a2a-js/sdk": "^0.3.13"
+  },
   "devDependencies": {
     "@monodon/rust": "^2.3.0",
     "@nx/js": "^22.6.5",

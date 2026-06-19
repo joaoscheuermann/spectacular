@@ -1,59 +1,56 @@
-import { pathToFileURL } from 'node:url';
+import express from 'express';
+import cors from 'cors';
 
-import {
-  resolveListenOptions,
-  startServer,
-  type StartedServer,
-} from './lib/start.js';
+import { UserBuilder } from '@a2a-js/sdk/server/grpc';
+import { agentCardHandler, jsonRpcHandler } from '@a2a-js/sdk/server/express';
+import { DefaultRequestHandler, InMemoryTaskStore } from '@a2a-js/sdk/server';
 
-export * from './lib/card.js';
-export * from './lib/executor.js';
-export * from './lib/messages/hello-world.js';
-export * from './lib/server.js';
-export * from './lib/start.js';
+import { createSessionStore } from 'session';
+import { createSandbox } from 'sandbox';
+import { createDockerClient } from 'docker';
 
-export const run = async (): Promise<void> => {
-  const options = resolveListenOptions();
-  const started = await startServer({
-    ...options,
-    writeLine: (line) => {
-      console.log(line);
-    },
-  });
+import { DEFAULT_HOST, DEFAULT_PORT } from './lib/constants/server.js';
 
-  installShutdownHandlers(started);
-};
+import { createAgentCard } from './lib/card.js';
+import { createExecutor, DoricSessionContext } from './lib/executor.js';
 
-const installShutdownHandlers = (started: StartedServer): void => {
-  const shutdown = (): void => {
-    process.off('SIGINT', shutdown);
-    process.off('SIGTERM', shutdown);
+const app = express();
 
-    void started.close().catch((error: unknown) => {
-      console.error(toErrorMessage(error));
-      process.exitCode = 1;
-    });
-  };
+const host = String(process.env.HOST || DEFAULT_HOST);
+const port = Number(process.env.PORT || DEFAULT_PORT);
 
-  process.once('SIGINT', shutdown);
-  process.once('SIGTERM', shutdown);
-};
+const sessions = createSessionStore<DoricSessionContext>();
 
-const toErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message;
-  }
+const card = createAgentCard(`${host}:${port}`);
 
-  return String(error);
-};
+const tasks = new InMemoryTaskStore();
 
-const isDirectExecution = (): boolean =>
-  process.argv[1] !== undefined &&
-  import.meta.url === pathToFileURL(process.argv[1]).href;
+const executor = createExecutor({
+  sessions,
+  createDockerClient,
+  createSandbox,
+});
 
-if (isDirectExecution()) {
-  void run().catch((error: unknown) => {
-    console.error(toErrorMessage(error));
-    process.exitCode = 1;
-  });
-}
+const requestHandler = new DefaultRequestHandler(card, tasks, executor);
+
+app.use(cors());
+app.use(express.json());
+
+// Sends the agent card for the other Agent
+app.use(
+  '/.well-known/a2a-agent-card',
+  agentCardHandler({ agentCardProvider: async () => card }),
+);
+
+// Standard JSON-RPC Endpoint (Recommended by the protocol)
+app.use(
+  '/rpc',
+  jsonRpcHandler({ requestHandler, userBuilder: UserBuilder.noAuthentication }),
+);
+
+app.listen(port, host, () => {
+  console.log(`A2A Express Server listening at http://localhost:${port}`);
+  console.log(
+    `Discovery endpoint available at http://localhost:${port}/.well-known/a2a-agent-card`,
+  );
+});

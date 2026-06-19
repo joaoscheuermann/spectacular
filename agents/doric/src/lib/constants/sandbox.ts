@@ -1,4 +1,4 @@
-export const DEFAULT_IMAGE = 'node:slim';
+export const DEFAULT_SANDBOX_IMAGE = 'node:slim';
 export const GIT_PROBE_COMMAND = [
   'sh',
   '-lc',

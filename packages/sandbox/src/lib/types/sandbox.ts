@@ -61,6 +61,7 @@ export type ClonedRepo = {
 export type CreateSandboxOptions = {
   readonly docker: DockerClient;
   readonly image: string;
+  readonly name?: string;
   readonly root?: string;
   readonly resources?: SandboxResources;
   readonly network?: SandboxNetworkPolicy;

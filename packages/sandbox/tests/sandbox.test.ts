@@ -115,6 +115,7 @@ test('creates an empty disposable container with safety defaults and no clone', 
   const session = await createSandbox({
     docker,
     image: 'alpine:latest',
+    name: 'doric-context-1',
     resources: {
       memoryBytes: 268_435_456,
       nanoCpus: 1_000_000_000,
@@ -127,6 +128,7 @@ test('creates an empty disposable container with safety defaults and no clone', 
   assert.deepEqual(docker.starts, ['container-1']);
   assert.equal(docker.execs.length, 0);
   assert.deepEqual(docker.creates[0], {
+    name: 'doric-context-1',
     image: 'alpine:latest',
     cmd: ['sh', '-lc', 'while :; do sleep 3600; done'],
     workingDir: '/workspace',
@@ -149,6 +151,16 @@ test('creates an empty disposable container with safety defaults and no clone', 
   await session.dispose();
 
   assert.deepEqual(docker.removes, [{ force: true, volumes: true }]);
+});
+
+test('rejects invalid custom container names before Docker creation', async () => {
+  const docker = fakeDocker();
+
+  await assert.rejects(
+    createSandbox({ docker, image: 'alpine:latest', name: 'doric:context' }),
+    /Docker container name must match/u,
+  );
+  assert.equal(docker.creates.length, 0);
 });
 
 test('force removes the container when startup fails', async () => {
