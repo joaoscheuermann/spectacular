@@ -6,7 +6,7 @@ import test from 'node:test';
 import type { Message, Task } from '@a2a-js/sdk';
 import { ClientFactory } from '@a2a-js/sdk/client';
 
-import { createDoricServer, HELLO_WORLD_TEXT } from '../src/index.js';
+import { createServer, HELLO_WORLD_TEXT } from '../src/index.js';
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
@@ -246,7 +246,7 @@ const assertJsonRpcError = (
 const withServer = async (
   run: (origin: string) => Promise<void>,
 ): Promise<void> => {
-  const server = createDoricServer();
+  const server = createServer();
   await listen(server);
 
   const address = server.address();

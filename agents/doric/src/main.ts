@@ -1,12 +1,12 @@
 import {
-  resolveDoricListenOptions,
-  startDoricServer,
-  type StartedDoricServer,
+  resolveListenOptions,
+  startServer,
+  type StartedServer,
 } from './lib/start.js';
 
 const run = async (): Promise<void> => {
-  const options = resolveDoricListenOptions();
-  const started = await startDoricServer({
+  const options = resolveListenOptions();
+  const started = await startServer({
     ...options,
     writeLine: (line) => {
       console.log(line);
@@ -16,7 +16,7 @@ const run = async (): Promise<void> => {
   installShutdownHandlers(started);
 };
 
-const installShutdownHandlers = (started: StartedDoricServer): void => {
+const installShutdownHandlers = (started: StartedServer): void => {
   const shutdown = (): void => {
     process.off('SIGINT', shutdown);
     process.off('SIGTERM', shutdown);

@@ -9,7 +9,7 @@ import { createAgentCard, RPC_PATH } from './card.js';
 import { executor } from './executor.js';
 
 /** Creates a Node HTTP server for Doric's minimal A2A protocol surface. */
-export const createDoricServer = (): Server => {
+export const createServer = (): Server => {
   const requestHandler = createRequestHandler();
   const app = express();
 

@@ -1,46 +1,46 @@
 import type { Server } from 'node:http';
 
-import { createDoricServer } from './server.js';
+import { createServer as createA2aServer } from './server.js';
 
-export const DEFAULT_DORIC_HOST = '127.0.0.1';
-export const DEFAULT_DORIC_PORT = 4123;
+export const DEFAULT_HOST = '127.0.0.1';
+export const DEFAULT_PORT = 4123;
 
-export type DoricListenOptions = {
+export type ListenOptions = {
   readonly host: string;
   readonly port: number;
 };
 
-export type StartDoricServerOptions = Partial<DoricListenOptions> & {
+export type StartServerOptions = Partial<ListenOptions> & {
   readonly createServer?: () => Server;
   readonly writeLine?: (line: string) => void;
 };
 
-export type StartedDoricServer = DoricListenOptions & {
+export type StartedServer = ListenOptions & {
   readonly origin: string;
   readonly server: Server;
   readonly close: () => Promise<void>;
 };
 
-type DoricServerEnv = Readonly<Record<string, string | undefined>>;
+type ServerEnv = Readonly<Record<string, string | undefined>>;
 
 const MAX_PORT = 65_535;
 const PORT_PATTERN = /^\d+$/u;
 
 /** Resolves host and port settings for the local Doric A2A server. */
-export const resolveDoricListenOptions = (
-  env: DoricServerEnv = process.env,
-): DoricListenOptions => ({
-  host: env.HOST ?? DEFAULT_DORIC_HOST,
+export const resolveListenOptions = (
+  env: ServerEnv = process.env,
+): ListenOptions => ({
+  host: env.HOST ?? DEFAULT_HOST,
   port: parseEnvPort(env.PORT),
 });
 
 /** Starts Doric's local A2A HTTP server and returns its resolved address. */
-export const startDoricServer = async (
-  options: StartDoricServerOptions = {},
-): Promise<StartedDoricServer> => {
-  const host = options.host ?? DEFAULT_DORIC_HOST;
-  const port = validatePort(options.port ?? DEFAULT_DORIC_PORT, 'port');
-  const server = (options.createServer ?? createDoricServer)();
+export const startServer = async (
+  options: StartServerOptions = {},
+): Promise<StartedServer> => {
+  const host = options.host ?? DEFAULT_HOST;
+  const port = validatePort(options.port ?? DEFAULT_PORT, 'port');
+  const server = (options.createServer ?? createA2aServer)();
 
   await listen(server, host, port);
 
@@ -55,7 +55,7 @@ export const startDoricServer = async (
   };
 
   try {
-    options.writeLine?.(formatDoricListenMessage(origin));
+    options.writeLine?.(formatListenMessage(origin));
   } catch (error) {
     await started.close();
     throw error;
@@ -64,12 +64,12 @@ export const startDoricServer = async (
   return started;
 };
 
-export const formatDoricListenMessage = (origin: string): string =>
+export const formatListenMessage = (origin: string): string =>
   `Doric A2A agent listening on ${origin}`;
 
 const parseEnvPort = (value: string | undefined): number => {
   if (value === undefined) {
-    return DEFAULT_DORIC_PORT;
+    return DEFAULT_PORT;
   }
 
   if (!PORT_PATTERN.test(value)) {
