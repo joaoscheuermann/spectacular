@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
 import {
@@ -75,6 +76,22 @@ test('maps Docker HTTP failures into structured errors', async () => {
   );
 });
 
+test('pulls images through the Docker image create endpoint', async () => {
+  const requests: DockerTransportRequest[] = [];
+  const client = createDockerClient({
+    request: async (request) => {
+      requests.push(request);
+      return textResponse(200, '{"status":"done"}\n');
+    },
+  });
+
+  await client.pullImage({ image: 'node:slim' });
+
+  assert.equal(requests[0]?.method, 'POST');
+  assert.equal(requests[0]?.path, '/images/create');
+  assert.deepEqual(requests[0]?.query, { fromImage: 'node:slim' });
+});
+
 test('honors timeout and abort controls around the injected transport', async () => {
   const never: DockerTransport = async () => new Promise(() => undefined);
   const timeoutClient = createDockerClient({
@@ -97,6 +114,32 @@ test('honors timeout and abort controls around the injected transport', async ()
     pending,
     (error: unknown) => error instanceof DockerRequestAbortedError,
   );
+});
+
+test('uses DOCKER_HOST as the default Unix socket path when set', async () => {
+  const previous = process.env.DOCKER_HOST;
+  const socketPath = `/tmp/doric-missing-${randomUUID()}.sock`;
+
+  process.env.DOCKER_HOST = `unix://${socketPath}`;
+
+  try {
+    await assert.rejects(
+      createDockerClient().ping(),
+      (error: unknown) =>
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        'address' in error &&
+        error.code === 'ENOENT' &&
+        error.address === socketPath,
+    );
+  } finally {
+    if (previous === undefined) {
+      delete process.env.DOCKER_HOST;
+    } else {
+      process.env.DOCKER_HOST = previous;
+    }
+  }
 });
 
 test('creates starts and inspects execs while demuxing non TTY output', async () => {

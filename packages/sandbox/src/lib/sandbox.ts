@@ -37,6 +37,11 @@ export const createSandbox = async (
   validateName(options.name);
 
   const root = options.root ?? '/workspace';
+  await options.docker.pullImage(
+    { image: options.image },
+    { timeoutMs: options.timeoutMs },
+  );
+
   const container = await options.docker.createContainer(
     containerInput(options, root),
     { timeoutMs: options.timeoutMs },

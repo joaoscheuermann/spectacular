@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { A2AError } from '@a2a-js/sdk/server';
+import { A2AError, type AgentExecutionEvent } from '@a2a-js/sdk/server';
 import { createSessionStore } from 'session';
 
 import type { DoricSessionContext } from '../src/lib/executor.js';
@@ -17,13 +17,11 @@ test('initializes a sandbox session and clones the configured repo on the first 
   const sessions = createSessionStore<DoricSessionContext>();
   const harness = createDoricTestHarness({ sessions });
   const eventBus = createEventBus();
+  const requestContext = createRequestContext({
+    contextId: 'context-1',
+  });
 
-  await harness.executor.execute(
-    createRequestContext({
-      contextId: 'context-1',
-    }),
-    eventBus,
-  );
+  await harness.executor.execute(requestContext, eventBus);
 
   assert.equal(harness.dockerCreateCount(), 1);
   assert.deepEqual(harness.sandboxOptions[0], {
@@ -42,8 +40,39 @@ test('initializes a sandbox session and clones the configured repo on the first 
     path: '/workspace/repo',
     commit: 'abc123',
   });
+  assert.deepEqual(
+    eventBus.events.map((event) => event.kind),
+    [
+      'task',
+      'status-update',
+      'status-update',
+      'status-update',
+      'status-update',
+      'status-update',
+    ],
+  );
+  assert.deepEqual(eventBus.events.map(statusTextPart), [
+    { kind: 'text', text: `Created task ${requestContext.taskId}.` },
+    { kind: 'text', text: 'Checking for an existing session.' },
+    { kind: 'text', text: 'Creating a sandbox for the repository.' },
+    { kind: 'text', text: 'Checking Git inside the sandbox.' },
+    { kind: 'text', text: 'Cloning the configured repository.' },
+    { kind: 'text', text: 'Repository session is ready.' },
+  ]);
   assert.equal(eventBus.finishedCount, 1);
 });
+
+const statusTextPart = (
+  event: AgentExecutionEvent,
+): { kind: 'text'; text: string } | undefined => {
+  if (event.kind !== 'task' && event.kind !== 'status-update') {
+    return undefined;
+  }
+
+  const part = event.status.message?.parts[0];
+
+  return part?.kind === 'text' ? part : undefined;
+};
 
 test('normalizes context IDs before using them as Docker container names', async () => {
   const harness = createDoricTestHarness();

@@ -11,12 +11,15 @@ import type {
   DockerVersion,
   ExecInput,
   ExecResult,
+  PullImageInput,
   RemoveContainerOptions,
 } from 'docker';
 
 import { createSandbox } from '../src/index.js';
 
 type FakeDocker = DockerClient & {
+  readonly calls: string[];
+  readonly pulls: PullImageInput[];
   readonly creates: CreateContainerInput[];
   readonly starts: string[];
   readonly execs: ExecInput[];
@@ -37,6 +40,8 @@ const ok = (stdout = ''): ExecResult => ({
 const fakeDocker = (): FakeDocker => {
   const archives = new Map<string, Uint8Array>();
   const docker: FakeDocker = {
+    calls: [],
+    pulls: [],
     creates: [],
     starts: [],
     execs: [],
@@ -53,12 +58,19 @@ const fakeDocker = (): FakeDocker => {
       return { raw: {} };
     },
 
+    async pullImage(input: PullImageInput) {
+      docker.calls.push(`pull:${input.image}`);
+      docker.pulls.push(input);
+    },
+
     async createContainer(input: CreateContainerInput) {
+      docker.calls.push('create');
       docker.creates.push(input);
       return { id: 'container-1', warnings: [] };
     },
 
     async startContainer(container: ContainerRef | string) {
+      docker.calls.push(`start:${id(container)}`);
       docker.starts.push(id(container));
 
       if (docker.failStart) {
@@ -125,6 +137,12 @@ test('creates an empty disposable container with safety defaults and no clone', 
   });
 
   assert.equal(session.id, 'container-1');
+  assert.deepEqual(docker.calls, [
+    'pull:alpine:latest',
+    'create',
+    'start:container-1',
+  ]);
+  assert.deepEqual(docker.pulls, [{ image: 'alpine:latest' }]);
   assert.deepEqual(docker.starts, ['container-1']);
   assert.equal(docker.execs.length, 0);
   assert.deepEqual(docker.creates[0], {

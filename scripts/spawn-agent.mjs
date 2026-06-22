@@ -18,32 +18,107 @@ const REDACTED_KEYS = new Set([
 ]);
 const SECRET_KEY_PATTERN = /(?:authorization|secret|token)/iu;
 const SECRET_ENV_KEY_PATTERN = /(?:AUTHORIZATION|SECRET|TOKEN)/iu;
+const TEST_PROVIDER = {
+  id: 'openai',
+  type: 'openai',
+};
+const TEST_MODEL = {
+  id: 'default',
+  provider: TEST_PROVIDER.id,
+  model: 'gpt-5.5',
+};
+const TEST_TASK = {
+  id: 'coding',
+  model: TEST_MODEL.id,
+};
+const CLI_OPTIONS = new Map([
+  ['--repo', 'repoUrl'],
+  ['--prompt', 'prompt'],
+  ['--contextId', 'contextId'],
+]);
+const REQUIRED_CLI_OPTIONS = new Map([
+  ['repoUrl', '--repo <url>'],
+  ['prompt', '--prompt <text>'],
+]);
 
-const HELP = `Usage: npm run doric:spawn-agent
+const HELP = `Usage: npm run doric:spawn-agent -- --repo <url> --prompt <text> [options]
 
 Sends Doric's initial A2A message to a running Doric agent server.
 
+Options:
+  --repo <url>              Required GitHub repository URL to clone.
+  --prompt <text>           Required user prompt sent after config.
+  --contextId <id>          Optional A2A context id.
+  -h, --help                Show this help.
+
 Configuration:
-  DORIC_AGENT_CARD_URL       Required URL to the A2A Agent Card.
-  DORIC_GITHUB_REPO_URL      Required GitHub repository URL to clone.
-  DORIC_GITHUB_TOKEN         Required GitHub token for repository access.
-  DORIC_PROVIDER_ID          Required provider id.
-  DORIC_PROVIDER_TYPE        Required provider type.
-  DORIC_PROVIDER_TOKEN       Required provider token.
-  DORIC_MODEL_ID             Required model id.
-  DORIC_MODEL_PROVIDER       Required provider id used by the model.
-  DORIC_MODEL_NAME           Required provider model name.
-  DORIC_MODEL_REASONING      Optional model reasoning setting.
-  DORIC_MODEL_INTERNAL_KEY   Optional model internal key.
-  DORIC_TASK_ID              Required task id.
-  DORIC_TASK_MODEL           Required model id used by the task.
-  DORIC_CONTEXT_ID           Optional A2A context id.
-  DORIC_INITIAL_PROMPT       Required user prompt sent after config.
+  AGENT_CARD_URL             Required URL to the A2A Agent Card.
+  GITHUB_TOKEN               Required GitHub token for repository access.
+  OPENAI_AUTHORIZATION       Required OpenAI provider auth token.
+
+Values from the shell override root .env for configuration values.
+
+Test configuration:
+  Provider                  ${TEST_PROVIDER.id} (${TEST_PROVIDER.type})
+  Model                     ${TEST_MODEL.id} -> ${TEST_MODEL.model}
+  Task                      ${TEST_TASK.id} -> ${TEST_TASK.model}
 
 The script redacts token-like fields when logging responses.`;
 
-const hasHelpFlag = (args) =>
-  args.some((arg) => arg === '--help' || arg === '-h');
+const parseArgs = (args) => {
+  const overrides = {};
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+
+    if (arg === '--help' || arg === '-h') {
+      return { help: true, overrides: {} };
+    }
+
+    const inlineSeparator = arg.indexOf('=');
+    const name = inlineSeparator < 0 ? arg : arg.slice(0, inlineSeparator);
+    const envKey = CLI_OPTIONS.get(name);
+
+    if (envKey === undefined) {
+      throw new Error(`Unknown option: ${arg}`);
+    }
+
+    const inlineValue =
+      inlineSeparator < 0 ? undefined : arg.slice(inlineSeparator + 1);
+    const value =
+      inlineValue === undefined
+        ? readOptionValue(args, index, name)
+        : inlineValue;
+
+    if (value === '') {
+      throw new Error(`${name} requires a value.`);
+    }
+
+    overrides[envKey] = value;
+
+    if (inlineValue === undefined) {
+      index += 1;
+    }
+  }
+
+  for (const [key, display] of REQUIRED_CLI_OPTIONS) {
+    if (overrides[key] === undefined) {
+      throw new Error(`Missing required option: ${display}.`);
+    }
+  }
+
+  return { help: false, overrides };
+};
+
+const readOptionValue = (args, index, name) => {
+  const value = args[index + 1];
+
+  if (value === undefined || value.startsWith('-')) {
+    throw new Error(`${name} requires a value.`);
+  }
+
+  return value;
+};
 
 const readEnvFile = async () => {
   try {
@@ -140,51 +215,45 @@ const createTextRedactor = (env) => {
     );
 };
 
-const createConfig = (env) => {
-  const reasoning = optional(env.DORIC_MODEL_REASONING);
-  const internalKey = optional(env.DORIC_MODEL_INTERNAL_KEY);
+const createConfig = (env, options) => {
+  const githubToken = required(env, 'GITHUB_TOKEN');
+  const openaiToken = required(env, 'OPENAI_AUTHORIZATION');
 
   return {
     github: {
-      repo: { url: required(env, 'DORIC_GITHUB_REPO_URL') },
-      token: required(env, 'DORIC_GITHUB_TOKEN'),
+      repo: { url: options.repoUrl },
+      token: githubToken,
     },
     providers: [
       {
-        id: required(env, 'DORIC_PROVIDER_ID'),
-        type: required(env, 'DORIC_PROVIDER_TYPE'),
-        token: required(env, 'DORIC_PROVIDER_TOKEN'),
+        ...TEST_PROVIDER,
+        token: openaiToken,
       },
     ],
     models: [
       {
-        id: required(env, 'DORIC_MODEL_ID'),
-        provider: required(env, 'DORIC_MODEL_PROVIDER'),
-        model: required(env, 'DORIC_MODEL_NAME'),
-        ...(reasoning === undefined ? {} : { reasoning }),
-        ...(internalKey === undefined ? {} : { internal_key: internalKey }),
+        ...TEST_MODEL,
       },
     ],
     tasks: [
       {
-        id: required(env, 'DORIC_TASK_ID'),
-        model: required(env, 'DORIC_TASK_MODEL'),
+        ...TEST_TASK,
       },
     ],
   };
 };
 
-const createMessageParams = (env) => {
-  const contextId = optional(env.DORIC_CONTEXT_ID);
-
+const createMessageParams = (env, options) => {
   return {
     message: {
       kind: 'message',
       messageId: randomUUID(),
       role: 'user',
-      ...(contextId === undefined ? {} : { contextId }),
-      metadata: { configuration: createConfig(env) },
-      parts: [{ kind: 'text', text: required(env, 'DORIC_INITIAL_PROMPT') }],
+      ...(options.contextId === undefined
+        ? {}
+        : { contextId: options.contextId }),
+      metadata: { configuration: createConfig(env, options) },
+      parts: [{ kind: 'text', text: options.prompt }],
     },
   };
 };
@@ -262,32 +331,31 @@ const sendWithStreamingFallback = async (client, params, redactText) => {
   );
 };
 
-const run = async () => {
+const run = async (options) => {
   const env = mergedEnv(parseEnv(await readEnvFile()));
   const redactText = createTextRedactor(env);
 
   try {
+    const params = createMessageParams(env, options);
     const client = await A2AClient.fromCardUrl(
-      required(env, 'DORIC_AGENT_CARD_URL'),
+      required(env, 'AGENT_CARD_URL'),
     );
 
-    await sendWithStreamingFallback(
-      client,
-      createMessageParams(env),
-      redactText,
-    );
+    await sendWithStreamingFallback(client, params, redactText);
   } catch (error) {
     throw new Error(redactText(errorMessage(error)), { cause: error });
   }
 };
 
-if (hasHelpFlag(process.argv.slice(2))) {
-  console.log(HELP);
-} else {
-  try {
-    await run();
-  } catch (error) {
-    console.error(errorMessage(error));
-    process.exitCode = 1;
+try {
+  const { help, overrides } = parseArgs(process.argv.slice(2));
+
+  if (help) {
+    console.log(HELP);
+  } else {
+    await run(overrides);
   }
+} catch (error) {
+  console.error(errorMessage(error));
+  process.exitCode = 1;
 }

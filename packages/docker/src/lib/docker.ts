@@ -69,6 +69,18 @@ export const createDockerClient = (
       return versionFrom(raw);
     },
 
+    async pullImage(input, control = {}) {
+      await send(
+        {
+          method: 'POST',
+          path: '/images/create',
+          query: { fromImage: input.image },
+          ...control,
+        },
+        200,
+      );
+    },
+
     async createContainer(input, control = {}) {
       const response = await json<Record<string, unknown>>(
         {
@@ -435,8 +447,24 @@ const defaultConnection = (): DockerConnection =>
 
 const socketPath = (connection: DockerConnection): string =>
   connection.kind === 'unix'
-    ? (connection.socketPath ?? '/var/run/docker.sock')
+    ? (connection.socketPath ??
+      dockerHostSocketPath(process.env.DOCKER_HOST) ??
+      '/var/run/docker.sock')
     : (connection.pipePath ?? '//./pipe/docker_engine');
+
+const dockerHostSocketPath = (
+  dockerHost: string | undefined,
+): string | undefined => {
+  if (dockerHost === undefined || dockerHost.length === 0) {
+    return undefined;
+  }
+
+  if (dockerHost.startsWith('unix://')) {
+    return dockerHost.slice('unix://'.length);
+  }
+
+  return dockerHost.startsWith('/') ? dockerHost : undefined;
+};
 
 const pathWithQuery = (request: DockerTransportRequest): string => {
   const params = new URLSearchParams();

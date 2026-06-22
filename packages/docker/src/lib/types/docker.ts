@@ -62,6 +62,10 @@ export type CreateContainerInput = {
   readonly networkDisabled?: boolean;
 };
 
+export type PullImageInput = {
+  readonly image: string;
+};
+
 export type ContainerRef = {
   readonly id: string;
   readonly warnings: readonly string[];
@@ -103,6 +107,10 @@ export type ArchiveReadInput = {
 export interface DockerClient {
   ping(options?: DockerRequestOptions): Promise<void>;
   version(options?: DockerRequestOptions): Promise<DockerVersion>;
+  pullImage(
+    input: PullImageInput,
+    options?: DockerRequestOptions,
+  ): Promise<void>;
   createContainer(
     input: CreateContainerInput,
     options?: DockerRequestOptions,
