@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 import type {
   Artifact,
+  DataPart,
+  Part,
   Task,
   TaskArtifactUpdateEvent,
   TaskState,
@@ -93,10 +95,10 @@ export const promptInputRequiredMessage = (
   contextId: string,
   questions: readonly PromptOpenQuestion[],
 ) =>
-  statusUpdate(
+  statusUpdateWithParts(
     taskId,
     contextId,
-    openQuestionsText(questions),
+    [openQuestionsPart(questions)],
     'input-required',
     true,
   );
@@ -116,6 +118,21 @@ const statusUpdate = (
   text: string,
   state: TaskState = 'working',
   final = false,
+): TaskStatusUpdateEvent =>
+  statusUpdateWithParts(
+    taskId,
+    contextId,
+    [{ kind: 'text', text }],
+    state,
+    final,
+  );
+
+const statusUpdateWithParts = (
+  taskId: string,
+  contextId: string,
+  parts: Part[],
+  state: TaskState = 'working',
+  final = false,
 ): TaskStatusUpdateEvent => ({
   kind: 'status-update',
   taskId,
@@ -127,7 +144,7 @@ const statusUpdate = (
       kind: 'message',
       messageId: randomUUID(),
       role: 'agent',
-      parts: [{ kind: 'text', text }],
+      parts,
       taskId,
       contextId,
     },
@@ -135,19 +152,27 @@ const statusUpdate = (
   },
 });
 
-const openQuestionsText = (questions: readonly PromptOpenQuestion[]): string =>
-  [
-    'I need input before finalizing PROMPT.',
-    '',
-    ...questions.map(formatOpenQuestion),
-  ].join('\n');
+const openQuestionsPart = (
+  questions: readonly PromptOpenQuestion[],
+): DataPart => ({
+  kind: 'data',
+  data: {
+    kind: 'prompt-open-questions',
+    questions: questions.map(openQuestionData),
+  },
+});
 
-const formatOpenQuestion = (
-  question: PromptOpenQuestion,
-  index: number,
-): string =>
-  [
-    `${index + 1}. ${question.question}`,
-    `Recommendation: ${question.recommendation}`,
-    ...(question.impact === undefined ? [] : [`Impact: ${question.impact}`]),
-  ].join('\n');
+const openQuestionData = (question: PromptOpenQuestion, index: number) => ({
+  id: `open-question-${index + 1}`,
+  title: `${question.question} Recommendation: ${question.recommendation}`,
+  question: question.question,
+  recommendation: question.recommendation,
+  ...(question.impact === undefined ? {} : { impact: question.impact }),
+  options: [
+    {
+      id: 'recommendation',
+      title: question.recommendation,
+      value: question.recommendation,
+    },
+  ],
+});

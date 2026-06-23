@@ -323,18 +323,31 @@ test('publishes open questions before ending the turn as input-required', async 
   assert.ok(artifactIndex < finalIndex);
   assert.equal(finalEvent?.kind, 'status-update');
   assert.equal(finalEvent.status.state, 'input-required');
-  assert.match(
-    finalEvent.status.message?.parts[0]?.kind === 'text'
-      ? finalEvent.status.message.parts[0].text
-      : '',
-    /Which provider should handle coding tasks\?/u,
-  );
-  assert.match(
-    finalEvent.status.message?.parts[0]?.kind === 'text'
-      ? finalEvent.status.message.parts[0].text
-      : '',
-    /Recommendation: Use the configured coding task model\./u,
-  );
+  assert.deepEqual(finalEvent.status.message?.parts, [
+    {
+      kind: 'data',
+      data: {
+        kind: 'prompt-open-questions',
+        questions: [
+          {
+            id: 'open-question-1',
+            title:
+              'Which provider should handle coding tasks? Recommendation: Use the configured coding task model.',
+            question: 'Which provider should handle coding tasks?',
+            recommendation: 'Use the configured coding task model.',
+            impact: 'The workflow cannot choose a final model path.',
+            options: [
+              {
+                id: 'recommendation',
+                title: 'Use the configured coding task model.',
+                value: 'Use the configured coding task model.',
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ]);
   assert.ok(
     eventBus.events.every(
       (event) =>

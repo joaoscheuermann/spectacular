@@ -93,24 +93,55 @@ test('creates final prompt workflow status updates', () => {
       impact: 'The run cannot continue.',
       recommendation: 'Use the coding task model.',
     },
+    {
+      question: 'Should the prompt include validation?',
+      recommendation: 'Include the configured checks.',
+    },
   ]);
   const completed = promptCompletedMessage('task-1', 'context-1');
 
   assert.equal(inputRequired.kind, 'status-update');
   assert.equal(inputRequired.final, true);
   assert.equal(inputRequired.status.state, 'input-required');
-  assert.match(
-    inputRequired.status.message?.parts[0]?.kind === 'text'
-      ? inputRequired.status.message.parts[0].text
-      : '',
-    /Which model should be used\?/u,
-  );
-  assert.match(
-    inputRequired.status.message?.parts[0]?.kind === 'text'
-      ? inputRequired.status.message.parts[0].text
-      : '',
-    /Recommendation: Use the coding task model\./u,
-  );
+  assert.deepEqual(inputRequired.status.message?.parts, [
+    {
+      kind: 'data',
+      data: {
+        kind: 'prompt-open-questions',
+        questions: [
+          {
+            id: 'open-question-1',
+            title:
+              'Which model should be used? Recommendation: Use the coding task model.',
+            question: 'Which model should be used?',
+            recommendation: 'Use the coding task model.',
+            impact: 'The run cannot continue.',
+            options: [
+              {
+                id: 'recommendation',
+                title: 'Use the coding task model.',
+                value: 'Use the coding task model.',
+              },
+            ],
+          },
+          {
+            id: 'open-question-2',
+            title:
+              'Should the prompt include validation? Recommendation: Include the configured checks.',
+            question: 'Should the prompt include validation?',
+            recommendation: 'Include the configured checks.',
+            options: [
+              {
+                id: 'recommendation',
+                title: 'Include the configured checks.',
+                value: 'Include the configured checks.',
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ]);
 
   assert.equal(completed.kind, 'status-update');
   assert.equal(completed.final, true);

@@ -16,6 +16,40 @@ this file only adds local conventions for agent packages.
 - Extract a helper only when it removes real duplication or names a meaningful
   concern.
 
+## Default Agent Pattern
+
+Use `agents/doric/src/index.ts` as the default pattern for new agent entrypoints.
+The entrypoint is the composition root: it should create the app, read runtime
+host/port config, instantiate stores, build the Agent Card, create the executor
+with explicit dependencies, register protocol routes, and start listening.
+
+Keep agent behavior out of `index.ts`. Move durable behavior into small
+factories or modules with semantic names:
+
+- `createAgentCard(...)` owns static Agent Card shape and protocol metadata.
+- `createExecutor(...)` owns request execution, context/session behavior, and
+  agent-side effects.
+- Message factories own protocol message shapes.
+- Constants modules own shared literal values used by source and tests.
+
+Inject required infrastructure at the factory boundary instead of hiding
+defaults inside executor code. If an executor needs sessions, Docker, sandbox
+creation, providers, tools, or stores, make those dependencies explicit in the
+factory input and let `index.ts` provide the production instances.
+
+Test the extracted behavior directly. Prefer focused tests with fakes for
+executor behavior, card shape, message factories, and constants. Start an HTTP
+server in tests only when route wiring or startup behavior is the behavior under
+test.
+
+When developing an agent, use this order:
+
+1. Wire the smallest working entrypoint with the real protocol adapter.
+2. Extract stable protocol metadata into card/message/constant modules.
+3. Move request behavior into an executor factory with explicit dependencies.
+4. Add tests against the extracted factories and fakes.
+5. Return to `index.ts` and keep only production wiring and startup there.
+
 ## File Shape
 
 - `index.ts` starts the server.
