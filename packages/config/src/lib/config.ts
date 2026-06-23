@@ -73,10 +73,12 @@ export function parseConfig(value: unknown, path = 'config'): AgentConfig {
 function parseGithub(value: unknown, path: string): GithubConfig {
   const input = object(value, path);
   const repo = object(input['repo'], at(path, 'repo'));
+  const branch = optionalString(repo['branch'], at(at(path, 'repo'), 'branch'));
 
   return {
     repo: {
       url: string(repo['url'], at(at(path, 'repo'), 'url')),
+      ...(branch === undefined ? {} : { branch }),
     },
     token: string(input['token'], at(path, 'token')),
   };

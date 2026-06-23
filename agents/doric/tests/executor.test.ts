@@ -167,6 +167,25 @@ test('runs workflow-prompt after the repository session is ready', async () => {
   );
 });
 
+test('passes configured GitHub branch to the sandbox clone', async () => {
+  const harness = createDoricTestHarness();
+
+  await harness.executor.execute(
+    createRequestContext({
+      config: createConfig({ branch: 'feature/doric-cli' }),
+    }),
+    createEventBus(),
+  );
+
+  assert.deepEqual(harness.sandboxes[0]?.clones, [
+    {
+      url: 'https://github.com/example/repo',
+      branch: 'feature/doric-cli',
+      auth: { kind: 'token', token: 'github-token' },
+    },
+  ]);
+});
+
 test('logs executor lifecycle metadata without recording prompts or credentials', async () => {
   const logger = createLogger();
   const harness = createDoricTestHarness({

@@ -233,6 +233,7 @@ export const createTextPart = (
 export const createConfig = (
   options: {
     readonly repoUrl?: string;
+    readonly branch?: string;
     readonly token?: string;
     readonly providers?: AgentConfig['providers'];
     readonly models?: AgentConfig['models'];
@@ -242,6 +243,7 @@ export const createConfig = (
   github: {
     repo: {
       url: options.repoUrl ?? 'https://github.com/example/repo',
+      ...(options.branch === undefined ? {} : { branch: options.branch }),
     },
     token: options.token ?? 'github-token',
   },

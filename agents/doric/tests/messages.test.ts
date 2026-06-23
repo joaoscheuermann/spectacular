@@ -12,6 +12,7 @@ import {
   promptInputRequiredMessage,
   runningPromptWorkflowMessage,
   sessionReadyMessage,
+  taskCanceledMessage,
   taskCreatedMessage,
   updatingSessionConfigMessage,
   usingExistingSessionMessage,
@@ -181,6 +182,19 @@ test('creates final prompt workflow status updates', () => {
       kind: 'text',
       text: 'Prompt workflow completed. PROMPT artifact is ready.',
     },
+  ]);
+});
+
+test('creates final task cancellation status updates', () => {
+  const canceled = taskCanceledMessage('task-1', 'context-1');
+
+  assert.equal(canceled.kind, 'status-update');
+  assert.equal(canceled.taskId, 'task-1');
+  assert.equal(canceled.contextId, 'context-1');
+  assert.equal(canceled.final, true);
+  assert.equal(canceled.status.state, 'canceled');
+  assert.deepEqual(canceled.status.message?.parts, [
+    { kind: 'text', text: 'Task cancellation requested by user.' },
   ]);
 });
 

@@ -1,6 +1,7 @@
 export type GithubConfig = {
   readonly repo: {
     readonly url: string;
+    readonly branch?: string;
   };
   readonly token: string;
 };

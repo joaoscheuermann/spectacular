@@ -37,6 +37,23 @@ test('parses config objects directly when the payload is valid', () => {
   assert.deepEqual(parseConfig(config), config);
 });
 
+test('parses optional GitHub repository branch when provided', () => {
+  const config = sampleConfig({
+    github: {
+      repo: {
+        url: 'https://github.com/example/repo',
+        branch: 'feature/doric-cli',
+      },
+      token: 'github-token',
+    },
+  });
+
+  assert.deepEqual(parseConfig(config).github.repo, {
+    url: 'https://github.com/example/repo',
+    branch: 'feature/doric-cli',
+  });
+});
+
 test('returns config update when later message metadata contains configuration', () => {
   const config = sampleConfig();
 

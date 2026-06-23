@@ -46,6 +46,7 @@ import {
   promptInputRequiredMessage,
   runningPromptWorkflowMessage,
   sessionReadyMessage,
+  taskCanceledMessage,
   taskCreatedMessage,
   updatingSessionConfigMessage,
   usingExistingSessionMessage,
@@ -120,6 +121,7 @@ export const createExecutor = ({
     promptRunner,
     createProvider,
   };
+  const activeContexts = new Map<string, string>();
 
   return {
     async execute(requestContext, eventBus) {
@@ -128,6 +130,7 @@ export const createExecutor = ({
         taskId: requestContext.taskId,
         contextId: requestContext.contextId,
       };
+      activeContexts.set(progress.taskId, progress.contextId);
 
       dependencies.logger.info(
         { ...logContext(progress), lifecycle: 'task.started' },
@@ -164,11 +167,22 @@ export const createExecutor = ({
         );
 
         throw error;
+      } finally {
+        activeContexts.delete(progress.taskId);
       }
 
       return eventBus.finished();
     },
-    async cancelTask() {},
+    async cancelTask(taskId, eventBus) {
+      const contextId = activeContexts.get(taskId);
+
+      if (contextId === undefined) {
+        return;
+      }
+
+      eventBus.publish(taskCanceledMessage(taskId, contextId));
+      eventBus.finished();
+    },
   };
 };
 
@@ -248,6 +262,9 @@ const ensureSession = async (
 
       const repo = await sandbox.cloneRepo({
         url: config.github.repo.url,
+        ...(config.github.repo.branch === undefined
+          ? {}
+          : { branch: config.github.repo.branch }),
         auth: { kind: 'token', token: config.github.token },
       });
 

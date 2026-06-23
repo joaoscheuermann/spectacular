@@ -116,6 +116,15 @@ export const promptCompletedMessage = (taskId: string, contextId: string) =>
     true,
   );
 
+export const taskCanceledMessage = (taskId: string, contextId: string) =>
+  statusUpdate(
+    taskId,
+    contextId,
+    'Task cancellation requested by user.',
+    'canceled',
+    true,
+  );
+
 const statusUpdate = (
   taskId: string,
   contextId: string,

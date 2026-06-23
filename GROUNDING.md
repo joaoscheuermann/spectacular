@@ -44,9 +44,16 @@ worker, lifecycle, TUI, slash-command, service, or multi-process architecture.
 Those terms are out-of-scope markers unless the user explicitly expands the
 product scope and current files support the change.
 
-`agents/doric` may host the explicitly requested minimal A2A protocol scaffold
-for the Doric agent. That scaffold does not by itself add CLI, daemon,
-provider, persistence, or broader host-surface scope.
+`agents/doric` hosts the A2A protocol scaffold for the Doric agent, including
+Doric-owned JSON-RPC session management methods under the `doric/*` namespace.
+Standard A2A JSON-RPC methods remain delegated to the A2A SDK transport
+handler.
+
+`apps/cli` is the explicitly requested Node.js command-line host surface for
+interacting with the Doric A2A agent. The CLI is scoped to A2A message
+submission, session listing, session replay/connection, and best-effort session
+kill behavior. This does not by itself reintroduce the former Rust CLI, daemon,
+worker, lifecycle service, TUI, slash-command, or multi-process architecture.
 
 Prompt open-question artifacts carry concrete selectable solution options.
 Doric input-required A2A events expose those options directly instead of
@@ -56,6 +63,8 @@ synthesizing a recommendation-only choice.
 `requestContext.userMessage.metadata.configuration`. Sandbox creation, Git
 setup, repository cloning, and initial workdir state are tied to session
 creation; later config replacement updates only the stored session config.
+GitHub repository config may include an optional `github.repo.branch` string,
+which is used only when initially cloning a sandbox repository.
 
 Doric supports OpenAI and Codex as separate provider types. The Codex provider
 uses the existing provider token field for the Codex authorization value and
@@ -78,7 +87,7 @@ not forward unsupported public Responses API controls such as `temperature`.
 ## Repository Shape
 
 Doric is an Nx-managed TypeScript workspace with npm workspaces for
-`agents/*`, `packages/*`, `tools/*`, and `workflows/*`.
+`apps/*`, `agents/*`, `packages/*`, `tools/*`, and `workflows/*`.
 
 Use current manifests and source as the package inventory. Do not treat this
 file as the source of truth for every package responsibility.
@@ -86,6 +95,7 @@ file as the source of truth for every package responsibility.
 Durable boundaries:
 
 - product packages live under `packages/*`;
+- application host surfaces live under `apps/*`;
 - agent entry surfaces live under `agents/*`;
 - standalone tool packages live under `tools/*`;
 - workflow packages live under `workflows/*`;
@@ -113,6 +123,16 @@ persistence, or session behavior without explicit scope and validation.
 Credentials and secrets must not be persisted, printed, logged, or committed.
 Prefer dependency injection and explicit configuration objects for sensitive
 runtime inputs.
+
+Doric runtime session replay state is process-local and in-memory. It records
+context IDs, latest task IDs, initial prompt text, visible task state, ordered
+A2A event history, and live subscribers for the custom
+`doric/sessions/list`, `doric/sessions/connect`, and `doric/sessions/kill`
+JSON-RPC methods. This replay state is not durable persistence. Session kill is
+best-effort: it cancels active A2A tasks when the SDK/runtime can do so,
+disposes known or in-flight sandbox sessions, removes in-memory session and
+runtime replay state, and suppresses late events from the killed context in the
+current process.
 
 ## Hard Constraints
 

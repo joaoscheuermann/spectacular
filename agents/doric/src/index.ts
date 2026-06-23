@@ -2,8 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import pino from 'pino';
 
-import { UserBuilder } from '@a2a-js/sdk/server/grpc';
-import { agentCardHandler, jsonRpcHandler } from '@a2a-js/sdk/server/express';
+import { agentCardHandler, UserBuilder } from '@a2a-js/sdk/server/express';
 import { DefaultRequestHandler, InMemoryTaskStore } from '@a2a-js/sdk/server';
 
 import { createSessionStore } from 'session';
@@ -15,6 +14,9 @@ import { DEFAULT_HOST, DEFAULT_PORT } from './lib/constants/server.js';
 import { createAgentCard } from './lib/card.js';
 import { createExecutor, DoricSessionContext } from './lib/executor.js';
 import { createRequestLogger } from './lib/middlewares/request-logger.js';
+import { createDoricJsonRpcHandler } from './lib/rpc.js';
+import { createRecordingEventBusManager } from './lib/runtime/event-bus.js';
+import { createRuntimeStore } from './lib/runtime/store.js';
 
 const app = express();
 
@@ -25,10 +27,12 @@ const logger = pino({ level: logLevel });
 const httpLogger = logger.child({ component: 'http' });
 
 const sessions = createSessionStore<DoricSessionContext>();
+const runtime = createRuntimeStore();
 
 const card = createAgentCard(`${host}:${port}`);
 
 const tasks = new InMemoryTaskStore();
+const eventBusManager = createRecordingEventBusManager(runtime);
 
 const executor = createExecutor({
   sessions,
@@ -37,7 +41,12 @@ const executor = createExecutor({
   logger: logger.child({ component: 'executor' }),
 });
 
-const requestHandler = new DefaultRequestHandler(card, tasks, executor);
+const requestHandler = new DefaultRequestHandler(
+  card,
+  tasks,
+  executor,
+  eventBusManager,
+);
 
 app.use(cors());
 app.use(express.json());
@@ -49,10 +58,15 @@ app.use(
   agentCardHandler({ agentCardProvider: async () => card }),
 );
 
-// Standard JSON-RPC Endpoint (Recommended by the protocol)
+// Standard JSON-RPC endpoint with Doric-owned session management methods.
 app.use(
   '/rpc',
-  jsonRpcHandler({ requestHandler, userBuilder: UserBuilder.noAuthentication }),
+  createDoricJsonRpcHandler({
+    requestHandler,
+    runtime,
+    sessions,
+    userBuilder: UserBuilder.noAuthentication,
+  }),
 );
 
 app.listen(port, host, () => {
