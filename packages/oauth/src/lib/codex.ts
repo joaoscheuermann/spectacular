@@ -3,12 +3,14 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { OAuthErrorObject } from './classes/oauth-error.js';
-import { createFetchTransport } from './http.js';
-import type { OAuthTransport } from './types/http.js';
+import {
+  CODEX_OAUTH_CLIENT_ID,
+  codexOAuthProfile,
+} from './codex-oauth.js';
+import { createFetchTransport, type OAuthTransport } from './http.js';
 import { asRecord, diagnosticExcerpt, stringField } from './utils/json.js';
+import { parseTokenClaims } from './utils/jwt.js';
 
-const CODEX_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann';
-const CODEX_REFRESH_URL = 'https://auth.openai.com/oauth/token';
 const DEFAULT_REFRESH_SKEW_MS = 5 * 60 * 1000;
 
 export type CodexCredential = {
@@ -193,13 +195,13 @@ const refreshChatGptToken = async (
 
   const response = await options.transport.request({
     method: 'POST',
-    url: CODEX_REFRESH_URL,
+    url: codexOAuthProfile.tokenEndpoint,
     headers: {
       'content-type': 'application/json',
       accept: 'application/json',
     },
     body: JSON.stringify({
-      client_id: CODEX_CLIENT_ID,
+      client_id: CODEX_OAUTH_CLIENT_ID,
       grant_type: 'refresh_token',
       refresh_token: refreshToken,
     }),
@@ -248,15 +250,13 @@ const parseRefreshResponse = (body: string): RefreshResponse => {
   try {
     parsed = asRecord(JSON.parse(body));
   } catch (cause) {
-    throw new OAuthErrorObject(
+    return error(
+      'codex_refresh_invalid_response',
+      'Codex token refresh response was not valid JSON.',
       {
-        provider: 'openai',
-        profile: 'codex',
-        code: 'codex_refresh_invalid_response',
-        message: 'Codex token refresh response was not valid JSON.',
         diagnostic: diagnosticExcerpt(body),
       },
-      { cause },
+      cause,
     );
   }
 
@@ -288,8 +288,8 @@ const chatGptCredential = (tokens: CodexTokenData): CodexCredential => {
   }
 
   const claims = {
-    ...nestedAuthClaims(parseJwt(tokens.id_token)),
-    ...nestedAuthClaims(parseJwt(token)),
+    ...nestedAuthClaims(claimsFromToken(tokens.id_token)),
+    ...nestedAuthClaims(claimsFromToken(token)),
   };
   const accountId =
     clean(tokens.account_id) ?? stringClaim(claims, 'chatgpt_account_id');
@@ -323,43 +323,26 @@ const shouldRefresh = (
   now: number,
   refreshSkewMs: number,
 ): boolean => {
-  const exp = numericClaim(parseJwt(tokens.access_token), 'exp');
+  const exp = numericClaim(claimsFromToken(tokens.access_token), 'exp');
 
   return exp !== undefined && exp * 1000 - now <= refreshSkewMs;
 };
 
-const parseJwt = (
+const claimsFromToken = (
   value: string | undefined,
-): Record<string, unknown> | undefined => {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  const [, payload] = value.split('.');
-
-  if (payload === undefined) {
-    return undefined;
-  }
-
-  try {
-    return asRecord(
-      JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')),
-    );
-  } catch {
-    return undefined;
-  }
-};
+): Readonly<Record<string, unknown>> | undefined =>
+  value === undefined ? undefined : parseTokenClaims(value);
 
 const nestedAuthClaims = (
-  claims: Record<string, unknown> | undefined,
-): Record<string, unknown> => {
+  claims: Readonly<Record<string, unknown>> | undefined,
+): Readonly<Record<string, unknown>> => {
   const nested = claims?.['https://api.openai.com/auth'];
 
   return asRecord(nested) ?? {};
 };
 
 const numericClaim = (
-  claims: Record<string, unknown> | undefined,
+  claims: Readonly<Record<string, unknown>> | undefined,
   key: string,
 ): number | undefined => {
   const value = claims?.[key];
@@ -370,7 +353,7 @@ const numericClaim = (
 };
 
 const stringClaim = (
-  claims: Record<string, unknown>,
+  claims: Readonly<Record<string, unknown>>,
   key: string,
 ): string | undefined => {
   const value = claims[key];
@@ -405,14 +388,11 @@ const readAuthJson = async (
       return undefined;
     }
 
-    throw new OAuthErrorObject(
-      {
-        provider: 'openai',
-        profile: 'codex',
-        code: 'codex_auth_read_failed',
-        message: `Failed to read Codex auth.json at ${path}.`,
-      },
-      { cause },
+    return error(
+      'codex_auth_read_failed',
+      `Failed to read Codex auth.json at ${path}.`,
+      {},
+      cause,
     );
   }
 };
@@ -441,13 +421,17 @@ const error = (
     readonly status?: number;
     readonly diagnostic?: string;
   } = {},
+  cause?: unknown,
 ): never => {
-  throw new OAuthErrorObject({
-    provider: 'openai',
-    profile: 'codex',
-    code,
-    message,
-    status: extra.status,
-    diagnostic: extra.diagnostic,
-  });
+  throw new OAuthErrorObject(
+    {
+      provider: 'openai',
+      profile: 'codex',
+      code,
+      message,
+      status: extra.status,
+      diagnostic: extra.diagnostic,
+    },
+    cause === undefined ? undefined : { cause },
+  );
 };

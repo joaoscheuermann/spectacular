@@ -67,7 +67,7 @@ const codex = createCodexOAuth({
   callbackServer: localCallbackServer,
 });
 
-const credential = await codex.oauth();
+const credential = await codex.credential();
 const provider = createCodexProvider({
   transport: createFetchTransport(),
   authorization: credential.authorization,

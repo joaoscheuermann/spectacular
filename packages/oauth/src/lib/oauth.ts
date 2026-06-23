@@ -1,11 +1,10 @@
 import { OAuthErrorObject } from './classes/oauth-error.js';
-import type { OAuthTransport } from './types/http.js';
+import type { OAuthTransport } from './http.js';
 import type {
   CreateOAuthClientOptions,
   OAuthCallback,
   OAuthClient,
   OAuthCredential,
-  OAuthCredentialOptions,
   OAuthProfile,
   OAuthTokenRecord,
 } from './types/oauth.js';
@@ -15,7 +14,10 @@ import {
   numberField,
   stringField,
 } from './utils/json.js';
+import { parseTokenClaims } from './utils/jwt.js';
 import { challenge, nodeRandomSource, token } from './utils/pkce.js';
+
+export { parseTokenClaims } from './utils/jwt.js';
 
 const DEFAULT_REFRESH_SKEW_MS = 60_000;
 
@@ -79,7 +81,10 @@ export const createOAuthClient = (
   };
 
   const credential = async (
-    credentialOptions: OAuthCredentialOptions = {},
+    credentialOptions: {
+      readonly forceRefresh?: boolean;
+      readonly signal?: AbortSignal;
+    } = {},
   ): Promise<OAuthCredential> => {
     const record = await options.tokenStore.load();
 
@@ -128,10 +133,6 @@ export const createOAuthClient = (
     },
 
     credential,
-
-    async oauth(credentialOptions = {}): Promise<OAuthCredential> {
-      return credential(credentialOptions);
-    },
   };
 };
 
@@ -150,24 +151,6 @@ export const renderCredential = (
     scope: record.scope,
     claims: record.claims === undefined ? undefined : { ...record.claims },
   };
-};
-
-export const parseTokenClaims = (
-  tokenValue: string,
-): Readonly<Record<string, unknown>> | undefined => {
-  const [, payload] = tokenValue.split('.');
-
-  if (payload === undefined) {
-    return undefined;
-  }
-
-  try {
-    return asRecord(
-      JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')),
-    );
-  } catch {
-    return undefined;
-  }
 };
 
 const authorizationUrl = (

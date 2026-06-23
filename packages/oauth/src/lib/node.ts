@@ -14,8 +14,6 @@ export type LocalCallbackServerOptions = {
   readonly host?: string;
   readonly port?: number;
   readonly path?: string;
-  readonly successHtml?: string;
-  readonly errorHtml?: string;
 };
 
 export type BrowserProcess = {
@@ -65,8 +63,6 @@ export const createLocalCallbackServer = async (
 ): Promise<LocalCallbackServer> => {
   const host = options.host ?? DEFAULT_HOST;
   const path = options.path ?? DEFAULT_PATH;
-  const successHtml = options.successHtml ?? DEFAULT_SUCCESS_HTML;
-  const errorHtml = options.errorHtml ?? DEFAULT_ERROR_HTML;
   let pending: PendingCallback | undefined;
   let closed = false;
 
@@ -91,7 +87,7 @@ export const createLocalCallbackServer = async (
     const stateMatches = callback.value.state === current.expectedState;
     const hasError = callback.value.error !== undefined || !stateMatches;
     response.writeHead(hasError ? 400 : 200, HTML_HEADERS);
-    response.end(hasError ? errorHtml : successHtml);
+    response.end(hasError ? DEFAULT_ERROR_HTML : DEFAULT_SUCCESS_HTML);
     finishPending(current, () => current.resolve(callback.value));
   });
 

@@ -27,7 +27,7 @@ const codex = createCodexOAuth({
 });
 
 await codex.authorize();
-const credential = await codex.oauth();
+const credential = await codex.credential();
 ```
 
 ## Building

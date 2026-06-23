@@ -209,7 +209,7 @@ test('forces OAuth refresh even when stored credentials are not expiring', async
     },
     callbackServer: callbackServer(() => ({ code: 'unused', state: 'unused' })),
     clock: () => 1_000,
-  }).oauth({ forceRefresh: true });
+  }).credential({ forceRefresh: true });
 
   assert.equal(credential.authorization, 'Bearer forced.token.value');
   assert.equal(transport.requests.length, 1);
@@ -254,7 +254,7 @@ test('parses JWT claims and renders OAuth credentials', async () => {
   );
 
   const record = await client.authorize();
-  const credential = await client.oauth();
+  const credential = await client.credential();
 
   assert.deepEqual(record.claims, { sub: 'user_1', email: 'a@example.com' });
   assert.deepEqual(credential, {

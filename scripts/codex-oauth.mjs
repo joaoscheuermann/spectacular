@@ -252,7 +252,7 @@ const authorize = async () => {
     });
 
     await codex.authorize();
-    const credential = await codex.oauth();
+    const credential = await codex.credential();
     await writeEnvKey(await readEnvFile(), outputKey, credential.authorization);
     log(`Saved authorization to .env key ${outputKey}.`);
   } finally {

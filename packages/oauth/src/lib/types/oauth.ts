@@ -1,3 +1,5 @@
+import type { OAuthTransport } from '../http.js';
+
 export type OAuthProfile = {
   readonly provider: string;
   readonly profile: string;
@@ -20,11 +22,10 @@ export type OAuthTokenRecord = {
 export interface OAuthTokenStore {
   load(): Promise<OAuthTokenRecord | undefined>;
   save(record: OAuthTokenRecord): Promise<void>;
-  clear?(): Promise<void>;
 }
 
 export type OAuthCredential = {
-  readonly source: 'api-key' | 'oauth';
+  readonly source: 'oauth';
   readonly scheme: string;
   readonly token: string;
   readonly authorization: string;
@@ -72,28 +73,23 @@ export type CreateOAuthClientOptions = {
   readonly scope?: string;
   readonly browserOpener: OAuthBrowserOpener;
   readonly callbackServer: OAuthCallbackServer;
-  readonly transport: import('./http.js').OAuthTransport;
+  readonly transport: OAuthTransport;
   readonly tokenStore: OAuthTokenStore;
   readonly random?: OAuthRandomSource;
   readonly clock?: () => number;
   readonly refreshSkewMs?: number;
 };
 
-export type OAuthAuthorizeOptions = {
-  readonly signal?: AbortSignal;
-};
-
-export type OAuthCredentialOptions = {
-  readonly forceRefresh?: boolean;
-  readonly signal?: AbortSignal;
-};
-
 export type OAuthClient = {
   readonly profile: OAuthProfile;
-  authorize(options?: OAuthAuthorizeOptions): Promise<OAuthTokenRecord>;
+  authorize(options?: {
+    readonly signal?: AbortSignal;
+  }): Promise<OAuthTokenRecord>;
   refresh(options?: {
     readonly signal?: AbortSignal;
   }): Promise<OAuthTokenRecord>;
-  credential(options?: OAuthCredentialOptions): Promise<OAuthCredential>;
-  oauth(options?: OAuthCredentialOptions): Promise<OAuthCredential>;
+  credential(options?: {
+    readonly forceRefresh?: boolean;
+    readonly signal?: AbortSignal;
+  }): Promise<OAuthCredential>;
 };
