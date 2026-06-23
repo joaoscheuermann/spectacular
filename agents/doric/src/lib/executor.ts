@@ -14,15 +14,7 @@ import {
   parseMessageConfigUpdate,
 } from 'config';
 
-import {
-  createFetchTransport as createLlmFetchTransport,
-  createCodexProvider,
-  createOpenAiProvider,
-  createOpenRouterProvider,
-} from 'llms';
 import type { LlmProvider } from 'llms';
-
-import { codexCredentialFromToken } from 'oauth';
 
 import type { SessionStore } from 'session';
 
@@ -58,6 +50,7 @@ import {
   updatingSessionConfigMessage,
   usingExistingSessionMessage,
 } from './messages/index.js';
+import { createProviderFromConfig } from './utils/provider.js';
 
 export type DoricSessionContext = {
   readonly repo: ClonedRepo;
@@ -79,14 +72,27 @@ export type DoricExecutorDependencies = {
   readonly sessions: SessionStore<DoricSessionContext>;
   readonly createDockerClient: typeof createDockerClient;
   readonly createSandbox: typeof createSandbox;
+  readonly logger?: DoricExecutorLogger;
   readonly promptRunner?: PromptRunner;
   readonly createProvider?: ProviderFactory;
+};
+
+export type DoricExecutorLogger = {
+  readonly info: (
+    bindings: Record<string, unknown>,
+    message: string,
+  ) => void;
+  readonly error: (
+    bindings: Record<string, unknown>,
+    message: string,
+  ) => void;
 };
 
 type ResolvedDependencies = {
   readonly sessions: SessionStore<DoricSessionContext>;
   readonly createDockerClient: typeof createDockerClient;
   readonly createSandbox: typeof createSandbox;
+  readonly logger: DoricExecutorLogger;
   readonly promptRunner: PromptRunner;
   readonly createProvider: ProviderFactory;
 };
@@ -102,6 +108,7 @@ export const createExecutor = ({
   sessions,
   createSandbox,
   createDockerClient,
+  logger = noopLogger,
   promptRunner = runPromptWorkflow,
   createProvider = createProviderFromConfig,
 }: DoricExecutorDependencies): AgentExecutor => {
@@ -109,30 +116,55 @@ export const createExecutor = ({
     sessions,
     createSandbox,
     createDockerClient,
+    logger,
     promptRunner,
     createProvider,
   };
 
   return {
     async execute(requestContext, eventBus) {
-      eventBus.publish(
-        taskCreatedMessage(requestContext.taskId, requestContext.contextId),
-      );
-
       const progress = {
         eventBus,
         taskId: requestContext.taskId,
         contextId: requestContext.contextId,
       };
-      const userPrompt = userPromptText(requestContext);
 
-      const session = await ensureSession(
-        requestContext,
-        dependencies,
-        progress,
+      dependencies.logger.info(
+        { ...logContext(progress), lifecycle: 'task.started' },
+        'Doric task started',
       );
 
-      await runPrompt(userPrompt, session, dependencies, progress);
+      try {
+        eventBus.publish(
+          taskCreatedMessage(requestContext.taskId, requestContext.contextId),
+        );
+
+        const userPrompt = userPromptText(requestContext);
+
+        const session = await ensureSession(
+          requestContext,
+          dependencies,
+          progress,
+        );
+
+        await runPrompt(userPrompt, session, dependencies, progress);
+
+        dependencies.logger.info(
+          { ...logContext(progress), lifecycle: 'task.finished' },
+          'Doric task finished',
+        );
+      } catch (error) {
+        dependencies.logger.error(
+          {
+            ...logContext(progress),
+            lifecycle: 'task.failed',
+            errorName: errorName(error),
+          },
+          'Doric task failed',
+        );
+
+        throw error;
+      }
 
       return eventBus.finished();
     },
@@ -149,6 +181,10 @@ const ensureSession = async (
   progress.eventBus.publish(
     checkingSessionMessage(progress.taskId, progress.contextId),
   );
+  dependencies.logger.info(
+    { ...logContext(progress), lifecycle: 'session.checking' },
+    'Checking Doric session',
+  );
 
   const existing = dependencies.sessions.load(requestContext.contextId);
 
@@ -160,11 +196,19 @@ const ensureSession = async (
       progress.eventBus.publish(
         updatingSessionConfigMessage(progress.taskId, progress.contextId),
       );
+      dependencies.logger.info(
+        { ...logContext(progress), lifecycle: 'session.config_updated' },
+        'Updated Doric session config',
+      );
       session.config = config;
     }
 
     progress.eventBus.publish(
       usingExistingSessionMessage(progress.taskId, progress.contextId),
+    );
+    dependencies.logger.info(
+      { ...logContext(progress), lifecycle: 'session.reused' },
+      'Reusing Doric session',
     );
 
     return session;
@@ -180,6 +224,10 @@ const ensureSession = async (
       progress.eventBus.publish(
         creatingSandboxMessage(progress.taskId, progress.contextId),
       );
+      dependencies.logger.info(
+        { ...logContext(progress), lifecycle: 'sandbox.creating' },
+        'Creating Doric sandbox',
+      );
 
       const sandbox = await dependencies.createSandbox({
         docker,
@@ -193,6 +241,10 @@ const ensureSession = async (
       progress.eventBus.publish(
         cloningRepositoryMessage(progress.taskId, progress.contextId),
       );
+      dependencies.logger.info(
+        { ...logContext(progress), lifecycle: 'repo.cloning' },
+        'Cloning Doric repository',
+      );
 
       const repo = await sandbox.cloneRepo({
         url: config.github.repo.url,
@@ -201,6 +253,10 @@ const ensureSession = async (
 
       progress.eventBus.publish(
         sessionReadyMessage(progress.taskId, progress.contextId),
+      );
+      dependencies.logger.info(
+        { ...logContext(progress), lifecycle: 'session.ready' },
+        'Doric session ready',
       );
 
       return { config, sandbox, repo };
@@ -219,6 +275,14 @@ const runPrompt = async (
 
   progress.eventBus.publish(
     runningPromptWorkflowMessage(progress.taskId, progress.contextId),
+  );
+  dependencies.logger.info(
+    {
+      ...logContext(progress),
+      lifecycle: 'prompt.started',
+      providerType: provider.type,
+    },
+    'Doric prompt workflow started',
   );
 
   const artifact = await dependencies.promptRunner(
@@ -253,7 +317,31 @@ const runPrompt = async (
         )
       : promptCompletedMessage(progress.taskId, progress.contextId),
   );
+  dependencies.logger.info(
+    {
+      ...logContext(progress),
+      lifecycle: 'prompt.finished',
+      questionCount: questions.length,
+      status: questions.length > 0 ? 'input-required' : 'completed',
+    },
+    'Doric prompt workflow finished',
+  );
 };
+
+const noopLogger: DoricExecutorLogger = {
+  info() {},
+  error() {},
+};
+
+const logContext = (
+  progress: Progress,
+): { readonly taskId: string; readonly contextId: string } => ({
+  taskId: progress.taskId,
+  contextId: progress.contextId,
+});
+
+const errorName = (error: unknown): string =>
+  error instanceof Error ? error.name : 'UnknownError';
 
 const userPromptText = (requestContext: RequestContext): string => {
   const text = requestContext.userMessage.parts
@@ -313,70 +401,6 @@ const resolvePromptModel = (
   }
 
   return { model, provider };
-};
-
-const createProviderFromConfig = async (
-  provider: ProviderConfig,
-): Promise<LlmProvider> => {
-  const transport = createLlmFetchTransport();
-
-  if (provider.type === 'openai') {
-    const token = requiredToken(provider);
-
-    return token.toLowerCase().startsWith('bearer ')
-      ? createOpenAiProvider({ transport, authorization: token })
-      : createOpenAiProvider({ transport, apiKey: token });
-  }
-
-  if (provider.type === 'openrouter') {
-    return createOpenRouterProvider({
-      transport,
-      apiKey: bearerValue(requiredToken(provider)),
-    });
-  }
-
-  if (provider.type === 'codex') {
-    const credential = codexCredentialFromToken(requiredToken(provider));
-
-    return createCodexProvider({
-      transport,
-      authorization: credential.authorization,
-      chatGptAccountId: credential.accountId,
-      fedramp: credential.fedramp,
-    });
-  }
-
-  throw A2AError.invalidParams(
-    `Unsupported provider type "${provider.type}".`,
-    {
-      code: 'unsupported_provider_type',
-      path: 'message.metadata.configuration.providers.type',
-    },
-  );
-};
-
-const requiredToken = (provider: ProviderConfig): string => {
-  const token = provider.token?.trim();
-
-  if (token === undefined || token === '') {
-    throw A2AError.invalidParams(
-      `Provider "${provider.id}" requires a token.`,
-      {
-        code: 'missing_provider_token',
-        path: 'message.metadata.configuration.providers.token',
-      },
-    );
-  }
-
-  return token;
-};
-
-const bearerValue = (token: string): string => {
-  const trimmed = token.trim();
-
-  return trimmed.toLowerCase().startsWith('bearer ')
-    ? trimmed.slice('bearer '.length).trimStart()
-    : trimmed;
 };
 
 const parseInitialConfig = (requestContext: RequestContext): AgentConfig => {

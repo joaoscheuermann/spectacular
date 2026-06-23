@@ -10,6 +10,7 @@ import {
   createConfig,
   createDoricTestHarness,
   createEventBus,
+  createLogger,
   createRequestContext,
   createTextPart,
 } from './fakes.js';
@@ -164,6 +165,130 @@ test('runs workflow-prompt after the repository session is ready', async () => {
           event.status.message.parts[0].text === 'Running workflow-prompt.',
       ),
   );
+});
+
+test('logs executor lifecycle metadata without recording prompts or credentials', async () => {
+  const logger = createLogger();
+  const harness = createDoricTestHarness({
+    logger,
+    promptRunner: async (artifact) => completedPromptArtifact(artifact),
+  });
+  const requestContext = createRequestContext({
+    contextId: 'context-logs',
+    config: createConfig({
+      repoUrl: 'https://github.com/example/private',
+      token: 'github-secret-token',
+      providers: [
+        {
+          id: 'openai',
+          type: 'openai',
+          token: 'provider-secret-token',
+        },
+      ],
+    }),
+    parts: [createTextPart('Prompt secret text')],
+  });
+
+  await harness.executor.execute(requestContext, createEventBus());
+
+  assert.ok(
+    logger.entries.every(
+      (entry) =>
+        entry.bindings.taskId === requestContext.taskId &&
+        entry.bindings.contextId === 'context-logs',
+    ),
+  );
+  assert.deepEqual(
+    logger.entries.map((entry) => entry.bindings.lifecycle),
+    [
+      'task.started',
+      'session.checking',
+      'sandbox.creating',
+      'repo.cloning',
+      'session.ready',
+      'prompt.started',
+      'prompt.finished',
+      'task.finished',
+    ],
+  );
+  assert.deepEqual(
+    logger.entries.find(
+      (entry) => entry.bindings.lifecycle === 'prompt.started',
+    )?.bindings,
+    {
+      taskId: requestContext.taskId,
+      contextId: 'context-logs',
+      lifecycle: 'prompt.started',
+      providerType: 'openai',
+    },
+  );
+  assert.deepEqual(
+    logger.entries.find(
+      (entry) => entry.bindings.lifecycle === 'prompt.finished',
+    )?.bindings,
+    {
+      taskId: requestContext.taskId,
+      contextId: 'context-logs',
+      lifecycle: 'prompt.finished',
+      questionCount: 0,
+      status: 'completed',
+    },
+  );
+
+  const serializedLogs = JSON.stringify(logger.entries);
+
+  assert.doesNotMatch(serializedLogs, /Prompt secret text/u);
+  assert.doesNotMatch(serializedLogs, /github-secret-token/u);
+  assert.doesNotMatch(serializedLogs, /provider-secret-token/u);
+  assert.doesNotMatch(serializedLogs, /https:\/\/github.com\/example\/private/u);
+});
+
+test('logs failures without recording sensitive error text', async () => {
+  const logger = createLogger();
+  const harness = createDoricTestHarness({
+    logger,
+    promptRunner: async () => {
+      throw new Error('sensitive error with provider-secret-token');
+    },
+  });
+  const requestContext = createRequestContext({
+    contextId: 'context-error-logs',
+    config: createConfig({
+      token: 'github-secret-token',
+      providers: [
+        {
+          id: 'openai',
+          type: 'openai',
+          token: 'provider-secret-token',
+        },
+      ],
+    }),
+    parts: [createTextPart('Prompt secret text')],
+  });
+
+  await assert.rejects(
+    harness.executor.execute(requestContext, createEventBus()),
+    /sensitive error/u,
+  );
+
+  assert.deepEqual(
+    logger.entries.find(
+      (entry) => entry.bindings.lifecycle === 'task.failed',
+    )?.bindings,
+    {
+      taskId: requestContext.taskId,
+      contextId: 'context-error-logs',
+      lifecycle: 'task.failed',
+      errorName: 'Error',
+    },
+  );
+
+  const serializedLogs = JSON.stringify(logger.entries);
+
+  assert.doesNotMatch(serializedLogs, /Prompt secret text/u);
+  assert.doesNotMatch(serializedLogs, /github-secret-token/u);
+  assert.doesNotMatch(serializedLogs, /provider-secret-token/u);
+  assert.doesNotMatch(serializedLogs, /sensitive error/u);
 });
 
 test('uses the coding task model when another task is configured first', async () => {

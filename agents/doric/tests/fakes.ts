@@ -26,6 +26,7 @@ import type { PromptArtifact, PromptWorkflowOptions } from 'workflow-prompt';
 import {
   createExecutor,
   type DoricSessionContext,
+  type DoricExecutorLogger,
   type ProviderFactory,
   type PromptRunner,
 } from '../src/lib/executor.js';
@@ -51,11 +52,22 @@ export type CapturingEventBus = ExecutionEventBus & {
   finishedCount: number;
 };
 
+export type CapturingLogger = DoricExecutorLogger & {
+  readonly entries: CapturingLogEntry[];
+};
+
+export type CapturingLogEntry = {
+  readonly level: 'info' | 'error';
+  readonly bindings: Record<string, unknown>;
+  readonly message: string;
+};
+
 type HarnessOptions = {
   readonly sessions?: SessionStore<DoricSessionContext>;
   readonly hasGit?: boolean;
   readonly gitInstallFailure?: Error;
   readonly cloneFailure?: Error;
+  readonly logger?: DoricExecutorLogger;
   readonly promptRunner?: PromptRunner;
   readonly createProvider?: ProviderFactory;
   readonly useDefaultProvider?: boolean;
@@ -109,6 +121,7 @@ export const createDoricTestHarness = (
 
         return sandbox;
       },
+      logger: options.logger,
       ...(options.useDefaultProvider
         ? {}
         : {
@@ -126,6 +139,20 @@ export const createDoricTestHarness = (
         return options.promptRunner?.(artifact, input) ?? artifact;
       },
     }),
+  };
+};
+
+export const createLogger = (): CapturingLogger => {
+  const entries: CapturingLogEntry[] = [];
+
+  return {
+    entries,
+    info(bindings, message) {
+      entries.push({ level: 'info', bindings, message });
+    },
+    error(bindings, message) {
+      entries.push({ level: 'error', bindings, message });
+    },
   };
 };
 

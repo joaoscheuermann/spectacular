@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import pino from 'pino';
 
 import { UserBuilder } from '@a2a-js/sdk/server/grpc';
 import { agentCardHandler, jsonRpcHandler } from '@a2a-js/sdk/server/express';
@@ -18,6 +19,9 @@ const app = express();
 
 const host = String(process.env.HOST || DEFAULT_HOST);
 const port = Number(process.env.PORT || DEFAULT_PORT);
+const logLevel = process.env.LOG_LEVEL?.trim() || 'info';
+const logger = pino({ level: logLevel });
+const httpLogger = logger.child({ component: 'http' });
 
 const sessions = createSessionStore<DoricSessionContext>();
 
@@ -29,10 +33,30 @@ const executor = createExecutor({
   sessions,
   createDockerClient,
   createSandbox,
+  logger: logger.child({ component: 'executor' }),
 });
 
 const requestHandler = new DefaultRequestHandler(card, tasks, executor);
 
+app.use((request, response, next) => {
+  const startedAt = process.hrtime.bigint();
+
+  response.on('finish', () => {
+    const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+
+    httpLogger.info(
+      {
+        method: request.method,
+        path: request.path,
+        statusCode: response.statusCode,
+        durationMs,
+      },
+      'HTTP request completed',
+    );
+  });
+
+  next();
+});
 app.use(cors());
 app.use(express.json());
 
@@ -49,8 +73,13 @@ app.use(
 );
 
 app.listen(port, host, () => {
-  console.log(`A2A Express Server listening at http://localhost:${port}`);
-  console.log(
-    `Discovery endpoint available at http://localhost:${port}/.well-known/a2a-agent-card`,
+  logger.info(
+    {
+      host,
+      port,
+      discoveryPath: '/.well-known/a2a-agent-card',
+      rpcPath: '/rpc',
+    },
+    'Doric A2A server listening',
   );
 });
