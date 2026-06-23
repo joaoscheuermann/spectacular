@@ -1,6 +1,6 @@
 # Doric Grounding
 
-Last reviewed: 2026-06-22
+Last reviewed: 2026-06-23
 
 This is Doric's repository validity contract. Every agent working in this
 repository must read it before non-trivial planning, reviewing, artifact
@@ -47,6 +47,10 @@ product scope and current files support the change.
 `agents/doric` may host the explicitly requested minimal A2A protocol scaffold
 for the Doric agent. That scaffold does not by itself add CLI, daemon,
 provider, persistence, or broader host-surface scope.
+
+Prompt open-question artifacts carry concrete selectable solution options.
+Doric input-required A2A events expose those options directly instead of
+synthesizing a recommendation-only choice.
 
 `agents/doric` receives first-message config and later config replacements from
 `requestContext.userMessage.metadata.configuration`. Sandbox creation, Git

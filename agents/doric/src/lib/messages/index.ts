@@ -10,7 +10,11 @@ import type {
   TaskStatusUpdateEvent,
 } from '@a2a-js/sdk';
 
-import type { PromptArtifact, PromptOpenQuestion } from 'workflow-prompt';
+import type {
+  PromptArtifact,
+  PromptOpenQuestion,
+  PromptOpenQuestionOptions,
+} from 'workflow-prompt';
 
 export const taskCreatedMessage = (
   taskId: string,
@@ -162,17 +166,34 @@ const openQuestionsPart = (
   },
 });
 
-const openQuestionData = (question: PromptOpenQuestion, index: number) => ({
-  id: `open-question-${index + 1}`,
-  title: `${question.question} Recommendation: ${question.recommendation}`,
-  question: question.question,
-  recommendation: question.recommendation,
-  ...(question.impact === undefined ? {} : { impact: question.impact }),
-  options: [
-    {
-      id: 'recommendation',
-      title: question.recommendation,
-      value: question.recommendation,
-    },
-  ],
-});
+const openQuestionData = (question: PromptOpenQuestion, index: number) => {
+  const options = openQuestionOptions(question, index);
+
+  return {
+    id: `open-question-${index + 1}`,
+    title: `${question.question} Recommendation: ${question.recommendation}`,
+    question: question.question,
+    recommendation: question.recommendation,
+    ...(question.impact === undefined ? {} : { impact: question.impact }),
+    options: options.map((option, optionIndex) => ({
+      id: `option-${optionIndex + 1}`,
+      title: option,
+      value: option,
+    })),
+  };
+};
+
+const openQuestionOptions = (
+  question: { readonly options?: readonly string[] },
+  index: number,
+): PromptOpenQuestionOptions => {
+  const [first, second, third, ...rest] = question.options ?? [];
+
+  if (first === undefined || second === undefined || third === undefined) {
+    throw new Error(
+      `Prompt open question ${index + 1} must include at least 3 options before emitting an input-required event.`,
+    );
+  }
+
+  return [first, second, third, ...rest];
+};

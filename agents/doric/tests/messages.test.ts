@@ -92,10 +92,20 @@ test('creates final prompt workflow status updates', () => {
       question: 'Which model should be used?',
       impact: 'The run cannot continue.',
       recommendation: 'Use the coding task model.',
+      options: [
+        'Use the coding task model.',
+        'Use the planning model for this run.',
+        'Ask the caller to provide a model override.',
+      ],
     },
     {
       question: 'Should the prompt include validation?',
       recommendation: 'Include the configured checks.',
+      options: [
+        'Include the configured checks.',
+        'Skip validation and only draft the prompt.',
+        'Ask the caller for the exact validation commands.',
+      ],
     },
   ]);
   const completed = promptCompletedMessage('task-1', 'context-1');
@@ -118,9 +128,19 @@ test('creates final prompt workflow status updates', () => {
             impact: 'The run cannot continue.',
             options: [
               {
-                id: 'recommendation',
+                id: 'option-1',
                 title: 'Use the coding task model.',
                 value: 'Use the coding task model.',
+              },
+              {
+                id: 'option-2',
+                title: 'Use the planning model for this run.',
+                value: 'Use the planning model for this run.',
+              },
+              {
+                id: 'option-3',
+                title: 'Ask the caller to provide a model override.',
+                value: 'Ask the caller to provide a model override.',
               },
             ],
           },
@@ -132,9 +152,19 @@ test('creates final prompt workflow status updates', () => {
             recommendation: 'Include the configured checks.',
             options: [
               {
-                id: 'recommendation',
+                id: 'option-1',
                 title: 'Include the configured checks.',
                 value: 'Include the configured checks.',
+              },
+              {
+                id: 'option-2',
+                title: 'Skip validation and only draft the prompt.',
+                value: 'Skip validation and only draft the prompt.',
+              },
+              {
+                id: 'option-3',
+                title: 'Ask the caller for the exact validation commands.',
+                value: 'Ask the caller for the exact validation commands.',
               },
             ],
           },
@@ -152,4 +182,20 @@ test('creates final prompt workflow status updates', () => {
       text: 'Prompt workflow completed. PROMPT artifact is ready.',
     },
   ]);
+});
+
+test('throws before creating input-required event when an open question has fewer than three options', () => {
+  const malformedQuestions = [
+    {
+      question: 'Which model should be used?',
+      recommendation: 'Use the coding task model.',
+      options: ['Use the coding task model.', 'Use the planning model.'],
+    },
+  ] as unknown as Parameters<typeof promptInputRequiredMessage>[2];
+
+  assert.throws(
+    () =>
+      promptInputRequiredMessage('task-1', 'context-1', malformedQuestions),
+    /Prompt open question 1 must include at least 3 options before emitting an input-required event/u,
+  );
 });

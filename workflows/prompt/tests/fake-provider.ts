@@ -29,11 +29,21 @@ export const responsesWithQuestions = (): readonly unknown[] => [
           'Which exact requirement fields should downstream agents use?',
         impact: 'Requirement extraction could choose an incompatible schema.',
         recommendation: 'Confirm the public artifact schema first.',
+        options: [
+          'Confirm the public artifact schema first.',
+          'Use the existing requirement list fields without schema changes.',
+          'Emit a separate compatibility artifact for downstream agents.',
+        ],
       },
       {
         question: 'Should any old state-machine behavior be preserved?',
         recommendation:
           'Keep the split-pipeline contract unless told otherwise.',
+        options: [
+          'Keep the split-pipeline contract unless told otherwise.',
+          'Preserve state-machine compatibility behind the workflow entrypoint.',
+          'Remove old state-machine behavior from the prompt workflow.',
+        ],
       },
     ],
   },

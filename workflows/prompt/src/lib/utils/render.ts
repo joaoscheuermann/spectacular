@@ -65,6 +65,11 @@ const questionList = (questions: readonly PromptOpenQuestion[]): string =>
     : questions
         .map(
           (question) =>
-            `- ${question.question}\n  - Impact: ${question.impact ?? 'Unspecified'}\n  - Recommendation: ${question.recommendation}`,
+            `- ${question.question}\n  - Impact: ${question.impact ?? 'Unspecified'}\n  - Recommendation: ${question.recommendation}\n  - Options:${nestedList(question.options)}`,
         )
         .join('\n');
+
+const nestedList = (items: readonly string[]): string =>
+  items.length === 0
+    ? ' None'
+    : `\n${items.map((item) => `    - ${item}`).join('\n')}`;

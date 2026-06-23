@@ -2,10 +2,18 @@ import type { Artifact } from 'artifacts';
 import type { LlmProvider } from 'llms';
 import type { SandboxSession } from 'sandbox';
 
+export type PromptOpenQuestionOptions = readonly [
+  string,
+  string,
+  string,
+  ...string[],
+];
+
 export type PromptOpenQuestion = {
   readonly question: string;
   readonly impact?: string;
   readonly recommendation: string;
+  readonly options: PromptOpenQuestionOptions;
 };
 
 export type PromptExplorationFact = {

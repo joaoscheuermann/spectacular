@@ -56,8 +56,14 @@ test('runs split passes and gates requirements when open questions exist', async
       question: 'Which exact requirement fields should downstream agents use?',
       impact: 'Requirement extraction could choose an incompatible schema.',
       recommendation: 'Confirm the public artifact schema first.',
+      options: [
+        'Confirm the public artifact schema first.',
+        'Use the existing requirement list fields without schema changes.',
+        'Emit a separate compatibility artifact for downstream agents.',
+      ],
     },
   ]);
+  assert.match(messageText(provider), /at least 3 concrete solution options/u);
   assert.equal(result.data.productRequirements, undefined);
   assert.equal(result.data.technicalRequirements, undefined);
   assert.equal(provider.requests.length, 4);
@@ -229,6 +235,11 @@ test('fails clearly when an open question contains unexpected fields', async () 
         {
           question: 'Question?',
           recommendation: 'Recommendation.',
+          options: [
+            'Use the first solution.',
+            'Use the second solution.',
+            'Use the third solution.',
+          ],
           owner: 'Unexpected owner field.',
         },
       ],
@@ -237,6 +248,32 @@ test('fails clearly when an open question contains unexpected fields', async () 
 
   await assert.rejects(
     prompt(createPromptArtifact('Invalid open question.'), {
+      ...workflowOptions(provider.provider, root),
+    }),
+    /Fake provider response 3 failed schema validation/,
+  );
+  await rm(root, { recursive: true, force: true });
+});
+
+test('fails clearly when an open question has fewer than three options', async () => {
+  const root = await workspace('prompt-open-question-few-options');
+  const provider = createProvider([
+    exploration(),
+    requestUnderstanding(),
+    intent(),
+    {
+      questions: [
+        {
+          question: 'Question?',
+          recommendation: 'Use the first solution.',
+          options: ['Use the first solution.', 'Use the second solution.'],
+        },
+      ],
+    },
+  ]);
+
+  await assert.rejects(
+    prompt(createPromptArtifact('Invalid open question options.'), {
       ...workflowOptions(provider.provider, root),
     }),
     /Fake provider response 3 failed schema validation/,

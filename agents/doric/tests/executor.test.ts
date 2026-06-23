@@ -118,6 +118,11 @@ const promptArtifactWithQuestions = (
         question: 'Which provider should handle coding tasks?',
         impact: 'The workflow cannot choose a final model path.',
         recommendation: 'Use the configured coding task model.',
+        options: [
+          'Use the configured coding task model.',
+          'Use the default OpenAI provider.',
+          'Ask the caller to choose a provider before continuing.',
+        ],
       },
     ],
   },
@@ -338,9 +343,19 @@ test('publishes open questions before ending the turn as input-required', async 
             impact: 'The workflow cannot choose a final model path.',
             options: [
               {
-                id: 'recommendation',
+                id: 'option-1',
                 title: 'Use the configured coding task model.',
                 value: 'Use the configured coding task model.',
+              },
+              {
+                id: 'option-2',
+                title: 'Use the default OpenAI provider.',
+                value: 'Use the default OpenAI provider.',
+              },
+              {
+                id: 'option-3',
+                title: 'Ask the caller to choose a provider before continuing.',
+                value: 'Ask the caller to choose a provider before continuing.',
               },
             ],
           },
