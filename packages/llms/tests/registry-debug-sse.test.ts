@@ -15,10 +15,12 @@ import {
 import { collect } from './fakes.js';
 
 test('finds providers and chooses enabled provider name from explicit availability', () => {
-  assert.equal(providerRegistry.length, 2);
+  assert.equal(providerRegistry.length, 3);
+  assert.equal(providerById('codex')?.name, 'Codex');
   assert.equal(providerById('openai')?.name, 'OpenAI');
   assert.equal(providerById('openrouter')?.name, 'OpenRouter');
   assert.equal(providerById('missing'), undefined);
+  assert.equal(enabledProviderName({ codexAuth: 'auth' }), 'codex');
   assert.equal(enabledProviderName({ openRouterApiKey: 'key' }), 'openrouter');
   assert.equal(enabledProviderName({ openAiApiKey: 'key' }), 'openai');
   assert.equal(enabledProviderName({}), undefined);

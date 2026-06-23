@@ -7,11 +7,16 @@ import {
   cloningRepositoryMessage,
   creatingSandboxMessage,
   installingGitMessage,
+  promptArtifactMessage,
+  promptCompletedMessage,
+  promptInputRequiredMessage,
+  runningPromptWorkflowMessage,
   sessionReadyMessage,
   taskCreatedMessage,
   updatingSessionConfigMessage,
   usingExistingSessionMessage,
 } from '../src/lib/messages/index.js';
+import { createPromptArtifact } from 'workflow-prompt';
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
@@ -43,6 +48,7 @@ test('creates non-final task status updates for session setup progress', () => {
     [installingGitMessage, 'Installing Git and certificates in the sandbox.'],
     [cloningRepositoryMessage, 'Cloning the configured repository.'],
     [sessionReadyMessage, 'Repository session is ready.'],
+    [runningPromptWorkflowMessage, 'Running workflow-prompt.'],
   ] as const;
 
   for (const [createUpdate, text] of updates) {
@@ -59,4 +65,60 @@ test('creates non-final task status updates for session setup progress', () => {
     assert.equal(update.status.message?.contextId, 'context-1');
     assert.deepEqual(update.status.message?.parts, [{ kind: 'text', text }]);
   }
+});
+
+test('creates prompt artifact update events', () => {
+  const artifact = createPromptArtifact('Build the agent');
+  const update = promptArtifactMessage(
+    'task-1',
+    'context-1',
+    artifact,
+    '# Prompt',
+  );
+
+  assert.equal(update.kind, 'artifact-update');
+  assert.equal(update.taskId, 'task-1');
+  assert.equal(update.contextId, 'context-1');
+  assert.equal(update.lastChunk, true);
+  assert.equal(update.artifact.artifactId, 'PROMPT');
+  assert.equal(update.artifact.name, 'PROMPT.md');
+  assert.deepEqual(update.artifact.parts, [{ kind: 'text', text: '# Prompt' }]);
+  assert.deepEqual(update.artifact.metadata, { mime: 'text/markdown' });
+});
+
+test('creates final prompt workflow status updates', () => {
+  const inputRequired = promptInputRequiredMessage('task-1', 'context-1', [
+    {
+      question: 'Which model should be used?',
+      impact: 'The run cannot continue.',
+      recommendation: 'Use the coding task model.',
+    },
+  ]);
+  const completed = promptCompletedMessage('task-1', 'context-1');
+
+  assert.equal(inputRequired.kind, 'status-update');
+  assert.equal(inputRequired.final, true);
+  assert.equal(inputRequired.status.state, 'input-required');
+  assert.match(
+    inputRequired.status.message?.parts[0]?.kind === 'text'
+      ? inputRequired.status.message.parts[0].text
+      : '',
+    /Which model should be used\?/u,
+  );
+  assert.match(
+    inputRequired.status.message?.parts[0]?.kind === 'text'
+      ? inputRequired.status.message.parts[0].text
+      : '',
+    /Recommendation: Use the coding task model\./u,
+  );
+
+  assert.equal(completed.kind, 'status-update');
+  assert.equal(completed.final, true);
+  assert.equal(completed.status.state, 'completed');
+  assert.deepEqual(completed.status.message?.parts, [
+    {
+      kind: 'text',
+      text: 'Prompt workflow completed. PROMPT artifact is ready.',
+    },
+  ]);
 });

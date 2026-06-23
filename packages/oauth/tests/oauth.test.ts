@@ -1,12 +1,19 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import {
+  CODEX_OAUTH_CALLBACK_PATH,
+  CODEX_OAUTH_CLIENT_ID,
+  CODEX_OAUTH_ORIGINATOR,
   OAuthErrorObject,
+  codexOAuthProfile,
   createOAuthClient,
-  createOpenAiOAuth,
-  openAiOAuthProfile,
+  createCodexOAuth,
+  resolveCodexAuth,
   type OAuthCallbackServer,
   type OAuthHttpRequest,
   type OAuthHttpResponse,
@@ -55,13 +62,22 @@ test('builds PKCE authorization URL and exchanges callback code', async () => {
   const body = new URLSearchParams(transport.requests[0]?.body);
   const verifier = body.get('code_verifier') ?? '';
 
-  assert.equal(authUrl.origin + authUrl.pathname, testProfile.authorizationEndpoint);
+  assert.equal(
+    authUrl.origin + authUrl.pathname,
+    testProfile.authorizationEndpoint,
+  );
   assert.equal(authUrl.searchParams.get('response_type'), 'code');
   assert.equal(authUrl.searchParams.get('client_id'), 'client');
-  assert.equal(authUrl.searchParams.get('redirect_uri'), 'http://127.0.0.1/callback');
+  assert.equal(
+    authUrl.searchParams.get('redirect_uri'),
+    'http://127.0.0.1/callback',
+  );
   assert.equal(authUrl.searchParams.get('scope'), testProfile.defaultScope);
   assert.equal(authUrl.searchParams.get('code_challenge_method'), 'S256');
-  assert.equal(authUrl.searchParams.get('code_challenge'), pkceChallenge(verifier));
+  assert.equal(
+    authUrl.searchParams.get('code_challenge'),
+    pkceChallenge(verifier),
+  );
   assert.equal(transport.requests[0]?.url, testProfile.tokenEndpoint);
   assert.equal(body.get('grant_type'), 'authorization_code');
   assert.equal(body.get('code'), 'code-123');
@@ -84,7 +100,10 @@ test('rejects OAuth callback state mismatch before token exchange', async () => 
       browserOpener() {
         return undefined;
       },
-      callbackServer: callbackServer(() => ({ code: 'code-123', state: 'wrong' })),
+      callbackServer: callbackServer(() => ({
+        code: 'code-123',
+        state: 'wrong',
+      })),
       random: sequentialRandom(),
     }).authorize(),
     hasCode('oauth_state_mismatch'),
@@ -210,7 +229,10 @@ test('rejects OAuth refresh when the stored credential lacks a refresh token', a
       browserOpener() {
         return undefined;
       },
-      callbackServer: callbackServer(() => ({ code: 'unused', state: 'unused' })),
+      callbackServer: callbackServer(() => ({
+        code: 'unused',
+        state: 'unused',
+      })),
       clock: () => 1_000,
       refreshSkewMs: 100,
     }).credential(),
@@ -246,15 +268,14 @@ test('parses JWT claims and renders OAuth credentials', async () => {
   });
 });
 
-test('uses OpenAI OAuth profile defaults', async () => {
+test('uses Codex OAuth profile defaults', async () => {
   let opened = '';
-  const client = createOpenAiOAuth({
+  const client = createCodexOAuth({
     transport: fakeTransport({
       responses: [response({ access_token: 'openai.token.value' })],
     }),
     tokenStore: memoryStore(),
-    clientId: 'client',
-    redirectUri: 'http://127.0.0.1/callback',
+    redirectUri: `http://localhost:1455${CODEX_OAUTH_CALLBACK_PATH}`,
     browserOpener(url) {
       opened = url;
     },
@@ -268,9 +289,114 @@ test('uses OpenAI OAuth profile defaults', async () => {
   await client.authorize();
 
   const url = new URL(opened);
-  assert.deepEqual(client.profile, openAiOAuthProfile);
-  assert.equal(url.origin + url.pathname, openAiOAuthProfile.authorizationEndpoint);
-  assert.equal(url.searchParams.get('scope'), 'openid profile email offline_access');
+  assert.deepEqual(client.profile, codexOAuthProfile);
+  assert.equal(
+    url.origin + url.pathname,
+    codexOAuthProfile.authorizationEndpoint,
+  );
+  assert.equal(url.searchParams.get('client_id'), CODEX_OAUTH_CLIENT_ID);
+  assert.equal(
+    url.searchParams.get('scope'),
+    'openid profile email offline_access api.connectors.read api.connectors.invoke',
+  );
+  assert.equal(
+    url.searchParams.get('redirect_uri'),
+    `http://localhost:1455${CODEX_OAUTH_CALLBACK_PATH}`,
+  );
+  assert.equal(url.searchParams.get('id_token_add_organizations'), 'true');
+  assert.equal(url.searchParams.get('codex_cli_simplified_flow'), 'true');
+  assert.equal(url.searchParams.get('originator'), CODEX_OAUTH_ORIGINATOR);
+});
+
+test('resolves Codex ChatGPT auth from auth.json with account headers', async () => {
+  await withTempDir(async (dir) => {
+    const accessToken = jwt({
+      exp: 10_000,
+      'https://api.openai.com/auth': {
+        chatgpt_account_id: 'acct_123',
+        chatgpt_account_is_fedramp: true,
+      },
+    });
+
+    await writeCodexAuth(dir, {
+      auth_mode: 'chatgpt',
+      tokens: {
+        id_token: jwt({}),
+        access_token: accessToken,
+        refresh_token: 'refresh-token',
+      },
+    });
+
+    const credential = await resolveCodexAuth({
+      codexHome: dir,
+      env: {},
+      now: () => 1_000,
+      transport: fakeTransport({}),
+    });
+
+    assert.equal(credential.kind, 'chatgpt');
+    assert.equal(credential.authorization, `Bearer ${accessToken}`);
+    assert.equal(credential.accountId, 'acct_123');
+    assert.equal(credential.fedramp, true);
+  });
+});
+
+test('resolves Codex authorization header from env', async () => {
+  const accessToken = jwt({
+    'https://api.openai.com/auth': {
+      chatgpt_account_id: 'acct_env',
+    },
+  });
+
+  const credential = await resolveCodexAuth({
+    env: { CODEX_AUTHORIZATION: `Bearer ${accessToken}` },
+    transport: fakeTransport({}),
+  });
+
+  assert.equal(credential.authorization, `Bearer ${accessToken}`);
+  assert.equal(credential.accountId, 'acct_env');
+});
+
+test('refreshes expiring Codex ChatGPT auth.json tokens with Codex client id', async () => {
+  await withTempDir(async (dir) => {
+    await writeCodexAuth(dir, {
+      auth_mode: 'chatgpt',
+      tokens: {
+        id_token: jwt({}),
+        access_token: jwt({ exp: 1_001 }),
+        refresh_token: 'old-refresh',
+        account_id: 'acct_existing',
+      },
+    });
+
+    const transport = fakeTransport({
+      responses: [
+        response({
+          access_token: jwt({ exp: 2_000 }),
+          refresh_token: 'new-refresh',
+        }),
+      ],
+    });
+    const credential = await resolveCodexAuth({
+      codexHome: dir,
+      env: {},
+      now: () => 1_000_000,
+      transport,
+    });
+    const requestBody = JSON.parse(transport.requests[0]?.body ?? '{}');
+    const saved = JSON.parse(await readFile(join(dir, 'auth.json'), 'utf8'));
+
+    assert.equal(
+      transport.requests[0]?.url,
+      'https://auth.openai.com/oauth/token',
+    );
+    assert.equal(requestBody.client_id, 'app_EMoamEEZ73f0CkXaXp7hrann');
+    assert.equal(requestBody.grant_type, 'refresh_token');
+    assert.equal(requestBody.refresh_token, 'old-refresh');
+    assert.equal(credential.accountId, 'acct_existing');
+    assert.equal(saved.tokens.refresh_token, 'new-refresh');
+    assert.equal(saved.tokens.access_token, credential.token);
+  });
 });
 
 type MutableStore = OAuthTokenStore & {
@@ -326,7 +452,9 @@ const memoryStore = (initial?: OAuthTokenRecord): MutableStore => {
 };
 
 const callbackServer = (
-  callback: (expectedState: string) => Awaited<ReturnType<OAuthCallbackServer['waitForCallback']>>,
+  callback: (
+    expectedState: string,
+  ) => Awaited<ReturnType<OAuthCallbackServer['waitForCallback']>>,
 ): OAuthCallbackServer => ({
   async waitForCallback(expectedState) {
     return callback(expectedState);
@@ -381,5 +509,26 @@ const jwt = (claims: Record<string, unknown>): string =>
     'signature',
   ].join('.');
 
-const hasCode = (code: string) => (error: unknown): boolean =>
-  error instanceof OAuthErrorObject && error.data.code === code;
+const withTempDir = async (
+  action: (dir: string) => Promise<void>,
+): Promise<void> => {
+  const dir = await mkdtemp(join(tmpdir(), 'codex-oauth-'));
+
+  try {
+    await action(dir);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+};
+
+const writeCodexAuth = async (
+  dir: string,
+  auth: Record<string, unknown>,
+): Promise<void> => {
+  await writeFile(join(dir, 'auth.json'), `${JSON.stringify(auth, null, 2)}\n`);
+};
+
+const hasCode =
+  (code: string) =>
+  (error: unknown): boolean =>
+    error instanceof OAuthErrorObject && error.data.code === code;

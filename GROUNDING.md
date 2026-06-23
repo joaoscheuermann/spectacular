@@ -1,6 +1,6 @@
 # Doric Grounding
 
-Last reviewed: 2026-06-19
+Last reviewed: 2026-06-22
 
 This is Doric's repository validity contract. Every agent working in this
 repository must read it before non-trivial planning, reviewing, artifact
@@ -52,6 +52,24 @@ provider, persistence, or broader host-surface scope.
 `requestContext.userMessage.metadata.configuration`. Sandbox creation, Git
 setup, repository cloning, and initial workdir state are tied to session
 creation; later config replacement updates only the stored session config.
+
+Doric supports OpenAI and Codex as separate provider types. The Codex provider
+uses the existing provider token field for the Codex authorization value and
+derives Codex-compatible account headers from that credential when available.
+Credential values must remain private runtime inputs: do not persist, log, or
+echo resolved tokens.
+
+The Codex OAuth profile is a package-owned default for the Codex browser
+authorization flow. Host scripts should require only `CODEX_AUTHORIZATION` for
+normal runtime use and let the OAuth package provide Codex's client id,
+localhost callback route, connector scopes, and authorize-request parameters
+unless an explicit override is needed for testing or a provider change. Codex
+model requests use ChatGPT's Codex Responses backend with the ChatGPT access
+token; they do not request the public OpenAI `api.responses.write` OAuth
+scope. The ChatGPT Codex backend requires streaming requests with
+`store: false` and non-empty instructions; non-streaming provider calls should
+be fulfilled by consuming the streaming backend response. Codex requests must
+not forward unsupported public Responses API controls such as `temperature`.
 
 ## Repository Shape
 

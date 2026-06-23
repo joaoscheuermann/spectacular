@@ -8,6 +8,7 @@ import {
   ProviderErrorObject,
   createOpenAiProvider,
   openAiBody,
+  type LlmDebugRecord,
   type ProviderStreamEvent,
 } from '../src/index.js';
 import { collect, fakeTransport, response } from './fakes.js';
@@ -44,7 +45,12 @@ test('maps OpenAI Responses DTO with instructions tools reasoning and fast servi
       type: 'function',
       name: 'search',
       description: 'Search docs',
-      parameters: { type: 'object', properties: {} },
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
       strict: true,
     },
   ]);
@@ -60,6 +66,124 @@ test('maps OpenAI Responses DTO with instructions tools reasoning and fast servi
     },
   ]);
   assert.equal('text' in body, false);
+});
+
+test('maps assistant tool calls to Responses function call input items', () => {
+  const body = openAiBody(
+    {
+      model: 'gpt-5',
+      messages: [
+        { role: 'user', content: 'Find it.' },
+        {
+          role: 'assistant',
+          content: '',
+          toolCalls: [
+            { id: 'call_1', name: 'lookup', arguments: '{"query":"x"}' },
+          ],
+        },
+        { role: 'tool', toolCallId: 'call_1', content: 'tool output' },
+      ],
+    },
+    false,
+  );
+
+  assert.deepEqual(body.input, [
+    {
+      role: 'user',
+      content: [{ type: 'input_text', text: 'Find it.' }],
+    },
+    {
+      type: 'function_call',
+      call_id: 'call_1',
+      name: 'lookup',
+      arguments: '{"query":"x"}',
+    },
+    {
+      type: 'function_call_output',
+      call_id: 'call_1',
+      output: 'tool output',
+    },
+  ]);
+});
+
+test('keeps assistant text before Responses function call input items', () => {
+  const body = openAiBody(
+    {
+      model: 'gpt-5',
+      messages: [
+        { role: 'user', content: 'Plan it.' },
+        {
+          role: 'assistant',
+          content: 'I will inspect first.',
+          toolCalls: [
+            { id: 'call_1', name: 'read_file', arguments: '{"path":"x"}' },
+          ],
+        },
+      ],
+    },
+    false,
+  );
+
+  assert.deepEqual(body.input, [
+    {
+      role: 'user',
+      content: [{ type: 'input_text', text: 'Plan it.' }],
+    },
+    {
+      role: 'assistant',
+      content: [{ type: 'output_text', text: 'I will inspect first.' }],
+    },
+    {
+      type: 'function_call',
+      call_id: 'call_1',
+      name: 'read_file',
+      arguments: '{"path":"x"}',
+    },
+  ]);
+});
+
+test('maps strict OpenAI tool schemas with optional properties to required parameters', () => {
+  const inputSchema = {
+    type: 'object',
+    properties: {
+      pattern: { type: 'string' },
+      path: { type: 'string' },
+      limit: { type: 'integer' },
+    },
+    required: ['pattern'],
+    additionalProperties: false,
+  } as const;
+  const body = openAiBody(
+    {
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Find files.' }],
+      tools: [
+        {
+          name: 'find',
+          description: 'Find files',
+          inputSchema,
+          strict: true,
+        },
+      ],
+    },
+    false,
+  );
+
+  assert.deepEqual(body.tools, [
+    {
+      type: 'function',
+      name: 'find',
+      description: 'Find files',
+      parameters: {
+        type: 'object',
+        properties: inputSchema.properties,
+        required: ['pattern', 'path', 'limit'],
+        additionalProperties: false,
+      },
+      strict: true,
+    },
+  ]);
+  assert.deepEqual(inputSchema.required, ['pattern']);
 });
 
 test('maps OpenAI structured output schemas to text format DTOs', () => {
@@ -82,6 +206,52 @@ test('maps OpenAI structured output schemas to text format DTOs', () => {
         type: 'object',
         properties: { answer: { type: 'string' } },
         required: ['answer'],
+        additionalProperties: false,
+      },
+    },
+  });
+});
+
+test('maps nested optional structured output properties to required schema properties', () => {
+  const body = openAiBody(
+    {
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Ask follow-up questions.' }],
+      schema: z.object({
+        questions: z.array(
+          z.object({
+            prompt: z.string(),
+            impact: z.string().optional(),
+          }),
+        ),
+      }),
+    },
+    false,
+  );
+
+  assert.deepEqual(body.text, {
+    format: {
+      type: 'json_schema',
+      name: 'structured_output',
+      strict: true,
+      schema: {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        properties: {
+          questions: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                prompt: { type: 'string' },
+                impact: { type: 'string' },
+              },
+              required: ['prompt', 'impact'],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ['questions'],
         additionalProperties: false,
       },
     },
@@ -306,6 +476,25 @@ test('rejects ambiguous OpenAI auth configuration', async () => {
   );
 });
 
+test('rejects missing OpenAI stream auth before yielding started', async () => {
+  const provider = createOpenAiProvider({
+    transport: fakeTransport({ streams: [[]] }),
+  });
+  const stream = provider
+    .stream({
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Hi' }],
+    })
+    [Symbol.asyncIterator]();
+
+  await assert.rejects(
+    stream.next(),
+    (error: unknown) =>
+      error instanceof ProviderErrorObject &&
+      error.data.code === 'auth_missing',
+  );
+});
+
 test('streams OpenAI text reasoning usage finish and tool calls', async () => {
   const stream = [
     sse({ type: 'response.output_text.delta', delta: 'Hel' }),
@@ -370,6 +559,63 @@ test('streams OpenAI text reasoning usage finish and tool calls', async () => {
   assert.equal(events.at(-1)?.type, 'response.finished');
 });
 
+test('keeps streamed OpenAI tool calls from completed responses without output', async () => {
+  const stream = [
+    sse({
+      type: 'response.function_call_arguments.delta',
+      output_index: 0,
+      item_id: 'call_1',
+      name: 'lookup',
+      delta: '{"q"',
+    }),
+    sse({
+      type: 'response.function_call_arguments.delta',
+      output_index: 0,
+      delta: ':"x"}',
+    }),
+    sse({
+      type: 'response.output_item.done',
+      output_index: 0,
+      item: {
+        type: 'function_call',
+        call_id: 'call_1',
+        name: 'lookup',
+        arguments: '{"q":"x"}',
+      },
+    }),
+    sse({
+      type: 'response.completed',
+      response: {
+        status: 'completed',
+      },
+    }),
+  ];
+  const provider = createOpenAiProvider({
+    transport: fakeTransport({ streams: [stream] }),
+    apiKey: 'sk-testSecret123',
+  });
+
+  const events = await collect(
+    provider.stream({
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Hi' }],
+      schema: z.object({ answer: z.string() }),
+    }),
+  );
+  const finished = events.at(-1);
+
+  assert.equal(finished?.type, 'response.finished');
+
+  if (finished?.type !== 'response.finished') {
+    assert.fail('Expected final response.finished event.');
+  }
+
+  assert.deepEqual(finished.finish.toolCalls, [
+    { id: 'call_1', name: 'lookup', arguments: '{"q":"x"}', index: 0 },
+  ]);
+  assert.equal(finished.finish.structured, undefined);
+});
+
 test('returns parsed OpenAI structured output from stream finishes', async () => {
   const provider = createOpenAiProvider({
     transport: fakeTransport({
@@ -384,6 +630,204 @@ test('returns parsed OpenAI structured output from stream finishes', async () =>
               output_text: '{"answer":"Done"}',
               usage: { input_tokens: 1, output_tokens: 2, total_tokens: 3 },
             },
+          }),
+        ],
+      ],
+    }),
+    apiKey: 'sk-testSecret123',
+  });
+
+  const events = await collect(
+    provider.stream({
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Hi' }],
+      schema: z.object({ answer: z.string() }),
+    }),
+  );
+  const finished = events.at(-1);
+
+  assert.equal(finished?.type, 'response.finished');
+
+  if (finished?.type !== 'response.finished') {
+    assert.fail('Expected final response.finished event.');
+  }
+
+  assert.deepEqual(finished.finish.structured, { answer: 'Done' });
+});
+
+test('returns parsed OpenAI structured output from content part stream snapshots', async () => {
+  const provider = createOpenAiProvider({
+    transport: fakeTransport({
+      streams: [
+        [
+          sse({
+            type: 'response.content_part.done',
+            part: { type: 'output_text', text: '{"answer":"Done"}' },
+          }),
+          sse({
+            type: 'response.completed',
+            response: { status: 'completed' },
+          }),
+        ],
+      ],
+    }),
+    apiKey: 'sk-testSecret123',
+  });
+
+  const events = await collect(
+    provider.stream({
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Hi' }],
+      schema: z.object({ answer: z.string() }),
+    }),
+  );
+  const finished = events.at(-1);
+
+  assert.equal(finished?.type, 'response.finished');
+
+  if (finished?.type !== 'response.finished') {
+    assert.fail('Expected final response.finished event.');
+  }
+
+  assert.deepEqual(finished.finish.structured, { answer: 'Done' });
+});
+
+test('returns parsed OpenAI structured output from snapshots when final output text is empty', async () => {
+  const provider = createOpenAiProvider({
+    transport: fakeTransport({
+      streams: [
+        [
+          sse({
+            type: 'response.content_part.done',
+            part: { type: 'output_text', text: '{"answer":"Snapshot"}' },
+          }),
+          sse({
+            type: 'response.completed',
+            response: { status: 'completed', output_text: '' },
+          }),
+        ],
+      ],
+    }),
+    apiKey: 'sk-testSecret123',
+  });
+
+  const events = await collect(
+    provider.stream({
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Hi' }],
+      schema: z.object({ answer: z.string() }),
+    }),
+  );
+  const finished = events.at(-1);
+
+  assert.equal(finished?.type, 'response.finished');
+
+  if (finished?.type !== 'response.finished') {
+    assert.fail('Expected final response.finished event.');
+  }
+
+  assert.deepEqual(finished.finish.structured, { answer: 'Snapshot' });
+});
+
+test('prefers OpenAI text deltas over stream snapshots', async () => {
+  const provider = createOpenAiProvider({
+    transport: fakeTransport({
+      streams: [
+        [
+          sse({
+            type: 'response.output_text.delta',
+            delta: '{"answer":"Delta"}',
+          }),
+          sse({
+            type: 'response.content_part.done',
+            part: { type: 'output_text', text: '{"answer":"Snapshot"}' },
+          }),
+          sse({
+            type: 'response.completed',
+            response: {
+              status: 'completed',
+              output_text: '{"answer":"Completed"}',
+            },
+          }),
+        ],
+      ],
+    }),
+    apiKey: 'sk-testSecret123',
+  });
+
+  const events = await collect(
+    provider.stream({
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Hi' }],
+      schema: z.object({ answer: z.string() }),
+    }),
+  );
+  const finished = events.at(-1);
+
+  assert.equal(finished?.type, 'response.finished');
+
+  if (finished?.type !== 'response.finished') {
+    assert.fail('Expected final response.finished event.');
+  }
+
+  assert.deepEqual(finished.finish.structured, { answer: 'Delta' });
+});
+
+test('returns parsed OpenAI structured output from output item stream snapshots', async () => {
+  const provider = createOpenAiProvider({
+    transport: fakeTransport({
+      streams: [
+        [
+          sse({
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'message',
+              content: [
+                { type: 'output_text', text: '{"answer":"Done"}' },
+              ],
+            },
+          }),
+          sse({
+            type: 'response.completed',
+            response: { status: 'completed' },
+          }),
+        ],
+      ],
+    }),
+    apiKey: 'sk-testSecret123',
+  });
+
+  const events = await collect(
+    provider.stream({
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Hi' }],
+      schema: z.object({ answer: z.string() }),
+    }),
+  );
+  const finished = events.at(-1);
+
+  assert.equal(finished?.type, 'response.finished');
+
+  if (finished?.type !== 'response.finished') {
+    assert.fail('Expected final response.finished event.');
+  }
+
+  assert.deepEqual(finished.finish.structured, { answer: 'Done' });
+});
+
+test('returns parsed OpenAI structured output from text done stream snapshots', async () => {
+  const provider = createOpenAiProvider({
+    transport: fakeTransport({
+      streams: [
+        [
+          sse({
+            type: 'response.output_text.done',
+            text: '{"answer":"Done"}',
+          }),
+          sse({
+            type: 'response.completed',
+            response: { status: 'completed' },
           }),
         ],
       ],
@@ -493,6 +937,69 @@ test('rejects invalid OpenAI structured JSON', async () => {
       error instanceof ProviderErrorObject &&
       error.data.code === 'invalid_structured_output',
   );
+});
+
+test('logs OpenAI stream structured output failures with finish context', async () => {
+  const records: LlmDebugRecord[] = [];
+  const provider = createOpenAiProvider({
+    transport: fakeTransport({
+      streams: [
+        [
+          sse({
+            type: 'response.completed',
+            response: {
+              status: 'completed',
+              output_text: '',
+              output: [],
+            },
+          }),
+        ],
+      ],
+    }),
+    apiKey: 'sk-testSecret123',
+    debugLogger: {
+      async log(record): Promise<void> {
+        records.push(record);
+      },
+    },
+  });
+
+  await assert.rejects(
+    collect(
+      provider.stream({
+        model: 'gpt-5',
+        messages: [{ role: 'user', content: 'Hi' }],
+        schema: z.object({ answer: z.string() }),
+      }),
+    ),
+    (error: unknown) =>
+      error instanceof ProviderErrorObject &&
+      error.data.code === 'invalid_structured_output',
+  );
+
+  assert.ok(records.some((record) => record.event === 'http.request'));
+  assert.ok(
+    records.some((record) => record.event === 'stream.response.completed'),
+  );
+
+  const finishRecord = records.find(
+    (record) => record.event === 'response.finish',
+  );
+  const errorRecord = records.find(
+    (record) => record.event === 'structured_output.error',
+  );
+  const finishFields = finishRecord?.fields as Record<string, unknown>;
+  const errorFields = errorRecord?.fields as Record<string, unknown>;
+  const finish = errorFields.finish as Record<string, unknown>;
+  const error = errorFields.error as Record<string, unknown>;
+  const cause = error.cause as Record<string, unknown>;
+
+  assert.equal(finishFields.source, 'stream');
+  assert.equal(errorFields.source, 'stream');
+  assert.equal(finish.textLength, 0);
+  assert.equal(finish.textExcerpt, '');
+  assert.equal(error.code, 'invalid_structured_output');
+  assert.match(String(cause.message), /JSON/);
 });
 
 test('rejects schema-invalid OpenAI structured JSON', async () => {

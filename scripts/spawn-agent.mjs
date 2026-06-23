@@ -19,8 +19,8 @@ const REDACTED_KEYS = new Set([
 const SECRET_KEY_PATTERN = /(?:authorization|secret|token)/iu;
 const SECRET_ENV_KEY_PATTERN = /(?:AUTHORIZATION|SECRET|TOKEN)/iu;
 const TEST_PROVIDER = {
-  id: 'openai',
-  type: 'openai',
+  id: 'codex',
+  type: 'codex',
 };
 const TEST_MODEL = {
   id: 'default',
@@ -54,7 +54,7 @@ Options:
 Configuration:
   AGENT_CARD_URL             Required URL to the A2A Agent Card.
   GITHUB_TOKEN               Required GitHub token for repository access.
-  OPENAI_AUTHORIZATION       Required OpenAI provider auth token.
+  CODEX_AUTHORIZATION        Required Codex provider authorization header.
 
 Values from the shell override root .env for configuration values.
 
@@ -217,7 +217,7 @@ const createTextRedactor = (env) => {
 
 const createConfig = (env, options) => {
   const githubToken = required(env, 'GITHUB_TOKEN');
-  const openaiToken = required(env, 'OPENAI_AUTHORIZATION');
+  const codexAuthorization = required(env, 'CODEX_AUTHORIZATION');
 
   return {
     github: {
@@ -227,7 +227,7 @@ const createConfig = (env, options) => {
     providers: [
       {
         ...TEST_PROVIDER,
-        token: openaiToken,
+        token: codexAuthorization,
       },
     ],
     models: [
@@ -337,9 +337,7 @@ const run = async (options) => {
 
   try {
     const params = createMessageParams(env, options);
-    const client = await A2AClient.fromCardUrl(
-      required(env, 'AGENT_CARD_URL'),
-    );
+    const client = await A2AClient.fromCardUrl(required(env, 'AGENT_CARD_URL'));
 
     await sendWithStreamingFallback(client, params, redactText);
   } catch (error) {

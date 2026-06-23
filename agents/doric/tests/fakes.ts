@@ -9,7 +9,8 @@ import {
   type ExecutionEventBus,
   type ExecutionEventName,
 } from '@a2a-js/sdk/server';
-import type { AgentConfig } from 'config';
+import type { LlmProvider } from 'llms';
+import type { AgentConfig, ProviderConfig } from 'config';
 import type { DockerClient } from 'docker';
 import { createSessionStore, type SessionStore } from 'session';
 import type {
@@ -20,10 +21,13 @@ import type {
   SandboxExecResult,
   SandboxSession,
 } from 'sandbox';
+import type { PromptArtifact, PromptWorkflowOptions } from 'workflow-prompt';
 
 import {
   createExecutor,
   type DoricSessionContext,
+  type ProviderFactory,
+  type PromptRunner,
 } from '../src/lib/executor.js';
 
 export type FakeSandbox = SandboxSession & {
@@ -37,6 +41,8 @@ export type DoricTestHarness = {
   readonly executor: AgentExecutor;
   readonly sandboxes: FakeSandbox[];
   readonly sandboxOptions: CreateSandboxOptions[];
+  readonly promptRuns: PromptRun[];
+  readonly providerConfigs: ProviderConfig[];
   readonly dockerCreateCount: () => number;
 };
 
@@ -50,6 +56,14 @@ type HarnessOptions = {
   readonly hasGit?: boolean;
   readonly gitInstallFailure?: Error;
   readonly cloneFailure?: Error;
+  readonly promptRunner?: PromptRunner;
+  readonly createProvider?: ProviderFactory;
+  readonly useDefaultProvider?: boolean;
+};
+
+export type PromptRun = {
+  readonly artifact: PromptArtifact;
+  readonly options: PromptWorkflowOptions;
 };
 
 const GIT_PROBE_COMMAND = 'sh -lc command -v git >/dev/null 2>&1';
@@ -62,6 +76,8 @@ export const createDoricTestHarness = (
   const docker = {} as DockerClient;
   const sandboxes: FakeSandbox[] = [];
   const sandboxOptions: CreateSandboxOptions[] = [];
+  const promptRuns: PromptRun[] = [];
+  const providerConfigs: ProviderConfig[] = [];
   const sessions =
     options.sessions ?? createSessionStore<DoricSessionContext>();
   let dockerCreateCount = 0;
@@ -70,6 +86,8 @@ export const createDoricTestHarness = (
     docker,
     sandboxes,
     sandboxOptions,
+    promptRuns,
+    providerConfigs,
     dockerCreateCount: () => dockerCreateCount,
     executor: createExecutor({
       sessions,
@@ -90,6 +108,22 @@ export const createDoricTestHarness = (
         sandboxes.push(sandbox);
 
         return sandbox;
+      },
+      ...(options.useDefaultProvider
+        ? {}
+        : {
+            createProvider:
+              options.createProvider ??
+              ((provider: ProviderConfig) => {
+                providerConfigs.push(provider);
+
+                return createFakeProvider(provider);
+              }),
+          }),
+      promptRunner: async (artifact, input) => {
+        promptRuns.push({ artifact, options: input });
+
+        return options.promptRunner?.(artifact, input) ?? artifact;
       },
     }),
   };
@@ -173,6 +207,9 @@ export const createConfig = (
   options: {
     readonly repoUrl?: string;
     readonly token?: string;
+    readonly providers?: AgentConfig['providers'];
+    readonly models?: AgentConfig['models'];
+    readonly tasks?: AgentConfig['tasks'];
   } = {},
 ): AgentConfig => ({
   github: {
@@ -182,24 +219,30 @@ export const createConfig = (
     token: options.token ?? 'github-token',
   },
   providers: [
-    {
-      id: 'openai',
-      type: 'openai',
-      token: 'provider-token',
-    },
+    ...(options.providers ?? [
+      {
+        id: 'openai',
+        type: 'openai',
+        token: 'provider-token',
+      },
+    ]),
   ],
   models: [
-    {
-      id: 'default',
-      provider: 'openai',
-      model: 'gpt-5',
-    },
+    ...(options.models ?? [
+      {
+        id: 'default',
+        provider: 'openai',
+        model: 'gpt-5',
+      },
+    ]),
   ],
   tasks: [
-    {
-      id: 'coding',
-      model: 'default',
-    },
+    ...(options.tasks ?? [
+      {
+        id: 'coding',
+        model: 'default',
+      },
+    ]),
   ],
 });
 
@@ -290,3 +333,33 @@ const createFakeSandbox = (options: {
     },
   };
 };
+
+const createFakeProvider = (provider: ProviderConfig): LlmProvider =>
+  ({
+    metadata: {
+      id: provider.id,
+      name: provider.id,
+      baseUrl: 'https://example.invalid',
+    },
+    capabilities: {
+      streaming: true,
+      tools: true,
+      reasoning: true,
+      modelListing: false,
+      oauth: false,
+      serviceTier: false,
+      structuredOutputs: true,
+    },
+    async complete() {
+      throw new Error('Fake provider complete was not expected.');
+    },
+    async *stream() {
+      throw new Error('Fake provider stream was not expected.');
+    },
+    async models() {
+      return [];
+    },
+    async validateModel(model: string) {
+      return { id: model };
+    },
+  }) as LlmProvider;

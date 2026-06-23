@@ -8,8 +8,10 @@ import type {
   Model,
   ProviderCapabilities,
   ProviderFinished,
+  ProviderMessage,
   ProviderMetadata,
   ProviderRequest,
+  ProviderId,
   ProviderStreamEvent,
   ProviderToolCall,
   ReasoningMetadata,
@@ -20,6 +22,7 @@ import {
   recordField,
   stringField,
 } from '../utils/json.js';
+import { diagnosticExcerpt } from '../utils/diagnostics.js';
 import { parseSseEvents } from '../utils/sse.js';
 import {
   finishReason,
@@ -43,6 +46,7 @@ export type OpenAiProviderDeps = {
   readonly authorization?: SecretSource;
   readonly baseUrl?: string;
   readonly debugLogger?: LlmDebugLogger;
+  readonly debugProviderId?: ProviderId;
 };
 
 export const openAiMetadata: ProviderMetadata = {
@@ -64,17 +68,17 @@ export const openAiCapabilities: ProviderCapabilities = {
 export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
   const baseUrl = deps.baseUrl ?? openAiMetadata.baseUrl;
   const logger = deps.debugLogger;
+  const debugProvider = deps.debugProviderId ?? 'openai';
 
   const send = async (
     request: ProviderRequest<unknown>,
     body: Record<string, unknown>,
   ): Promise<Record<string, unknown>> => {
-    const auth = await authorization(deps);
     const response = await deps.transport.request({
       method: 'POST',
       url: `${baseUrl}/responses`,
       headers: {
-        authorization: auth,
+        authorization: await authorization(deps),
         'content-type': 'application/json',
         accept: 'application/json',
       },
@@ -83,7 +87,7 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
     });
 
     await logger?.log({
-      provider: 'openai',
+      provider: debugProvider,
       target: 'responses',
       event: 'http.response',
       fields: { status: response.status, body: response.body },
@@ -106,16 +110,18 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
       requireRequestInput('openai', request);
       const body = openAiBody(request, false);
       await logger?.log({
-        provider: 'openai',
+        provider: debugProvider,
         target: 'responses',
         event: 'http.request',
         fields: { body },
       });
 
-      return parseStructuredOutput(
-        'openai',
+      return parseOpenAiStructuredOutput(
+        logger,
+        debugProvider,
         request,
         parseOpenAiFinished(await send(request, body)),
+        'complete',
       );
     },
 
@@ -124,11 +130,22 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
     ): AsyncIterable<ProviderStreamEvent<Output>> {
       requireRequestInput('openai', request);
       const body = openAiBody(request, true);
-      const auth = await authorization(deps);
       const text: string[] = [];
       const reasoning: string[] = [];
       const refusals: string[] = [];
+      const textSnapshots: OpenAiTextSnapshots = {
+        outputItems: [],
+        outputTexts: [],
+        contentParts: [],
+      };
       const calls = new Map<number, ProviderToolCall>();
+      await logger?.log({
+        provider: debugProvider,
+        target: 'responses',
+        event: 'http.request',
+        fields: { body },
+      });
+      const auth = await authorization(deps);
 
       yield {
         type: 'response.started',
@@ -158,6 +175,12 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
         try {
           payload = parseJsonBody('openai', event.data);
         } catch {
+          await logger?.log({
+            provider: debugProvider,
+            target: 'responses',
+            event: 'stream.event.invalid_json',
+            fields: { data: event.data },
+          });
           yield streamErrorEvent(
             'openai',
             'malformed_stream_event',
@@ -167,6 +190,7 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
         }
 
         const parsed = openAiStreamEvent(payload, calls);
+        recordOpenAiTextSnapshot(textSnapshots, payload);
 
         if (parsed?.type === 'text.delta') {
           text.push(parsed.delta);
@@ -185,16 +209,25 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
         }
 
         if (payload.type === 'response.completed') {
+          await logger?.log({
+            provider: debugProvider,
+            target: 'responses',
+            event: 'stream.response.completed',
+            fields: { payload },
+          });
           const response = recordField(payload, 'response') ?? payload;
-          const finish = parseStructuredOutput(
-            'openai',
+          const finish = await parseOpenAiStructuredOutput(
+            logger,
+            debugProvider,
             request,
             parseOpenAiFinished(
               response,
-              text.join(''),
+              openAiStreamText(text, textSnapshots),
               reasoning.join(''),
               refusals.join('') || undefined,
+              [...calls.values()],
             ),
+            'stream',
           );
           const usage = finish.usage;
 
@@ -207,6 +240,12 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
         }
 
         if (payload.type === 'response.failed') {
+          await logger?.log({
+            provider: debugProvider,
+            target: 'responses',
+            event: 'stream.response.failed',
+            fields: { payload },
+          });
           yield streamErrorEvent(
             'openai',
             'provider_error',
@@ -218,22 +257,30 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
 
       yield {
         type: 'response.finished',
-        finish: parseStructuredOutput('openai', request, {
-          text: text.join(''),
-          reasoning: { text: reasoning.join('') },
-          refusal: refusals.join('') || undefined,
-          finishReason: 'unknown',
-          toolCalls: [...calls.values()],
-        }),
+        finish: await parseOpenAiStructuredOutput(
+          logger,
+          debugProvider,
+          request,
+          {
+            text: openAiStreamText(text, textSnapshots) ?? '',
+            reasoning: { text: reasoning.join('') },
+            refusal: refusals.join('') || undefined,
+            finishReason: 'unknown',
+            toolCalls: [...calls.values()],
+          },
+          'stream_end',
+        ),
       };
     },
 
     async models(signal?: AbortSignal): Promise<readonly Model[]> {
-      const auth = await authorization(deps);
       const response = await deps.transport.request({
         method: 'GET',
         url: `${baseUrl}/models`,
-        headers: { authorization: auth, accept: 'application/json' },
+        headers: {
+          authorization: await authorization(deps),
+          accept: 'application/json',
+        },
         signal,
       });
 
@@ -279,6 +326,10 @@ export const openAiBody = (
 ): Record<string, unknown> => {
   requireRequestInput('openai', request);
   const schema = structuredJsonSchema('openai', request.schema);
+  const strictSchema =
+    schema === undefined
+      ? undefined
+      : (openAiStrictSchema(schema) as JsonObject);
   const alias = fastAlias(request.model);
   const system = request.messages
     .filter((message) => message.role === 'system')
@@ -293,30 +344,12 @@ export const openAiBody = (
   return prune({
     model: alias.model,
     instructions: system === '' ? undefined : system,
-    input: nonSystem.map((message) => {
-      if (message.role === 'tool') {
-        return {
-          type: 'function_call_output',
-          call_id: message.toolCallId,
-          output: messageText(message),
-        };
-      }
-
-      return {
-        role: message.role,
-        content: [
-          {
-            type: message.role === 'assistant' ? 'output_text' : 'input_text',
-            text: messageText(message),
-          },
-        ],
-      };
-    }),
+    input: nonSystem.flatMap(openAiInputItems),
     tools: request.tools?.map((tool) => ({
       type: 'function',
       name: tool.name,
       description: tool.description,
-      parameters: tool.inputSchema,
+      parameters: openAiToolParameters(tool.inputSchema, tool.strict),
       strict: tool.strict,
     })),
     text:
@@ -327,7 +360,7 @@ export const openAiBody = (
               type: 'json_schema',
               name: structuredOutputName,
               strict: true,
-              schema,
+              schema: strictSchema,
             }),
           },
     temperature: request.temperature,
@@ -336,6 +369,134 @@ export const openAiBody = (
     reasoning,
     stream,
   });
+};
+
+const openAiInputItems = (
+  message: ProviderMessage,
+): readonly Record<string, unknown>[] => {
+  if (message.role === 'tool') {
+    return [
+      {
+        type: 'function_call_output',
+        call_id: message.toolCallId,
+        output: messageText(message),
+      },
+    ];
+  }
+
+  const text = messageText(message);
+  const item = {
+    role: message.role,
+    content: [
+      {
+        type: message.role === 'assistant' ? 'output_text' : 'input_text',
+        text,
+      },
+    ],
+  };
+
+  if (message.role !== 'assistant') {
+    return [item];
+  }
+
+  const calls = message.toolCalls?.map(openAiFunctionCallItem) ?? [];
+
+  if (calls.length === 0) {
+    return [item];
+  }
+
+  return text === '' ? calls : [item, ...calls];
+};
+
+const openAiFunctionCallItem = (
+  call: ProviderToolCall,
+): Record<string, unknown> => ({
+  type: 'function_call',
+  call_id: call.id,
+  name: call.name,
+  arguments: call.arguments,
+});
+
+const parseOpenAiStructuredOutput = async <Output = JsonValue>(
+  logger: LlmDebugLogger | undefined,
+  debugProvider: ProviderId,
+  request: ProviderRequest<Output>,
+  finish: ProviderFinished,
+  source: string,
+): Promise<ProviderFinished<Output>> => {
+  await logger?.log({
+    provider: debugProvider,
+    target: 'responses',
+    event: 'response.finish',
+    fields: { source, finish: openAiFinishDebugFields(finish) },
+  });
+
+  try {
+    return parseStructuredOutput('openai', request, finish);
+  } catch (error) {
+    await logger?.log({
+      provider: debugProvider,
+      target: 'responses',
+      event: 'structured_output.error',
+      fields: {
+        source,
+        finish: openAiFinishDebugFields(finish),
+        error: openAiErrorDebugFields(error),
+      },
+    });
+    throw error;
+  }
+};
+
+const openAiFinishDebugFields = (
+  finish: ProviderFinished,
+): Record<string, unknown> => ({
+  finishReason: finish.finishReason,
+  textLength: finish.text.length,
+  textExcerpt: diagnosticExcerpt(finish.text, 512),
+  refusalPresent: finish.refusal !== undefined,
+  reasoningPresent: finish.reasoning?.text !== undefined,
+  toolCallCount: finish.toolCalls.length,
+  toolCalls: finish.toolCalls.map((call) => ({
+    id: call.id,
+    name: call.name,
+    argumentsLength: call.arguments.length,
+  })),
+  usage: finish.usage,
+});
+
+const openAiErrorDebugFields = (error: unknown): Record<string, unknown> => {
+  if (error instanceof ProviderErrorObject) {
+    return {
+      name: error.name,
+      code: error.data.code,
+      message: error.data.message,
+      diagnostic: error.data.diagnostic,
+      cause: openAiCauseDebugFields(error),
+    };
+  }
+
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      cause: openAiCauseDebugFields(error),
+    };
+  }
+
+  return { value: String(error) };
+};
+
+const openAiCauseDebugFields = (
+  error: Error & { readonly cause?: unknown },
+): Record<string, unknown> | undefined => {
+  const cause = error.cause;
+
+  if (cause instanceof Error) {
+    return { name: cause.name, message: cause.message };
+  }
+
+  return cause === undefined ? undefined : { value: String(cause) };
 };
 
 const openAiStreamEvent = (
@@ -416,24 +577,99 @@ const openAiStreamEvent = (
   return undefined;
 };
 
+type OpenAiTextSnapshots = {
+  readonly outputItems: string[];
+  readonly outputTexts: string[];
+  readonly contentParts: string[];
+};
+
+const recordOpenAiTextSnapshot = (
+  snapshots: OpenAiTextSnapshots,
+  payload: Record<string, unknown>,
+): void => {
+  const type = stringField(payload, 'type');
+  const text = openAiTextSnapshot(type, payload);
+
+  if (text === undefined || text === '') {
+    return;
+  }
+
+  if (type === 'response.output_item.done') {
+    snapshots.outputItems.push(text);
+    return;
+  }
+
+  if (type === 'response.output_text.done') {
+    snapshots.outputTexts.push(text);
+    return;
+  }
+
+  snapshots.contentParts.push(text);
+};
+
+const openAiTextSnapshot = (
+  type: string | undefined,
+  payload: Record<string, unknown>,
+): string | undefined => {
+  if (type === 'response.output_text.done') {
+    return stringField(payload, 'text');
+  }
+
+  if (type === 'response.content_part.done') {
+    return openAiContentPartText(recordField(payload, 'part'));
+  }
+
+  if (type === 'response.output_item.done') {
+    return openAiOutputItemText(recordField(payload, 'item'));
+  }
+
+  return undefined;
+};
+
+const openAiStreamText = (
+  deltas: readonly string[],
+  snapshots: OpenAiTextSnapshots,
+): string | undefined => {
+  const deltaText = deltas.join('');
+
+  if (deltaText !== '') {
+    return deltaText;
+  }
+
+  const snapshotText =
+    snapshotGroupText(snapshots.outputItems) ??
+    snapshotGroupText(snapshots.outputTexts) ??
+    snapshotGroupText(snapshots.contentParts);
+
+  return snapshotText;
+};
+
+const snapshotGroupText = (items: readonly string[]): string | undefined => {
+  const text = items.join('');
+
+  return text === '' ? undefined : text;
+};
+
 const parseOpenAiFinished = (
   response: Record<string, unknown>,
   streamText?: string,
   streamReasoning?: string,
   streamRefusal?: string,
+  streamToolCalls: readonly ProviderToolCall[] = [],
 ): ProviderFinished => {
   const output = arrayField(response, 'output').map(asRecord).filter(isRecord);
   const content = output
     .flatMap((item) => arrayField(item, 'content'))
     .map(asRecord)
     .filter(isRecord);
+  const contentText = content
+    .filter((item) => item.type === 'output_text')
+    .map((item) => stringField(item, 'text') ?? '')
+    .join('');
   const outputText =
-    stringField(response, 'output_text') ??
     streamText ??
-    content
-      .filter((item) => item.type === 'output_text')
-      .map((item) => stringField(item, 'text') ?? '')
-      .join('');
+    nonEmptyText(stringField(response, 'output_text')) ??
+    contentText;
   const refusal =
     stringField(response, 'refusal') ??
     streamRefusal ??
@@ -444,7 +680,7 @@ const parseOpenAiFinished = (
           stringField(item, 'refusal') ?? stringField(item, 'text') ?? '',
       )
       .join('');
-  const toolCalls = output
+  const responseToolCalls = output
     .filter((item) => item.type === 'function_call')
     .map((item, index) => ({
       id:
@@ -455,6 +691,8 @@ const parseOpenAiFinished = (
       arguments: stringField(item, 'arguments') ?? '',
       index,
     }));
+  const toolCalls =
+    responseToolCalls.length === 0 ? streamToolCalls : responseToolCalls;
   const reasoningText =
     streamReasoning ??
     output
@@ -479,6 +717,37 @@ const parseOpenAiFinished = (
     toolCalls,
   };
 };
+
+const openAiOutputItemText = (
+  item: Record<string, unknown> | undefined,
+): string | undefined => {
+  if (item?.type === 'output_text') {
+    return stringField(item, 'text');
+  }
+
+  if (item?.type !== 'message') {
+    return undefined;
+  }
+
+  return openAiContentText(item);
+};
+
+const openAiContentPartText = (
+  part: Record<string, unknown> | undefined,
+): string | undefined =>
+  part?.type === 'output_text' ? stringField(part, 'text') : undefined;
+
+const openAiContentText = (item: Record<string, unknown>): string => {
+  return arrayField(item, 'content')
+    .map(asRecord)
+    .filter(isRecord)
+    .filter((content) => content.type === 'output_text')
+    .map((content) => stringField(content, 'text') ?? '')
+    .join('');
+};
+
+const nonEmptyText = (value: string | undefined): string | undefined =>
+  value === '' ? undefined : value;
 
 const authorization = async (deps: OpenAiProviderDeps): Promise<string> => {
   if (deps.apiKey !== undefined && deps.authorization !== undefined) {
@@ -543,6 +812,42 @@ const reasoningRequest = (
     effort: value.effort,
     summary: value.summary,
   }) as JsonObject;
+};
+
+const openAiToolParameters = (
+  schema: JsonObject,
+  strict: boolean | undefined,
+): JsonObject =>
+  strict === true ? (openAiStrictSchema(schema) as JsonObject) : schema;
+
+const openAiStrictSchema = (value: JsonValue): JsonValue => {
+  if (Array.isArray(value)) {
+    return value.map(openAiStrictSchema);
+  }
+
+  const record = asRecord(value);
+
+  if (record === undefined) {
+    return value;
+  }
+
+  const schema = Object.fromEntries(
+    Object.entries(record).map(([key, child]) => [
+      key,
+      openAiStrictSchema(child as JsonValue),
+    ]),
+  ) as JsonObject;
+  const properties = asRecord(schema.properties);
+
+  if (schema.type !== 'object' || properties === undefined) {
+    return schema;
+  }
+
+  return {
+    ...schema,
+    required: Object.keys(properties),
+    additionalProperties: false,
+  };
 };
 
 const prune = (value: Record<string, unknown>): Record<string, unknown> =>

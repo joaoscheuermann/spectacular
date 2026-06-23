@@ -33,7 +33,7 @@ import { createFetchTransport, createOpenAiProvider } from 'llms';
 
 const provider = createOpenAiProvider({
   transport: createFetchTransport(),
-  apiKey: process.env.OPENAI_API_KEY ?? '',
+  apiKey: process.env.CODEX_API_KEY ?? '',
 });
 
 for await (const event of provider.stream({
@@ -52,13 +52,13 @@ for await (const event of provider.stream({
 `*-fast` OpenAI model aliases are sent to the Responses API without the
 suffix and with `service_tier: "priority"`.
 
-## OpenAI with a rendered authorization header
+## Codex with a rendered authorization header
 
 ```ts
-import { createFetchTransport, createOpenAiProvider } from 'llms';
-import { createOpenAiOAuth } from 'oauth';
+import { createCodexProvider, createFetchTransport } from 'llms';
+import { createCodexOAuth } from 'oauth';
 
-const openai = createOpenAiOAuth({
+const codex = createCodexOAuth({
   transport: createFetchTransport(),
   tokenStore,
   clientId: 'client-id',
@@ -67,8 +67,8 @@ const openai = createOpenAiOAuth({
   callbackServer: localCallbackServer,
 });
 
-const credential = await openai.oauth();
-const provider = createOpenAiProvider({
+const credential = await codex.oauth();
+const provider = createCodexProvider({
   transport: createFetchTransport(),
   authorization: credential.authorization,
 });
@@ -76,6 +76,8 @@ const provider = createOpenAiProvider({
 
 OAuth is owned by the `oauth` package. `llms` only accepts an API key rendered
 as `Bearer ${apiKey}` or an exact `authorization` header supplied by the host.
+The Codex provider sends that authorization header to ChatGPT's Codex backend,
+not the public OpenAI Responses API.
 
 ## Fake transport tests
 

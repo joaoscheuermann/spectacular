@@ -1,6 +1,14 @@
 import { randomUUID } from 'node:crypto';
 
-import type { Task, TaskStatusUpdateEvent } from '@a2a-js/sdk';
+import type {
+  Artifact,
+  Task,
+  TaskArtifactUpdateEvent,
+  TaskState,
+  TaskStatusUpdateEvent,
+} from '@a2a-js/sdk';
+
+import type { PromptArtifact, PromptOpenQuestion } from 'workflow-prompt';
 
 export const taskCreatedMessage = (
   taskId: string,
@@ -56,17 +64,65 @@ export const cloningRepositoryMessage = (taskId: string, contextId: string) =>
 export const sessionReadyMessage = (taskId: string, contextId: string) =>
   statusUpdate(taskId, contextId, 'Repository session is ready.');
 
+export const runningPromptWorkflowMessage = (
+  taskId: string,
+  contextId: string,
+) => statusUpdate(taskId, contextId, 'Running workflow-prompt.');
+
+export const promptArtifactMessage = (
+  taskId: string,
+  contextId: string,
+  artifact: PromptArtifact,
+  rendered: string,
+): TaskArtifactUpdateEvent => ({
+  kind: 'artifact-update',
+  taskId,
+  contextId,
+  lastChunk: true,
+  artifact: {
+    artifactId: artifact.name,
+    name: `${artifact.name}.md`,
+    description: 'Rendered workflow-prompt artifact.',
+    parts: [{ kind: 'text', text: rendered }],
+    metadata: { mime: artifact.mime },
+  } satisfies Artifact,
+});
+
+export const promptInputRequiredMessage = (
+  taskId: string,
+  contextId: string,
+  questions: readonly PromptOpenQuestion[],
+) =>
+  statusUpdate(
+    taskId,
+    contextId,
+    openQuestionsText(questions),
+    'input-required',
+    true,
+  );
+
+export const promptCompletedMessage = (taskId: string, contextId: string) =>
+  statusUpdate(
+    taskId,
+    contextId,
+    'Prompt workflow completed. PROMPT artifact is ready.',
+    'completed',
+    true,
+  );
+
 const statusUpdate = (
   taskId: string,
   contextId: string,
   text: string,
+  state: TaskState = 'working',
+  final = false,
 ): TaskStatusUpdateEvent => ({
   kind: 'status-update',
   taskId,
   contextId,
-  final: false,
+  final,
   status: {
-    state: 'working',
+    state,
     message: {
       kind: 'message',
       messageId: randomUUID(),
@@ -78,3 +134,20 @@ const statusUpdate = (
     timestamp: new Date().toISOString(),
   },
 });
+
+const openQuestionsText = (questions: readonly PromptOpenQuestion[]): string =>
+  [
+    'I need input before finalizing PROMPT.',
+    '',
+    ...questions.map(formatOpenQuestion),
+  ].join('\n');
+
+const formatOpenQuestion = (
+  question: PromptOpenQuestion,
+  index: number,
+): string =>
+  [
+    `${index + 1}. ${question.question}`,
+    `Recommendation: ${question.recommendation}`,
+    ...(question.impact === undefined ? [] : [`Impact: ${question.impact}`]),
+  ].join('\n');

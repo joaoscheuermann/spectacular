@@ -11,24 +11,23 @@ compose this package with provider packages by passing a rendered credential's
 
 ```ts
 import {
+  createCodexOAuth,
   createFetchTransport,
   createLocalCallbackServer,
-  createOpenAiOAuth,
   openBrowser,
 } from 'oauth';
 
 const callbackServer = await createLocalCallbackServer();
-const openai = createOpenAiOAuth({
+const codex = createCodexOAuth({
   transport: createFetchTransport(),
   tokenStore,
-  clientId: 'client-id',
   redirectUri: callbackServer.redirectUri,
   browserOpener: openBrowser,
   callbackServer,
 });
 
-await openai.authorize();
-const credential = await openai.oauth();
+await codex.authorize();
+const credential = await codex.oauth();
 ```
 
 ## Building

@@ -1,4 +1,5 @@
 import type { HttpRequest, HttpResponse, HttpTransport } from './types/http.js';
+import { diagnosticExcerpt } from './utils/diagnostics.js';
 
 const headersToRecord = (headers: Headers): Record<string, string> =>
   Object.fromEntries(headers.entries());
@@ -31,7 +32,11 @@ export const createFetchTransport = (
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status} while opening provider stream.`);
+      throw new Error(
+        `HTTP ${response.status} while opening provider stream: ${diagnosticExcerpt(
+          await response.text(),
+        )}`,
+      );
     }
 
     if (response.body === null) {

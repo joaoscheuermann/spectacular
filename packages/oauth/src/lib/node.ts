@@ -46,8 +46,18 @@ type PendingCallback = {
 
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PATH = '/callback';
-const DEFAULT_SUCCESS_HTML = '<!doctype html><title>OAuth complete</title><p>You can close this window.</p>';
-const DEFAULT_ERROR_HTML = '<!doctype html><title>OAuth failed</title><p>OAuth did not complete.</p>';
+const DEFAULT_SUCCESS_HTML =
+  '<!doctype html><title>OAuth complete</title><p>You can close this window.</p>';
+const DEFAULT_ERROR_HTML =
+  '<!doctype html><title>OAuth failed</title><p>OAuth did not complete.</p>';
+const TEXT_HEADERS = {
+  'content-type': 'text/plain',
+  connection: 'close',
+};
+const HTML_HEADERS = {
+  'content-type': 'text/html',
+  connection: 'close',
+};
 
 /** Starts an explicit localhost callback server for authorization-code flows. */
 export const createLocalCallbackServer = async (
@@ -64,13 +74,13 @@ export const createLocalCallbackServer = async (
     const callback = parseCallback(request, host);
 
     if (callback.path !== path) {
-      response.writeHead(404, { 'content-type': 'text/plain' });
+      response.writeHead(404, TEXT_HEADERS);
       response.end('Not found');
       return;
     }
 
     if (pending === undefined) {
-      response.writeHead(409, { 'content-type': 'text/plain' });
+      response.writeHead(409, TEXT_HEADERS);
       response.end('No OAuth callback is pending.');
       return;
     }
@@ -80,7 +90,7 @@ export const createLocalCallbackServer = async (
 
     const stateMatches = callback.value.state === current.expectedState;
     const hasError = callback.value.error !== undefined || !stateMatches;
-    response.writeHead(hasError ? 400 : 200, { 'content-type': 'text/html' });
+    response.writeHead(hasError ? 400 : 200, HTML_HEADERS);
     response.end(hasError ? errorHtml : successHtml);
     finishPending(current, () => current.resolve(callback.value));
   });
@@ -99,7 +109,10 @@ export const createLocalCallbackServer = async (
   return {
     redirectUri: `http://${host}:${address.port}${path}`,
 
-    waitForCallback(expectedState: string, signal?: AbortSignal): Promise<OAuthCallback> {
+    waitForCallback(
+      expectedState: string,
+      signal?: AbortSignal,
+    ): Promise<OAuthCallback> {
       if (closed) {
         return Promise.reject(serverError('oauth_callback_server_closed'));
       }
@@ -113,7 +126,9 @@ export const createLocalCallbackServer = async (
           if (pending !== undefined) {
             const current = pending;
             pending = undefined;
-            finishPending(current, () => reject(serverError('oauth_callback_aborted')));
+            finishPending(current, () =>
+              reject(serverError('oauth_callback_aborted')),
+            );
           }
         };
 
@@ -134,7 +149,9 @@ export const createLocalCallbackServer = async (
       if (pending !== undefined) {
         const current = pending;
         pending = undefined;
-        finishPending(current, () => current.reject(serverError('oauth_callback_server_closed')));
+        finishPending(current, () =>
+          current.reject(serverError('oauth_callback_server_closed')),
+        );
       }
 
       await close(server);
@@ -189,7 +206,16 @@ const listen = (server: Server, port: number, host: string): Promise<void> =>
 
 const close = (server: Server): Promise<void> =>
   new Promise((resolve, reject) => {
+    const connections = server as Server & {
+      closeIdleConnections?: () => void;
+      closeAllConnections?: () => void;
+    };
+    const forceClose = setTimeout(() => {
+      connections.closeAllConnections?.();
+    }, 100);
+
     server.close((error) => {
+      clearTimeout(forceClose);
       if (error === undefined) {
         resolve();
         return;
@@ -197,6 +223,7 @@ const close = (server: Server): Promise<void> =>
 
       reject(error);
     });
+    connections.closeIdleConnections?.();
   });
 
 const finishPending = (
@@ -207,8 +234,9 @@ const finishPending = (
   complete();
 };
 
-const isAddressInfo = (value: string | AddressInfo | null): value is AddressInfo =>
-  value !== null && typeof value !== 'string';
+const isAddressInfo = (
+  value: string | AddressInfo | null,
+): value is AddressInfo => value !== null && typeof value !== 'string';
 
 const serverError = (code: string): OAuthErrorObject =>
   new OAuthErrorObject({

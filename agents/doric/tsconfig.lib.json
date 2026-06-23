@@ -12,6 +12,9 @@
   "include": ["src/**/*.ts"],
   "references": [
     {
+      "path": "../../packages/artifacts/tsconfig.lib.json"
+    },
+    {
       "path": "../../packages/config/tsconfig.lib.json"
     },
     {
@@ -22,6 +25,15 @@
     },
     {
       "path": "../../packages/session/tsconfig.lib.json"
+    },
+    {
+      "path": "../../packages/llms/tsconfig.lib.json"
+    },
+    {
+      "path": "../../packages/oauth/tsconfig.lib.json"
+    },
+    {
+      "path": "../../workflows/prompt/tsconfig.lib.json"
     }
   ]
 }

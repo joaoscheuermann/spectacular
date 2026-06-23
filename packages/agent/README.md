@@ -18,7 +18,7 @@ import { z } from 'zod';
 
 const provider = createOpenAiProvider({
   transport: createFetchTransport(),
-  apiKey: process.env.OPENAI_API_KEY ?? '',
+  apiKey: process.env.CODEX_API_KEY ?? '',
 });
 
 const tools = createToolStorage([

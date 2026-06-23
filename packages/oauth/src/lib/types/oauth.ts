@@ -3,6 +3,7 @@ export type OAuthProfile = {
   readonly profile: string;
   readonly authorizationEndpoint: string;
   readonly tokenEndpoint: string;
+  readonly authorizationParams?: Readonly<Record<string, string>>;
   readonly defaultScope?: string;
   readonly defaultTokenScheme?: string;
 };
@@ -90,7 +91,9 @@ export type OAuthCredentialOptions = {
 export type OAuthClient = {
   readonly profile: OAuthProfile;
   authorize(options?: OAuthAuthorizeOptions): Promise<OAuthTokenRecord>;
-  refresh(options?: { readonly signal?: AbortSignal }): Promise<OAuthTokenRecord>;
+  refresh(options?: {
+    readonly signal?: AbortSignal;
+  }): Promise<OAuthTokenRecord>;
   credential(options?: OAuthCredentialOptions): Promise<OAuthCredential>;
   oauth(options?: OAuthCredentialOptions): Promise<OAuthCredential>;
 };

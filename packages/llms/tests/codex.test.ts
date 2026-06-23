@@ -1,0 +1,207 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import {
+  ProviderErrorObject,
+  createCodexProvider,
+  type LlmDebugRecord,
+  type ProviderStreamEvent,
+} from '../src/index.js';
+import { collect, fakeTransport } from './fakes.js';
+
+test('sends Codex ChatGPT account headers to the Codex backend', async () => {
+  const debugRecords: LlmDebugRecord[] = [];
+  const transport = fakeTransport({
+    streams: [
+      [
+        sse({
+          type: 'response.completed',
+          response: {
+            status: 'completed',
+            output_text: 'ok',
+            output: [],
+          },
+        }),
+        'data: [DONE]\n\n',
+      ],
+    ],
+  });
+  const provider = createCodexProvider({
+    transport,
+    authorization: 'Bearer codex-token',
+    chatGptAccountId: 'acct_123',
+    fedramp: true,
+    debugLogger: {
+      async log(record): Promise<void> {
+        debugRecords.push(record);
+      },
+    },
+  });
+
+  const result = await provider.complete({
+    model: 'gpt-5.5',
+    messages: [{ role: 'user', content: 'Hi' }],
+    temperature: 0,
+  });
+  const body = JSON.parse(transport.requests[0]?.body ?? '{}');
+
+  assert.equal(provider.metadata.id, 'codex');
+  assert.equal(
+    transport.requests[0]?.url,
+    'https://chatgpt.com/backend-api/codex/responses',
+  );
+  assert.equal(result.text, 'ok');
+  assert.equal(body.model, 'gpt-5.5');
+  assert.equal(body.stream, true);
+  assert.equal(body.store, false);
+  assert.equal(body.temperature, undefined);
+  assert.equal(body.instructions, 'You are Codex, a coding agent.');
+  assert.equal(
+    transport.requests[0]?.headers?.authorization,
+    'Bearer codex-token',
+  );
+  assert.equal(
+    transport.requests[0]?.headers?.['ChatGPT-Account-ID'],
+    'acct_123',
+  );
+  assert.equal(transport.requests[0]?.headers?.['X-OpenAI-Fedramp'], 'true');
+  assert.equal(
+    debugRecords.find((record) => record.event === 'http.request')?.provider,
+    'codex',
+  );
+  assert.equal(
+    debugRecords.find((record) => record.event === 'response.finish')
+      ?.provider,
+    'codex',
+  );
+});
+
+test('allows overriding the Codex backend base URL', async () => {
+  const transport = fakeTransport({
+    streams: [
+      [
+        sse({
+          type: 'response.completed',
+          response: {
+            status: 'completed',
+            output_text: 'ok',
+            output: [],
+          },
+        }),
+        'data: [DONE]\n\n',
+      ],
+    ],
+  });
+  const provider = createCodexProvider({
+    transport,
+    authorization: 'Bearer codex-token',
+    baseUrl: 'https://codex.example.test/backend',
+  });
+
+  await provider.complete({
+    model: 'gpt-5.5',
+    messages: [{ role: 'user', content: 'Hi' }],
+  });
+
+  assert.equal(
+    transport.requests[0]?.url,
+    'https://codex.example.test/backend/responses',
+  );
+});
+
+test('preserves caller-provided Codex instructions', async () => {
+  const transport = fakeTransport({
+    streams: [
+      [
+        sse({
+          type: 'response.completed',
+          response: {
+            status: 'completed',
+            output_text: 'ok',
+            output: [],
+          },
+        }),
+        'data: [DONE]\n\n',
+      ],
+    ],
+  });
+  const provider = createCodexProvider({
+    transport,
+    authorization: 'Bearer codex-token',
+  });
+
+  await provider.complete({
+    model: 'gpt-5.5',
+    messages: [
+      { role: 'system', content: 'Use the repository conventions.' },
+      { role: 'user', content: 'Hi' },
+    ],
+  });
+
+  assert.equal(
+    JSON.parse(transport.requests[0]?.body ?? '{}').instructions,
+    'Use the repository conventions.',
+  );
+});
+
+test('rejects Codex complete when the stream emits a provider error', async () => {
+  const transport = fakeTransport({
+    streams: [['data: not-json\n\n']],
+  });
+  const provider = createCodexProvider({
+    transport,
+    authorization: 'Bearer codex-token',
+  });
+
+  await assert.rejects(
+    provider.complete({
+      model: 'gpt-5.5',
+      messages: [{ role: 'user', content: 'Hi' }],
+    }),
+    (error) =>
+      error instanceof ProviderErrorObject &&
+      error.data.provider === 'codex' &&
+      error.data.code === 'malformed_stream_event',
+  );
+});
+
+test('maps Codex stream provider identity', async () => {
+  const transport = fakeTransport({
+    streams: [
+      [
+        sse({
+          type: 'response.completed',
+          response: {
+            status: 'completed',
+            output_text: 'ok',
+            output: [],
+          },
+        }),
+        'data: [DONE]\n\n',
+      ],
+    ],
+  });
+  const provider = createCodexProvider({
+    transport,
+    authorization: 'Bearer codex-token',
+  });
+
+  const events = await collect(
+    provider.stream({
+      model: 'gpt-5.5',
+      messages: [{ role: 'user', content: 'Hi' }],
+    }),
+  );
+
+  assert.deepEqual(events[0], {
+    type: 'response.started',
+    provider: 'codex',
+    model: 'gpt-5.5',
+  } satisfies ProviderStreamEvent);
+  const body = JSON.parse(transport.requests[0]?.body ?? '{}');
+  assert.equal(body.store, false);
+  assert.equal(body.instructions, 'You are Codex, a coding agent.');
+});
+
+const sse = (payload: unknown): string =>
+  `data: ${JSON.stringify(payload)}\n\n`;

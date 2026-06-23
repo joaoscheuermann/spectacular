@@ -5,30 +5,33 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  CODEX_AUTHORIZATION_ENV_KEY,
+  CODEX_OAUTH_CALLBACK_HOST,
+  CODEX_OAUTH_CALLBACK_PATH,
+  CODEX_OAUTH_CALLBACK_PORT,
+  CODEX_OAUTH_FALLBACK_CALLBACK_PORT,
   createFetchTransport,
   createLocalCallbackServer,
-  createOpenAiOAuth,
+  createCodexOAuth,
   openBrowser,
 } from 'oauth';
 
 const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const ENV_PATH = resolve(ROOT_DIR, '.env');
-const DEFAULT_OUTPUT_KEY = 'OPENAI_AUTHORIZATION';
-const DEFAULT_CALLBACK_PATH = '/callback';
 
-const HELP = `Usage: npm run openai:oauth
+const HELP = `Usage: npm run codex:oauth
 
-Starts an OpenAI OAuth authorization-code flow in your browser and writes the
+Starts a Codex OAuth authorization-code flow in your browser and writes the
 resulting authorization header to root .env.
 
 Configuration:
-  OPENAI_OAUTH_CLIENT_ID          Required OAuth client id.
-  OPENAI_OAUTH_CLIENT_SECRET      Optional OAuth client secret.
-  OPENAI_OAUTH_SCOPE              Optional OAuth scope override.
-  OPENAI_OAUTH_CALLBACK_HOST      Optional callback host. Defaults to 127.0.0.1.
-  OPENAI_OAUTH_CALLBACK_PORT      Optional callback port. Defaults to an ephemeral port.
-  OPENAI_OAUTH_CALLBACK_PATH      Optional callback path. Defaults to /callback.
-  OPENAI_OAUTH_OUTPUT_KEY         Optional .env output key. Defaults to OPENAI_AUTHORIZATION.
+  CODEX_OAUTH_CLIENT_ID          Optional OAuth client id override.
+  CODEX_OAUTH_CLIENT_SECRET      Optional OAuth client secret.
+  CODEX_OAUTH_SCOPE              Optional OAuth scope override.
+  CODEX_OAUTH_CALLBACK_HOST      Optional callback host. Defaults to ${CODEX_OAUTH_CALLBACK_HOST}.
+  CODEX_OAUTH_CALLBACK_PORT      Optional callback port. Defaults to ${CODEX_OAUTH_CALLBACK_PORT}, falling back to ${CODEX_OAUTH_FALLBACK_CALLBACK_PORT} when busy.
+  CODEX_OAUTH_CALLBACK_PATH      Optional callback path. Defaults to ${CODEX_OAUTH_CALLBACK_PATH}.
+  CODEX_OAUTH_OUTPUT_KEY         Optional .env output key. Defaults to CODEX_AUTHORIZATION.
 
 The script never prints the token or existing .env contents.`;
 
@@ -103,18 +106,6 @@ const mergedEnv = (fileEnv) => ({
 const optional = (value) =>
   value === undefined || value === '' ? undefined : value;
 
-const required = (env, key) => {
-  const value = optional(env[key]);
-
-  if (value === undefined) {
-    throw new Error(
-      `${key} is required. Set it in the environment or root .env.`,
-    );
-  }
-
-  return value;
-};
-
 const parsePort = (value) => {
   const raw = optional(value);
 
@@ -131,7 +122,7 @@ const parsePort = (value) => {
     String(port) !== raw
   ) {
     throw new Error(
-      'OPENAI_OAUTH_CALLBACK_PORT must be an integer from 0 to 65535.',
+      'CODEX_OAUTH_CALLBACK_PORT must be an integer from 0 to 65535.',
     );
   }
 
@@ -140,7 +131,7 @@ const parsePort = (value) => {
 
 const assertOutputKey = (key) => {
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
-    throw new Error('OPENAI_OAUTH_OUTPUT_KEY must be a valid .env key.');
+    throw new Error('CODEX_OAUTH_OUTPUT_KEY must be a valid .env key.');
   }
 
   return key;
@@ -205,39 +196,65 @@ const tokenStore = () => {
 const errorMessage = (error) =>
   error instanceof Error ? error.message : String(error);
 
+const log = (message) => {
+  console.log(`[codex:oauth] ${message}`);
+};
+
+const isAddressInUse = (error) =>
+  error instanceof Error && error.code === 'EADDRINUSE';
+
+const createCodexCallbackServer = async (env) => {
+  const configuredPort = parsePort(env.CODEX_OAUTH_CALLBACK_PORT);
+  const options = {
+    host: optional(env.CODEX_OAUTH_CALLBACK_HOST) ?? CODEX_OAUTH_CALLBACK_HOST,
+    port: configuredPort ?? CODEX_OAUTH_CALLBACK_PORT,
+    path: optional(env.CODEX_OAUTH_CALLBACK_PATH) ?? CODEX_OAUTH_CALLBACK_PATH,
+  };
+
+  try {
+    return await createLocalCallbackServer(options);
+  } catch (error) {
+    if (configuredPort !== undefined || !isAddressInUse(error)) {
+      throw error;
+    }
+
+    return createLocalCallbackServer({
+      ...options,
+      port: CODEX_OAUTH_FALLBACK_CALLBACK_PORT,
+    });
+  }
+};
+
 const authorize = async () => {
   const envContents = await readEnvFile();
   const env = mergedEnv(parseEnv(envContents));
   const outputKey = assertOutputKey(
-    optional(env.OPENAI_OAUTH_OUTPUT_KEY) ?? DEFAULT_OUTPUT_KEY,
+    optional(env.CODEX_OAUTH_OUTPUT_KEY) ?? CODEX_AUTHORIZATION_ENV_KEY,
   );
-  const clientId = required(env, 'OPENAI_OAUTH_CLIENT_ID');
   let callbackServer;
 
   try {
-    callbackServer = await createLocalCallbackServer({
-      host: optional(env.OPENAI_OAUTH_CALLBACK_HOST),
-      port: parsePort(env.OPENAI_OAUTH_CALLBACK_PORT),
-      path: optional(env.OPENAI_OAUTH_CALLBACK_PATH) ?? DEFAULT_CALLBACK_PATH,
-    });
+    callbackServer = await createCodexCallbackServer(env);
 
-    const openai = createOpenAiOAuth({
+    const codex = createCodexOAuth({
       transport: createFetchTransport(),
       tokenStore: tokenStore(),
-      clientId,
-      clientSecret: optional(env.OPENAI_OAUTH_CLIENT_SECRET),
-      scope: optional(env.OPENAI_OAUTH_SCOPE),
+      clientId: optional(env.CODEX_OAUTH_CLIENT_ID),
+      clientSecret: optional(env.CODEX_OAUTH_CLIENT_SECRET),
+      scope: optional(env.CODEX_OAUTH_SCOPE),
       redirectUri: callbackServer.redirectUri,
-      browserOpener: openBrowser,
+      async browserOpener(url) {
+        log(`Opening browser. If it does not open, visit:\n${url}`);
+        await openBrowser(url);
+        log('Waiting for authorization...');
+      },
       callbackServer,
     });
 
-    await openai.authorize();
-    const credential = await openai.oauth();
+    await codex.authorize();
+    const credential = await codex.oauth();
     await writeEnvKey(await readEnvFile(), outputKey, credential.authorization);
-    console.error(
-      `Saved OpenAI authorization header to .env key ${outputKey}.`,
-    );
+    log(`Saved authorization to .env key ${outputKey}.`);
   } finally {
     await callbackServer?.close();
   }

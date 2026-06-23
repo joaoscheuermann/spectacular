@@ -9,7 +9,12 @@ import type {
   OAuthProfile,
   OAuthTokenRecord,
 } from './types/oauth.js';
-import { asRecord, diagnosticExcerpt, numberField, stringField } from './utils/json.js';
+import {
+  asRecord,
+  diagnosticExcerpt,
+  numberField,
+  stringField,
+} from './utils/json.js';
 import { challenge, nodeRandomSource, token } from './utils/pkce.js';
 
 const DEFAULT_REFRESH_SKEW_MS = 60_000;
@@ -89,7 +94,10 @@ export const createOAuthClient = (
       credentialOptions.forceRefresh === true ||
       shouldRefresh(record, clock, options.refreshSkewMs)
     ) {
-      return renderCredential(options.profile, await refresh(credentialOptions.signal, record));
+      return renderCredential(
+        options.profile,
+        await refresh(credentialOptions.signal, record),
+      );
     }
 
     return renderCredential(options.profile, record);
@@ -140,8 +148,7 @@ export const renderCredential = (
     authorization: `${scheme} ${record.accessToken}`,
     expiresAt: record.expiresAt,
     scope: record.scope,
-    claims:
-      record.claims === undefined ? undefined : { ...record.claims },
+    claims: record.claims === undefined ? undefined : { ...record.claims },
   };
 };
 
@@ -155,7 +162,9 @@ export const parseTokenClaims = (
   }
 
   try {
-    return asRecord(JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')));
+    return asRecord(
+      JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')),
+    );
   } catch {
     return undefined;
   }
@@ -170,7 +179,15 @@ const authorizationUrl = (
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('client_id', options.clientId);
   url.searchParams.set('redirect_uri', options.redirectUri);
-  url.searchParams.set('scope', options.scope ?? options.profile.defaultScope ?? '');
+  url.searchParams.set(
+    'scope',
+    options.scope ?? options.profile.defaultScope ?? '',
+  );
+  for (const [key, value] of Object.entries(
+    options.profile.authorizationParams ?? {},
+  )) {
+    url.searchParams.set(key, value);
+  }
   url.searchParams.set('state', state);
   url.searchParams.set('code_challenge', challenge(verifier));
   url.searchParams.set('code_challenge_method', 'S256');
@@ -347,7 +364,9 @@ const shouldRefresh = (
 ): boolean =>
   record.expiresAt !== undefined && record.expiresAt - clock() <= refreshSkewMs;
 
-const form = (entries: Readonly<Record<string, string | undefined>>): string => {
+const form = (
+  entries: Readonly<Record<string, string | undefined>>,
+): string => {
   const body = new URLSearchParams();
 
   for (const [key, value] of Object.entries(entries)) {

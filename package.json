@@ -4,7 +4,7 @@
   "license": "MIT",
   "scripts": {
     "doric:spawn-agent": "node scripts/spawn-agent.mjs",
-    "openai:oauth": "node --conditions=@org/source --import @swc-node/register/esm-register scripts/openai-oauth.mjs"
+    "codex:oauth": "node --conditions=@org/source --import @swc-node/register/esm-register scripts/codex-oauth.mjs"
   },
   "private": true,
   "dependencies": {
