@@ -14,6 +14,7 @@ import { DEFAULT_HOST, DEFAULT_PORT } from './lib/constants/server.js';
 
 import { createAgentCard } from './lib/card.js';
 import { createExecutor, DoricSessionContext } from './lib/executor.js';
+import { createRequestLogger } from './lib/middlewares/request-logger.js';
 
 const app = express();
 
@@ -38,27 +39,9 @@ const executor = createExecutor({
 
 const requestHandler = new DefaultRequestHandler(card, tasks, executor);
 
-app.use((request, response, next) => {
-  const startedAt = process.hrtime.bigint();
-
-  response.on('finish', () => {
-    const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
-
-    httpLogger.info(
-      {
-        method: request.method,
-        path: request.path,
-        statusCode: response.statusCode,
-        durationMs,
-      },
-      'HTTP request completed',
-    );
-  });
-
-  next();
-});
 app.use(cors());
 app.use(express.json());
+app.use(createRequestLogger(httpLogger));
 
 // Sends the agent card for the other Agent
 app.use(
