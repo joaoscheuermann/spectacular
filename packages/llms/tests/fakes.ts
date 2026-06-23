@@ -54,7 +54,9 @@ export const fakeTransport = (options: {
   };
 };
 
-export const collect = async <T>(items: AsyncIterable<T>): Promise<readonly T[]> => {
+export const collect = async <T>(
+  items: AsyncIterable<T>,
+): Promise<readonly T[]> => {
   const collected: T[] = [];
 
   for await (const item of items) {

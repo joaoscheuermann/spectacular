@@ -60,7 +60,10 @@ export async function* parseSseEvents(
   };
 
   for await (const chunk of chunks) {
-    buffer += typeof chunk === 'string' ? chunk : decoder.decode(chunk, { stream: true });
+    buffer +=
+      typeof chunk === 'string'
+        ? chunk
+        : decoder.decode(chunk, { stream: true });
     const lines = buffer.split(/\r?\n/);
     buffer = lines.pop() ?? '';
 

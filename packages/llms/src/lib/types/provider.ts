@@ -1,13 +1,9 @@
-import type {
-  JsonValue,
-  ToolCallRequest,
-  ToolDefinition,
-} from 'tools';
+import type { JsonValue, ToolCallRequest, ToolDefinition } from 'tools';
 import type { z } from 'zod';
 
 export type { JsonArray, JsonObject, JsonPrimitive, JsonValue } from 'tools';
 
-export type ProviderId = 'openai' | 'openrouter' | string;
+export type ProviderId = string;
 
 export type ProviderMetadata = {
   readonly id: ProviderId;
@@ -50,8 +46,6 @@ export type ProviderMessage = {
   readonly toolCallId?: string;
   readonly toolCalls?: readonly ProviderToolCall[];
 };
-
-export type ToolManifest = ToolDefinition;
 
 export type ProviderToolCall = ToolCallRequest;
 
@@ -173,10 +167,7 @@ export interface LlmProvider {
   readonly metadata: ProviderMetadata;
   readonly capabilities: ProviderCapabilities;
 
-  complete<
-    Schema extends StructuredOutputSchema,
-    Output = z.output<Schema>,
-  >(
+  complete<Schema extends StructuredOutputSchema, Output = z.output<Schema>>(
     request: ProviderRequest<Output, Schema> & {
       readonly schema: Schema;
     },

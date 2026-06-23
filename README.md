@@ -233,7 +233,7 @@ Doric is an Nx workspace backed by a Rust Cargo workspace.
 | ------- | ------- |
 | `cli` | CLI entry point, chat composition root, sessions, config commands, and command/TUI adapters. |
 | `agent` | Agent runtime, streaming, retries, continuation, tool loop, and store. |
-| `llms` | Provider traits, provider types, registry, and OpenRouter. |
+| `llms` | Provider contracts, provider types, and OpenAI/OpenRouter/Codex adapters. |
 | `tools` | Built-in file, terminal, web, search, edit, and write tools. |
 | `commands` | Slash-command parsing, metadata, fuzzy search, and errors. |
 | `config` | Config schema, persistence, validation, and migration. |

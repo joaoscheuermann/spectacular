@@ -11,7 +11,7 @@
       "options": {
         "commands": [
           "tsc -p packages/llms/tsconfig.spec.json",
-          "node --test packages/llms/dist-tests/tests/*.test.js"
+          "node --test $(find packages/llms/tests -maxdepth 1 -name '*.test.ts' -print | sort | sed 's#^packages/llms/tests/#packages/llms/dist-tests/tests/#; s#\\.ts$#.js#')"
         ],
         "parallel": false
       }

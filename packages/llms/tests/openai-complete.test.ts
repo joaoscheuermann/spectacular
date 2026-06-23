@@ -1,0 +1,242 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import { z } from 'zod';
+
+import { ProviderErrorObject, createOpenAiProvider } from '../src/index.js';
+import { fakeTransport, response } from './fakes.js';
+
+test('rejects OpenAI requests that are missing model or input', async () => {
+  const provider = createOpenAiProvider({
+    transport: fakeTransport({}),
+    apiKey: 'sk-testSecret123',
+  });
+
+  await assert.rejects(
+    provider.complete({
+      model: '',
+      messages: [{ role: 'user', content: 'hi' }],
+    }),
+    (error: unknown) =>
+      error instanceof ProviderErrorObject &&
+      error.data.code === 'missing_model',
+  );
+
+  await assert.rejects(
+    provider.complete({ model: 'gpt-5', messages: [] }),
+    (error: unknown) =>
+      error instanceof ProviderErrorObject &&
+      error.data.code === 'missing_input',
+  );
+});
+
+test('parses OpenAI completion output usage reasoning and tool calls', async () => {
+  const transport = fakeTransport({
+    responses: [
+      response({
+        status: 'completed',
+        output_text: 'Done',
+        output: [
+          { type: 'reasoning', summary: [{ text: 'Thought' }] },
+          {
+            type: 'function_call',
+            call_id: 'call_1',
+            name: 'lookup',
+            arguments: '{"q":"x"}',
+          },
+        ],
+        usage: {
+          input_tokens: 3,
+          output_tokens: 4,
+          total_tokens: 7,
+          output_tokens_details: { reasoning_tokens: 2 },
+        },
+      }),
+    ],
+  });
+  const provider = createOpenAiProvider({
+    transport,
+    apiKey: 'sk-testSecret123',
+  });
+
+  const result = await provider.complete({
+    model: 'gpt-5',
+    messages: [{ role: 'user', content: 'Hi' }],
+  });
+
+  assert.equal(result.text, 'Done');
+  assert.equal(result.finishReason, 'stop');
+  assert.deepEqual(result.reasoning, { text: 'Thought' });
+  assert.deepEqual(result.usage, {
+    inputTokens: 3,
+    outputTokens: 4,
+    totalTokens: 7,
+    reasoningTokens: 2,
+    cachedInputTokens: undefined,
+  });
+  assert.deepEqual(result.toolCalls, [
+    { id: 'call_1', name: 'lookup', arguments: '{"q":"x"}', index: 0 },
+  ]);
+});
+
+test('returns parsed OpenAI structured output from completions', async () => {
+  const transport = fakeTransport({
+    responses: [
+      response({
+        status: 'completed',
+        output_text: '{"answer":"Done"}',
+        output: [],
+      }),
+    ],
+  });
+  const provider = createOpenAiProvider({
+    transport,
+    apiKey: 'sk-testSecret123',
+  });
+
+  const result = await provider.complete({
+    model: 'gpt-5',
+    messages: [{ role: 'user', content: 'Hi' }],
+    schema: z.object({ answer: z.string() }),
+  });
+
+  assert.deepEqual(result.structured, { answer: 'Done' });
+});
+
+test('returns OpenAI refusals without structured parsing', async () => {
+  const transport = fakeTransport({
+    responses: [
+      response({
+        status: 'completed',
+        output: [
+          {
+            type: 'message',
+            content: [{ type: 'refusal', refusal: 'No.' }],
+          },
+        ],
+      }),
+    ],
+  });
+  const provider = createOpenAiProvider({
+    transport,
+    apiKey: 'sk-testSecret123',
+  });
+
+  const result = await provider.complete({
+    model: 'gpt-5',
+    messages: [{ role: 'user', content: 'Hi' }],
+    schema: z.object({ answer: z.string() }),
+  });
+
+  assert.equal(result.refusal, 'No.');
+  assert.equal(result.structured, undefined);
+});
+
+test('sends OpenAI API key auth as bearer token', async () => {
+  const transport = fakeTransport({
+    responses: [
+      response({ status: 'completed', output_text: 'ok', output: [] }),
+    ],
+  });
+  const provider = createOpenAiProvider({
+    transport,
+    apiKey: 'sk-testSecret123',
+  });
+
+  await provider.complete({
+    model: 'gpt-5',
+    messages: [{ role: 'user', content: 'Hi' }],
+  });
+
+  assert.equal(
+    transport.requests[0]?.headers?.authorization,
+    'Bearer sk-testSecret123',
+  );
+});
+
+test('sends exact OpenAI authorization header when supplied', async () => {
+  const transport = fakeTransport({
+    responses: [
+      response({ status: 'completed', output_text: 'ok', output: [] }),
+    ],
+  });
+  const provider = createOpenAiProvider({
+    transport,
+    authorization: 'Custom credential-value',
+  });
+
+  await provider.complete({
+    model: 'gpt-5',
+    messages: [{ role: 'user', content: 'Hi' }],
+  });
+
+  assert.equal(
+    transport.requests[0]?.headers?.authorization,
+    'Custom credential-value',
+  );
+});
+
+test('rejects ambiguous OpenAI auth configuration', async () => {
+  const provider = createOpenAiProvider({
+    transport: fakeTransport({}),
+    apiKey: 'sk-testSecret123',
+    authorization: 'Bearer token',
+  });
+
+  await assert.rejects(
+    provider.complete({
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Hi' }],
+    }),
+    (error: unknown) =>
+      error instanceof ProviderErrorObject &&
+      error.data.code === 'auth_ambiguous',
+  );
+});
+
+test('rejects schema-invalid OpenAI structured JSON', async () => {
+  const provider = createOpenAiProvider({
+    transport: fakeTransport({
+      responses: [
+        response({
+          status: 'completed',
+          output_text: '{"answer":123}',
+          output: [],
+        }),
+      ],
+    }),
+    apiKey: 'sk-testSecret123',
+  });
+
+  await assert.rejects(
+    provider.complete({
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Hi' }],
+      schema: z.object({ answer: z.string() }),
+    }),
+    (error: unknown) =>
+      error instanceof ProviderErrorObject &&
+      error.data.code === 'invalid_structured_output' &&
+      error.data.diagnostic?.includes('answer') === true,
+  );
+});
+
+test('does not refresh OpenAI auth after 401 responses', async () => {
+  const transport = fakeTransport({
+    responses: [response({ error: 'expired' }, 401)],
+  });
+  const provider = createOpenAiProvider({
+    transport,
+    authorization: 'Bearer expired-token',
+  });
+
+  await assert.rejects(
+    provider.complete({
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Hi' }],
+    }),
+    (error: unknown) =>
+      error instanceof ProviderErrorObject && error.data.code === 'auth_failed',
+  );
+  assert.equal(transport.requests.length, 1);
+});

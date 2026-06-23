@@ -7,24 +7,9 @@ import test from 'node:test';
 import {
   LlmDebugLogger,
   diagnosticExcerpt,
-  enabledProviderName,
   parseSseEvents,
-  providerById,
-  providerRegistry,
 } from '../src/index.js';
 import { collect } from './fakes.js';
-
-test('finds providers and chooses enabled provider name from explicit availability', () => {
-  assert.equal(providerRegistry.length, 3);
-  assert.equal(providerById('codex')?.name, 'Codex');
-  assert.equal(providerById('openai')?.name, 'OpenAI');
-  assert.equal(providerById('openrouter')?.name, 'OpenRouter');
-  assert.equal(providerById('missing'), undefined);
-  assert.equal(enabledProviderName({ codexAuth: 'auth' }), 'codex');
-  assert.equal(enabledProviderName({ openRouterApiKey: 'key' }), 'openrouter');
-  assert.equal(enabledProviderName({ openAiApiKey: 'key' }), 'openai');
-  assert.equal(enabledProviderName({}), undefined);
-});
 
 test('writes redacted JSONL debug records when logger is created at a path', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'llms-debug-'));

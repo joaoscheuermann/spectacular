@@ -1,4 +1,6 @@
-export const asRecord = (value: unknown): Record<string, unknown> | undefined =>
+export const asRecord = (
+  value: unknown,
+): Record<string, unknown> | undefined =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
@@ -20,14 +22,9 @@ export const numberField = (
 export const arrayField = (
   record: Record<string, unknown>,
   key: string,
-): readonly unknown[] =>
-  Array.isArray(record[key]) ? record[key] : [];
+): readonly unknown[] => (Array.isArray(record[key]) ? record[key] : []);
 
 export const recordField = (
   record: Record<string, unknown>,
   key: string,
 ): Record<string, unknown> | undefined => asRecord(record[key]);
-
-export const parseJsonRecord = (
-  text: string,
-): Record<string, unknown> | undefined => asRecord(JSON.parse(text));

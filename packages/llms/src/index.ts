@@ -4,7 +4,6 @@ export * from './lib/http.js';
 export * from './lib/providers/codex.js';
 export * from './lib/providers/openai.js';
 export * from './lib/providers/openrouter.js';
-export * from './lib/registry.js';
 export * from './lib/types/http.js';
 export * from './lib/types/provider.js';
 export * from './lib/utils/diagnostics.js';

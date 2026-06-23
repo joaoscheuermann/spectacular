@@ -70,8 +70,7 @@ test('sends Codex ChatGPT account headers to the Codex backend', async () => {
     'codex',
   );
   assert.equal(
-    debugRecords.find((record) => record.event === 'response.finish')
-      ?.provider,
+    debugRecords.find((record) => record.event === 'response.finish')?.provider,
     'codex',
   );
 });
