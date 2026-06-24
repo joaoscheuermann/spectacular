@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { Command } from 'commander';
-import inquirer from 'inquirer';
+import { createPromptKit } from 'prompt-kit';
 
 import {
   runConnect,
@@ -12,7 +12,6 @@ import {
   runList,
   type CommandDependencies,
 } from './lib/commands.js';
-import type { Prompt } from './lib/questions.js';
 
 const createProgram = (dependencies: CommandDependencies): Command => {
   const program = new Command();
@@ -55,7 +54,7 @@ export const run = async (
   dependencies: CommandDependencies = {
     io: processIo,
     fetch,
-    prompt: inquirer.prompt as Prompt,
+    prompt: createPromptKit(),
   },
 ): Promise<void> => {
   try {

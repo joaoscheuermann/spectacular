@@ -24,7 +24,12 @@ test('prints help without rejecting or forcing process exit', async () => {
         },
       },
     },
-    prompt: async () => ({}),
+    prompt: {
+      queue: async () => [],
+      select: async () => {
+        throw new Error('Help should not prompt.');
+      },
+    } as CommandDependencies['prompt'],
   } satisfies CommandDependencies);
 
   assert.match(stdout.join(''), /Usage: doric/u);

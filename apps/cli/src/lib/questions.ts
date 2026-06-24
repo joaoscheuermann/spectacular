@@ -1,4 +1,5 @@
 import type { AgentExecutionEvent } from '@a2a-js/sdk/server';
+import { type Choice, type PromptKit, type PromptTask } from 'prompt-kit';
 
 export type PromptQuestion = {
   readonly id: string;
@@ -9,14 +10,7 @@ export type PromptQuestion = {
   }[];
 };
 
-export type Prompt = (
-  questions: readonly {
-    readonly type: 'list';
-    readonly name: string;
-    readonly message: string;
-    readonly choices: readonly { readonly name: string; readonly value: string }[];
-  }[],
-) => Promise<Record<string, string>>;
+export type Prompt = Pick<PromptKit, 'queue' | 'select'>;
 
 export const openQuestionsFromEvent = (
   event: AgentExecutionEvent,
@@ -47,20 +41,24 @@ export const askOpenQuestions = async (
   questions: readonly PromptQuestion[],
   prompt: Prompt,
 ): Promise<string> => {
-  const answers = await prompt(
-    questions.map((question) => ({
-      type: 'list',
-      name: question.id,
-      message: question.question,
-      choices: question.options.map((option) => ({
-        name: option.title,
-        value: option.value,
-      })),
-    })),
+  const tasks = questions.map(
+    (question): PromptTask<string> =>
+      () =>
+        prompt.select(
+          question.question,
+          '',
+          question.options.map(
+            (option): Choice<string> => ({
+              key: option.title,
+              value: option.value,
+            }),
+          ),
+        ),
   );
+  const answers = await prompt.queue(tasks);
 
   return questions
-    .map((question) => `- ${question.question}: ${answers[question.id] ?? ''}`)
+    .map((question, index) => `- ${question.question}: ${answers[index] ?? ''}`)
     .join('\n');
 };
 

@@ -1,11 +1,8 @@
 {
-  "name": "cli",
+  "name": "prompt-kit",
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "bin": {
-    "doric": "./dist/index.js"
-  },
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -19,11 +16,7 @@
     }
   },
   "dependencies": {
-    "@a2a-js/sdk": "^0.3.13",
-    "commander": "^14.0.2",
-    "pino": "^10.3.1",
-    "pino-pretty": "^13.1.2",
-    "prompt-kit": "0.0.1",
+    "chalk": "^5.4.1",
     "tslib": "^2.3.0"
   }
 }

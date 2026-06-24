@@ -1,6 +1,6 @@
 # Doric Grounding
 
-Last reviewed: 2026-06-23
+Last reviewed: 2026-06-24
 
 This is Doric's repository validity contract. Every agent working in this
 repository must read it before non-trivial planning, reviewing, artifact
@@ -54,6 +54,15 @@ interacting with the Doric A2A agent. The CLI is scoped to A2A message
 submission, session listing, session replay/connection, and best-effort session
 kill behavior. This does not by itself reintroduce the former Rust CLI, daemon,
 worker, lifecycle service, TUI, slash-command, or multi-process architecture.
+
+`packages/prompt-kit` owns Doric's command-line prompt abstraction for the
+Node.js CLI host. It provides Doric-owned text, select, and queued prompt APIs
+instead of coupling CLI user-input handling to Inquirer-shaped contracts.
+
+CLI streamed A2A event output is visible console rendering through
+`pino`/`pino-pretty`. Redaction must be applied to message text and structured
+fields before events are handed to the logger, and this rendering is not
+durable structured log storage.
 
 Prompt open-question artifacts carry concrete selectable solution options.
 Doric input-required A2A events expose those options directly instead of

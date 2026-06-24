@@ -67,6 +67,9 @@
       "path": "./packages/session"
     },
     {
+      "path": "./packages/prompt-kit"
+    },
+    {
       "path": "./apps/cli"
     }
   ]

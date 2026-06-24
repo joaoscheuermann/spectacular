@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import test from 'node:test';
 
 import type { AgentExecutionEvent } from '@a2a-js/sdk/server';
+import type { PromptAnswers, PromptTask } from 'prompt-kit';
 
 import {
   runConnect,
@@ -64,24 +65,52 @@ test('does not answer input-required events replayed before connect replay compl
   await runConnect('context-1', {
     ...dependencies(fetch),
     io: captureIo(output),
-    prompt: async () => {
-      throw new Error('Prompt should not be called for replayed input.');
-    },
+    prompt: throwingPrompt('Prompt should not be called for replayed input.'),
   });
 
   assert.deepEqual(methods, ['doric/sessions/connect']);
-  assert.deepEqual(output, ['Prompt workflow completed.\n']);
+  assert.match(output.join(''), /Prompt workflow completed\./u);
+  assert.match(output.join(''), /status-update/u);
 });
 
 const dependencies = (fetch: typeof globalThis.fetch): CommandDependencies => ({
   fetch,
   io: captureIo([]),
-  prompt: async () => ({}),
+  prompt: emptyPrompt(),
   rootDir: EMPTY_ENV_ROOT,
   env: {
     AGENT_CARD_URL: 'http://agent-card.example',
     CODEX_AUTHORIZATION: 'codex-token',
     GITHUB_TOKEN: 'github-token',
+  },
+});
+
+const emptyPrompt = (): CommandDependencies['prompt'] => ({
+  queue: async <T extends readonly PromptTask[]>(
+    tasks: T,
+  ): Promise<PromptAnswers<T>> =>
+    tasks.map(() => undefined) as PromptAnswers<T>,
+  select: async <T>(
+    _title: string,
+    _description: string,
+    choices: readonly { readonly value: T }[],
+  ): Promise<T> => {
+    const [choice] = choices;
+
+    if (choice === undefined) {
+      throw new Error('Expected at least one test choice.');
+    }
+
+    return choice.value;
+  },
+});
+
+const throwingPrompt = (message: string): CommandDependencies['prompt'] => ({
+  queue: async () => {
+    throw new Error(message);
+  },
+  select: async () => {
+    throw new Error(message);
   },
 });
 

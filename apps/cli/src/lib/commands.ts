@@ -16,8 +16,9 @@ import {
   type JsonRpcClient,
 } from './rpc.js';
 import {
+  createEventWriter,
+  type EventWriter,
   latestTaskIdFromEvent,
-  writeEvent,
   writeSessionList,
   type CliIo,
   type RuntimeSessionSummary,
@@ -58,6 +59,7 @@ export const runFeature = async (
   const env = await commandEnv(dependencies);
   const rpc = await rpcClient(env, dependencies.fetch);
   const redactText = createTextRedactor(env);
+  const writeEvent = createEventWriter(dependencies.io, redactText);
   const contextId = randomUUID();
   let latestTaskId: string | undefined;
   let params = createInitialMessageParams(env, {
@@ -70,8 +72,7 @@ export const runFeature = async (
   while (true) {
     const result = await consumeEvents(
       rpc.stream('message/stream', params),
-      dependencies,
-      redactText,
+      writeEvent,
       latestTaskId,
     );
     latestTaskId = result.latestTaskId;
@@ -115,6 +116,7 @@ export const runConnect = async (
   const env = await commandEnv(dependencies);
   const rpc = await rpcClient(env, dependencies.fetch);
   const redactText = createTextRedactor(env);
+  const writeEvent = createEventWriter(dependencies.io, redactText);
   const answered = new Set<string>();
   let latestTaskId: string | undefined;
   let replayComplete = false;
@@ -128,7 +130,7 @@ export const runConnect = async (
       continue;
     }
 
-    writeEvent(dependencies.io, event, redactText);
+    writeEvent(event);
     latestTaskId = latestTaskIdFromEvent(event) ?? latestTaskId;
 
     const messageId =
@@ -183,8 +185,7 @@ export const runKill = async (
 
 const consumeEvents = async (
   stream: AsyncGenerator<AgentExecutionEvent, void>,
-  dependencies: CommandDependencies,
-  redactText: (text: string) => string,
+  writeEvent: EventWriter,
   initialTaskId: string | undefined,
 ): Promise<{
   readonly latestTaskId: string | undefined;
@@ -194,7 +195,7 @@ const consumeEvents = async (
   let finalEvent: AgentExecutionEvent | undefined;
 
   for await (const event of stream) {
-    writeEvent(dependencies.io, event, redactText);
+    writeEvent(event);
     latestTaskId = latestTaskIdFromEvent(event) ?? latestTaskId;
 
     if (event.kind === 'status-update' && event.final) {

@@ -10,9 +10,5 @@
     "types": ["node"]
   },
   "include": ["src/**/*.ts"],
-  "references": [
-    {
-      "path": "../../packages/prompt-kit/tsconfig.lib.json"
-    }
-  ]
+  "references": []
 }
