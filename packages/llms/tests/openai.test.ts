@@ -4,7 +4,7 @@ import test from 'node:test';
 import { createTool, createToolStorage } from 'tools';
 import { z } from 'zod';
 
-import { openAiBody } from '../src/index.js';
+import { ProviderErrorObject, openAiBody } from '../src/index.js';
 
 test('maps OpenAI Responses DTO with instructions tools reasoning and fast service tier', () => {
   const body = openAiBody(
@@ -203,6 +203,81 @@ test('maps OpenAI structured output schemas to text format DTOs', () => {
       },
     },
   });
+});
+
+test('maps OpenAI nested union structured output schemas to text format DTOs', () => {
+  const body = openAiBody(
+    {
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Return JSON.' }],
+      schema: z
+        .object({
+          action: z.union([
+            z.object({ type: z.literal('question'), question: z.string() }),
+            z.object({ type: z.literal('answer'), answer: z.string() }),
+          ]),
+        })
+        .strict(),
+    },
+    false,
+  );
+  const text = body.text as {
+    readonly format?: {
+      readonly schema?: {
+        readonly type?: unknown;
+        readonly properties?: {
+          readonly action?: {
+            readonly anyOf?: unknown;
+          };
+        };
+      };
+    };
+  };
+  const variants = text.format?.schema?.properties?.action?.anyOf;
+
+  assert.equal(text.format?.schema?.type, 'object');
+  assert.ok(Array.isArray(variants));
+  assert.equal(variants.length, 2);
+  assert.deepEqual(
+    variants.map((variant) => (variant as Record<string, unknown>).required),
+    [
+      ['type', 'question'],
+      ['type', 'answer'],
+    ],
+  );
+  assert.deepEqual(
+    variants.map(
+      (variant) => (variant as Record<string, unknown>).additionalProperties,
+    ),
+    [false, false],
+  );
+});
+
+test('rejects OpenAI top-level union structured output schemas', () => {
+  const request = {
+    model: 'gpt-5',
+    messages: [{ role: 'user', content: 'Return JSON.' }],
+  } as const;
+  const topLevelUnion = z.union([
+    z.object({ type: z.literal('question'), question: z.string() }),
+    z.object({ type: z.literal('answer'), answer: z.string() }),
+  ]);
+  const topLevelDiscriminatedUnion = z.discriminatedUnion('type', [
+    z.object({ type: z.literal('question'), question: z.string() }),
+    z.object({ type: z.literal('answer'), answer: z.string() }),
+  ]);
+  const rejectsInvalidStructuredSchema = (error: unknown) =>
+    error instanceof ProviderErrorObject &&
+    error.data.code === 'invalid_structured_schema';
+
+  assert.throws(
+    () => openAiBody({ ...request, schema: topLevelUnion }, false),
+    rejectsInvalidStructuredSchema,
+  );
+  assert.throws(
+    () => openAiBody({ ...request, schema: topLevelDiscriminatedUnion }, false),
+    rejectsInvalidStructuredSchema,
+  );
 });
 
 test('maps nested optional structured output properties to required schema properties', () => {

@@ -103,6 +103,58 @@ test('returns parsed OpenAI structured output from completions', async () => {
   assert.deepEqual(result.structured, { answer: 'Done' });
 });
 
+test('returns parsed OpenAI nested union structured output from completions', async () => {
+  const transport = fakeTransport({
+    responses: [
+      response({
+        status: 'completed',
+        output_text: '{"action":{"type":"answer","answer":"Done"}}',
+        output: [],
+      }),
+    ],
+  });
+  const provider = createOpenAiProvider({
+    transport,
+    apiKey: 'sk-testSecret123',
+  });
+
+  const result = await provider.complete({
+    model: 'gpt-5',
+    messages: [{ role: 'user', content: 'Hi' }],
+    schema: z.object({
+      action: z.union([
+        z.object({ type: z.literal('question'), question: z.string() }),
+        z.object({ type: z.literal('answer'), answer: z.string() }),
+      ]),
+    }),
+  });
+
+  assert.deepEqual(result.structured, {
+    action: { type: 'answer', answer: 'Done' },
+  });
+});
+
+test('rejects OpenAI top-level discriminated union structured output from completions', async () => {
+  const provider = createOpenAiProvider({
+    transport: fakeTransport({}),
+    apiKey: 'sk-testSecret123',
+  });
+
+  await assert.rejects(
+    provider.complete({
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Hi' }],
+      schema: z.discriminatedUnion('type', [
+        z.object({ type: z.literal('question'), question: z.string() }),
+        z.object({ type: z.literal('answer'), answer: z.string() }),
+      ]),
+    }),
+    (error: unknown) =>
+      error instanceof ProviderErrorObject &&
+      error.data.code === 'invalid_structured_schema',
+  );
+});
+
 test('returns OpenAI refusals without structured parsing', async () => {
   const transport = fakeTransport({
     responses: [

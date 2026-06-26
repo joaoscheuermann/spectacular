@@ -54,7 +54,7 @@ export type ReasoningRequest = {
   readonly summary?: 'auto' | 'concise' | 'detailed';
 };
 
-export type StructuredOutputSchema = z.ZodObject;
+export type StructuredOutputSchema = z.ZodType;
 export type StructuredOutputValue<Schema extends StructuredOutputSchema> =
   z.output<Schema>;
 

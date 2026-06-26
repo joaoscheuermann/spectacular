@@ -172,11 +172,11 @@ export const structuredJsonSchema = (
     return undefined;
   }
 
-  if (!(schema instanceof z.ZodObject)) {
+  if (!(schema instanceof z.ZodType)) {
     throw new ProviderErrorObject({
       provider,
       code: 'invalid_structured_schema',
-      message: `${provider} structured output schema must be a Zod object.`,
+      message: `${provider} structured output schema must be a Zod schema.`,
     });
   }
 

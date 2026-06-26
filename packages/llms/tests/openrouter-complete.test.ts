@@ -90,6 +90,70 @@ test('maps OpenRouter structured output schemas to response format DTOs', () => 
   });
 });
 
+test('maps OpenRouter nested union structured output schemas to response format DTOs', () => {
+  const body = openRouterBody(
+    {
+      model: 'openai/gpt-5',
+      messages: [{ role: 'user', content: 'Return JSON.' }],
+      schema: z
+        .object({
+          action: z.union([
+            z.object({ type: z.literal('question'), question: z.string() }),
+            z.object({ type: z.literal('answer'), answer: z.string() }),
+          ]),
+        })
+        .strict(),
+    },
+    false,
+  );
+  const responseFormat = body.response_format as {
+    readonly json_schema?: {
+      readonly schema?: {
+        readonly type?: unknown;
+        readonly properties?: {
+          readonly action?: {
+            readonly anyOf?: unknown;
+          };
+        };
+      };
+    };
+  };
+  const variants =
+    responseFormat.json_schema?.schema?.properties?.action?.anyOf;
+
+  assert.equal(responseFormat.json_schema?.schema?.type, 'object');
+  assert.ok(Array.isArray(variants));
+  assert.equal(variants.length, 2);
+  assert.deepEqual(
+    variants.map((variant) => (variant as Record<string, unknown>).type),
+    ['object', 'object'],
+  );
+});
+
+test('rejects OpenRouter top-level union structured output schemas', () => {
+  const request = {
+    model: 'openai/gpt-5',
+    messages: [{ role: 'user', content: 'Return JSON.' }],
+  } as const;
+
+  assert.throws(
+    () =>
+      openRouterBody(
+        {
+          ...request,
+          schema: z.union([
+            z.object({ type: z.literal('question'), question: z.string() }),
+            z.object({ type: z.literal('answer'), answer: z.string() }),
+          ]),
+        },
+        false,
+      ),
+    (error: unknown) =>
+      error instanceof ProviderErrorObject &&
+      error.data.code === 'invalid_structured_schema',
+  );
+});
+
 test('parses OpenRouter completion and redacts auth failures', async () => {
   const transport = fakeTransport({
     responses: [
