@@ -31,7 +31,7 @@ export type PromptIo = {
 };
 
 export type PromptKit = {
-  text(question: string): Promise<string>;
+  text(title: string, description?: string): Promise<string>;
   select<T>(
     title: string,
     description: string,

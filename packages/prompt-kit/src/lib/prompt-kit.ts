@@ -40,7 +40,8 @@ export const createPromptKit = (io?: PromptIo): PromptKit => {
   const fallbackIo = resolveIo(io);
 
   return {
-    text: (question) => promptText(currentIo(fallbackIo), prefixed(question)),
+    text: (title, description = '') =>
+      promptText(currentIo(fallbackIo), prefixed(title), description),
     select: (title, description, choices) =>
       promptSelect(currentIo(fallbackIo), prefixed(title), description, choices),
     queue: async (tasks) => runQueue(fallbackIo, tasks),
@@ -65,9 +66,15 @@ const runQueue = async <T extends readonly PromptTask[]>(
 
 const promptText = async (
   io: ResolvedPromptIo,
-  question: string,
+  title: string,
+  description: string,
 ): Promise<string> => {
-  io.output.write(`${formatTitle(io.output, question)}\n> `);
+  io.output.write(
+    [
+      formatTitle(io.output, title),
+      ...(description === '' ? [] : [formatDescription(io.output, description)]),
+    ].join('\n') + '\n> ',
+  );
 
   return readLine(io.input);
 };
@@ -355,6 +362,11 @@ const promptInputClosedError = (): Error =>
 const formatTitle = (output: PromptOutput, title: string): string =>
   output.isTTY === true ? titleChalk.bold.cyan(title) : title;
 
+const formatDescription = (
+  output: PromptOutput,
+  description: string,
+): string => (output.isTTY === true ? titleChalk.dim(description) : description);
+
 const prefixed = (title: string): string => queueContext.getStore()?.prefix(title) ?? title;
 
 const currentIo = (fallback: ResolvedPromptIo): ResolvedPromptIo =>
@@ -373,7 +385,10 @@ const isInteractive = (io: ResolvedPromptIo): boolean =>
 const defaultKit = createPromptKit();
 
 /** Reads one line of user input without the trailing newline. */
-export const text = (question: string): Promise<string> => defaultKit.text(question);
+export const text = (
+  title: string,
+  description?: string,
+): Promise<string> => defaultKit.text(title, description);
 
 /** Prompts for one selected choice and returns the selected value. */
 export const select = <T>(

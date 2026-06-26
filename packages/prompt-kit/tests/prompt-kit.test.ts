@@ -5,6 +5,7 @@ import test from 'node:test';
 import {
   createPromptKit,
   select,
+  text,
   type Choice,
   type PromptInput,
 } from '../src/index.js';
@@ -43,6 +44,36 @@ test('text styles the question when output is TTY', async () => {
   assert.match(firstLine, ansiPattern);
   assert.equal(stripAnsi(firstLine), 'Your name?');
   assert.equal(stripAnsi(rendered), 'Your name?\n> ');
+});
+
+test('text renders a title and description when output is not TTY', async () => {
+  const { input, output, io } = createIo();
+  const kit = createPromptKit(io);
+  const answer = kit.text('Repository name', 'Use the owner/name format.');
+
+  input.write('openai/codex\n');
+
+  assert.equal(await answer, 'openai/codex');
+  assert.equal(output.join(''), 'Repository name\nUse the owner/name format.\n> ');
+});
+
+test('text styles the title and description when output is TTY', async () => {
+  const { input, output, io } = createIo({ outputIsTTY: true });
+  const kit = createPromptKit(io);
+  const answer = kit.text('Repository name', 'Use the owner/name format.');
+
+  input.write('openai/codex\n');
+
+  assert.equal(await answer, 'openai/codex');
+
+  const rendered = output.join('');
+  const [titleLine = '', descriptionLine = ''] = rendered.split('\n');
+
+  assert.match(titleLine, ansiPattern);
+  assert.equal(stripAnsi(titleLine), 'Repository name');
+  assert.match(descriptionLine, ansiPattern);
+  assert.equal(stripAnsi(descriptionLine), 'Use the owner/name format.');
+  assert.equal(stripAnsi(rendered), 'Repository name\nUse the owner/name format.\n> ');
 });
 
 test('select fallback accepts a choice key', async () => {
@@ -169,6 +200,19 @@ test('queue prefixes prompt titles and routes direct select calls through contex
   assert.deepEqual(await answers, ['main', 'develop']);
   assert.match(output.join(''), /\[1\/2\] First/u);
   assert.match(output.join(''), /\[2\/2\] Second/u);
+});
+
+test('queue prefixes text titles without prefixing descriptions', async () => {
+  const { input, output, io } = createIo();
+  const kit = createPromptKit(io);
+  const answers = kit.queue([
+    () => text('Repository', 'Use owner/name.'),
+  ] as const);
+
+  input.write('openai/codex\n');
+
+  assert.deepEqual(await answers, ['openai/codex']);
+  assert.equal(output.join(''), '[1/1] Repository\nUse owner/name.\n> ');
 });
 
 const stripAnsi = (text: string): string => text.replace(ansiPatternGlobal, '');
