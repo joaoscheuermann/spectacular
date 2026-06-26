@@ -4,7 +4,8 @@
   "license": "MIT",
   "scripts": {
     "doric:spawn-agent": "node scripts/spawn-agent.mjs",
-    "codex:oauth": "node --conditions=@org/source --import @swc-node/register/esm-register scripts/codex-oauth.mjs"
+    "codex:oauth": "node --conditions=@org/source --import @swc-node/register/esm-register scripts/codex-oauth.mjs",
+    "agent:ambiguity-02": "node --conditions=@org/source --import @swc-node/register/esm-register scripts/ambiguity-agent-02.mjs"
   },
   "private": true,
   "dependencies": {
