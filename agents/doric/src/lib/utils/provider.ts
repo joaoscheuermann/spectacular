@@ -17,7 +17,11 @@ export const createProviderFromConfig = async (
   const transport = createLlmFetchTransport();
 
   if (provider.type === 'openai') {
-    const token = requiredToken(provider);
+    const token = optionalToken(provider);
+
+    if (token === undefined) {
+      return createOpenAiProvider({ transport });
+    }
 
     return token.toLowerCase().startsWith('bearer ')
       ? createOpenAiProvider({ transport, authorization: token })
@@ -51,10 +55,16 @@ export const createProviderFromConfig = async (
   );
 };
 
-const requiredToken = (provider: ProviderConfig): string => {
+const optionalToken = (provider: ProviderConfig): string | undefined => {
   const token = provider.token?.trim();
 
-  if (token === undefined || token === '') {
+  return token === undefined || token === '' ? undefined : token;
+};
+
+const requiredToken = (provider: ProviderConfig): string => {
+  const token = optionalToken(provider);
+
+  if (token === undefined) {
     throw A2AError.invalidParams(
       `Provider "${provider.id}" requires a token.`,
       {

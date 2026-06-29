@@ -228,6 +228,42 @@ test('sends exact OpenAI authorization header when supplied', async () => {
   );
 });
 
+test('omits OpenAI authorization header when credentials are omitted', async () => {
+  const transport = fakeTransport({
+    responses: [
+      response({ status: 'completed', output_text: 'ok', output: [] }),
+    ],
+  });
+  const provider = createOpenAiProvider({ transport });
+
+  await provider.complete({
+    model: 'gpt-5',
+    messages: [{ role: 'user', content: 'Hi' }],
+  });
+
+  assert.equal('authorization' in (transport.requests[0]?.headers ?? {}), false);
+});
+
+test('omits OpenAI authorization header when credentials are blank', async () => {
+  const transport = fakeTransport({
+    responses: [
+      response({ status: 'completed', output_text: 'ok', output: [] }),
+    ],
+  });
+  const provider = createOpenAiProvider({
+    transport,
+    apiKey: '  ',
+    authorization: '\t',
+  });
+
+  await provider.complete({
+    model: 'gpt-5',
+    messages: [{ role: 'user', content: 'Hi' }],
+  });
+
+  assert.equal('authorization' in (transport.requests[0]?.headers ?? {}), false);
+});
+
 test('rejects ambiguous OpenAI auth configuration', async () => {
   const provider = createOpenAiProvider({
     transport: fakeTransport({}),

@@ -9,7 +9,7 @@ export type GithubConfig = {
 export type ProviderConfig = {
   readonly id: string;
   readonly type: string;
-  readonly token: string;
+  readonly token?: string;
 };
 
 export type ModelConfig = {

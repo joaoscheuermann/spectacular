@@ -78,6 +78,9 @@ which is used only when initially cloning a sandbox repository.
 Doric supports OpenAI and Codex as separate provider types. The Codex provider
 uses the existing provider token field for the Codex authorization value and
 derives Codex-compatible account headers from that credential when available.
+OpenAI provider configs may omit or blank the token for OpenAI-compatible
+endpoints such as local LM Studio APIs; in that case the auth header is
+omitted. Codex and OpenRouter provider configs still require configured tokens.
 Credential values must remain private runtime inputs: do not persist, log, or
 echo resolved tokens.
 

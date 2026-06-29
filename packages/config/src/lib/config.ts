@@ -86,11 +86,12 @@ function parseGithub(value: unknown, path: string): GithubConfig {
 
 function parseProvider(value: unknown, path: string): ProviderConfig {
   const input = object(value, path);
+  const token = optionalString(input['token'], at(path, 'token'));
 
   return {
     id: string(input['id'], at(path, 'id')),
     type: string(input['type'], at(path, 'type')),
-    token: string(input['token'], at(path, 'token')),
+    ...(token === undefined ? {} : { token }),
   };
 }
 

@@ -54,6 +54,22 @@ test('parses optional GitHub repository branch when provided', () => {
   });
 });
 
+test('parses OpenAI provider when token is omitted', () => {
+  const config = sampleConfig({
+    providers: [
+      {
+        id: 'openai',
+        type: 'openai',
+      },
+    ],
+  });
+
+  assert.deepEqual(parseConfig(config).providers[0], {
+    id: 'openai',
+    type: 'openai',
+  });
+});
+
 test('returns config update when later message metadata contains configuration', () => {
   const config = sampleConfig();
 

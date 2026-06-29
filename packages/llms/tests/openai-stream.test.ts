@@ -3,30 +3,37 @@ import test from 'node:test';
 
 import { z } from 'zod';
 
-import {
-  ProviderErrorObject,
-  createOpenAiProvider,
-  type ProviderStreamEvent,
-} from '../src/index.js';
+import { createOpenAiProvider, type ProviderStreamEvent } from '../src/index.js';
 import { collect, fakeTransport } from './fakes.js';
 
-test('rejects missing OpenAI stream auth before yielding started', async () => {
-  const provider = createOpenAiProvider({
-    transport: fakeTransport({ streams: [[]] }),
+test('streams OpenAI requests without an authorization header when credentials are omitted', async () => {
+  const transport = fakeTransport({
+    streams: [
+      [
+        sse({
+          type: 'response.completed',
+          response: {
+            status: 'completed',
+            output_text: 'ok',
+          },
+        }),
+      ],
+    ],
   });
-  const stream = provider
-    .stream({
+  const provider = createOpenAiProvider({
+    transport,
+  });
+
+  const events = await collect(
+    provider.stream({
       model: 'gpt-5',
       messages: [{ role: 'user', content: 'Hi' }],
-    })
-    [Symbol.asyncIterator]();
-
-  await assert.rejects(
-    stream.next(),
-    (error: unknown) =>
-      error instanceof ProviderErrorObject &&
-      error.data.code === 'auth_missing',
+    }),
   );
+
+  assert.equal(events[0]?.type, 'response.started');
+  assert.equal(events.at(-1)?.type, 'response.finished');
+  assert.equal('authorization' in (transport.requests[0]?.headers ?? {}), false);
 });
 
 test('streams OpenAI text reasoning usage finish and tool calls', async () => {

@@ -394,6 +394,128 @@ test('uses configured OpenAI bearer authorization without prefixing it again', a
   }
 });
 
+test('uses tokenless OpenAI providers without an authorization header', async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: RequestInit[] = [];
+  globalThis.fetch = (async (_input, init) => {
+    requests.push(init ?? {});
+
+    return new Response(
+      JSON.stringify({ status: 'completed', output_text: 'ok', output: [] }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  }) as typeof fetch;
+
+  try {
+    const harness = createDoricTestHarness({
+      useDefaultProvider: true,
+      promptRunner: async (artifact, options) => {
+        await options.provider.complete({
+          model: options.model,
+          messages: [{ role: 'user', content: 'Hi' }],
+        });
+
+        return completedPromptArtifact(artifact);
+      },
+    });
+
+    await harness.executor.execute(
+      createRequestContext({
+        config: createConfig({
+          providers: [{ id: 'openai', type: 'openai' }],
+        }),
+      }),
+      createEventBus(),
+    );
+
+    const headers = requests[0]?.headers as Record<string, string> | undefined;
+
+    assert.equal('authorization' in (headers ?? {}), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('uses blank-token OpenAI providers without an authorization header', async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: RequestInit[] = [];
+  globalThis.fetch = (async (_input, init) => {
+    requests.push(init ?? {});
+
+    return new Response(
+      JSON.stringify({ status: 'completed', output_text: 'ok', output: [] }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  }) as typeof fetch;
+
+  try {
+    const harness = createDoricTestHarness({
+      useDefaultProvider: true,
+      promptRunner: async (artifact, options) => {
+        await options.provider.complete({
+          model: options.model,
+          messages: [{ role: 'user', content: 'Hi' }],
+        });
+
+        return completedPromptArtifact(artifact);
+      },
+    });
+
+    await harness.executor.execute(
+      createRequestContext({
+        config: createConfig({
+          providers: [{ id: 'openai', type: 'openai', token: '   ' }],
+        }),
+      }),
+      createEventBus(),
+    );
+
+    const headers = requests[0]?.headers as Record<string, string> | undefined;
+
+    assert.equal('authorization' in (headers ?? {}), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('rejects OpenRouter providers when token is omitted', async () => {
+  const harness = createDoricTestHarness({ useDefaultProvider: true });
+
+  await assertMissingProviderToken(
+    harness.executor.execute(
+      createRequestContext({
+        config: createConfig({
+          providers: [{ id: 'openrouter', type: 'openrouter' }],
+          models: [
+            {
+              id: 'default',
+              provider: 'openrouter',
+              model: 'anthropic/claude-sonnet-4',
+            },
+          ],
+        }),
+      }),
+      createEventBus(),
+    ),
+  );
+});
+
+test('rejects Codex providers when token is blank', async () => {
+  const harness = createDoricTestHarness({ useDefaultProvider: true });
+
+  await assertMissingProviderToken(
+    harness.executor.execute(
+      createRequestContext({
+        config: createConfig({
+          providers: [{ id: 'codex', type: 'codex', token: '   ' }],
+          models: [{ id: 'default', provider: 'codex', model: 'gpt-5' }],
+        }),
+      }),
+      createEventBus(),
+    ),
+  );
+});
+
 test('uses Codex ChatGPT auth headers for Codex providers', async () => {
   const originalFetch = globalThis.fetch;
   const requests: RequestInit[] = [];
@@ -863,3 +985,16 @@ const jwt = (claims: Record<string, unknown>): string =>
     Buffer.from(JSON.stringify(claims)).toString('base64url'),
     'signature',
   ].join('.');
+
+const assertMissingProviderToken = async (action: Promise<unknown>) => {
+  await assert.rejects(action, (error: unknown) => {
+    assert.ok(error instanceof A2AError);
+    assert.equal(error.code, -32602);
+    assert.deepEqual(error.data, {
+      code: 'missing_provider_token',
+      path: 'message.metadata.configuration.providers.token',
+    });
+
+    return true;
+  });
+};

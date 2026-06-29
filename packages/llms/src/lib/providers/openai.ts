@@ -74,11 +74,12 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
     request: ProviderRequest<unknown>,
     body: Record<string, unknown>,
   ): Promise<Record<string, unknown>> => {
+    const auth = await authorization(deps);
     const response = await deps.transport.request({
       method: 'POST',
       url: `${baseUrl}/responses`,
       headers: {
-        authorization: await authorization(deps),
+        ...(auth === undefined ? {} : { authorization: auth }),
         'content-type': 'application/json',
         accept: 'application/json',
       },
@@ -154,7 +155,7 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
           method: 'POST',
           url: `${baseUrl}/responses`,
           headers: {
-            authorization: auth,
+            ...(auth === undefined ? {} : { authorization: auth }),
             'content-type': 'application/json',
             accept: 'text/event-stream',
           },
@@ -270,11 +271,12 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
     },
 
     async models(signal?: AbortSignal): Promise<readonly Model[]> {
+      const auth = await authorization(deps);
       const response = await deps.transport.request({
         method: 'GET',
         url: `${baseUrl}/models`,
         headers: {
-          authorization: await authorization(deps),
+          ...(auth === undefined ? {} : { authorization: auth }),
           accept: 'application/json',
         },
         signal,

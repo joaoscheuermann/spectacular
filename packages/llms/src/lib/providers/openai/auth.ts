@@ -7,8 +7,13 @@ export type AuthDeps = {
   readonly authorization?: SecretSource;
 };
 
-export const authorization = async (deps: AuthDeps): Promise<string> => {
-  if (deps.apiKey !== undefined && deps.authorization !== undefined) {
+export const authorization = async (
+  deps: AuthDeps,
+): Promise<string | undefined> => {
+  const apiKey = await secret(deps.apiKey);
+  const auth = await secret(deps.authorization);
+
+  if (apiKey !== undefined && auth !== undefined) {
     throw new ProviderErrorObject({
       provider: 'openai',
       code: 'auth_ambiguous',
@@ -17,30 +22,24 @@ export const authorization = async (deps: AuthDeps): Promise<string> => {
     });
   }
 
-  if (deps.apiKey !== undefined) {
-    return `Bearer ${await secret(deps.apiKey)}`;
+  if (apiKey !== undefined) {
+    return `Bearer ${apiKey}`;
   }
 
-  if (deps.authorization !== undefined) {
-    return secret(deps.authorization);
-  }
-
-  throw new ProviderErrorObject({
-    provider: 'openai',
-    code: 'auth_missing',
-    message: 'OpenAI provider requires an API key or authorization header.',
-  });
+  return auth;
 };
 
-const secret = async (source: SecretSource): Promise<string> => {
+const secret = async (
+  source: SecretSource | undefined,
+): Promise<string | undefined> => {
+  if (source === undefined) {
+    return undefined;
+  }
+
   const value = typeof source === 'function' ? await source() : source;
 
   if (value.trim() === '') {
-    throw new ProviderErrorObject({
-      provider: 'openai',
-      code: 'auth_missing',
-      message: 'OpenAI provider received an empty auth value.',
-    });
+    return undefined;
   }
 
   return value;
