@@ -8,6 +8,7 @@ import type {
   ProviderId,
   ProviderMessage,
   ProviderRequest,
+  ReasoningEffort,
   StructuredOutputSchema,
   UsageMetadata,
 } from '../types/provider.js';
@@ -34,6 +35,18 @@ export const requireRequestInput = (
       message: 'Provider request requires at least one message.',
     });
   }
+};
+
+export const requestReasoningEffort = (
+  request: ProviderRequest<unknown>,
+): ReasoningEffort | undefined => {
+  if (request.effort !== undefined) {
+    return request.effort;
+  }
+
+  const value = request.flags?.reasoning;
+
+  return typeof value === 'object' ? value.effort : undefined;
 };
 
 export const messageText = (message: ProviderMessage): string => {

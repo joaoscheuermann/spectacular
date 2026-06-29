@@ -64,6 +64,20 @@ test('maps OpenRouter chat completions DTO with messages tools and reasoning', (
   assert.equal('response_format' in body, false);
 });
 
+test('maps top-level OpenRouter effort before legacy reasoning effort', () => {
+  const body = openRouterBody(
+    {
+      model: 'openai/gpt-5',
+      messages: [{ role: 'user', content: 'Plan it.' }],
+      effort: 'none',
+      flags: { reasoning: { effort: 'medium', summary: 'detailed' } },
+    },
+    false,
+  );
+
+  assert.deepEqual(body.reasoning, { effort: 'none', summary: 'detailed' });
+});
+
 test('maps OpenRouter structured output schemas to response format DTOs', () => {
   const body = openRouterBody(
     {

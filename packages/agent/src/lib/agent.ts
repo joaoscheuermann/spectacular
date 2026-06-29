@@ -52,6 +52,7 @@ export const createAgent = (options: AgentOptions): Agent => {
       ...(options.maxOutputTokens !== undefined
         ? { maxOutputTokens: options.maxOutputTokens }
         : {}),
+      ...(options.effort !== undefined ? { effort: options.effort } : {}),
       ...(options.flags !== undefined ? { flags: options.flags } : {}),
       ...(runOptions.schema !== undefined ? { schema: runOptions.schema } : {}),
       ...(runOptions.signal !== undefined ? { signal: runOptions.signal } : {}),

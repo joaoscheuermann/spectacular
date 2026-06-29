@@ -46,6 +46,7 @@ test('sends LM Studio chat requests to the default native endpoint without auth'
   assert.equal(provider.metadata.name, 'LM Studio');
   assert.equal(provider.metadata.baseUrl, 'http://localhost:1234');
   assert.equal(provider.capabilities.tools, false);
+  assert.equal(provider.capabilities.reasoning, true);
   assert.equal(provider.capabilities.serviceTier, false);
   assert.equal(
     transport.requests[0]?.url,
@@ -59,9 +60,9 @@ test('sends LM Studio chat requests to the default native endpoint without auth'
     stream: false,
     temperature: 0.2,
     max_output_tokens: 64,
+    reasoning: 'low',
   });
   assert.equal('service_tier' in body, false);
-  assert.equal('reasoning' in body, false);
   assert.equal(result.text, 'Done.');
   assert.deepEqual(result.reasoning, { text: 'Thinking.' });
   assert.deepEqual(result.usage, {
@@ -71,6 +72,40 @@ test('sends LM Studio chat requests to the default native endpoint without auth'
     reasoningTokens: 2,
   });
   assert.deepEqual(result.toolCalls, []);
+});
+
+test('normalizes top-level LM Studio reasoning effort values for native requests', async () => {
+  const transport = fakeTransport({
+    responses: [
+      response({ output: [{ type: 'message', content: 'ok' }] }),
+      response({ output: [{ type: 'message', content: 'ok' }] }),
+      response({ output: [{ type: 'message', content: 'ok' }] }),
+    ],
+  });
+  const provider = createLmStudioProvider({ transport });
+
+  await provider.complete({
+    model: 'local-model',
+    messages: [{ role: 'user', content: 'Hi' }],
+    effort: 'none',
+  });
+  await provider.complete({
+    model: 'local-model',
+    messages: [{ role: 'user', content: 'Hi' }],
+    effort: 'minimal',
+  });
+  await provider.complete({
+    model: 'local-model',
+    messages: [{ role: 'user', content: 'Hi' }],
+    effort: 'xhigh',
+  });
+
+  assert.deepEqual(
+    transport.requests.map(
+      (request) => JSON.parse(request.body ?? '{}').reasoning,
+    ),
+    ['off', 'low', 'high'],
+  );
 });
 
 test('maps LM Studio authorization modes', async () => {

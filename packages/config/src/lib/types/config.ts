@@ -1,3 +1,11 @@
+export type ReasoningEffort =
+  | 'none'
+  | 'minimal'
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'xhigh';
+
 export type GithubConfig = {
   readonly repo: {
     readonly url: string;
@@ -17,7 +25,8 @@ export type ModelConfig = {
   readonly id: string;
   readonly provider: string;
   readonly model: string;
-  readonly reasoning?: string;
+  readonly effort?: ReasoningEffort;
+  readonly reasoning?: ReasoningEffort;
   readonly internal_key?: string;
 };
 

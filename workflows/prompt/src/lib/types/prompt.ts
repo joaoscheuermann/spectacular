@@ -1,5 +1,5 @@
 import type { Artifact } from 'artifacts';
-import type { LlmProvider } from 'llms';
+import type { LlmProvider, ReasoningEffort } from 'llms';
 import type { SandboxSession } from 'sandbox';
 
 export type PromptOpenQuestionOptions = readonly [
@@ -46,6 +46,7 @@ export type PromptArtifact = Artifact<PromptData>;
 export type PromptWorkflowOptions = {
   readonly provider: LlmProvider;
   readonly model: string;
+  readonly effort?: ReasoningEffort;
   readonly workspaceRoot: string;
   readonly sandbox: SandboxSession;
   readonly signal?: AbortSignal;

@@ -20,6 +20,7 @@ import {
   messageText,
   parseJsonBody,
   parseStructuredOutput,
+  requestReasoningEffort,
   requireRequestInput,
   streamErrorEvent,
   structuredJsonSchema,
@@ -69,7 +70,9 @@ export const createLmStudioOpenAiProvider = (
   deps: LmStudioOpenAiProviderDeps,
 ): LlmProvider => {
   const baseUrl = deps.baseUrl ?? lmStudioOpenAiMetadata.baseUrl;
+
   const logger = deps.debugLogger;
+
   const log: DebugLog = async (target, event, fields) => {
     await logger?.log({ provider: 'lmstudio-openai', target, event, fields });
   };
@@ -258,6 +261,7 @@ const chatBody = (
     tools,
     temperature: request.temperature,
     max_tokens: request.maxOutputTokens,
+    reasoning_effort: requestReasoningEffort(request),
     response_format:
       schema === undefined
         ? undefined

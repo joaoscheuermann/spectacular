@@ -61,6 +61,20 @@ test('maps OpenAI Responses DTO with instructions tools reasoning and fast servi
   assert.equal('text' in body, false);
 });
 
+test('maps top-level OpenAI effort before legacy reasoning effort', () => {
+  const body = openAiBody(
+    {
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Plan it.' }],
+      effort: 'xhigh',
+      flags: { reasoning: { effort: 'low', summary: 'concise' } },
+    },
+    false,
+  );
+
+  assert.deepEqual(body.reasoning, { effort: 'xhigh', summary: 'concise' });
+});
+
 test('maps assistant tool calls to Responses function call input items', () => {
   const body = openAiBody(
     {

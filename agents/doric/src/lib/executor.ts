@@ -289,6 +289,7 @@ const runPrompt = async (
 ): Promise<void> => {
   const { model, provider } = resolvePromptModel(session.config);
   const promptProvider = await dependencies.createProvider(provider);
+  const effort = model.effort ?? model.reasoning;
 
   progress.eventBus.publish(
     runningPromptWorkflowMessage(progress.taskId, progress.contextId),
@@ -307,6 +308,7 @@ const runPrompt = async (
     {
       provider: promptProvider,
       model: model.model,
+      ...(effort === undefined ? {} : { effort }),
       workspaceRoot: session.repo.path,
       sandbox: session.sandbox,
     },

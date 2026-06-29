@@ -49,8 +49,16 @@ export type ProviderMessage = {
 
 export type ProviderToolCall = ToolCallRequest;
 
+export type ReasoningEffort =
+  | 'none'
+  | 'minimal'
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'xhigh';
+
 export type ReasoningRequest = {
-  readonly effort?: 'minimal' | 'low' | 'medium' | 'high';
+  readonly effort?: ReasoningEffort;
   readonly summary?: 'auto' | 'concise' | 'detailed';
 };
 
@@ -83,7 +91,7 @@ export type UsageMetadata = {
 
 export type ReasoningMetadata = {
   readonly text?: string;
-  readonly effort?: ReasoningRequest['effort'];
+  readonly effort?: ReasoningEffort;
   readonly summary?: string;
 };
 
@@ -156,6 +164,7 @@ export type ProviderRequest<
   readonly messages: readonly ProviderMessage[];
   readonly tools?: readonly ToolDefinition[];
   readonly schema?: Schema;
+  readonly effort?: ReasoningEffort;
   readonly temperature?: number;
   readonly maxOutputTokens?: number;
   readonly flags?: ProviderCallFlags;

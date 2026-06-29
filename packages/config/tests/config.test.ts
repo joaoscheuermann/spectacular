@@ -37,6 +37,66 @@ test('parses config objects directly when the payload is valid', () => {
   assert.deepEqual(parseConfig(config), config);
 });
 
+test('parses provider-neutral model effort values', () => {
+  const config = sampleConfig({
+    models: [
+      {
+        id: 'planning',
+        provider: 'openai',
+        model: 'gpt-5',
+        effort: 'xhigh',
+      },
+    ],
+  });
+
+  assert.deepEqual(parseConfig(config).models[0], {
+    id: 'planning',
+    provider: 'openai',
+    model: 'gpt-5',
+    effort: 'xhigh',
+  });
+});
+
+test('rejects conflicting model effort and legacy reasoning values', () => {
+  assertConfigError(
+    () =>
+      parseConfig(
+        sampleConfig({
+          models: [
+            {
+              id: 'planning',
+              provider: 'openai',
+              model: 'gpt-5',
+              effort: 'high',
+              reasoning: 'medium',
+            },
+          ],
+        }),
+      ),
+    'invalid_config_field',
+    'config.models[0].effort',
+  );
+});
+
+test('rejects invalid model effort values', () => {
+  assertConfigError(
+    () =>
+      parseConfig({
+        ...sampleConfig(),
+        models: [
+          {
+            id: 'planning',
+            provider: 'openai',
+            model: 'gpt-5',
+            effort: 'maximum',
+          },
+        ],
+      }),
+    'invalid_config_field',
+    'config.models[0].effort',
+  );
+});
+
 test('parses optional GitHub repository branch when provided', () => {
   const config = sampleConfig({
     github: {

@@ -25,6 +25,7 @@ import {
   messageText,
   parseJsonBody,
   parseStructuredOutput,
+  requestReasoningEffort,
   requireRequestInput,
   streamErrorEvent,
 } from './common.js';
@@ -47,7 +48,7 @@ export const lmStudioMetadata: ProviderMetadata = {
 export const lmStudioCapabilities: ProviderCapabilities = {
   streaming: true,
   tools: false,
-  reasoning: false,
+  reasoning: true,
   modelListing: true,
   oauth: false,
   serviceTier: false,
@@ -237,7 +238,27 @@ const chatBody = (
     stream,
     temperature: request.temperature,
     max_output_tokens: request.maxOutputTokens,
+    reasoning: reasoningEffort(request),
   });
+
+const reasoningEffort = (
+  request: ProviderRequest<unknown>,
+): string | undefined => {
+  const effort = requestReasoningEffort(request);
+
+  if (effort === undefined) {
+    return undefined;
+  }
+
+  return {
+    none: 'off',
+    minimal: 'low',
+    low: 'low',
+    medium: 'medium',
+    high: 'high',
+    xhigh: 'high',
+  }[effort];
+};
 
 const systemPrompt = (
   messages: readonly ProviderMessage[],

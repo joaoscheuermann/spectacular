@@ -167,6 +167,54 @@ test('runs workflow-prompt after the repository session is ready', async () => {
   );
 });
 
+test('passes configured model effort to workflow-prompt', async () => {
+  const harness = createDoricTestHarness({
+    promptRunner: async (artifact) => completedPromptArtifact(artifact),
+  });
+
+  await harness.executor.execute(
+    createRequestContext({
+      config: createConfig({
+        models: [
+          {
+            id: 'default',
+            provider: 'openai',
+            model: 'gpt-5',
+            effort: 'xhigh',
+          },
+        ],
+      }),
+    }),
+    createEventBus(),
+  );
+
+  assert.equal(harness.promptRuns[0]?.options.effort, 'xhigh');
+});
+
+test('passes legacy model reasoning to workflow-prompt when effort is omitted', async () => {
+  const harness = createDoricTestHarness({
+    promptRunner: async (artifact) => completedPromptArtifact(artifact),
+  });
+
+  await harness.executor.execute(
+    createRequestContext({
+      config: createConfig({
+        models: [
+          {
+            id: 'default',
+            provider: 'openai',
+            model: 'gpt-5',
+            reasoning: 'medium',
+          },
+        ],
+      }),
+    }),
+    createEventBus(),
+  );
+
+  assert.equal(harness.promptRuns[0]?.options.effort, 'medium');
+});
+
 test('passes configured GitHub branch to the sandbox clone', async () => {
   const harness = createDoricTestHarness();
 

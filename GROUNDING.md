@@ -86,13 +86,22 @@ both requested, LM Studio OpenAI compatibility rejects the request with a
 provider error before sending HTTP because LM Studio rejects `tools` and
 `response_format` together.
 Provider configs may include an optional `baseUrl` string to
-override provider endpoints that support it. The Codex provider uses the
-existing provider token field for the Codex authorization value and derives
-Codex-compatible account headers from that credential when available. OpenAI
-and LM Studio provider configs may omit or blank the token for compatible local
-endpoints; in that case the auth header is omitted. Codex and OpenRouter
-provider configs still require configured tokens. Credential values must remain
-private runtime inputs: do not persist, log, or echo resolved tokens.
+override provider endpoints that support it. Model configs may include an
+optional provider-neutral `effort` value of `none`, `minimal`, `low`,
+`medium`, `high`, or `xhigh`; legacy model `reasoning` remains supported as
+the same effort alias. Config parsing rejects models that provide conflicting
+`effort` and `reasoning` values. Provider requests may include top-level
+`effort`, which takes precedence over legacy `flags.reasoning.effort`.
+OpenAI, Codex, and OpenRouter send resolved effort through `reasoning.effort`;
+LM Studio OpenAI compatibility sends `reasoning_effort`; LM Studio native sends
+its native `reasoning` value with `none` mapped to `off`, `minimal` to `low`,
+and `xhigh` to `high`. The Codex provider uses the existing provider token
+field for the Codex authorization value and derives Codex-compatible account
+headers from that credential when available. OpenAI and LM Studio provider
+configs may omit or blank the token for compatible local endpoints; in that
+case the auth header is omitted. Codex and OpenRouter provider configs still
+require configured tokens. Credential values must remain private runtime
+inputs: do not persist, log, or echo resolved tokens.
 
 The Codex OAuth profile is a package-owned default for the Codex browser
 authorization flow. Host scripts should require only `CODEX_AUTHORIZATION` for

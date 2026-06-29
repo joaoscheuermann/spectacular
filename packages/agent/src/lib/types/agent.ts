@@ -5,6 +5,7 @@ import type {
   ProviderCallFlags,
   ProviderFinished,
   ProviderStreamEvent,
+  ReasoningEffort,
   ReasoningMetadata,
   StructuredOutputSchema,
   StructuredOutputValue,
@@ -19,6 +20,7 @@ export type AgentOptions = {
   readonly messages: MessageStorage;
   readonly system: string;
   readonly model: string;
+  readonly effort?: ReasoningEffort;
   readonly flags?: ProviderCallFlags;
   readonly temperature?: number;
   readonly maxOutputTokens?: number;

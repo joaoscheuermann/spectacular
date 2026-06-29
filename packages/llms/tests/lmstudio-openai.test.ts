@@ -113,6 +113,23 @@ test('sends LM Studio OpenAI-compatible structured output requests without tools
   });
 });
 
+test('sends LM Studio OpenAI-compatible reasoning effort as top-level chat field', async () => {
+  const transport = fakeTransport({
+    responses: [response({ choices: [{ message: { content: 'ok' } }] })],
+  });
+  const provider = createLmStudioOpenAiProvider({ transport });
+
+  await provider.complete({
+    model: 'local-model',
+    messages: [{ role: 'user', content: 'Hi' }],
+    effort: 'minimal',
+    flags: { reasoning: { effort: 'high' } },
+  });
+  const body = JSON.parse(transport.requests[0]?.body ?? '{}');
+
+  assert.equal(body.reasoning_effort, 'minimal');
+});
+
 test('rejects LM Studio OpenAI-compatible structured requests with tools before sending HTTP', async () => {
   const transport = fakeTransport({});
   const provider = createLmStudioOpenAiProvider({ transport });

@@ -41,6 +41,7 @@ test('sends Codex ChatGPT account headers to the Codex backend', async () => {
   const result = await provider.complete({
     model: 'gpt-5.5',
     messages: [{ role: 'user', content: 'Hi' }],
+    effort: 'high',
     temperature: 0,
   });
   const body = JSON.parse(transport.requests[0]?.body ?? '{}');
@@ -54,6 +55,7 @@ test('sends Codex ChatGPT account headers to the Codex backend', async () => {
   assert.equal(body.model, 'gpt-5.5');
   assert.equal(body.stream, true);
   assert.equal(body.store, false);
+  assert.deepEqual(body.reasoning, { effort: 'high' });
   assert.equal(body.temperature, undefined);
   assert.equal(body.instructions, 'You are Codex, a coding agent.');
   assert.equal(

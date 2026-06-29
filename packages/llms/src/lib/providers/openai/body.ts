@@ -121,15 +121,15 @@ const reasoningRequest = (
   const value = request.flags?.reasoning;
 
   if (value === undefined || value === false) {
-    return undefined;
+    return request.effort === undefined ? undefined : { effort: request.effort };
   }
 
   if (value === true) {
-    return {};
+    return request.effort === undefined ? {} : { effort: request.effort };
   }
 
   return prune({
-    effort: value.effort,
+    effort: request.effort ?? value.effort,
     summary: value.summary,
   }) as JsonObject;
 };

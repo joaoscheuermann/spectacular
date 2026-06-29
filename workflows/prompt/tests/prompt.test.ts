@@ -108,6 +108,22 @@ test('extracts product and technical requirements only when questions are empty'
   await rm(root, { recursive: true, force: true });
 });
 
+test('passes reasoning effort to every prompt pass provider request', async () => {
+  const root = await workspace('prompt-effort');
+  const provider = createProvider(responsesWithoutQuestions());
+
+  await prompt(createPromptArtifact('Ship with high effort.'), {
+    ...workflowOptions(provider.provider, root),
+    effort: 'xhigh',
+  });
+
+  assert.deepEqual(
+    provider.requests.map((request) => request.effort),
+    ['xhigh', 'xhigh', 'xhigh', 'xhigh', 'xhigh', 'xhigh'],
+  );
+  await rm(root, { recursive: true, force: true });
+});
+
 test('executes exploration tools through workflow-safe wrappers', async () => {
   const root = await workspace('prompt-safe-tools');
   await write(root, 'GROUNDING.md', 'GROUNDING_SENTINEL');

@@ -65,12 +65,14 @@ const reasoningRequest = (
   const value = request.flags?.reasoning;
 
   if (value === undefined || value === false) {
-    return undefined;
+    return request.effort === undefined ? undefined : { effort: request.effort };
   }
 
   return value === true
-    ? {}
-    : prune({ effort: value.effort, summary: value.summary });
+    ? request.effort === undefined
+      ? {}
+      : { effort: request.effort }
+    : prune({ effort: request.effort ?? value.effort, summary: value.summary });
 };
 
 const prune = (value: Record<string, unknown>): Record<string, unknown> =>

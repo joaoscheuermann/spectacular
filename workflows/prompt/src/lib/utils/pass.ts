@@ -27,6 +27,7 @@ export const completePass = async <Schema extends StructuredOutputSchema>(
     messages: createMessageStorage(),
     system: pass.system,
     model: options.model,
+    ...(options.effort !== undefined ? { effort: options.effort } : {}),
     temperature: 0,
   });
 

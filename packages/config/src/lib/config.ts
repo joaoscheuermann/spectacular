@@ -4,6 +4,7 @@ import type {
   GithubConfig,
   ModelConfig,
   ProviderConfig,
+  ReasoningEffort,
   TaskConfig,
 } from './types/config.js';
 import type { ConfigParseErrorCode } from './types/error.js';
@@ -15,6 +16,7 @@ export type {
   GithubConfig,
   ModelConfig,
   ProviderConfig,
+  ReasoningEffort,
   TaskConfig,
 } from './types/config.js';
 export type { ConfigParseErrorCode, ConfigParseIssue } from './types/error.js';
@@ -99,16 +101,29 @@ function parseProvider(value: unknown, path: string): ProviderConfig {
 
 function parseModel(value: unknown, path: string): ModelConfig {
   const input = object(value, path);
-  const reasoning = optionalString(input['reasoning'], at(path, 'reasoning'));
+  const effort = optionalReasoningEffort(input['effort'], at(path, 'effort'));
+  const reasoning = optionalReasoningEffort(
+    input['reasoning'],
+    at(path, 'reasoning'),
+  );
   const internalKey = optionalString(
     input['internal_key'],
     at(path, 'internal_key'),
   );
 
+  if (effort !== undefined && reasoning !== undefined && effort !== reasoning) {
+    throw invalid(
+      'invalid_config_field',
+      at(path, 'effort'),
+      'Model effort must match legacy reasoning when both are provided',
+    );
+  }
+
   return {
     id: string(input['id'], at(path, 'id')),
     provider: string(input['provider'], at(path, 'provider')),
     model: string(input['model'], at(path, 'model')),
+    ...(effort === undefined ? {} : { effort }),
     ...(reasoning === undefined ? {} : { reasoning }),
     ...(internalKey === undefined ? {} : { internal_key: internalKey }),
   };
@@ -181,6 +196,34 @@ function optionalString(value: unknown, path: string): string | undefined {
   }
 
   return string(value, path);
+}
+
+function optionalReasoningEffort(
+  value: unknown,
+  path: string,
+): ReasoningEffort | undefined {
+  const effort = optionalString(value, path);
+
+  if (effort === undefined) {
+    return undefined;
+  }
+
+  if (
+    effort === 'none' ||
+    effort === 'minimal' ||
+    effort === 'low' ||
+    effort === 'medium' ||
+    effort === 'high' ||
+    effort === 'xhigh'
+  ) {
+    return effort;
+  }
+
+  throw invalid(
+    'invalid_config_field',
+    path,
+    'Expected reasoning effort none, minimal, low, medium, high, or xhigh',
+  );
 }
 
 function invalid(
