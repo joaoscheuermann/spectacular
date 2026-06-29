@@ -75,6 +75,7 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
     body: Record<string, unknown>,
   ): Promise<Record<string, unknown>> => {
     const auth = await authorization(deps);
+
     const response = await deps.transport.request({
       method: 'POST',
       url: `${baseUrl}/responses`,

@@ -75,9 +75,17 @@ creation; later config replacement updates only the stored session config.
 GitHub repository config may include an optional `github.repo.branch` string,
 which is used only when initially cloning a sandbox repository.
 
-Doric supports OpenAI, OpenRouter, LM Studio, and Codex as separate provider
-types. LM Studio uses its native REST API at `http://localhost:1234` by
-default, and provider configs may include an optional `baseUrl` string to
+Doric supports OpenAI, OpenRouter, LM Studio native, LM Studio OpenAI
+compatibility, and Codex as separate provider integrations. LM Studio native
+uses its native REST API at `http://localhost:1234` by default. LM Studio
+OpenAI compatibility uses the OpenAI-compatible API at
+`http://localhost:1234/v1` by default and sends structured-output requests
+through chat completions `response_format` rather than OpenAI Responses
+`text.format` when no tools are present. When tools and structured output are
+both requested, LM Studio OpenAI compatibility rejects the request with a
+provider error before sending HTTP because LM Studio rejects `tools` and
+`response_format` together.
+Provider configs may include an optional `baseUrl` string to
 override provider endpoints that support it. The Codex provider uses the
 existing provider token field for the Codex authorization value and derives
 Codex-compatible account headers from that credential when available. OpenAI
