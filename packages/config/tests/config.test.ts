@@ -70,6 +70,24 @@ test('parses OpenAI provider when token is omitted', () => {
   });
 });
 
+test('parses optional provider base URL when provided', () => {
+  const config = sampleConfig({
+    providers: [
+      {
+        id: 'lmstudio',
+        type: 'lmstudio',
+        baseUrl: 'http://localhost:4321',
+      },
+    ],
+  });
+
+  assert.deepEqual(parseConfig(config).providers[0], {
+    id: 'lmstudio',
+    type: 'lmstudio',
+    baseUrl: 'http://localhost:4321',
+  });
+});
+
 test('returns config update when later message metadata contains configuration', () => {
   const config = sampleConfig();
 

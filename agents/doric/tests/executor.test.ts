@@ -478,6 +478,174 @@ test('uses blank-token OpenAI providers without an authorization header', async 
   }
 });
 
+test('uses tokenless LM Studio providers with the default local endpoint', async () => {
+  const originalFetch = globalThis.fetch;
+  const urls: string[] = [];
+  const requests: RequestInit[] = [];
+  globalThis.fetch = (async (input, init) => {
+    urls.push(String(input));
+    requests.push(init ?? {});
+
+    return new Response(
+      JSON.stringify({ output: [{ type: 'message', content: 'ok' }] }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  }) as typeof fetch;
+
+  try {
+    const harness = createDoricTestHarness({
+      useDefaultProvider: true,
+      promptRunner: async (artifact, options) => {
+        await options.provider.complete({
+          model: options.model,
+          messages: [{ role: 'user', content: 'Hi' }],
+        });
+
+        return completedPromptArtifact(artifact);
+      },
+    });
+
+    await harness.executor.execute(
+      createRequestContext({
+        config: createConfig({
+          providers: [{ id: 'lmstudio', type: 'lmstudio' }],
+          models: [
+            {
+              id: 'default',
+              provider: 'lmstudio',
+              model: 'local-model-fast',
+            },
+          ],
+        }),
+      }),
+      createEventBus(),
+    );
+
+    const headers = requests[0]?.headers as Record<string, string> | undefined;
+    const body = JSON.parse(String(requests[0]?.body ?? '{}'));
+
+    assert.equal(urls[0], 'http://localhost:1234/api/v1/chat');
+    assert.equal('authorization' in (headers ?? {}), false);
+    assert.equal(body.model, 'local-model-fast');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('uses configured LM Studio provider base URL overrides', async () => {
+  const originalFetch = globalThis.fetch;
+  const urls: string[] = [];
+  const requests: RequestInit[] = [];
+  globalThis.fetch = (async (input, init) => {
+    urls.push(String(input));
+    requests.push(init ?? {});
+
+    return new Response(
+      JSON.stringify({ output: [{ type: 'message', content: 'ok' }] }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  }) as typeof fetch;
+
+  try {
+    const harness = createDoricTestHarness({
+      useDefaultProvider: true,
+      promptRunner: async (artifact, options) => {
+        await options.provider.complete({
+          model: options.model,
+          messages: [{ role: 'user', content: 'Hi' }],
+        });
+
+        return completedPromptArtifact(artifact);
+      },
+    });
+
+    await harness.executor.execute(
+      createRequestContext({
+        config: createConfig({
+          providers: [
+            {
+              id: 'lmstudio',
+              type: 'lmstudio',
+              token: 'Bearer local-session-token',
+              baseUrl: 'http://localhost:4321',
+            },
+          ],
+          models: [
+            {
+              id: 'default',
+              provider: 'lmstudio',
+              model: 'local-model',
+            },
+          ],
+        }),
+      }),
+      createEventBus(),
+    );
+
+    const headers = requests[0]?.headers as Record<string, string> | undefined;
+
+    assert.equal(urls[0], 'http://localhost:4321/api/v1/chat');
+    assert.equal(headers?.authorization, 'Bearer local-session-token');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('uses configured LM Studio provider tokens as API keys', async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: RequestInit[] = [];
+  globalThis.fetch = (async (_input, init) => {
+    requests.push(init ?? {});
+
+    return new Response(
+      JSON.stringify({ output: [{ type: 'message', content: 'ok' }] }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  }) as typeof fetch;
+
+  try {
+    const harness = createDoricTestHarness({
+      useDefaultProvider: true,
+      promptRunner: async (artifact, options) => {
+        await options.provider.complete({
+          model: options.model,
+          messages: [{ role: 'user', content: 'Hi' }],
+        });
+
+        return completedPromptArtifact(artifact);
+      },
+    });
+
+    await harness.executor.execute(
+      createRequestContext({
+        config: createConfig({
+          providers: [
+            {
+              id: 'lmstudio',
+              type: 'lmstudio',
+              token: 'local-api-key',
+            },
+          ],
+          models: [
+            {
+              id: 'default',
+              provider: 'lmstudio',
+              model: 'local-model',
+            },
+          ],
+        }),
+      }),
+      createEventBus(),
+    );
+
+    const headers = requests[0]?.headers as Record<string, string> | undefined;
+
+    assert.equal(headers?.authorization, 'Bearer local-api-key');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('rejects OpenRouter providers when token is omitted', async () => {
   const harness = createDoricTestHarness({ useDefaultProvider: true });
 

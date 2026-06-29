@@ -10,6 +10,7 @@ export type ProviderConfig = {
   readonly id: string;
   readonly type: string;
   readonly token?: string;
+  readonly baseUrl?: string;
 };
 
 export type ModelConfig = {

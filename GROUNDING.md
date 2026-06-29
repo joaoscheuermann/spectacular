@@ -75,14 +75,16 @@ creation; later config replacement updates only the stored session config.
 GitHub repository config may include an optional `github.repo.branch` string,
 which is used only when initially cloning a sandbox repository.
 
-Doric supports OpenAI and Codex as separate provider types. The Codex provider
-uses the existing provider token field for the Codex authorization value and
-derives Codex-compatible account headers from that credential when available.
-OpenAI provider configs may omit or blank the token for OpenAI-compatible
-endpoints such as local LM Studio APIs; in that case the auth header is
-omitted. Codex and OpenRouter provider configs still require configured tokens.
-Credential values must remain private runtime inputs: do not persist, log, or
-echo resolved tokens.
+Doric supports OpenAI, OpenRouter, LM Studio, and Codex as separate provider
+types. LM Studio uses its native REST API at `http://localhost:1234` by
+default, and provider configs may include an optional `baseUrl` string to
+override provider endpoints that support it. The Codex provider uses the
+existing provider token field for the Codex authorization value and derives
+Codex-compatible account headers from that credential when available. OpenAI
+and LM Studio provider configs may omit or blank the token for compatible local
+endpoints; in that case the auth header is omitted. Codex and OpenRouter
+provider configs still require configured tokens. Credential values must remain
+private runtime inputs: do not persist, log, or echo resolved tokens.
 
 The Codex OAuth profile is a package-owned default for the Codex browser
 authorization flow. Host scripts should require only `CODEX_AUTHORIZATION` for

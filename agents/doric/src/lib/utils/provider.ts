@@ -4,6 +4,7 @@ import type { ProviderConfig } from 'config';
 import {
   createFetchTransport as createLlmFetchTransport,
   createCodexProvider,
+  createLmStudioProvider,
   createOpenAiProvider,
   createOpenRouterProvider,
 } from 'llms';
@@ -26,6 +27,20 @@ export const createProviderFromConfig = async (
     return token.toLowerCase().startsWith('bearer ')
       ? createOpenAiProvider({ transport, authorization: token })
       : createOpenAiProvider({ transport, apiKey: token });
+  }
+
+  if (provider.type === 'lmstudio') {
+    const token = optionalToken(provider);
+    const baseUrl =
+      provider.baseUrl === undefined ? {} : { baseUrl: provider.baseUrl };
+
+    if (token === undefined) {
+      return createLmStudioProvider({ transport, ...baseUrl });
+    }
+
+    return token.toLowerCase().startsWith('bearer ')
+      ? createLmStudioProvider({ transport, ...baseUrl, authorization: token })
+      : createLmStudioProvider({ transport, ...baseUrl, apiKey: token });
   }
 
   if (provider.type === 'openrouter') {
