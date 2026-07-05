@@ -113,7 +113,7 @@ test('maps assistant tool calls to Responses function call input items', () => {
   ]);
 });
 
-test('keeps assistant text before Responses function call input items', () => {
+test('omits assistant text while keeping Responses function call input items', () => {
   const body = openAiBody(
     {
       model: 'gpt-5',
@@ -137,14 +137,30 @@ test('keeps assistant text before Responses function call input items', () => {
       content: [{ type: 'input_text', text: 'Plan it.' }],
     },
     {
-      role: 'assistant',
-      content: [{ type: 'output_text', text: 'I will inspect first.' }],
-    },
-    {
       type: 'function_call',
       call_id: 'call_1',
       name: 'read_file',
       arguments: '{"path":"x"}',
+    },
+  ]);
+});
+
+test('omits assistant text-only messages from Responses input items', () => {
+  const body = openAiBody(
+    {
+      model: 'gpt-5',
+      messages: [
+        { role: 'user', content: 'Plan it.' },
+        { role: 'assistant', content: 'I will inspect first.' },
+      ],
+    },
+    false,
+  );
+
+  assert.deepEqual(body.input, [
+    {
+      role: 'user',
+      content: [{ type: 'input_text', text: 'Plan it.' }],
     },
   ]);
 });

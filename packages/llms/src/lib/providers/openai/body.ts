@@ -78,27 +78,20 @@ const inputItems = (
   }
 
   const text = messageText(message);
+  if (message.role === 'assistant') {
+    return message.toolCalls?.map(functionCallItem) ?? [];
+  }
+
   const item = {
     role: message.role,
     content: [
       {
-        type: message.role === 'assistant' ? 'output_text' : 'input_text',
+        type: 'input_text',
         text,
       },
     ],
   };
-
-  if (message.role !== 'assistant') {
-    return [item];
-  }
-
-  const calls = message.toolCalls?.map(functionCallItem) ?? [];
-
-  if (calls.length === 0) {
-    return [item];
-  }
-
-  return text === '' ? calls : [item, ...calls];
+  return [item];
 };
 
 const functionCallItem = (call: ProviderToolCall): Record<string, unknown> => ({
