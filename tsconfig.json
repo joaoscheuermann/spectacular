@@ -71,6 +71,9 @@
     },
     {
       "path": "./apps/cli"
+    },
+    {
+      "path": "./apps/okf"
     }
   ]
 }
