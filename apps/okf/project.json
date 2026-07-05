@@ -4,17 +4,6 @@
   "projectType": "application",
   "sourceRoot": "apps/okf/src",
   "targets": {
-    "build": {
-      "executor": "nx:run-commands",
-      "outputs": ["{projectRoot}/dist"],
-      "options": {
-        "commands": [
-          "node -e \"require('node:fs').rmSync('apps/okf/dist', { recursive: true, force: true })\"",
-          "tsc -p apps/okf/tsconfig.lib.json"
-        ],
-        "parallel": false
-      }
-    },
     "run": {
       "executor": "nx:run-commands",
       "dependsOn": ["build"],

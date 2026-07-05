@@ -1,71 +1,90 @@
-#!/usr/bin/env node
-import { Command } from 'commander';
-import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
 import path from 'node:path';
+
+import { Command } from 'commander';
+
 import pino from 'pino';
+import pretty from 'pino-pretty';
 
-import { generateKnowledgeBundle } from './lib/analyzer.js';
-import { createLmStudioSummarizer } from './lib/summarizer.js';
-import type { KnowledgeLogger } from './lib/types.js';
+import { readGitIgnoreFile } from './lib/git.js';
+import { walk } from './lib/walk.js';
+import { classify } from './lib/agents/classify/index.js';
 
-export * from './lib/analyzer.js';
-export * from './lib/collect.js';
-export * from './lib/extract.js';
-export * from './lib/log.js';
-export * from './lib/markdown.js';
-export * from './lib/summarizer.js';
-export * from './lib/tree.js';
-export * from './lib/types.js';
-
-export type CliOptions = {
-  readonly path: string;
-};
-
-export const createCliLogger = (): KnowledgeLogger =>
-  pino(
-    {
-      base: undefined,
-      level: process.env['OKF_LOG_LEVEL'] ?? 'info',
-      timestamp: false,
-    },
-    pino.destination(2),
-  );
+const logger = pino(pretty());
 
 /** Runs the OKF CLI against the repository path passed through --path. */
-export const runCli = async (argv: readonly string[]): Promise<void> => {
-  const logger = createCliLogger();
+async function main(): Promise<void> {
+  // Logger
+
   const program = new Command()
     .name('okf')
     .description('Generate an Open Knowledge Format bundle for a repository.')
     .requiredOption('--path <repo-root>', 'repository root to analyze');
 
-  program.parse(argv, { from: 'user' });
-  const options = program.opts<CliOptions>();
-  const result = await generateKnowledgeBundle({
-    rootPath: options.path,
-    summarizer: createLmStudioSummarizer(),
-    logger,
-  });
+  program.parse();
+
+  const options = program.opts<{
+    readonly path: string;
+  }>();
 
   logger.info(
     {
-      knowledgePath: result.knowledgePath,
-      files: result.filesWritten,
-      indexes: result.indexesWritten,
-      logs: result.logsWritten,
+      path: options.path,
     },
-    'okf.result',
+    'okf.start',
   );
-};
 
-const isEntrypoint = (): boolean =>
-  process.argv[1] !== undefined &&
-  fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+  const root = options.path;
+  const output = path.join(options.path, '.doric', 'knowledge');
 
-if (isEntrypoint()) {
-  runCli(process.argv.slice(2)).catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(message);
-    process.exitCode = 1;
-  });
+  // Ensure the root folder is created
+  try {
+    await fs.promises.access(output, fs.constants.F_OK);
+    logger.info(
+      {
+        path: output,
+      },
+      'okf:output folder already exists',
+    );
+  } catch {
+    await fs.promises.mkdir(output, { recursive: true });
+    logger.info(
+      {
+        path: output,
+      },
+      'okf:output folder created',
+    );
+  }
+
+  // Root .gitignore
+  const ignore = await readGitIgnoreFile(root);
+
+  // We walk file by file
+  await walk(
+    root,
+    async (root, target) => {
+      const stat = await fs.promises.stat(target);
+
+      if (stat.isDirectory()) {
+        console.log('Go depper');
+      } else {
+        const filePath = path.join(root, target);
+
+        const body = await fs.promises.readFile(filePath, 'utf-8');
+
+        const classification = await classify(filePath, body);
+
+        console.log('OUTPUT', classification.structured);
+      }
+    },
+    {
+      ignore,
+    },
+  );
 }
+
+main()
+  .then(() => {
+    logger.info('Finished!');
+  })
+  .catch((error) => logger.error(error.message));
