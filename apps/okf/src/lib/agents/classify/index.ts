@@ -40,36 +40,40 @@ Do not make assumptions. Use only information present in the supplied facts and 
 `;
 
 const schema = z.object({
-  type: z.array(
-    z.enum([
-      'source_code',
-      'test',
-      'configuration',
-      'package_manifest',
-      'lockfile',
-      'build',
-      'documentation',
-      'generated',
-      'schema_contract',
-      'database',
-      'script',
-      'ci_cd',
-      'infrastructure',
-      'deployment_runtime',
-      'static_asset',
-      'template',
-      'localization',
-      'data_fixture',
-      'editor_tooling',
-      'version_control_metadata',
-      'legal_governance',
-      'secret_related',
-      'binary_vendor',
-      'none',
-    ]),
-  ),
-  reason: z.string(),
+  type: z.enum([
+    'source_code',
+    'test',
+    'configuration',
+    'package_manifest',
+    'lockfile',
+    'build',
+    'documentation',
+    'generated',
+    'schema_contract',
+    'database',
+    'script',
+    'ci_cd',
+    'infrastructure',
+    'deployment_runtime',
+    'static_asset',
+    'template',
+    'localization',
+    'data_fixture',
+    'editor_tooling',
+    'version_control_metadata',
+    'legal_governance',
+    'secret_related',
+    'binary_vendor',
+    'none',
+  ]),
+  // reason: z
+  //   .string()
+  //   .describe(
+  //     'An lean and small explanation about the `why` the classification was selected',
+  //   ),
 });
+
+export type Categorization = z.infer<typeof schema>;
 
 const prompt = (path: string, body: string) => `
   Classify the following file:
@@ -80,6 +84,9 @@ const prompt = (path: string, body: string) => `
 `;
 
 export const classify = (path: string, body: string) =>
-  agent('poolside/laguna-xs-2.1', system, 'low').complete(prompt(path, body), {
+  // agent('minicpm5-1b@q4_k_m', system, 'none').complete(prompt(path, body), {
+  // agent('minicpm5-1b@q8_0', system, 'low').complete(prompt(path, body), {
+  // agent('qwen3.5-4b', system, 'low').complete(prompt(path, body), {
+  agent('google/gemma-4-e4b', system, 'low').complete(prompt(path, body), {
     schema,
   });
