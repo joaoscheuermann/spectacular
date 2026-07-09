@@ -19,7 +19,6 @@ export const agent = (
       // provider: createOpenRouterProvider({
       // debugLogger: console as any,
       transport: createFetchTransport(),
-      // baseUrl: 'https://openrouter.ai/api/v1',
       baseUrl: BASE_URL,
     }),
     tools: createToolStorage([]),

@@ -8,10 +8,11 @@ import { Command } from 'commander';
 import pino from 'pino';
 import pretty from 'pino-pretty';
 
-import { walk } from './lib/walk.js';
 import { analyze } from './lib/agents/analyze/index.js';
 import { classify } from './lib/agents/classify/index.js';
 import { frontmatter } from './lib/agents/frontmatter/index.js';
+import { indexing } from './lib/agents/indexing/index.js';
+import { walk } from './lib/walk.js';
 
 const logger = pino(pretty());
 
@@ -60,20 +61,82 @@ async function main(): Promise<void> {
   // Root .gitignore
 
   // We walk file by file
-  await walk(root, (file, body) => work(root, output, file, body), {
-    ignore: [
-      // LLM instructions
-      '.agents',
+  await walk(
+    root,
+    {
+      file: async (file, body) => {
+        const markdown = await work(root, output, file, body);
 
-      // Config files
-      'package-lock.json',
+        if (!markdown) return '';
 
-      // Forbidden EXT.
-      '*.pfd',
-      '*.exe',
-      '*.msi',
-    ],
-  });
+        return markdown;
+      },
+      folder: async (folderRoot, files) => {
+        const indexRoot = path.join(output, path.relative(root, folderRoot));
+        const documents = (
+          await Promise.all(
+            files.map(async (file) => {
+              const relative = relativeFile(root, file.path);
+              const target = path.join(output, `${relative}.md`);
+              const content =
+                file.output.trim().length > 0
+                  ? file.output
+                  : await readFileIfExists(target);
+              const body = content.trim();
+
+              if (body.length === 0) {
+                return;
+              }
+
+              return [
+                `Source: ${toPosix(relative)}`,
+                `Link: ${toPosix(path.relative(indexRoot, target))}`,
+                '',
+                body,
+              ].join('\n');
+            }),
+          )
+        ).filter((document): document is string => document !== undefined);
+
+        if (documents.length === 0) {
+          return;
+        }
+
+        const response = await indexing(folderRoot, documents);
+        const markdown = response.text.trim();
+
+        if (markdown.length === 0) {
+          return;
+        }
+
+        const target = path.join(indexRoot, 'index.md');
+
+        await fs.promises.mkdir(indexRoot, { recursive: true });
+        await fs.promises.writeFile(target, `${markdown}\n`, 'utf-8');
+
+        logger.info(
+          {
+            path: target,
+          },
+          'okf:index written',
+        );
+      },
+    },
+    {
+      ignore: [
+        // LLM instructions
+        '.agents',
+
+        // Config files
+        'package-lock.json',
+
+        // Forbidden EXT.
+        '*.pdf',
+        '*.exe',
+        '*.msi',
+      ],
+    },
+  );
 }
 
 const work = async (
@@ -151,6 +214,8 @@ ${analysis.structured.summary}
     },
     'okf:written',
   );
+
+  return markdown;
 };
 
 const relativeFile = (root: string, file: string): string => {
@@ -168,6 +233,18 @@ const relativeFile = (root: string, file: string): string => {
 const toPosix = (value: string): string => value.split(path.sep).join('/');
 
 const yamlString = (value: string): string => JSON.stringify(value);
+
+const readFileIfExists = async (file: string): Promise<string> => {
+  try {
+    return await fs.promises.readFile(file, 'utf-8');
+  } catch (error) {
+    if (isMissingFile(error)) {
+      return '';
+    }
+
+    throw error;
+  }
+};
 
 const containsHash = async (file: string, hash: string): Promise<boolean> => {
   try {

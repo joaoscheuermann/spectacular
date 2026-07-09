@@ -4,20 +4,35 @@ import path from 'node:path';
 import { glob } from 'glob';
 import { readGitIgnoreFile } from './git.js';
 
-interface WalkOptions {
-  ignore?: Array<string>;
-}
+export type WalkFile = {
+  readonly path: string;
+  readonly body: string;
+  readonly output: string;
+};
 
-/** walks the file system ignoring files for the current root path */
+export type WalkCallbacks = {
+  readonly file: (file: string, body: string) => Promise<string>;
+  readonly folder: (
+    root: string,
+    files: readonly WalkFile[],
+  ) => Promise<void>;
+};
+
+export type WalkOptions = {
+  readonly ignore?: readonly string[];
+};
+
+/** Walks the file system from root while respecting .gitignore and explicit ignores. */
 export async function walk(
   root: string,
-  callback: (file: string, body: string) => Promise<void>,
+  callbacks: WalkCallbacks,
   options: WalkOptions,
-): Promise<void> {
+): Promise<readonly WalkFile[]> {
   const ignore = [
     ...(options.ignore ?? []),
     ...(await readGitIgnoreFile(root)),
   ];
+  const files: WalkFile[] = [];
 
   const targets = await glob('*', {
     cwd: root,
@@ -29,13 +44,22 @@ export async function walk(
     const stat = await fs.promises.stat(composed);
 
     if (stat.isDirectory()) {
-      await walk(composed, callback, { ignore });
+      files.push(...(await walk(composed, callbacks, { ignore })));
 
-      // Handle the folder...
+      continue;
     } else {
       const body = await fs.promises.readFile(composed, 'utf-8');
+      const output = await callbacks.file(composed, body);
 
-      await callback(composed, body);
+      files.push({
+        path: composed,
+        body,
+        output,
+      });
     }
   }
+
+  await callbacks.folder(root, files);
+
+  return files;
 }

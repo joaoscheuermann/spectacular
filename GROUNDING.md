@@ -58,11 +58,13 @@ worker, lifecycle service, TUI, slash-command, or multi-process architecture.
 `apps/okf` is the explicitly requested Node.js command-line host surface for
 generating local Open Knowledge Format bundles. The OKF CLI accepts a target
 repository path, indexes it while respecting target `.gitignore` rules and
-skipping binary files, and writes markdown knowledge under the target
-repository's `.doric/knowledge` tree. Production OKF summarization composes
-the Doric agent, message, tool, and LM Studio provider APIs against local
-LM Studio at `http://127.0.0.1:1234` with model `google/gemma-4-e4b`, and the
-CLI emits concise progress logs through `pino`.
+skipping binary files, and writes generated concept markdown plus per-folder
+OKF `index.md` files under the target repository's `.doric/knowledge` tree.
+Production OKF classifies readable text files with Gemma before summarization,
+routes file summaries by the classification result, composes the Doric agent,
+message, tool, and LM Studio provider APIs against local LM Studio at
+`http://127.0.0.1:1234` with model `google/gemma-4-e4b`, and the CLI emits
+concise progress logs through `pino`.
 
 `packages/prompt-kit` owns Doric's command-line prompt abstraction for the
 Node.js CLI host. It provides Doric-owned text, select, and queued prompt APIs
