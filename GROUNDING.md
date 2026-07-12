@@ -66,6 +66,34 @@ message, tool, and LM Studio provider APIs against local LM Studio at
 `http://127.0.0.1:1234` with model `google/gemma-4-e4b`, and the CLI emits
 concise progress logs through `pino`.
 
+`apps/evolution` is the explicitly requested Node.js prompt-evolution CLI. Its
+installed command is `evolve <config-path> [--dry-run]`; relative config paths
+resolve from the caller's current working directory, allowing invocation from
+anywhere. The config file's parent directory is the workspace root for all
+input and output: `scenarios`, exactly one original `SYSTEM_PROMPT.md` or
+`SYSTEM_PROMPT.txt` and baseline scenarios under `default`, and each
+model-specific `SYSTEM_PROMPT.md` under its target model ID. The config file and
+default prompt are immutable. An applied run may append missing initial
+scenario definition files to `default/scenarios` to establish the immutable
+baseline snapshot, but it never overwrites an existing baseline scenario. The
+root `scenarios` directory receives the merged accepted suite. The CLI composes
+configured target, optimizer, and judge models through any provider integration
+exported by `packages/llms`: OpenAI,
+OpenRouter, LM Studio native, LM Studio OpenAI compatibility, or Codex.
+Non-secret provider and model settings live in the passed JSON config;
+credential values are resolved only at runtime from configured
+environment-variable names and are never persisted or logged. Each target
+model evolves independently from the original prompt; no worst-performing
+model controls another model's candidate. Proposed scenarios hide their
+expected behavior from target calls, are screened for duplicates, and are
+promoted only after unanimous, unambiguous agreement by at least two distinct
+configured judges. Evolution is bounded by a config-backed accuracy target,
+plateau patience, and hard epoch cap. A dry run performs the same in-memory
+work but makes no filesystem writes, including directory, prompt, scenario, or
+history creation. Runtime progress is rendered through `pino`/`pino-pretty` on
+stderr with credential redaction and without prompt bodies, preserving stdout
+for the final JSON result.
+
 `packages/prompt-kit` owns Doric's command-line prompt abstraction for the
 Node.js CLI host. It provides Doric-owned text, select, and queued prompt APIs
 instead of coupling CLI user-input handling to Inquirer-shaped contracts.

@@ -74,6 +74,9 @@
     },
     {
       "path": "./apps/okf"
+    },
+    {
+      "path": "./apps/evolution"
     }
   ]
 }
