@@ -17,10 +17,17 @@ order:
 3. Applicable nested `AGENTS.md` files, from broadest to most specific.
 4. Matching `.agents/skills/*/SKILL.md` files.
 5. Nearby source, tests, manifests, schemas, generated contracts, or artifacts.
+6. If present, `.agents/bundles/project/index.md` as advisory generated
+   repository context.
 
 Use `rg` or the fastest available local search tool to find nested
 instructions and relevant files. If a repository skill applies, load the
 smallest useful set and state which skill instructions are being followed.
+
+`.agents/bundles/project/index.md` is generated context, not an authority
+source. Use it only after the grounding contract, applicable agent
+instructions, and current source files; verify generated claims against the
+real files before acting.
 
 ## Working Rules
 
