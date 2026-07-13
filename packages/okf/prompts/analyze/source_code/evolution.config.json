@@ -1,0 +1,60 @@
+{
+  "providers": [
+    {
+      "id": "local",
+      "type": "lmstudio-openai",
+      "baseUrl": "http://127.0.0.1:1234/v1"
+    }
+  ],
+  "models": [
+    {
+      "id": "lfm2.5-8b-a1b",
+      "provider": "local",
+      "model": "lfm2.5-8b-a1b",
+      "effort": "none",
+      "temperature": 0
+    },
+    {
+      "id": "qwen3.5-4b",
+      "provider": "local",
+      "model": "qwen3.5-4b",
+      "effort": "none",
+      "temperature": 0
+    },
+    {
+      "id": "gemma-4-e2b",
+      "provider": "local",
+      "model": "google/gemma-4-e2b",
+      "effort": "none",
+      "temperature": 0
+    }
+  ],
+  "optimizer": {
+    "provider": "local",
+    "model": "google/gemma-4-e2b",
+    "effort": "none",
+    "temperature": 0
+  },
+  "judges": [
+    {
+      "provider": "local",
+      "model": "lfm2.5-8b-a1b",
+      "temperature": 0
+    },
+    {
+      "provider": "local",
+      "model": "qwen3.5-4b",
+      "temperature": 0
+    },
+    {
+      "provider": "local",
+      "model": "google/gemma-4-e2b",
+      "temperature": 0
+    }
+  ],
+  "evolution": {
+    "targetAccuracy": 0.9,
+    "plateauPatience": 3,
+    "maxEpochs": 20
+  }
+}
