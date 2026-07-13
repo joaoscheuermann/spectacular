@@ -73,10 +73,13 @@
       "path": "./apps/cli"
     },
     {
-      "path": "./apps/okf"
+      "path": "./apps/evolution"
     },
     {
-      "path": "./apps/evolution"
+      "path": "./tools/okf"
+    },
+    {
+      "path": "./packages/okf"
     }
   ]
 }
