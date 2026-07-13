@@ -3,9 +3,11 @@ import { dirname, join, resolve } from 'node:path';
 
 import { createCompletionFor, type CompletionFor } from './completion.js';
 import { loadConfig } from './config.js';
+import { createJudges } from './evaluate.js';
 import { evolveModels, mergeScenarios, type TargetResult } from './evolve.js';
 import { persistLayout } from './layout.js';
 import type { Progress } from './progress.js';
+import { initializeScenarios } from './scenario-initialization.js';
 import { loadScenarios } from './scenarios.js';
 import type { EvolutionConfig } from './schema.js';
 
@@ -103,17 +105,27 @@ export const runEvolution = async (
   ]);
   const completeFor =
     dependencies.completionFactory?.(config) ?? createCompletionFor(config);
+  const baseline =
+    scenarios.length > 0
+      ? scenarios
+      : await initializeScenarios({
+          optimizer: completeFor(config.optimizer),
+          judges: createJudges(config.judges, completeFor),
+          originalPrompt,
+          maxAttempts: config.evolution.plateauPatience,
+          progress: dependencies.progress,
+        });
   const targets = await evolveModels(
     config,
     originalPrompt,
-    scenarios,
+    baseline,
     completeFor,
     dependencies.progress,
   );
-  const merged = mergeScenarios(scenarios, targets);
+  const merged = mergeScenarios(baseline, targets);
   await persistLayout({
     root,
-    initialScenarios: scenarios,
+    initialScenarios: baseline,
     scenarios: merged,
     targets,
     dryRun: options.dryRun,

@@ -1,5 +1,6 @@
 import type { Completion, CompletionFor } from './completion.js';
 import {
+  createJudges,
   evaluate,
   type Evaluation,
   type Judge,
@@ -288,6 +289,11 @@ const runEpoch = async (
 export const evolveTarget = async (
   inputs: TargetInputs,
 ): Promise<TargetResult> => {
+  if (inputs.scenarios.length === 0) {
+    throw new Error(
+      'Evolution requires a non-empty baseline; initialize scenarios before evolving models.',
+    );
+  }
   const targetComplete = inputs.completeFor(inputs.target);
   const optimizerComplete = inputs.completeFor(inputs.optimizer);
   let state = await initialState(inputs, targetComplete);
@@ -318,8 +324,6 @@ export const evolveTarget = async (
   };
 };
 
-const judgeId = (model: ModelRef): string => model.provider + ':' + model.model;
-
 /** Starts every target from the same original prompt and scenario snapshot. */
 export const evolveModels = async (
   config: EvolutionConfig,
@@ -328,10 +332,12 @@ export const evolveModels = async (
   completeFor: CompletionFor,
   progress?: Progress,
 ): Promise<readonly TargetResult[]> => {
-  const judges = config.judges.map((model) => ({
-    id: judgeId(model),
-    completion: completeFor(model),
-  }));
+  if (scenarios.length === 0) {
+    throw new Error(
+      'Evolution requires a non-empty baseline; initialize scenarios before evolving models.',
+    );
+  }
+  const judges = createJudges(config.judges, completeFor);
   const results: TargetResult[] = [];
   for (const target of config.models) {
     results.push(

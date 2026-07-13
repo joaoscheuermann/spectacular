@@ -87,20 +87,27 @@ export const judgmentSchema = z
   })
   .strict();
 
+const generatedScenarioSchema = z
+  .object({
+    id: idSchema,
+    input: textSchema,
+    expected: textSchema,
+    rationale: textSchema.nullable(),
+    tags: z.array(textSchema),
+  })
+  .strict();
+
 export const proposalOutputSchema = z
   .object({
     prompt: textSchema,
-    scenarios: z.array(
-      z
-        .object({
-          id: idSchema,
-          input: textSchema,
-          expected: textSchema,
-          rationale: textSchema.nullable(),
-          tags: z.array(textSchema),
-        })
-        .strict(),
-    ),
+    scenarios: z.array(generatedScenarioSchema),
+    rationale: textSchema,
+  })
+  .strict();
+
+export const scenarioInitializationOutputSchema = z
+  .object({
+    scenarios: z.array(generatedScenarioSchema).min(1),
     rationale: textSchema,
   })
   .strict();
@@ -113,3 +120,6 @@ export type EvolutionConfig = z.infer<typeof evolutionConfigSchema>;
 export type Scenario = z.infer<typeof scenarioSchema>;
 export type Judgment = z.infer<typeof judgmentSchema>;
 export type ProposalOutput = z.infer<typeof proposalOutputSchema>;
+export type ScenarioInitializationOutput = z.infer<
+  typeof scenarioInitializationOutputSchema
+>;

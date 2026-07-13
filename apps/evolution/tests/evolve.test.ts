@@ -22,6 +22,20 @@ test('stops for target, plateau, and hard cap in priority order', () => {
   assert.equal(evolutionStopReason(0.2, options, 1, 0), undefined);
 });
 
+test('rejects an empty baseline before creating model completions', async () => {
+  let completionCount = 0;
+  const completeFor: CompletionFor = () => {
+    completionCount += 1;
+    return fakeCompletion();
+  };
+
+  await assert.rejects(
+    evolveModels(validConfig(), 'incumbent', [], completeFor),
+    /initialize scenarios before evolving models/i,
+  );
+  assert.equal(completionCount, 0);
+});
+
 test('evolves every model independently from the original prompt', async () => {
   const config: EvolutionConfig = {
     ...validConfig(),

@@ -3,11 +3,24 @@ export const optimizerSystemPrompt = [
   'Return a complete replacement prompt, not a patch.',
   'Optimize only the target described in the input and use only its history.',
   'Preserve the original intent while correcting the listed failures.',
-  'You may propose generic scenarios as independently screened additions.',
+  'Independently screened scenario additions are optional.',
   'Each scenario input must contain only the model input.',
   'Each expected value must describe the observable successful behavior.',
   'Do not duplicate an incumbent or another proposed scenario.',
   'Return only JSON with prompt:string, scenarios:array of {id:string,input:string,expected:string,rationale:string|null,tags:string[]}, and rationale:string.',
+  'Do not wrap the JSON in Markdown.',
+].join(' ');
+
+export const scenarioInitializerSystemPrompt = [
+  'Generate a shared baseline suite for testing one immutable original system prompt.',
+  'Propose clear, useful scenarios that cover observable behavior required by the prompt.',
+  'Do not replace or revise the original prompt and do not assume a target model.',
+  'Use prior rejection feedback to improve later attempts.',
+  'Do not duplicate any previously attempted candidate.',
+  'Each scenario input must contain only the model input.',
+  'Each expected value must describe the observable successful behavior.',
+  'Return at least one scenario.',
+  'Return only JSON with scenarios:non-empty array of {id:string,input:string,expected:string,rationale:string|null,tags:string[]} and rationale:string.',
   'Do not wrap the JSON in Markdown.',
 ].join(' ');
 

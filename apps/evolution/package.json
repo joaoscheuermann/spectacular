@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "bin": {
-    "evolve": "./dist/index.js"
+    "evolution": "./dist/index.js"
   },
   "main": "./dist/index.js",
   "module": "./dist/index.js",

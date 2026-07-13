@@ -1,7 +1,12 @@
-import type { Completion } from './completion.js';
+import type { Completion, CompletionFor } from './completion.js';
 import { resultJudgeSystemPrompt } from './prompts.js';
 import type { Progress } from './progress.js';
-import { judgmentSchema, type Judgment, type Scenario } from './schema.js';
+import {
+  judgmentSchema,
+  type Judgment,
+  type ModelRef,
+  type Scenario,
+} from './schema.js';
 
 export type Judge = {
   readonly id: string;
@@ -26,6 +31,16 @@ export type Evaluation = {
   readonly total: number;
   readonly results: readonly ScenarioResult[];
 };
+
+/** Composes configured model references into stable judge identities. */
+export const createJudges = (
+  models: readonly ModelRef[],
+  completeFor: CompletionFor,
+): readonly Judge[] =>
+  models.map((model) => ({
+    id: model.provider + ':' + model.model,
+    completion: completeFor(model),
+  }));
 
 type EvaluationOptions = {
   readonly targetId: string;

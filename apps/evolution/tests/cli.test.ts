@@ -9,7 +9,7 @@ import type { CompletionFor } from '../src/completion.js';
 import { loadDefaultPrompt, runEvolution } from '../src/run.js';
 import { fakeCompletion, validConfig } from './fakes.js';
 
-test('parses exactly evolve config-path with optional dry run', async () => {
+test('dispatches evolve with config-path and optional dry run', async () => {
   let received:
     | { readonly config: string; readonly dryRun: boolean }
     | undefined;
@@ -27,9 +27,13 @@ test('parses exactly evolve config-path with optional dry run', async () => {
     () => {
       emitted = true;
     },
+    async () => {
+      throw new Error('init should not run');
+    },
   );
   await program.parseAsync([
     'node',
+    'evolution',
     'evolve',
     'relative/evolution.config.json',
     '--dry-run',
@@ -39,15 +43,49 @@ test('parses exactly evolve config-path with optional dry run', async () => {
     dryRun: true,
   });
   assert.equal(emitted, true);
-  assert.equal(program.name(), 'evolve');
+  assert.equal(program.name(), 'evolution');
+  const evolve = program.commands.find(
+    (command) => command.name() === 'evolve',
+  );
+  assert.ok(evolve);
   assert.equal(
-    program.options.some(({ long }) => long === '--config'),
+    evolve.options.some(({ long }) => long === '--config'),
     false,
   );
   assert.equal(
-    program.options.some(({ long }) => long === '--output'),
+    evolve.options.some(({ long }) => long === '--output'),
     false,
   );
+});
+
+test('dispatches init with the current directory by default', async () => {
+  let received: string | undefined;
+  let emitted: unknown;
+  const program = createProgram(
+    async () => {
+      throw new Error('evolve should not run');
+    },
+    (summary) => {
+      emitted = summary;
+    },
+    async (directory) => {
+      received = directory;
+      return {
+        root: 'resolved-root',
+        configCreated: true,
+        scenariosCreated: true,
+      };
+    },
+  );
+
+  await program.parseAsync(['node', 'evolution', 'init']);
+
+  assert.equal(received, '.');
+  assert.deepEqual(emitted, {
+    root: 'resolved-root',
+    configCreated: true,
+    scenariosCreated: true,
+  });
 });
 
 test('loads exactly one Markdown or text default prompt', async () => {
