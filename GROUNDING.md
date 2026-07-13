@@ -1,6 +1,6 @@
 # Doric Grounding
 
-Last reviewed: 2026-06-24
+Last reviewed: 2026-07-12
 
 This is Doric's repository validity contract. Every agent working in this
 repository must read it before non-trivial planning, reviewing, artifact
@@ -55,25 +55,49 @@ submission, session listing, session replay/connection, and best-effort session
 kill behavior. This does not by itself reintroduce the former Rust CLI, daemon,
 worker, lifecycle service, TUI, slash-command, or multi-process architecture.
 
-`apps/okf` is the explicitly requested Node.js command-line host surface for
-generating local Open Knowledge Format bundles. The OKF CLI accepts a target
-repository path, indexes it while respecting target `.gitignore` rules and
-skipping binary files, and writes generated concept markdown plus per-folder
-OKF `index.md` files under the target repository's `.doric/knowledge` tree.
-Production OKF classifies readable text files with Gemma before summarization,
-routes file summaries by the classification result, composes the Doric agent,
-message, tool, and LM Studio provider APIs against local LM Studio at
-`http://127.0.0.1:1234` with model `google/gemma-4-e4b`, and the CLI emits
-concise progress logs through `pino`.
+`packages/okf` is the explicitly requested embeddable TypeScript library for
+generating local Open Knowledge Format bundles. Its public `generate` API
+accepts an injected provider/model configuration, a repository root, and an
+optional output path. The default output is
+`<root>/.agents/bundles/project`; every explicit output must remain below
+`<root>/.agents/bundles`, including after resolving existing symbolic links or
+junctions. The generator discovers a complete regular-file snapshot, respects
+scoped target `.gitignore` rules, excludes symbolic links and binary content,
+and processes readable text in configurable concurrent batches.
+Production OKF retains raw source bodies for SHA-256 cache identity while
+redacting slash-delimited regex literals from model input. It preserves the
+classification, frontmatter, and classification-routed analysis stages, using
+the caller's provider instead of a package-selected provider. Complete
+classification and frontmatter system prompts live under
+`packages/okf/prompts/<stage>/<target>/SYSTEM_PROMPT.md`; analysis has one
+complete prompt per supported file kind under
+`packages/okf/prompts/analyze/<kind>/<target>/SYSTEM_PROMPT.md`. The
+prompt-evolution CLI can evolve each prompt independently, and callers select
+a common prompt target. Generated concepts mirror source paths without using
+reserved `index.md` or `log.md` concept names, and one deterministic project
+index is written to the bundle root.
+
+`tools/okf` owns the provider-neutral, read-only `okf_search` tool for consuming
+bundles below `<workspace>/.agents/bundles`. It performs bounded deterministic
+lexical search over permissively parsed OKF frontmatter and Markdown bodies,
+tolerates unknown producer fields and concept types, skips malformed concepts
+and reserved index/log files, does not follow symbolic links, and does not
+write files or access the network. The tool is a standalone package and is not
+registered with `workflow-prompt` by this scope.
 
 `apps/evolution` is the explicitly requested Node.js prompt-evolution CLI. Its
-installed command is `evolve <config-path> [--dry-run]`; relative config paths
-resolve from the caller's current working directory, allowing invocation from
-anywhere. The config file's parent directory is the workspace root for all
-input and output: `scenarios`, exactly one original `SYSTEM_PROMPT.md` or
+installed root command is `evolution`, with `init [directory]` and
+`evolve <config-path> [--dry-run]` subcommands. Init resolves its directory from
+the caller's current working directory, defaults to `.`, and non-destructively
+ensures a real `scenarios` directory plus a credential-free default
+`evolution.config.json`; it does not create a default prompt. Relative evolve
+config paths resolve from the caller's current working directory, allowing
+invocation from anywhere. The config file's parent directory is the workspace
+root for all input and output: `scenarios`, exactly one original
+`SYSTEM_PROMPT.md` or
 `SYSTEM_PROMPT.txt` and baseline scenarios under `default`, and each
 model-specific `SYSTEM_PROMPT.md` under its target model ID. The config file and
-default prompt are immutable. An applied run may append missing initial
+default prompt are immutable. An applied run may append missing baseline
 scenario definition files to `default/scenarios` to establish the immutable
 baseline snapshot, but it never overwrites an existing baseline scenario. The
 root `scenarios` directory receives the merged accepted suite. The CLI composes
@@ -84,15 +108,23 @@ Non-secret provider and model settings live in the passed JSON config;
 credential values are resolved only at runtime from configured
 environment-variable names and are never persisted or logged. Each target
 model evolves independently from the original prompt; no worst-performing
-model controls another model's candidate. Proposed scenarios hide their
-expected behavior from target calls, are screened for duplicates, and are
-promoted only after unanimous, unambiguous agreement by at least two distinct
-configured judges. Evolution is bounded by a config-backed accuracy target,
-plateau patience, and hard epoch cap. A dry run performs the same in-memory
-work but makes no filesystem writes, including directory, prompt, scenario, or
-history creation. Runtime progress is rendered through `pino`/`pino-pretty` on
-stderr with credential redaction and without prompt bodies, preserving stdout
-for the final JSON result.
+model controls another model's candidate. Before target evolution, an empty
+on-disk suite enters one shared scenario-initialization phase. Each attempt uses
+the configured optimizer with the immutable original prompt and prior rejection
+feedback, without target context or prompt replacement, then screens every
+candidate for duplicates and unanimous, unambiguous agreement by all configured
+judges. All-rejected batches retry up to `plateauPatience`; the first batch with
+an accepted candidate contributes all accepted candidates as the common
+baseline for every target. Initialization does not consume target epochs or
+plateau state, and no target model runs before the baseline is accepted. A
+non-empty on-disk suite skips initialization. During ordinary target evolution,
+proposed scenarios hide their expected behavior from target calls, use the same
+validation, and remain optional additions. Evolution is bounded by a
+config-backed accuracy target, plateau patience, and hard epoch cap. A dry run
+performs the same in-memory work but makes no filesystem writes, including
+directory, prompt, scenario, or history creation. Runtime progress is rendered
+through `pino`/`pino-pretty` on stderr with credential redaction and without
+prompt bodies, preserving stdout for the final JSON result.
 
 `packages/prompt-kit` owns Doric's command-line prompt abstraction for the
 Node.js CLI host. It provides Doric-owned text, select, and queued prompt APIs
