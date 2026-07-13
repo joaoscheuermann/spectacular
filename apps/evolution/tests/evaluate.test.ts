@@ -3,152 +3,93 @@ import test from 'node:test';
 
 import { evaluate, type Judge } from '../src/evaluate.js';
 import type { ProgressEvent } from '../src/progress.js';
-import { validateScenarioCandidates } from '../src/scenarios.js';
-import { fakeCompletion } from './fakes.js';
+import { fakeCompletion, matrix } from './fakes.js';
 
-const judges = (
-  values: readonly {
-    readonly passed: boolean;
-    readonly ambiguous?: boolean;
-  }[],
-): readonly Judge[] =>
-  values.map((value, index) => ({
-    id: 'judge-' + index,
-    completion: fakeCompletion(undefined, async () => ({
-      passed: value.passed,
-      ambiguous: value.ambiguous ?? false,
-      rationale: 'Private rationale.',
-    })),
-  }));
+const scenario = (id: string, evalIds: readonly string[]) => ({
+  id,
+  split: 'train' as const,
+  input: 'Private input ' + id,
+  evals: evalIds.map((evalId) => ({ id: evalId, assertion: 'Private rule' })),
+});
 
-test('evaluates generic text with unanimous judges and body-free progress', async () => {
-  const targetInputs: string[] = [];
-  const judgeInputs: string[] = [];
+test('calls target three times and judge once with the full assertion matrix', async () => {
+  let targetCalls = 0;
+  let judgeCalls = 0;
   const progress: ProgressEvent[] = [];
+  const judge: Judge = {
+    id: 'judge',
+    completion: fakeCompletion(undefined, async (_system, input) => {
+      judgeCalls += 1;
+      const payload = JSON.parse(input) as {
+        readonly outputs: readonly unknown[];
+      };
+      assert.equal(payload.outputs.length, 3);
+      return { results: matrix(['a', 'b']) };
+    }),
+  };
   const result = await evaluate(
-    fakeCompletion(async (_system, input) => {
-      targetInputs.push(input);
+    fakeCompletion(async () => {
+      targetCalls += 1;
       return 'Private output';
     }),
-    [0, 1].map((index) => ({
-      id: 'judge-' + index,
-      completion: fakeCompletion(undefined, async (_system, input) => {
-        judgeInputs.push(input);
-        return {
-          passed: true,
-          ambiguous: false,
-          rationale: 'Private rationale.',
-        };
-      }),
-    })),
-    'Private system prompt',
-    [
-      {
-        id: 'case-one',
-        input: 'Private scenario input',
-        expected: 'Private expected behavior',
-        tags: [],
-      },
-    ],
-    {
-      targetId: 'target-one',
-      progress: (event) => progress.push(event),
-    },
+    judge,
+    'Private prompt',
+    [scenario('one', ['a', 'b'])],
+    { targetId: 'target', progress: (event) => progress.push(event) },
   );
-
-  assert.equal(result.score, 1);
-  assert.deepEqual(targetInputs, ['Private scenario input']);
-  assert.equal(judgeInputs.length, 2);
-  assert.match(judgeInputs[0] ?? '', /Private expected behavior/);
+  assert.equal(targetCalls, 3);
+  assert.equal(judgeCalls, 1);
+  assert.equal(result.accuracy, 1);
   const logged = JSON.stringify(progress);
   for (const body of [
-    'Private system prompt',
-    'Private scenario input',
-    'Private expected behavior',
+    'Private input',
     'Private output',
-    'Private rationale',
+    'Private prompt',
+    'Private rule',
   ]) {
     assert.equal(logged.includes(body), false);
   }
 });
 
-test('fails an evaluation when any judge rejects or is ambiguous', async () => {
-  const scenario = [
-    { id: 'case-one', input: 'input', expected: 'expected', tags: [] },
-  ];
-  const rejected = await evaluate(
-    fakeCompletion(async () => 'output'),
-    judges([{ passed: true }, { passed: false }]),
-    'prompt',
-    scenario,
-    { targetId: 'target' },
-  );
-  const ambiguous = await evaluate(
-    fakeCompletion(async () => 'output'),
-    judges([{ passed: true }, { passed: true, ambiguous: true }]),
-    'prompt',
-    scenario,
-    { targetId: 'target' },
-  );
-  assert.equal(rejected.score, 0);
-  assert.equal(ambiguous.score, 0);
-});
-
-test('rejects duplicates before judging and accepts unanimous candidates', async () => {
-  let calls = 0;
-  const payloads: string[] = [];
-  const candidateJudges: readonly Judge[] = [0, 1].map((index) => ({
-    id: 'judge-' + index,
+test('macro-averages scenario accuracy instead of weighting assertion counts', async () => {
+  const judge: Judge = {
+    id: 'judge',
     completion: fakeCompletion(undefined, async (_system, input) => {
-      calls += 1;
-      payloads.push(input);
-      return { passed: true, ambiguous: false, rationale: 'Clear.' };
+      const payload = JSON.parse(input) as {
+        readonly evals: readonly { id: string }[];
+      };
+      const ids = payload.evals.map(({ id }) => id);
+      return { results: matrix(ids, ids.length > 1) };
     }),
-  }));
-  const results = await validateScenarioCandidates({
-    judges: candidateJudges,
-    originalPrompt: 'Original task contract',
-    incumbents: [
-      { id: 'existing', input: ' Add   dark mode ', expected: 'x', tags: [] },
-    ],
-    candidates: [
-      { id: 'duplicate', input: 'add DARK mode', expected: 'x', tags: [] },
-      { id: 'new-case', input: 'Export PDF', expected: 'PDF output', tags: [] },
-    ],
-  });
-  assert.equal(results[0]?.reason, 'duplicate-input');
-  assert.equal(results[1]?.accepted, true);
-  assert.equal(calls, 2);
-  assert.ok(
-    payloads.every((payload) =>
-      payload.includes('"originalPrompt":"Original task contract"'),
-    ),
+  };
+  const result = await evaluate(
+    fakeCompletion(async () => 'output'),
+    judge,
+    'prompt',
+    [scenario('many', ['a', 'b', 'c']), scenario('one', ['d'])],
+    { targetId: 'target' },
   );
+  assert.equal(result.accuracy, 0.5);
 });
 
-test('requires two independent unanimous and unambiguous scenario judges', async () => {
-  const candidate = [
-    { id: 'case', input: 'input', expected: 'expected', tags: [] },
-  ];
-  const insufficient = await validateScenarioCandidates({
-    judges: judges([{ passed: true }]),
-    originalPrompt: 'Original task contract',
-    incumbents: [],
-    candidates: candidate,
-  });
-  const disagreement = await validateScenarioCandidates({
-    judges: judges([{ passed: true }, { passed: false }]),
-    originalPrompt: 'Original task contract',
-    incumbents: [],
-    candidates: candidate,
-  });
-  const ambiguous = await validateScenarioCandidates({
-    judges: judges([{ passed: true }, { passed: true, ambiguous: true }]),
-    originalPrompt: 'Original task contract',
-    incumbents: [],
-    candidates: candidate,
-  });
-  assert.equal(insufficient[0]?.reason, 'insufficient-judges');
-  assert.equal(disagreement[0]?.reason, 'judge-disagreement');
-  assert.equal(ambiguous[0]?.reason, 'ambiguous');
+test('aborts on missing, duplicate, or unknown judge results', async () => {
+  for (const results of [
+    matrix(['a']).slice(1),
+    [...matrix(['a']).slice(0, 2), matrix(['a'])[0]],
+    matrix(['unknown']),
+  ]) {
+    await assert.rejects(
+      evaluate(
+        fakeCompletion(async () => 'output'),
+        {
+          id: 'judge',
+          completion: fakeCompletion(undefined, async () => ({ results })),
+        },
+        'prompt',
+        [scenario('case', ['a'])],
+        { targetId: 'target' },
+      ),
+      /invalid result matrix/,
+    );
+  }
 });

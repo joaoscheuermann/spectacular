@@ -47,23 +47,44 @@ export const modelRefSchema = z
   })
   .strict();
 
+const optimizerRefSchema = z
+  .object({
+    provider: idSchema,
+    model: textSchema,
+    effort: effortSchema.optional(),
+    maxOutputTokens: z.number().int().positive().optional(),
+  })
+  .strict();
+
 export const targetModelSchema = modelRefSchema.extend({
   id: folderIdSchema.refine((id) => id !== 'default' && id !== 'scenarios', {
     message: 'model id is reserved',
   }),
 });
 
+export const evalAssertionSchema = z
+  .object({
+    id: idSchema,
+    assertion: textSchema,
+  })
+  .strict();
+
 export const evolutionConfigSchema = z
   .object({
     providers: z.array(providerConfigSchema).min(1),
     models: z.array(targetModelSchema).min(1),
-    optimizer: modelRefSchema,
-    judges: z.array(modelRefSchema).min(2),
+    optimizer: optimizerRefSchema,
+    judge: modelRefSchema,
+    evals: z.array(evalAssertionSchema),
     evolution: z
       .object({
-        targetAccuracy: z.number().finite().min(0).max(1),
-        plateauPatience: z.number().int().positive(),
-        maxEpochs: z.number().int().positive(),
+        accuracy: z.number().finite().min(0).max(1),
+        patience: z.object({ epochs: z.number().int().positive() }).strict(),
+        epochs: z.number().int().positive(),
+        history: z
+          .object({ limit: z.number().int().positive().default(20) })
+          .strict()
+          .default({ limit: 20 }),
       })
       .strict(),
   })
@@ -72,43 +93,32 @@ export const evolutionConfigSchema = z
 export const scenarioSchema = z
   .object({
     id: idSchema,
+    split: z.enum(['train', 'validation']),
     input: textSchema,
-    expected: textSchema,
+    evals: z.array(evalAssertionSchema),
     rationale: textSchema.optional(),
-    tags: z.array(textSchema).default([]),
   })
   .strict();
 
-export const judgmentSchema = z
+export const evalVerdictSchema = z
   .object({
+    evalId: idSchema,
+    sampleIndex: z.number().int().min(0).max(2),
+    reasoning: textSchema,
     passed: z.boolean(),
-    ambiguous: z.boolean(),
-    rationale: textSchema,
   })
   .strict();
 
-const generatedScenarioSchema = z
+export const judgeOutputSchema = z
   .object({
-    id: idSchema,
-    input: textSchema,
-    expected: textSchema,
-    rationale: textSchema.nullable(),
-    tags: z.array(textSchema),
+    results: z.array(evalVerdictSchema),
   })
   .strict();
 
 export const proposalOutputSchema = z
   .object({
     prompt: textSchema,
-    scenarios: z.array(generatedScenarioSchema),
-    rationale: textSchema,
-  })
-  .strict();
-
-export const scenarioInitializationOutputSchema = z
-  .object({
-    scenarios: z.array(generatedScenarioSchema).min(1),
-    rationale: textSchema,
+    strategy: textSchema,
   })
   .strict();
 
@@ -116,10 +126,8 @@ export type ProviderConfig = z.infer<typeof providerConfigSchema>;
 export type ProviderType = z.infer<typeof providerTypeSchema>;
 export type ModelRef = z.infer<typeof modelRefSchema>;
 export type TargetModel = z.infer<typeof targetModelSchema>;
+export type EvalAssertion = z.infer<typeof evalAssertionSchema>;
 export type EvolutionConfig = z.infer<typeof evolutionConfigSchema>;
 export type Scenario = z.infer<typeof scenarioSchema>;
-export type Judgment = z.infer<typeof judgmentSchema>;
+export type EvalVerdict = z.infer<typeof evalVerdictSchema>;
 export type ProposalOutput = z.infer<typeof proposalOutputSchema>;
-export type ScenarioInitializationOutput = z.infer<
-  typeof scenarioInitializationOutputSchema
->;

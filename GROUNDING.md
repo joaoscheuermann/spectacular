@@ -1,6 +1,6 @@
 # Doric Grounding
 
-Last reviewed: 2026-07-12
+Last reviewed: 2026-07-13
 
 This is Doric's repository validity contract. Every agent working in this
 repository must read it before non-trivial planning, reviewing, artifact
@@ -93,38 +93,49 @@ ensures a real `scenarios` directory plus a credential-free default
 `evolution.config.json`; it does not create a default prompt. Relative evolve
 config paths resolve from the caller's current working directory, allowing
 invocation from anywhere. The config file's parent directory is the workspace
-root for all input and output: `scenarios`, exactly one original
-`SYSTEM_PROMPT.md` or
-`SYSTEM_PROMPT.txt` and baseline scenarios under `default`, and each
-model-specific `SYSTEM_PROMPT.md` under its target model ID. The config file and
-default prompt are immutable. An applied run may append missing baseline
-scenario definition files to `default/scenarios` to establish the immutable
-baseline snapshot, but it never overwrites an existing baseline scenario. The
-root `scenarios` directory receives the merged accepted suite. The CLI composes
-configured target, optimizer, and judge models through any provider integration
-exported by `packages/llms`: OpenAI,
-OpenRouter, LM Studio native, LM Studio OpenAI compatibility, or Codex.
+root for all input and output: manually authored scenario definitions under
+`scenarios`, exactly one immutable original `SYSTEM_PROMPT.md` or
+`SYSTEM_PROMPT.txt` under `default`, and model-specific prompts and append-only
+`evolution.history.jsonl` files under each target model ID. The config, default
+prompt, and scenario definitions are read-only during evolution. The CLI
+composes configured target models, one optimizer, and one binary judge through
+any provider integration exported by `packages/llms`: OpenAI, OpenRouter, LM
+Studio native, LM Studio OpenAI compatibility, or Codex.
 Non-secret provider and model settings live in the passed JSON config;
 credential values are resolved only at runtime from configured
 environment-variable names and are never persisted or logged. Each target
-model evolves independently from the original prompt; no worst-performing
-model controls another model's candidate. Before target evolution, an empty
-on-disk suite enters one shared scenario-initialization phase. Each attempt uses
-the configured optimizer with the immutable original prompt and prior rejection
-feedback, without target context or prompt replacement, then screens every
-candidate for duplicates and unanimous, unambiguous agreement by all configured
-judges. All-rejected batches retry up to `plateauPatience`; the first batch with
-an accepted candidate contributes all accepted candidates as the common
-baseline for every target. Initialization does not consume target epochs or
-plateau state, and no target model runs before the baseline is accepted. A
-non-empty on-disk suite skips initialization. During ordinary target evolution,
-proposed scenarios hide their expected behavior from target calls, use the same
-validation, and remain optional additions. Evolution is bounded by a
-config-backed accuracy target, plateau patience, and hard epoch cap. A dry run
-performs the same in-memory work but makes no filesystem writes, including
-directory, prompt, scenario, or history creation. Runtime progress is rendered
-through `pino`/`pino-pretty` on stderr with credential redaction and without
-prompt bodies, preserving stdout for the final JSON result.
+model evolves independently from the original prompt; target failures do not
+prevent other targets from running. Scenarios carry an explicit training or
+validation split and combine config-level binary assertions with optional
+scenario-local assertions. An incomplete suite, including a missing split or
+a scenario without an effective assertion, fails before provider calls; the
+CLI never generates, accepts, snapshots, merges, or writes scenarios.
+
+For each scenario, the target is sampled exactly three times and one structured
+judge call evaluates every sample against every effective assertion. Scenario
+accuracy covers its complete result matrix, and overall accuracy is the mean of
+scenario accuracies so scenarios are equally weighted. Only training scenarios,
+training failures, and matching bounded history inform optimization. Normal
+optimizer calls use temperature `0.2`; after the configured
+`evolution.patience.epochs` unsuccessful normal epochs, one `0.8`
+plateau-escape attempt runs. Codex optimizer requests
+omit unsupported temperature and emit one stderr warning. Candidates are
+accepted only on strict training improvement, subject to a hard epoch cap.
+
+After training reaches the configured accuracy, one `0.2` compression attempt
+may replace the prompt only when it is 20–30 percent shorter by trimmed
+character count and still meets training accuracy. The selected prompt is then
+evaluated once against the isolated validation split; validation inputs,
+outputs, reasoning, and failures are never exposed to optimization or
+compression. Prompt files are written only for approved targets, and existing
+prompts survive failed runs. Applied runs append fingerprinted attempt and
+terminal records to each target's history; only the newest configured number of
+records matching the original prompt, training contract, global assertions,
+accuracy threshold, target, and judge are reused. A dry run may read matching
+history but makes no filesystem writes. Runtime progress is rendered through
+`pino`/`pino-pretty` on stderr with credential redaction and without prompt,
+scenario, model-output, judge-reasoning, assertion, strategy, or failure bodies,
+preserving stdout for the final JSON result.
 
 `packages/prompt-kit` owns Doric's command-line prompt abstraction for the
 Node.js CLI host. It provides Doric-owned text, select, and queued prompt APIs

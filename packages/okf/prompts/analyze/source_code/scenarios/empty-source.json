@@ -1,0 +1,12 @@
+{
+  "id": "empty-source",
+  "split": "train",
+  "input": "{\"path\":\"src/empty.ts\",\"classification\":\"source_code\",\"content\":\"\"}",
+  "evals": [
+    {
+      "id": "empty-evidence",
+      "assertion": "Because the supplied source content is empty, each of '# Responsibility', '# Public Surface', '# Data Flow And Side Effects', and '# Dependencies And Constraints' contains exactly the single bullet '- Not present in the input.' and no substantive source-code claim."
+    }
+  ],
+  "rationale": "Checks the prompt's explicit no-evidence fallback for every required heading."
+}

@@ -1,395 +1,440 @@
 import type { Completion, CompletionFor } from './completion.js';
 import {
-  createJudges,
+  createJudge,
   evaluate,
   type Evaluation,
   type Judge,
-  type ScenarioResult,
 } from './evaluate.js';
-import { optimizerSystemPrompt } from './prompts.js';
+import {
+  historyFingerprint,
+  optimizerHistory,
+  type HistoryDisposition,
+  type HistoryRecord,
+  type OptimizerMode,
+  type TerminalStatus,
+} from './history.js';
+import { compressionSystemPrompt, optimizerSystemPrompt } from './prompts.js';
 import type { Progress } from './progress.js';
 import {
-  normalizeInput,
-  normalizeProposalScenarios,
-  validateScenarioCandidates,
-} from './scenarios.js';
-import {
   proposalOutputSchema,
-  scenarioSchema,
   type EvolutionConfig,
   type ModelRef,
+  type ProposalOutput,
   type Scenario,
   type TargetModel,
 } from './schema.js';
 
-export type StopReason = 'target-reached' | 'plateau' | 'max-epochs';
-
-export type HistoryEntry = {
-  readonly epoch: number;
-  readonly score: number;
-  readonly failures: readonly ScenarioResult[];
-};
+export type StopReason = TerminalStatus;
 
 export type TargetResult = {
   readonly target: TargetModel;
   readonly prompt: string;
-  readonly evaluation: Evaluation;
-  readonly scenarios: readonly Scenario[];
-  readonly acceptedScenarios: readonly Scenario[];
+  readonly trainingEvaluation: Evaluation;
+  readonly validationEvaluation?: Evaluation;
+  readonly trainingAccuracy: number;
+  readonly validationAccuracy?: number;
+  readonly approved: boolean;
+  readonly refactored: boolean;
   readonly epochsRun: number;
   readonly stopReason: StopReason;
+  readonly history: readonly HistoryRecord[];
 };
-
-type EvolutionOptions = EvolutionConfig['evolution'];
 
 type TargetInputs = {
   readonly target: TargetModel;
   readonly optimizer: ModelRef;
-  readonly judges: readonly Judge[];
-  readonly prompt: string;
-  readonly scenarios: readonly Scenario[];
-  readonly options: EvolutionOptions;
+  readonly judge: Judge;
+  readonly judgeModel: ModelRef;
+  readonly originalPrompt: string;
+  readonly training: readonly Scenario[];
+  readonly validation: readonly Scenario[];
+  readonly globalEvals: EvolutionConfig['evals'];
+  readonly options: EvolutionConfig['evolution'];
   readonly completeFor: CompletionFor;
+  readonly optimizerIsCodex: boolean;
+  readonly previousHistory: readonly HistoryRecord[];
   readonly progress?: Progress;
 };
 
-type TargetState = {
+type State = {
   readonly prompt: string;
-  readonly scenarios: readonly Scenario[];
   readonly evaluation: Evaluation;
-  readonly history: readonly HistoryEntry[];
-  readonly acceptedScenarios: readonly Scenario[];
+  readonly attempts: readonly HistoryRecord[];
   readonly epochsRun: number;
-  readonly plateauCount: number;
+  readonly normalMisses: number;
 };
 
-type Proposal = {
-  readonly prompt: string;
-  readonly scenarios: readonly Scenario[];
+type Runtime = {
+  readonly history?: Readonly<Record<string, readonly HistoryRecord[]>>;
+  readonly historyErrors?: Readonly<Record<string, Error>>;
+  readonly warn?: (message: string) => void;
+  readonly onResult?: (result: TargetResult) => void | Promise<void>;
 };
 
-type ProposalInputs = {
-  readonly complete: Completion;
-  readonly target: TargetModel;
-  readonly prompt: string;
-  readonly scenarios: readonly Scenario[];
-  readonly history: readonly HistoryEntry[];
-  readonly progress?: Progress;
-};
+const normalized = (value: string): string =>
+  value.trim().replace(/\s+/gu, ' ').toLocaleLowerCase();
 
-export const evolutionStopReason = (
-  score: number,
-  options: EvolutionOptions,
-  epochsRun: number,
-  plateauCount: number,
-): StopReason | undefined => {
-  if (score >= options.targetAccuracy) return 'target-reached';
-  if (plateauCount >= options.plateauPatience) return 'plateau';
-  if (epochsRun >= options.maxEpochs) return 'max-epochs';
-  return undefined;
-};
-
-const historyEntry = (epoch: number, evaluation: Evaluation): HistoryEntry => ({
-  epoch,
-  score: evaluation.score,
-  failures: evaluation.results.filter(({ passed }) => !passed),
-});
-
-const propose = async (inputs: ProposalInputs): Promise<Proposal> => {
-  inputs.progress?.({
-    event: 'proposal.start',
-    target: inputs.target.id,
-    scenarioCount: inputs.scenarios.length,
-    historyCount: inputs.history.length,
-  });
-  try {
-    const proposal = await inputs.complete.structured(
-      optimizerSystemPrompt,
-      JSON.stringify({
-        target: {
-          id: inputs.target.id,
-          provider: inputs.target.provider,
-          model: inputs.target.model,
-        },
-        prompt: inputs.prompt,
-        scenarios: inputs.scenarios,
-        history: inputs.history,
-      }),
-      proposalOutputSchema,
-    );
-    inputs.progress?.({
-      event: 'proposal.complete',
-      target: inputs.target.id,
-      scenarioCount: proposal.scenarios.length,
-    });
-    return {
-      prompt: proposal.prompt,
-      scenarios: normalizeProposalScenarios(proposal.scenarios),
-    };
-  } catch (error) {
-    inputs.progress?.({
-      event: 'proposal.failed',
-      target: inputs.target.id,
-    });
-    throw error;
-  }
+const optimizerModel = (
+  model: ModelRef,
+  temperature: number,
+  isCodex: boolean,
+): ModelRef => {
+  const withoutTemperature: ModelRef = { ...model };
+  delete withoutTemperature.temperature;
+  return isCodex ? withoutTemperature : { ...withoutTemperature, temperature };
 };
 
 const evaluatePrompt = (
   inputs: TargetInputs,
-  complete: Completion,
+  target: Completion,
   prompt: string,
   scenarios: readonly Scenario[],
 ): Promise<Evaluation> =>
-  evaluate(complete, inputs.judges, prompt, scenarios, {
+  evaluate(target, inputs.judge, prompt, scenarios, {
     targetId: inputs.target.id,
     progress: inputs.progress,
   });
 
-const initialState = async (
+const propose = async (
   inputs: TargetInputs,
-  complete: Completion,
-): Promise<TargetState> => {
-  const evaluation = await evaluatePrompt(
-    inputs,
-    complete,
-    inputs.prompt,
-    inputs.scenarios,
+  state: State,
+  mode: OptimizerMode,
+): Promise<ProposalOutput> => {
+  const temperature = mode === 'plateau-escape' ? 0.8 : 0.2;
+  const complete = inputs.completeFor(
+    optimizerModel(inputs.optimizer, temperature, inputs.optimizerIsCodex),
   );
-  return {
-    prompt: inputs.prompt,
-    scenarios: [...inputs.scenarios],
-    evaluation,
-    history: [historyEntry(0, evaluation)],
-    acceptedScenarios: [],
-    epochsRun: 0,
-    plateauCount: 0,
-  };
-};
-
-const acceptedCandidates = async (
-  inputs: TargetInputs,
-  state: TargetState,
-  proposal: Proposal,
-): Promise<readonly Scenario[]> =>
-  (
-    await validateScenarioCandidates({
-      judges: inputs.judges,
-      originalPrompt: inputs.prompt,
-      incumbents: state.scenarios,
-      candidates: proposal.scenarios,
-      progress: inputs.progress,
-    })
-  )
-    .filter(({ accepted }) => accepted)
-    .map(({ candidate }) => candidate);
-
-const updatedEvaluation = async (
-  inputs: TargetInputs,
-  complete: Completion,
-  prompt: string,
-  scenarios: readonly Scenario[],
-  fallback: Evaluation,
-  acceptedCount: number,
-): Promise<Evaluation> =>
-  acceptedCount === 0
-    ? fallback
-    : evaluatePrompt(inputs, complete, prompt, scenarios);
-
-const nextState = async (
-  inputs: TargetInputs,
-  complete: Completion,
-  state: TargetState,
-  proposal: Proposal,
-  candidate: Evaluation,
-  accepted: readonly Scenario[],
-): Promise<TargetState> => {
-  const promptWon = candidate.score > state.evaluation.score;
-  const prompt = promptWon ? proposal.prompt : state.prompt;
-  const scenarios = [...state.scenarios, ...accepted];
-  const selected = promptWon ? candidate : state.evaluation;
-  const evaluation = await updatedEvaluation(
-    inputs,
-    complete,
-    prompt,
-    scenarios,
-    selected,
-    accepted.length,
+  const durableHistory = [...inputs.previousHistory, ...state.attempts].slice(
+    -inputs.options.history.limit,
   );
-  const epoch = state.epochsRun + 1;
-  return {
-    prompt,
-    scenarios,
-    evaluation,
-    history: [...state.history, historyEntry(epoch, evaluation)],
-    acceptedScenarios: [...state.acceptedScenarios, ...accepted],
-    epochsRun: epoch,
-    plateauCount: promptWon ? 0 : state.plateauCount + 1,
-  };
-};
-
-const reportEpoch = (
-  inputs: TargetInputs,
-  previous: TargetState,
-  next: TargetState,
-  acceptedCount: number,
-): void => {
+  const history = optimizerHistory(durableHistory);
   inputs.progress?.({
-    event: 'epoch.complete',
+    event: 'proposal.start',
     target: inputs.target.id,
-    epoch: next.epochsRun,
-    score: next.evaluation.score,
-    promptWon: next.prompt !== previous.prompt,
-    acceptedScenarioCount: acceptedCount,
-    plateauCount: next.plateauCount,
+    epoch: state.epochsRun + 1,
+    optimizerMode: mode,
+    historyCount: history.length,
   });
+  const proposal = await complete.structured(
+    optimizerSystemPrompt,
+    JSON.stringify({
+      target: {
+        id: inputs.target.id,
+        provider: inputs.target.provider,
+        model: inputs.target.model,
+      },
+      prompt: state.prompt,
+      trainingScenarios: inputs.training,
+      currentFailures: state.evaluation.failures,
+      history,
+      prohibitedPrompts: history.map(({ attemptedPrompt }) => attemptedPrompt),
+      prohibitedStrategies: history
+        .filter(
+          ({ disposition }) =>
+            disposition !== 'improved' &&
+            disposition !== 'compression-accepted',
+        )
+        .map(({ strategy }) => strategy),
+    }),
+    proposalOutputSchema,
+  );
+  inputs.progress?.({
+    event: 'proposal.complete',
+    target: inputs.target.id,
+    epoch: state.epochsRun + 1,
+    optimizerMode: mode,
+  });
+  return proposal;
 };
+
+const rejectedDisposition = (
+  proposal: ProposalOutput,
+  state: State,
+  previous: readonly HistoryRecord[],
+): HistoryDisposition | undefined => {
+  const history = [...previous, ...state.attempts];
+  const prompts = [
+    state.prompt,
+    ...history.map(({ attemptedPrompt }) => attemptedPrompt),
+  ];
+  if (
+    prompts.some((prompt) => normalized(prompt) === normalized(proposal.prompt))
+  ) {
+    return 'duplicate-prompt';
+  }
+  const failedStrategies = history.filter(
+    ({ disposition }) =>
+      disposition !== 'improved' && disposition !== 'compression-accepted',
+  );
+  return failedStrategies.some(
+    ({ strategy }) => normalized(strategy) === normalized(proposal.strategy),
+  )
+    ? 'rejected-strategy'
+    : undefined;
+};
+
+const record = (
+  fingerprint: string,
+  proposal: ProposalOutput,
+  mode: OptimizerMode,
+  evaluation: Evaluation,
+  disposition: HistoryDisposition,
+): HistoryRecord => ({
+  fingerprint,
+  attemptedPrompt: proposal.prompt,
+  strategy: proposal.strategy,
+  optimizerMode: mode,
+  trainingAccuracy: evaluation.accuracy,
+  failedEvals: evaluation.failures,
+  disposition,
+  terminalStatus: null,
+});
 
 const runEpoch = async (
   inputs: TargetInputs,
-  targetComplete: Completion,
-  optimizerComplete: Completion,
-  state: TargetState,
-): Promise<TargetState> => {
+  target: Completion,
+  state: State,
+  mode: 'normal' | 'plateau-escape',
+  fingerprint: string,
+): Promise<{ readonly state: State; readonly improved: boolean }> => {
   inputs.progress?.({
     event: 'epoch.start',
     target: inputs.target.id,
     epoch: state.epochsRun + 1,
-    score: state.evaluation.score,
-    plateauCount: state.plateauCount,
+    trainingAccuracy: state.evaluation.accuracy,
+    optimizerMode: mode,
   });
-  const proposal = await propose({
-    complete: optimizerComplete,
-    target: inputs.target,
-    prompt: state.prompt,
-    scenarios: state.scenarios,
-    history: state.history,
-    progress: inputs.progress,
+  const proposal = await propose(inputs, state, mode);
+  const rejected = rejectedDisposition(proposal, state, inputs.previousHistory);
+  const candidate =
+    rejected === undefined
+      ? await evaluatePrompt(inputs, target, proposal.prompt, inputs.training)
+      : state.evaluation;
+  const improved =
+    rejected === undefined && candidate.accuracy > state.evaluation.accuracy;
+  const disposition = rejected ?? (improved ? 'improved' : 'not-improved');
+  const next: State = {
+    prompt: improved ? proposal.prompt : state.prompt,
+    evaluation: improved ? candidate : state.evaluation,
+    attempts: [
+      ...state.attempts,
+      record(fingerprint, proposal, mode, candidate, disposition),
+    ],
+    epochsRun: state.epochsRun + 1,
+    normalMisses:
+      improved || mode === 'plateau-escape' ? 0 : state.normalMisses + 1,
+  };
+  inputs.progress?.({
+    event: 'epoch.complete',
+    target: inputs.target.id,
+    epoch: next.epochsRun,
+    trainingAccuracy: next.evaluation.accuracy,
+    improved,
+    disposition,
+    optimizerMode: mode,
   });
-  const candidate = await evaluatePrompt(
-    inputs,
-    targetComplete,
-    proposal.prompt,
-    state.scenarios,
-  );
-  const accepted = await acceptedCandidates(inputs, state, proposal);
-  const next = await nextState(
-    inputs,
-    targetComplete,
-    state,
-    proposal,
-    candidate,
-    accepted,
-  );
-  reportEpoch(inputs, state, next, accepted.length);
-  return next;
+  return { state: next, improved };
 };
 
-/** Evolves one model without sharing prompt state, scenarios, or history. */
+const compression = async (
+  inputs: TargetInputs,
+  target: Completion,
+  state: State,
+  fingerprint: string,
+): Promise<{ readonly state: State; readonly refactored: boolean }> => {
+  const complete = inputs.completeFor(
+    optimizerModel(inputs.optimizer, 0.2, inputs.optimizerIsCodex),
+  );
+  inputs.progress?.({ event: 'compression.start', target: inputs.target.id });
+  const proposal = await complete.structured(
+    compressionSystemPrompt,
+    JSON.stringify({
+      prompt: state.prompt,
+      trainingScenarios: inputs.training,
+    }),
+    proposalOutputSchema,
+  );
+  const originalLength = state.prompt.trim().length;
+  const candidateLength = proposal.prompt.trim().length;
+  const ratio = originalLength === 0 ? 1 : candidateLength / originalLength;
+  const validLength = ratio >= 0.7 && ratio <= 0.8;
+  const candidate = validLength
+    ? await evaluatePrompt(inputs, target, proposal.prompt, inputs.training)
+    : state.evaluation;
+  const accepted = validLength && candidate.accuracy >= inputs.options.accuracy;
+  const selected = accepted ? candidate : state.evaluation;
+  const next = {
+    ...state,
+    prompt: accepted ? proposal.prompt : state.prompt,
+    evaluation: selected,
+    attempts: [
+      ...state.attempts,
+      record(
+        fingerprint,
+        proposal,
+        'compression',
+        candidate,
+        accepted ? 'compression-accepted' : 'compression-rejected',
+      ),
+    ],
+  };
+  inputs.progress?.({
+    event: 'compression.complete',
+    target: inputs.target.id,
+    accepted,
+  });
+  return { state: next, refactored: accepted };
+};
+
+const terminalHistory = (
+  records: readonly HistoryRecord[],
+  status: StopReason,
+): readonly HistoryRecord[] =>
+  records.map((entry, index) =>
+    index === records.length - 1 ? { ...entry, terminalStatus: status } : entry,
+  );
+
+/** Evolves, optionally compresses, then validates one target in isolation. */
 export const evolveTarget = async (
   inputs: TargetInputs,
 ): Promise<TargetResult> => {
-  if (inputs.scenarios.length === 0) {
-    throw new Error(
-      'Evolution requires a non-empty baseline; initialize scenarios before evolving models.',
-    );
-  }
-  const targetComplete = inputs.completeFor(inputs.target);
-  const optimizerComplete = inputs.completeFor(inputs.optimizer);
-  let state = await initialState(inputs, targetComplete);
-  let stopReason = evolutionStopReason(
-    state.evaluation.score,
-    inputs.options,
-    state.epochsRun,
-    state.plateauCount,
-  );
-  while (stopReason === undefined) {
-    state = await runEpoch(inputs, targetComplete, optimizerComplete, state);
-    stopReason = evolutionStopReason(
-      state.evaluation.score,
-      inputs.options,
-      state.epochsRun,
-      state.plateauCount,
-    );
+  const target = inputs.completeFor(inputs.target);
+  const fingerprint = historyFingerprint({
+    originalPrompt: inputs.originalPrompt,
+    training: inputs.training,
+    globalEvals: inputs.globalEvals,
+    accuracy: inputs.options.accuracy,
+    target: inputs.target,
+    judge: inputs.judgeModel,
+  });
+  let state: State = {
+    prompt: inputs.originalPrompt,
+    evaluation: await evaluatePrompt(
+      inputs,
+      target,
+      inputs.originalPrompt,
+      inputs.training,
+    ),
+    attempts: [],
+    epochsRun: 0,
+    normalMisses: 0,
+  };
+  let trainingStop: 'plateau' | 'max-epochs' | undefined;
+  while (state.evaluation.accuracy < inputs.options.accuracy) {
+    if (state.epochsRun >= inputs.options.epochs) {
+      trainingStop = 'max-epochs';
+      break;
+    }
+    const mode =
+      state.normalMisses >= inputs.options.patience.epochs
+        ? 'plateau-escape'
+        : 'normal';
+    const epoch = await runEpoch(inputs, target, state, mode, fingerprint);
+    state = epoch.state;
+    if (mode === 'plateau-escape' && !epoch.improved) {
+      trainingStop = 'plateau';
+      break;
+    }
   }
 
+  if (trainingStop !== undefined) {
+    return {
+      target: inputs.target,
+      prompt: state.prompt,
+      trainingEvaluation: state.evaluation,
+      trainingAccuracy: state.evaluation.accuracy,
+      approved: false,
+      refactored: false,
+      epochsRun: state.epochsRun,
+      stopReason: trainingStop,
+      history: terminalHistory(state.attempts, trainingStop),
+    };
+  }
+
+  const compressed = await compression(inputs, target, state, fingerprint);
+  state = compressed.state;
+  const validationEvaluation = await evaluatePrompt(
+    inputs,
+    target,
+    state.prompt,
+    inputs.validation,
+  );
+  const approved = validationEvaluation.accuracy >= inputs.options.accuracy;
+  const stopReason = approved ? 'approved' : 'validation-failed';
   return {
     target: inputs.target,
     prompt: state.prompt,
-    evaluation: state.evaluation,
-    scenarios: state.scenarios,
-    acceptedScenarios: state.acceptedScenarios,
+    trainingEvaluation: state.evaluation,
+    validationEvaluation,
+    trainingAccuracy: state.evaluation.accuracy,
+    validationAccuracy: validationEvaluation.accuracy,
+    approved,
+    refactored: compressed.refactored,
     epochsRun: state.epochsRun,
     stopReason,
+    history: terminalHistory(state.attempts, stopReason),
   };
 };
 
-/** Starts every target from the same original prompt and scenario snapshot. */
+/** Starts every target from the same prompt and keeps validation target-local. */
 export const evolveModels = async (
   config: EvolutionConfig,
   prompt: string,
   scenarios: readonly Scenario[],
   completeFor: CompletionFor,
   progress?: Progress,
+  runtime: Runtime = {},
 ): Promise<readonly TargetResult[]> => {
-  if (scenarios.length === 0) {
+  const training = scenarios.filter(({ split }) => split === 'train');
+  const validation = scenarios.filter(({ split }) => split === 'validation');
+  if (training.length === 0 || validation.length === 0) {
     throw new Error(
-      'Evolution requires a non-empty baseline; initialize scenarios before evolving models.',
+      'Evolution requires non-empty train and validation splits.',
     );
   }
-  const judges = createJudges(config.judges, completeFor);
+  const judge = createJudge(config.judge, completeFor);
+  const optimizerProvider = config.providers.find(
+    ({ id }) => id === config.optimizer.provider,
+  );
+  const optimizerIsCodex = optimizerProvider?.type === 'codex';
+  if (optimizerIsCodex) {
+    (runtime.warn ?? console.error)(
+      'Evolution optimizer temperature is omitted for the Codex provider.',
+    );
+  }
   const results: TargetResult[] = [];
+  const errors: Error[] = [];
   for (const target of config.models) {
-    results.push(
-      await evolveTarget({
+    try {
+      const historyError = runtime.historyErrors?.[target.id];
+      if (historyError !== undefined) throw historyError;
+      const result = await evolveTarget({
         target,
         optimizer: config.optimizer,
-        judges,
-        prompt,
-        scenarios: [...scenarios],
+        judge,
+        judgeModel: config.judge,
+        originalPrompt: prompt,
+        training,
+        validation,
+        globalEvals: config.evals,
         options: config.evolution,
         completeFor,
+        optimizerIsCodex,
+        previousHistory: runtime.history?.[target.id] ?? [],
         progress,
-      }),
-    );
-  }
-  return results;
-};
-
-const sameScenario = (left: Scenario, right: Scenario): boolean =>
-  JSON.stringify(scenarioSchema.parse(left)) ===
-  JSON.stringify(scenarioSchema.parse(right));
-
-/** Merges independently accepted scenarios and fails on cross-target collisions. */
-export const mergeScenarios = (
-  initial: readonly Scenario[],
-  targets: readonly TargetResult[],
-): readonly Scenario[] => {
-  const byId = new Map(initial.map((scenario) => [scenario.id, scenario]));
-  const byInput = new Map(
-    initial.map((scenario) => [normalizeInput(scenario.input), scenario.id]),
-  );
-
-  for (const scenario of targets.flatMap(
-    ({ acceptedScenarios }) => acceptedScenarios,
-  )) {
-    const existing = byId.get(scenario.id);
-    if (existing !== undefined) {
-      if (sameScenario(existing, scenario)) continue;
-      throw new Error('Scenario id collision: ' + scenario.id);
-    }
-    const inputOwner = byInput.get(normalizeInput(scenario.input));
-    if (inputOwner !== undefined) {
-      throw new Error(
-        'Scenario input collision between "' +
-          inputOwner +
-          '" and "' +
-          scenario.id +
-          '".',
+      });
+      results.push(result);
+      await runtime.onResult?.(result);
+    } catch (error) {
+      errors.push(
+        new Error(`Evolution failed for target "${target.id}".`, {
+          cause: error,
+        }),
       );
     }
-    byId.set(scenario.id, scenario);
-    byInput.set(normalizeInput(scenario.input), scenario.id);
   }
-  return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
+  if (errors.length > 0) {
+    throw new AggregateError(errors, 'One or more evolution targets failed.');
+  }
+  return results;
 };

@@ -1,87 +1,111 @@
 import assert from 'node:assert/strict';
+import { join } from 'node:path';
 import test from 'node:test';
 
-import { parseConfig } from '../src/config.js';
-import { judgmentSchema } from '../src/schema.js';
+import { loadConfig, parseConfig } from '../src/config.js';
+import { loadScenarios, prepareScenarios } from '../src/scenarios.js';
+import { scenarioSchema } from '../src/schema.js';
 import { validConfig } from './fakes.js';
 
-test('accepts dotted model folder ids and validates references', () => {
-  const config = parseConfig(validConfig());
-  assert.equal(config.models[0]?.id, 'lfm2.5-8b-a1b');
+test('defaults nested history limit and validates the single judge reference', () => {
+  const config = validConfig();
+  const evolution = {
+    accuracy: config.evolution.accuracy,
+    patience: config.evolution.patience,
+    epochs: config.evolution.epochs,
+  };
+  const parsed = parseConfig({ ...config, evolution });
+  assert.equal(parsed.evolution.history.limit, 20);
+  assert.equal(parsed.judge.model, 'judge-model');
 });
 
-test('rejects unsafe and reserved model folder ids', () => {
-  for (const id of [
-    '../escape',
-    '.',
-    '..',
-    'default',
-    'scenarios',
-    'bad.',
-    'con',
-    'con.txt',
-    'prn.md',
-    'aux',
-    'nul.json',
-    'com1',
-    'com9.prompt',
-    'lpt1',
-    'lpt9.txt',
+test('strictly rejects legacy fields and optimizer temperature', () => {
+  const config = validConfig();
+  for (const value of [
+    { ...config, judges: [config.judge] },
+    {
+      ...config,
+      evolution: { ...config.evolution, targetAccuracy: 1 },
+    },
+    { ...config, optimizer: { ...config.optimizer, temperature: 0.4 } },
+    {
+      ...config,
+      evolution: { ...config.evolution, plateauPatience: 2 },
+    },
+    { ...config, evolution: { ...config.evolution, maxEpochs: 2 } },
+    { ...config, evolution: { ...config.evolution, historyLimit: 2 } },
   ]) {
-    const config = validConfig();
-    assert.throws(() =>
-      parseConfig({
-        ...config,
-        models: [{ ...config.models[0], id }],
-      }),
-    );
+    assert.throws(() => parseConfig(value));
+  }
+  for (const legacy of [
+    { id: 'case', split: 'train', input: 'x', evals: [], expected: 'x' },
+    { id: 'case', split: 'train', input: 'x', evals: [], tags: [] },
+  ]) {
+    assert.throws(() => scenarioSchema.parse(legacy));
   }
 });
 
-test('rejects duplicate ids, duplicate judges, and unknown providers', () => {
-  const config = validConfig();
-  assert.throws(() =>
-    parseConfig({
-      ...config,
-      providers: [...config.providers, config.providers[0]],
-    }),
+test('merges global evals first and requires both suite splits', () => {
+  const globals = [{ id: 'global', assertion: 'global assertion' }];
+  const suite = prepareScenarios(
+    [
+      {
+        id: 'train',
+        split: 'train',
+        input: 'train input',
+        evals: [{ id: 'local', assertion: 'local assertion' }],
+      },
+      {
+        id: 'validation',
+        split: 'validation',
+        input: 'validation input',
+        evals: [],
+      },
+    ],
+    globals,
   );
-  assert.throws(() =>
-    parseConfig({
-      ...config,
-      models: [...config.models, config.models[0]],
-    }),
+  assert.deepEqual(
+    suite[0]?.evals.map(({ id }) => id),
+    ['global', 'local'],
   );
-  assert.throws(() =>
-    parseConfig({
-      ...config,
-      judges: [config.judges[0], config.judges[0]],
-    }),
+  assert.throws(
+    () => prepareScenarios(suite.slice(0, 1), globals),
+    /validation/,
   );
   assert.throws(
     () =>
-      parseConfig({
-        ...config,
-        optimizer: { provider: 'missing', model: 'optimizer-model' },
-      }),
-    /Unknown provider reference/,
+      prepareScenarios(
+        [
+          ...suite,
+          {
+            id: 'duplicate',
+            split: 'train',
+            input: 'different',
+            evals: [{ id: 'global', assertion: 'collision' }],
+          },
+        ],
+        globals,
+      ),
+    /duplicate effective eval ids/,
   );
 });
 
-test('requires the exact structured judgment contract', () => {
-  assert.deepEqual(
-    judgmentSchema.parse({
-      passed: true,
-      ambiguous: false,
-      rationale: 'Clear.',
-    }),
-    { passed: true, ambiguous: false, rationale: 'Clear.' },
+test('loads the tracked OKF config and six curated scenarios', async () => {
+  const root = join(
+    process.cwd(),
+    'packages',
+    'okf',
+    'prompts',
+    'analyze',
+    'source_code',
   );
-  assert.throws(() =>
-    judgmentSchema.parse({
-      pass: true,
-      ambiguous: false,
-      rationale: 'Clear.',
-    }),
+  const config = await loadConfig(join(root, 'evolution.config.json'));
+  const scenarios = await loadScenarios(join(root, 'scenarios'), config.evals);
+  assert.equal(scenarios.length, 6);
+  assert.equal(scenarios.filter(({ split }) => split === 'train').length, 4);
+  assert.equal(
+    scenarios.filter(({ split }) => split === 'validation').length,
+    2,
   );
+  assert.ok(scenarios.every(({ evals }) => evals.length === 4));
 });

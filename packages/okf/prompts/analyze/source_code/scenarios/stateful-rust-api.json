@@ -1,0 +1,12 @@
+{
+  "id": "stateful-rust-api",
+  "split": "validation",
+  "input": "{\"path\":\"src/counter.rs\",\"classification\":\"source_code\",\"content\":\"use std::sync::{Arc, Mutex};\\n\\npub struct Counter {\\n    value: Arc<Mutex<u64>>,\\n}\\n\\nimpl Counter {\\n    pub fn new(initial: u64) -> Self {\\n        Self { value: Arc::new(Mutex::new(initial)) }\\n    }\\n\\n    pub fn increment(&self) -> u64 {\\n        let mut value = self.value.lock().expect(\\\"counter lock poisoned\\\");\\n        *value += 1;\\n        *value\\n    }\\n\\n    pub fn current(&self) -> u64 {\\n        *self.value.lock().expect(\\\"counter lock poisoned\\\")\\n    }\\n}\\n\"}",
+  "evals": [
+    {
+      "id": "rust-state-surface",
+      "assertion": "The summary identifies the public Counter type and its new, increment, and current methods, and accurately describes the Arc<Mutex<u64>> state, locking, increment mutation, returned values, and lock-poison expect path."
+    }
+  ],
+  "rationale": "Held-out check for a stateful public API in a different implementation language."
+}

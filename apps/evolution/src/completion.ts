@@ -140,9 +140,13 @@ const request = (
     { role: 'system', content: system },
     { role: 'user', content: input },
   ],
-  effort: model.effort,
-  temperature: model.temperature,
-  maxOutputTokens: model.maxOutputTokens,
+  ...(model.effort === undefined ? {} : { effort: model.effort }),
+  ...(model.temperature === undefined
+    ? {}
+    : { temperature: model.temperature }),
+  ...(model.maxOutputTokens === undefined
+    ? {}
+    : { maxOutputTokens: model.maxOutputTokens }),
 });
 
 const completion = (provider: LlmProvider, model: ModelRef): Completion => ({

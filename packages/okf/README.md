@@ -52,8 +52,11 @@ prompts/
 
 For an evolution run, place an `evolution.config.json` and `scenarios/` beside
 the relevant stage's `default/` directory as described by
-`apps/evolution/README.md`. Provider and judge choices are intentionally not
-preconfigured by this package. The evolution CLI writes a model prompt to
+`apps/evolution/README.md`. The tracked `analyze/source_code` workspace is a
+curated example with local provider/model references, global output-contract,
+evidence-grounding, and secret-safety assertions, plus four training and two
+validation scenarios. Its model references may be edited for the available
+runtime before use. The evolution CLI writes an approved model prompt to
 `<stage>/<model-id>/SYSTEM_PROMPT.md`, or
 `analyze/<kind>/<model-id>/SYSTEM_PROMPT.md` for analysis. Select the common
 model target at runtime with `promptTarget: '<model-id>'`. Omitting

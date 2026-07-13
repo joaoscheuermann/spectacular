@@ -9,7 +9,7 @@ import {
 import type { HttpRequest, HttpTransport } from 'llms';
 import { resultJudgeSystemPrompt } from '../src/prompts.js';
 import {
-  judgmentSchema,
+  judgeOutputSchema,
   type EvolutionConfig,
   type ProviderConfig,
 } from '../src/schema.js';
@@ -126,9 +126,14 @@ test('parses native LM Studio JSON text for structured evolution roles', async (
             {
               type: 'message',
               content: JSON.stringify({
-                passed: true,
-                ambiguous: false,
-                rationale: 'Clear.',
+                results: [
+                  {
+                    evalId: 'rule',
+                    sampleIndex: 0,
+                    reasoning: 'Clear.',
+                    passed: true,
+                  },
+                ],
               }),
             },
           ],
@@ -143,14 +148,13 @@ test('parses native LM Studio JSON text for structured evolution roles', async (
     providers: [{ id: 'native', type: 'lmstudio' }],
     models: [{ id: 'native-model', provider: 'native', model: 'model' }],
     optimizer: { provider: 'native', model: 'model' },
-    judges: [
-      { provider: 'native', model: 'judge-one' },
-      { provider: 'native', model: 'judge-two' },
-    ],
+    judge: { provider: 'native', model: 'judge' },
+    evals: [],
     evolution: {
-      targetAccuracy: 1,
-      plateauPatience: 1,
-      maxEpochs: 1,
+      accuracy: 1,
+      patience: { epochs: 1 },
+      epochs: 1,
+      history: { limit: 30 },
     },
   };
 
@@ -158,18 +162,15 @@ test('parses native LM Studio JSON text for structured evolution roles', async (
     config,
     {},
     nativeTransport,
-  )(config.judges[0]).structured(
+  )(config.judge).structured(
     resultJudgeSystemPrompt,
     'Judge this.',
-    judgmentSchema,
+    judgeOutputSchema,
   );
 
-  assert.equal(judgment.passed, true);
+  assert.equal(judgment.results[0]?.passed, true);
   const body = JSON.parse(requests[0]?.body ?? '{}') as {
     readonly system_prompt?: string;
   };
-  assert.match(
-    body.system_prompt ?? '',
-    /Return only JSON with passed:boolean, ambiguous:boolean, and rationale:string/,
-  );
+  assert.match(body.system_prompt ?? '', /results:array/);
 });

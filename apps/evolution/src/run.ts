@@ -3,11 +3,16 @@ import { dirname, join, resolve } from 'node:path';
 
 import { createCompletionFor, type CompletionFor } from './completion.js';
 import { loadConfig } from './config.js';
-import { createJudges } from './evaluate.js';
-import { evolveModels, mergeScenarios, type TargetResult } from './evolve.js';
-import { persistLayout } from './layout.js';
+import { evolveModels, type TargetResult } from './evolve.js';
+import {
+  appendHistory,
+  historyFingerprint,
+  loadHistory,
+  preflightHistory,
+  type HistoryRecord,
+} from './history.js';
+import { persistLayout, preflightLayout } from './layout.js';
 import type { Progress } from './progress.js';
-import { initializeScenarios } from './scenario-initialization.js';
 import { loadScenarios } from './scenarios.js';
 import type { EvolutionConfig } from './schema.js';
 
@@ -22,18 +27,19 @@ export type RunSummary = {
   readonly scenarioCount: number;
   readonly targets: readonly {
     readonly id: string;
-    readonly score: number;
-    readonly passed: number;
-    readonly total: number;
+    readonly trainingAccuracy: number;
+    readonly validationAccuracy?: number;
+    readonly approved: boolean;
+    readonly refactored: boolean;
     readonly epochsRun: number;
     readonly stopReason: TargetResult['stopReason'];
-    readonly acceptedScenarioCount: number;
   }[];
 };
 
 type RunDependencies = {
   readonly completionFactory?: (config: EvolutionConfig) => CompletionFor;
   readonly progress?: Progress;
+  readonly warn?: (message: string) => void;
 };
 
 const optionalFile = async (path: string): Promise<string | undefined> => {
@@ -69,7 +75,7 @@ export const loadDefaultPrompt = async (root: string): Promise<string> => {
   return prompt;
 };
 
-const summary = (
+const summarize = (
   dryRun: boolean,
   root: string,
   scenarioCount: number,
@@ -79,56 +85,120 @@ const summary = (
   root,
   scenarioCount,
   targets: targets.map(
-    ({ target, evaluation, epochsRun, stopReason, acceptedScenarios }) => ({
-      id: target.id,
-      score: evaluation.score,
-      passed: evaluation.passed,
-      total: evaluation.total,
+    ({
+      target,
+      trainingAccuracy,
+      validationAccuracy,
+      approved,
+      refactored,
       epochsRun,
       stopReason,
-      acceptedScenarioCount: acceptedScenarios.length,
+    }) => ({
+      id: target.id,
+      trainingAccuracy,
+      ...(validationAccuracy === undefined ? {} : { validationAccuracy }),
+      approved,
+      refactored,
+      epochsRun,
+      stopReason,
     }),
   ),
 });
 
-/** Executes one prompt evolution run and returns a body-free summary. */
+type LoadedHistory = {
+  readonly records: Readonly<Record<string, readonly HistoryRecord[]>>;
+  readonly errors: Readonly<Record<string, Error>>;
+};
+
+const matchingHistory = async (
+  root: string,
+  prompt: string,
+  config: EvolutionConfig,
+  scenarios: Awaited<ReturnType<typeof loadScenarios>>,
+): Promise<LoadedHistory> => {
+  const training = scenarios.filter(({ split }) => split === 'train');
+  const settled = await Promise.all(
+    config.models.map(async (target) => {
+      const fingerprint = historyFingerprint({
+        originalPrompt: prompt,
+        training,
+        globalEvals: config.evals,
+        accuracy: config.evolution.accuracy,
+        target,
+        judge: config.judge,
+      });
+      try {
+        const records = await loadHistory(
+          root,
+          target.id,
+          fingerprint,
+          config.evolution.history.limit,
+        );
+        return { status: 'loaded', targetId: target.id, records } as const;
+      } catch (error) {
+        return {
+          status: 'failed',
+          targetId: target.id,
+          error:
+            error instanceof Error
+              ? error
+              : new Error('Unknown history error.'),
+        } as const;
+      }
+    }),
+  );
+  const records: Record<string, readonly HistoryRecord[]> = {};
+  const errors: Record<string, Error> = {};
+  for (const entry of settled) {
+    if (entry.status === 'loaded') {
+      records[entry.targetId] = entry.records;
+    } else {
+      errors[entry.targetId] = entry.error;
+    }
+  }
+  return { records, errors };
+};
+
+/** Executes one assertion-based evolution run and returns a body-free summary. */
 export const runEvolution = async (
   options: RunOptions,
   dependencies: RunDependencies = {},
 ): Promise<RunSummary> => {
   const configPath = resolve(options.config);
   const root = dirname(configPath);
-  const [originalPrompt, config, scenarios] = await Promise.all([
+  const config = await loadConfig(configPath);
+  const [originalPrompt, scenarios] = await Promise.all([
     loadDefaultPrompt(root),
-    loadConfig(configPath),
-    loadScenarios(join(root, 'scenarios')),
+    loadScenarios(join(root, 'scenarios'), config.evals),
   ]);
+  const history = await matchingHistory(
+    root,
+    originalPrompt,
+    config,
+    scenarios,
+  );
   const completeFor =
     dependencies.completionFactory?.(config) ?? createCompletionFor(config);
-  const baseline =
-    scenarios.length > 0
-      ? scenarios
-      : await initializeScenarios({
-          optimizer: completeFor(config.optimizer),
-          judges: createJudges(config.judges, completeFor),
-          originalPrompt,
-          maxAttempts: config.evolution.plateauPatience,
-          progress: dependencies.progress,
-        });
   const targets = await evolveModels(
     config,
     originalPrompt,
-    baseline,
+    scenarios,
     completeFor,
     dependencies.progress,
+    {
+      history: history.records,
+      historyErrors: history.errors,
+      warn: dependencies.warn,
+      onResult: async (target) => {
+        if (options.dryRun) return;
+        await Promise.all([
+          preflightHistory(root, target.target.id),
+          preflightLayout({ root, targets: [target], dryRun: false }),
+        ]);
+        await appendHistory(root, target.target.id, target.history);
+        await persistLayout({ root, targets: [target], dryRun: false });
+      },
+    },
   );
-  const merged = mergeScenarios(baseline, targets);
-  await persistLayout({
-    root,
-    initialScenarios: baseline,
-    scenarios: merged,
-    targets,
-    dryRun: options.dryRun,
-  });
-  return summary(options.dryRun, root, merged.length, targets);
+  return summarize(options.dryRun, root, scenarios.length, targets);
 };

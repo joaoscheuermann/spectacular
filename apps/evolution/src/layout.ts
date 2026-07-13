@@ -1,27 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { lstat, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, rename, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative } from 'node:path';
 
 import type { TargetResult } from './evolve.js';
-import { scenarioSchema, type Scenario } from './schema.js';
 
 export type Layout = {
   readonly root: string;
-  readonly initialScenarios: readonly Scenario[];
-  readonly scenarios: readonly Scenario[];
   readonly targets: readonly TargetResult[];
   readonly dryRun: boolean;
-};
-
-const current = async (path: string): Promise<string | undefined> => {
-  try {
-    return await readFile(path, 'utf8');
-  } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
-      return undefined;
-    }
-    throw error;
-  }
 };
 
 const atomicWrite = async (path: string, body: string): Promise<void> => {
@@ -31,10 +17,8 @@ const atomicWrite = async (path: string, body: string): Promise<void> => {
   await rename(temporary, path);
 };
 
-const serializedScenario = (scenario: Scenario): string =>
-  JSON.stringify(scenarioSchema.parse(scenario), null, 2) + '\n';
-
-const assertSafeWritePath = async (
+/** Rejects writes outside the workspace or through existing symlink components. */
+export const assertSafeWritePath = async (
   root: string,
   path: string,
 ): Promise<void> => {
@@ -46,15 +30,14 @@ const assertSafeWritePath = async (
   if (rootStats.isSymbolicLink()) {
     throw new Error('Write path contains a symbolic link or junction: ' + root);
   }
-  const components = [root, ...child.split(/[\\/]/u).filter(Boolean)];
-  let currentPath = components[0] ?? root;
-  for (const component of components.slice(1)) {
-    currentPath = join(currentPath, component);
+  let current = root;
+  for (const component of child.split(/[\\/]/u).filter(Boolean)) {
+    current = join(current, component);
     try {
-      const stats = await lstat(currentPath);
+      const stats = await lstat(current);
       if (stats.isSymbolicLink()) {
         throw new Error(
-          'Write path contains a symbolic link or junction: ' + currentPath,
+          'Write path contains a symbolic link or junction: ' + current,
         );
       }
     } catch (error) {
@@ -70,79 +53,28 @@ const assertSafeWritePath = async (
   }
 };
 
-const assertScenarioCompatible = async (
-  path: string,
-  scenario: Scenario,
-): Promise<void> => {
-  const existing = await current(path);
-  if (existing === undefined) return;
-  const parsed = scenarioSchema.parse(JSON.parse(existing));
-  if (serializedScenario(parsed) !== serializedScenario(scenario)) {
-    throw new Error('Scenario id collision: ' + scenario.id);
-  }
-};
-
-const preflight = async (layout: Layout): Promise<void> => {
-  const defaultPaths = layout.initialScenarios.map((scenario) =>
-    join(layout.root, 'default', 'scenarios', scenario.id + '.json'),
-  );
-  const scenarioPaths = layout.scenarios.map((scenario) =>
-    join(layout.root, 'scenarios', scenario.id + '.json'),
-  );
-  const modelPaths = layout.targets.map(({ target }) =>
+/** Preflights every approved prompt destination without mutating it. */
+export const preflightLayout = async (layout: Layout): Promise<void> => {
+  const approved = layout.targets.filter(({ approved }) => approved);
+  const paths = approved.map(({ target }) =>
     join(layout.root, target.id, 'SYSTEM_PROMPT.md'),
   );
   await Promise.all(
-    [...defaultPaths, ...scenarioPaths, ...modelPaths].map((path) =>
-      assertSafeWritePath(layout.root, path),
-    ),
+    paths.map((path) => assertSafeWritePath(layout.root, path)),
   );
-  await Promise.all([
-    ...layout.initialScenarios.map((scenario) =>
-      assertScenarioCompatible(
-        join(layout.root, 'default', 'scenarios', scenario.id + '.json'),
-        scenario,
-      ),
-    ),
-    ...layout.scenarios.map((scenario) =>
-      assertScenarioCompatible(
-        join(layout.root, 'scenarios', scenario.id + '.json'),
-        scenario,
-      ),
-    ),
-  ]);
 };
 
-const writeScenario = async (
-  path: string,
-  scenario: Scenario,
-): Promise<void> => {
-  if ((await current(path)) !== undefined) return;
-  await atomicWrite(path, serializedScenario(scenario));
-};
-
-/** Persists the complete result only after collision checks pass. */
+/** Writes prompts only for targets approved by held-out validation. */
 export const persistLayout = async (layout: Layout): Promise<void> => {
   if (layout.dryRun) return;
-  await preflight(layout);
-  await Promise.all([
-    ...layout.initialScenarios.map((scenario) =>
-      writeScenario(
-        join(layout.root, 'default', 'scenarios', scenario.id + '.json'),
-        scenario,
-      ),
-    ),
-    ...layout.scenarios.map((scenario) =>
-      writeScenario(
-        join(layout.root, 'scenarios', scenario.id + '.json'),
-        scenario,
-      ),
-    ),
-    ...layout.targets.map(({ target, prompt }) =>
+  await preflightLayout(layout);
+  const approved = layout.targets.filter(({ approved }) => approved);
+  await Promise.all(
+    approved.map(({ target, prompt }) =>
       atomicWrite(
         join(layout.root, target.id, 'SYSTEM_PROMPT.md'),
         prompt.trimEnd() + '\n',
       ),
     ),
-  ]);
+  );
 };

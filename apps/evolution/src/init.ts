@@ -11,14 +11,18 @@ const defaultConfig = {
   providers: [{ id: 'openai', type: 'openai', tokenEnv: 'OPENAI_API_KEY' }],
   models: [{ id: 'target-model', provider: 'openai', model: 'target-model' }],
   optimizer: { provider: 'openai', model: 'optimizer-model' },
-  judges: [
-    { provider: 'openai', model: 'judge-one' },
-    { provider: 'openai', model: 'judge-two' },
+  judge: { provider: 'openai', model: 'judge-model' },
+  evals: [
+    {
+      id: 'correct-output',
+      assertion: 'The output correctly fulfills the requested behavior.',
+    },
   ],
   evolution: {
-    targetAccuracy: 0.9,
-    plateauPatience: 3,
-    maxEpochs: 20,
+    accuracy: 0.9,
+    patience: { epochs: 3 },
+    epochs: 20,
+    history: { limit: 30 },
   },
 } satisfies EvolutionConfig;
 

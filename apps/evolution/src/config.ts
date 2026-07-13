@@ -12,9 +12,6 @@ const unique = (values: readonly string[], label: string): void => {
   }
 };
 
-const modelKey = ({ provider, model }: ModelRef): string =>
-  `${provider}:${model}`;
-
 export const parseConfig = (value: unknown): EvolutionConfig => {
   const config = evolutionConfigSchema.parse(value);
   unique(
@@ -25,15 +22,21 @@ export const parseConfig = (value: unknown): EvolutionConfig => {
     config.models.map(({ id }) => id),
     'Model ids',
   );
-  unique(config.judges.map(modelKey), 'Judge models');
+  unique(
+    config.evals.map(({ id }) => id),
+    'Global eval ids',
+  );
 
   const providers = new Set(config.providers.map(({ id }) => id));
-  const refs = [...config.models, config.optimizer, ...config.judges];
+  const refs: readonly ModelRef[] = [
+    ...config.models,
+    config.optimizer,
+    config.judge,
+  ];
   const missing = refs.find(({ provider }) => !providers.has(provider));
   if (missing !== undefined) {
     throw new Error(`Unknown provider reference: ${missing.provider}`);
   }
-
   return config;
 };
 
