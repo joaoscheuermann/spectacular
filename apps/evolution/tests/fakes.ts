@@ -7,9 +7,28 @@ import type { EvolutionConfig, Scenario } from '../src/schema.js';
 type Text = (system: string, input: string) => string | Promise<string>;
 type Structured = (system: string, input: string) => unknown | Promise<unknown>;
 
+export type Deferred<Value> = {
+  readonly promise: Promise<Value>;
+  readonly resolve: (value: Value) => void;
+  readonly reject: (reason?: unknown) => void;
+};
+
+export const deferred = <Value>(): Deferred<Value> => {
+  let resolve!: (value: Value) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<Value>((accept, decline) => {
+    resolve = accept;
+    reject = decline;
+  });
+  return { promise, resolve, reject };
+};
+
 export const fakeCompletion = (
   text: Text = async () => '',
-  structured: Structured = async () => ({ results: [] }),
+  structured: Structured = async () => ({
+    reasoning: 'Private evidence.',
+    passed: true,
+  }),
 ): Completion => ({
   async text(system, input) {
     return text(system, input);
@@ -37,6 +56,7 @@ export const validConfig = (): EvolutionConfig => ({
     patience: { epochs: 2 },
     epochs: 3,
     history: { limit: 30 },
+    concurrency: { scenarios: 1, judgments: 1 },
   },
 });
 
@@ -55,20 +75,12 @@ export const scenarios = (): readonly Scenario[] => [
   },
 ];
 
-export const matrix = (
-  evalIds: readonly string[],
+export const judgment = (
   passed = true,
-): readonly {
-  readonly evalId: string;
-  readonly sampleIndex: number;
+): {
   readonly reasoning: string;
   readonly passed: boolean;
-}[] =>
-  evalIds.flatMap((evalId) =>
-    [0, 1, 2].map((sampleIndex) => ({
-      evalId,
-      sampleIndex,
-      reasoning: 'Private evidence.',
-      passed,
-    })),
-  );
+} => ({
+  reasoning: 'Private evidence.',
+  passed,
+});

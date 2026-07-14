@@ -111,16 +111,30 @@ scenario-local assertions. An incomplete suite, including a missing split or
 a scenario without an effective assertion, fails before provider calls; the
 CLI never generates, accepts, snapshots, merges, or writes scenarios.
 
-For each scenario, the target is sampled exactly three times and one structured
-judge call evaluates every sample against every effective assertion. Scenario
-accuracy covers its complete result matrix, and overall accuracy is the mean of
-scenario accuracies so scenarios are equally weighted. Only training scenarios,
-training failures, and matching bounded history inform optimization. Normal
+For each scenario, the target is sampled with exactly three independent text
+calls. Every effective assertion/sample pair is evaluated by its own structured
+judge call, which returns one binary verdict; scenario accuracy covers all
+pair verdicts, and overall accuracy is the mean of scenario accuracies so
+scenarios are equally weighted. Evaluation defaults to one complete scenario
+at a time and one global judge request at a time. Positive-integer concurrency
+settings may raise either sliding limit; each active scenario still starts its
+three target samples concurrently, while one evaluation-wide judge pool caps
+judgments across all active scenarios. Scheduling settings do not change the
+history fingerprint. Only training scenarios, training failures, and matching
+bounded history inform optimization. Normal
 optimizer calls use temperature `0.2`; after the configured
 `evolution.patience.epochs` unsuccessful normal epochs, one `0.8`
 plateau-escape attempt runs. Codex optimizer requests
 omit unsupported temperature and emit one stderr warning. Candidates are
 accepted only on strict training improvement, subject to a hard epoch cap.
+
+Application-generated optimizer, compression, and judge user messages are
+deterministic Markdown documents. Every authored or historical text value is
+preserved inside a collision-safe Markdown fence. Optimizer messages exclude
+application-injected target identity entirely: target ID, provider, and model
+remain available for routing, progress, history, and fingerprints but are not
+sent to the optimizer. Raw target scenario inputs remain unchanged, and all
+structured optimizer and judge responses remain schema-validated JSON.
 
 After training reaches the configured accuracy, one `0.2` compression attempt
 may replace the prompt only when it is 20–30 percent shorter by trimmed
@@ -130,12 +144,13 @@ outputs, reasoning, and failures are never exposed to optimization or
 compression. Prompt files are written only for approved targets, and existing
 prompts survive failed runs. Applied runs append fingerprinted attempt and
 terminal records to each target's history; only the newest configured number of
-records matching the original prompt, training contract, global assertions,
-accuracy threshold, target, and judge are reused. A dry run may read matching
-history but makes no filesystem writes. Runtime progress is rendered through
-`pino`/`pino-pretty` on stderr with credential redaction and without prompt,
-scenario, model-output, judge-reasoning, assertion, strategy, or failure bodies,
-preserving stdout for the final JSON result.
+records matching the versioned evaluation mode, original prompt, training
+contract, global assertions, accuracy threshold, target, and judge are reused.
+A dry run may read matching history but makes no filesystem writes. Runtime
+progress is rendered through `pino`/`pino-pretty` on stderr with credential
+redaction and without prompt, scenario, model-output, judge-reasoning,
+assertion, strategy, or failure bodies, preserving stdout for the final JSON
+result.
 
 `packages/prompt-kit` owns Doric's command-line prompt abstraction for the
 Node.js CLI host. It provides Doric-owned text, select, and queued prompt APIs

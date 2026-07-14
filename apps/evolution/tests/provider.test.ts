@@ -126,14 +126,8 @@ test('parses native LM Studio JSON text for structured evolution roles', async (
             {
               type: 'message',
               content: JSON.stringify({
-                results: [
-                  {
-                    evalId: 'rule',
-                    sampleIndex: 0,
-                    reasoning: 'Clear.',
-                    passed: true,
-                  },
-                ],
+                reasoning: 'Clear.',
+                passed: true,
               }),
             },
           ],
@@ -155,6 +149,7 @@ test('parses native LM Studio JSON text for structured evolution roles', async (
       patience: { epochs: 1 },
       epochs: 1,
       history: { limit: 30 },
+      concurrency: { scenarios: 1, judgments: 1 },
     },
   };
 
@@ -168,9 +163,9 @@ test('parses native LM Studio JSON text for structured evolution roles', async (
     judgeOutputSchema,
   );
 
-  assert.equal(judgment.results[0]?.passed, true);
+  assert.equal(judgment.passed, true);
   const body = JSON.parse(requests[0]?.body ?? '{}') as {
     readonly system_prompt?: string;
   };
-  assert.match(body.system_prompt ?? '', /results:array/);
+  assert.match(body.system_prompt ?? '', /reasoning:string and passed:boolean/);
 });

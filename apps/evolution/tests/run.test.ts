@@ -15,7 +15,7 @@ import { join } from 'node:path';
 import type { CompletionFor } from '../src/completion.js';
 import { runEvolution } from '../src/run.js';
 import { compressionSystemPrompt } from '../src/prompts.js';
-import { fakeCompletion, matrix, validConfig } from './fakes.js';
+import { fakeCompletion, judgment, validConfig } from './fakes.js';
 
 const workspace = async () => {
   const root = await mkdtemp(join(tmpdir(), 'evolution-run-'));
@@ -51,9 +51,7 @@ const completions =
       });
     }
     if (model.model === 'judge-model') {
-      return fakeCompletion(undefined, async () => ({
-        results: matrix(['global']),
-      }));
+      return fakeCompletion(undefined, async () => judgment());
     }
     return fakeCompletion(async () => 'correct');
   };
@@ -165,9 +163,7 @@ test('isolates malformed target history and persists unaffected targets', async 
       }));
     }
     if (model.model === 'judge-model') {
-      return fakeCompletion(undefined, async () => ({
-        results: matrix(['global']),
-      }));
+      return fakeCompletion(undefined, async () => judgment());
     }
     return fakeCompletion(async () => {
       targetModels.push(model.model);

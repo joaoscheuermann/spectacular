@@ -23,6 +23,7 @@ const defaultConfig = {
     patience: { epochs: 3 },
     epochs: 20,
     history: { limit: 30 },
+    concurrency: { scenarios: 1, judgments: 1 },
   },
 } satisfies EvolutionConfig;
 

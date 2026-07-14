@@ -47,11 +47,14 @@ type FingerprintInputs = {
   readonly judge: ModelRef;
 };
 
+const evaluationMode = 'per-eval-sample-v1';
+
 /** Identifies history that is valid for one immutable training contract. */
 export const historyFingerprint = (inputs: FingerprintInputs): string =>
   createHash('sha256')
     .update(
       JSON.stringify({
+        evaluationMode,
         originalPrompt: inputs.originalPrompt,
         training: inputs.training,
         globalEvals: inputs.globalEvals,

@@ -13,7 +13,12 @@ import {
   type OptimizerMode,
   type TerminalStatus,
 } from './history.js';
-import { compressionSystemPrompt, optimizerSystemPrompt } from './prompts.js';
+import {
+  compressionInput,
+  compressionSystemPrompt,
+  optimizerInput,
+  optimizerSystemPrompt,
+} from './prompts.js';
 import type { Progress } from './progress.js';
 import {
   proposalOutputSchema,
@@ -93,6 +98,7 @@ const evaluatePrompt = (
   evaluate(target, inputs.judge, prompt, scenarios, {
     targetId: inputs.target.id,
     progress: inputs.progress,
+    concurrency: inputs.options.concurrency,
   });
 
 const propose = async (
@@ -117,12 +123,7 @@ const propose = async (
   });
   const proposal = await complete.structured(
     optimizerSystemPrompt,
-    JSON.stringify({
-      target: {
-        id: inputs.target.id,
-        provider: inputs.target.provider,
-        model: inputs.target.model,
-      },
+    optimizerInput({
       prompt: state.prompt,
       trainingScenarios: inputs.training,
       currentFailures: state.evaluation.failures,
@@ -248,7 +249,7 @@ const compression = async (
   inputs.progress?.({ event: 'compression.start', target: inputs.target.id });
   const proposal = await complete.structured(
     compressionSystemPrompt,
-    JSON.stringify({
+    compressionInput({
       prompt: state.prompt,
       trainingScenarios: inputs.training,
     }),

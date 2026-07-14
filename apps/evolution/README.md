@@ -100,6 +100,10 @@ configuration is:
     "epochs": 20,
     "history": {
       "limit": 30
+    },
+    "concurrency": {
+      "scenarios": 1,
+      "judgments": 1
     }
   }
 }
@@ -137,9 +141,14 @@ verification, and validation. `evolution.patience.epochs` controls how many
 unsuccessful normal epochs precede a single plateau-escape attempt, while
 `evolution.epochs` is a hard cap across attempts. `evolution.history.limit`
 limits matching prior attempts supplied to the optimizer.
+`evolution.concurrency.scenarios` limits active scenario lifecycles, while
+`evolution.concurrency.judgments` limits judge requests globally across every
+active scenario in one evaluation. The block and either field may be omitted;
+each value defaults to `1` and must be a positive integer.
 
 The config parser is strict. Legacy `judges` and `targetAccuracy` fields are
-rejected rather than ignored.
+rejected rather than ignored, as are unknown concurrency keys and zero,
+negative, or fractional concurrency values.
 
 ## Scenarios and assertions
 
@@ -174,15 +183,33 @@ own evaluation contract.
 
 ## Evaluation and evolution
 
-For every evaluated scenario, the target is called exactly three times. One
-structured judge call receives the three outputs and all effective assertions
-and must return exactly one result for every `(evalId, sampleIndex)` pair. Each
-result contains `evalId`, `sampleIndex`, non-empty `reasoning`, and binary
-`passed`. Missing, duplicate, unknown, or malformed results abort evaluation.
+For every evaluated scenario, the target is called exactly three times through
+independent text requests. Each effective assertion is then judged against
+each sampled output through its own structured request. Four assertions and
+three samples therefore produce 12 independent judge calls. By default, one
+scenario completes generation and judging before the next starts, and judge
+requests run one at a time. Raising the scenario limit keeps each active
+scenario's three target samples concurrent, for at most `3 × scenarios` target
+requests. Raising the judgment limit uses one evaluation-wide sliding pool;
+scenario concurrency never multiplies that global cap. Every judge request
+contains only one eval and one sampled output, and the judge returns only
+non-empty `reasoning` and binary `passed`. The evaluator attaches the known
+`evalId` and `sampleIndex` and preserves eval-major, sample-minor verdict order
+independently of completion order. A malformed verdict aborts evaluation and
+queued work does not start after the first failure.
 
 A scenario's accuracy is its passed verdicts divided by `3 × evals`. Overall
 accuracy is the arithmetic mean of scenario accuracies, so scenarios remain
 equally weighted even when they have different numbers of assertions.
+
+Application-generated optimizer, compression, and judge inputs are
+deterministic Markdown rather than JSON envelopes. Arbitrary prompt, scenario,
+failure, output, reasoning, strategy, and history text is preserved verbatim
+inside collision-safe fenced blocks. The optimizer document never includes an
+application-injected target ID, provider, or model; those values still drive
+model routing, progress, history reuse, and persistence. Target sampling still
+receives each authored `scenario.input` unchanged, and structured optimizer and
+judge responses remain schema-validated JSON.
 
 Only training scenarios, current training failures, and the newest matching
 history attempts are sent to the optimizer. A proposal contains only `prompt`
@@ -217,10 +244,13 @@ prompt, strategy, optimizer mode, training accuracy, failed evaluation
 evidence, and disposition; terminal records capture the run's final status.
 History is not rewritten.
 
-History reuse is scoped by a SHA-256 fingerprint of the original prompt,
-training contract, global assertions, accuracy threshold, target, and judge.
-Only the newest `evolution.history.limit` matching attempts inform the
-optimizer. A dry run may read this history but never appends it.
+History reuse is scoped by a SHA-256 fingerprint of the versioned evaluation
+mode, original prompt, training contract, global assertions, accuracy
+threshold, target, and judge. This prevents history from the former bundled
+judge mode from being reused. Only the newest `evolution.history.limit`
+matching attempts inform the optimizer. A dry run may read this history but
+never appends it. Concurrency settings are scheduling controls and are not part
+of the history fingerprint.
 
 ```text
 <config-directory>/

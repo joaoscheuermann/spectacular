@@ -1,9 +1,11 @@
 import type { Completion, CompletionFor } from './completion.js';
-import { resultJudgeSystemPrompt } from './prompts.js';
-import type { Progress } from './progress.js';
+import { createFailure, createPool, type Failure, type Pool } from './pool.js';
+import { judgeInput, resultJudgeSystemPrompt } from './prompts.js';
+import type { Progress, ProgressEvent } from './progress.js';
 import {
   judgeOutputSchema,
   type EvalVerdict,
+  type EvolutionConfig,
   type ModelRef,
   type Scenario,
 } from './schema.js';
@@ -45,70 +47,147 @@ export const createJudge = (
 type EvaluationOptions = {
   readonly targetId: string;
   readonly progress?: Progress;
+  readonly concurrency?: EvolutionConfig['evolution']['concurrency'];
 };
 
-const validateMatrix = (
+type Runtime = {
+  readonly complete: Completion;
+  readonly judge: Judge;
+  readonly prompt: string;
+  readonly options: EvaluationOptions;
+  readonly failure: Failure;
+  readonly judgments: Pool;
+};
+
+type Pair = {
+  readonly evaluation: Scenario['evals'][number];
+  readonly sampleIndex: number;
+  readonly output: string;
+};
+
+const report = (
+  progress: Progress | undefined,
+  failure: Failure,
+  event: ProgressEvent,
+): void => {
+  try {
+    progress?.(event);
+  } catch (error) {
+    throw failure.fail(error);
+  }
+};
+
+const reportFailure = (
+  progress: Progress | undefined,
+  failure: Failure,
+  event: ProgressEvent,
+): void => {
+  try {
+    progress?.(event);
+  } catch (error) {
+    failure.fail(error);
+  }
+};
+
+const protectedCall = async <Value>(
+  failure: Failure,
+  call: () => Promise<Value>,
+): Promise<Value> => {
+  try {
+    return await call();
+  } catch (error) {
+    throw failure.fail(error);
+  }
+};
+
+const values = <Value>(
+  settled: readonly PromiseSettledResult<Value>[],
+  failure: Failure,
+): readonly Value[] => {
+  if (failure.failed()) throw failure.reason();
+  return settled.map((result) => {
+    if (result.status === 'rejected') throw result.reason;
+    return result.value;
+  });
+};
+
+const samples = async (
   scenario: Scenario,
-  verdicts: readonly EvalVerdict[],
-): readonly EvalVerdict[] => {
-  const expected = new Set(
-    scenario.evals.flatMap(({ id }) =>
-      Array.from({ length: sampleCount }, (_, sampleIndex) =>
-        JSON.stringify([id, sampleIndex]),
-      ),
+  runtime: Runtime,
+): Promise<readonly string[]> => {
+  const requests = Array.from({ length: sampleCount }, () =>
+    protectedCall(runtime.failure, () =>
+      runtime.complete.text(runtime.prompt, scenario.input),
     ),
   );
-  const actual = verdicts.map(({ evalId, sampleIndex }) =>
-    JSON.stringify([evalId, sampleIndex]),
+  return values(await Promise.allSettled(requests), runtime.failure);
+};
+
+const pairs = (
+  scenario: Scenario,
+  outputs: readonly string[],
+): readonly Pair[] =>
+  scenario.evals.flatMap((evaluation) =>
+    outputs.map((output, sampleIndex) => ({
+      evaluation,
+      sampleIndex,
+      output,
+    })),
   );
-  if (
-    actual.length !== expected.size ||
-    new Set(actual).size !== actual.length ||
-    actual.some((key) => !expected.has(key))
-  ) {
-    throw new Error(
-      `Judge returned an invalid result matrix for scenario "${scenario.id}".`,
-    );
-  }
-  return verdicts;
+
+const judgePair = async (
+  scenario: Scenario,
+  pair: Pair,
+  runtime: Runtime,
+): Promise<EvalVerdict> => {
+  const judged = await runtime.judgments.run(() =>
+    runtime.judge.completion.structured(
+      resultJudgeSystemPrompt,
+      judgeInput({
+        scenarioInput: scenario.input,
+        assertion: pair.evaluation,
+        sampleIndex: pair.sampleIndex,
+        modelOutput: pair.output,
+      }),
+      judgeOutputSchema,
+    ),
+  );
+  return {
+    evalId: pair.evaluation.id,
+    sampleIndex: pair.sampleIndex,
+    ...judged,
+  };
+};
+
+const judgeScenario = async (
+  scenario: Scenario,
+  outputs: readonly string[],
+  runtime: Runtime,
+): Promise<readonly EvalVerdict[]> => {
+  const requests = pairs(scenario, outputs).map((pair) =>
+    judgePair(scenario, pair, runtime),
+  );
+  return values(await Promise.allSettled(requests), runtime.failure);
 };
 
 const evaluateScenario = async (
-  complete: Completion,
-  judge: Judge,
-  prompt: string,
   scenario: Scenario,
-  options: EvaluationOptions,
+  runtime: Runtime,
 ): Promise<ScenarioResult> => {
-  options.progress?.({
-    event: 'scenario.start',
-    target: options.targetId,
-    scenarioId: scenario.id,
-    sampleCount,
-    evalCount: scenario.evals.length,
-  });
+  const { failure, options } = runtime;
   try {
-    const outputs = await Promise.all(
-      Array.from({ length: sampleCount }, () =>
-        complete.text(prompt, scenario.input),
-      ),
-    );
-    const judged = await judge.completion.structured(
-      resultJudgeSystemPrompt,
-      JSON.stringify({
-        input: scenario.input,
-        evals: scenario.evals,
-        outputs: outputs.map((output, sampleIndex) => ({
-          sampleIndex,
-          output,
-        })),
-      }),
-      judgeOutputSchema,
-    );
-    const verdicts = validateMatrix(scenario, judged.results);
+    report(options.progress, failure, {
+      event: 'scenario.start',
+      target: options.targetId,
+      scenarioId: scenario.id,
+      sampleCount,
+      evalCount: scenario.evals.length,
+    });
+    const outputs = await samples(scenario, runtime);
+    const verdicts = await judgeScenario(scenario, outputs, runtime);
     const passed = verdicts.filter((verdict) => verdict.passed).length;
     const accuracy = passed / verdicts.length;
-    options.progress?.({
+    report(options.progress, failure, {
       event: 'scenario.complete',
       target: options.targetId,
       scenarioId: scenario.id,
@@ -118,34 +197,19 @@ const evaluateScenario = async (
     });
     return { scenario, outputs, verdicts, accuracy };
   } catch (error) {
-    options.progress?.({
+    failure.fail(error);
+    reportFailure(options.progress, failure, {
       event: 'scenario.failed',
       target: options.targetId,
       scenarioId: scenario.id,
     });
-    throw error;
+    throw failure.reason();
   }
 };
 
-/** Evaluates three target samples per scenario with one exact-matrix judge call. */
-export const evaluate = async (
-  complete: Completion,
-  judge: Judge,
-  prompt: string,
-  scenarios: readonly Scenario[],
-  options: EvaluationOptions,
-): Promise<Evaluation> => {
-  if (scenarios.length === 0) throw new Error('Evaluation suite is empty.');
-  options.progress?.({
-    event: 'evaluation.start',
-    target: options.targetId,
-    scenarioCount: scenarios.length,
-  });
-  const results = await Promise.all(
-    scenarios.map((scenario) =>
-      evaluateScenario(complete, judge, prompt, scenario, options),
-    ),
-  );
+const completedEvaluation = (
+  results: readonly ScenarioResult[],
+): Evaluation => {
   const accuracy =
     results.reduce((sum, result) => sum + result.accuracy, 0) / results.length;
   const failures = results.flatMap(({ scenario, outputs, verdicts }) =>
@@ -161,16 +225,47 @@ export const evaluate = async (
           ],
     ),
   );
-  options.progress?.({
+  return { accuracy, results, failures };
+};
+
+/** Evaluates three target samples with one judge call per eval/sample pair. */
+export const evaluate = async (
+  complete: Completion,
+  judge: Judge,
+  prompt: string,
+  scenarios: readonly Scenario[],
+  options: EvaluationOptions,
+): Promise<Evaluation> => {
+  if (scenarios.length === 0) throw new Error('Evaluation suite is empty.');
+  const failure = createFailure();
+  report(options.progress, failure, {
+    event: 'evaluation.start',
+    target: options.targetId,
+    scenarioCount: scenarios.length,
+  });
+  const concurrency = options.concurrency ?? { scenarios: 1, judgments: 1 };
+  const judgments = createPool(concurrency.judgments, failure);
+  const scenarioPool = createPool(concurrency.scenarios, failure);
+  const runtime = { complete, judge, prompt, options, failure, judgments };
+  const pending = scenarios.map((scenario) =>
+    scenarioPool.run(() => evaluateScenario(scenario, runtime)),
+  );
+  const settled = await Promise.allSettled(pending);
+  await Promise.all([scenarioPool.idle(), judgments.idle()]);
+  const result = completedEvaluation(values(settled, failure));
+  report(options.progress, failure, {
     event: 'evaluation.complete',
     target: options.targetId,
-    accuracy,
-    passed: results.reduce(
+    accuracy: result.accuracy,
+    passed: result.results.reduce(
       (sum, result) =>
         sum + result.verdicts.filter((verdict) => verdict.passed).length,
       0,
     ),
-    total: results.reduce((sum, result) => sum + result.verdicts.length, 0),
+    total: result.results.reduce(
+      (sum, scenario) => sum + scenario.verdicts.length,
+      0,
+    ),
   });
-  return { accuracy, results, failures };
+  return result;
 };

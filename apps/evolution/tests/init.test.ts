@@ -30,6 +30,11 @@ test('creates a valid minimal workspace scaffold', async () => {
   const text = await readFile(join(root, 'evolution.config.json'), 'utf8');
   const parsed = JSON.parse(text) as unknown;
   assert.equal(text, JSON.stringify(parsed, null, 2) + '\n');
+  assert.deepEqual(
+    (parsed as { readonly evolution: { readonly concurrency: unknown } })
+      .evolution.concurrency,
+    { scenarios: 1, judgments: 1 },
+  );
   assert.deepEqual(parseConfig(parsed), {
     providers: [{ id: 'openai', type: 'openai', tokenEnv: 'OPENAI_API_KEY' }],
     models: [{ id: 'target-model', provider: 'openai', model: 'target-model' }],
@@ -46,6 +51,7 @@ test('creates a valid minimal workspace scaffold', async () => {
       patience: { epochs: 3 },
       epochs: 20,
       history: { limit: 30 },
+      concurrency: { scenarios: 1, judgments: 1 },
     },
   });
   assert.deepEqual((await readdir(root)).sort(), [

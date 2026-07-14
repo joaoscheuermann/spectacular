@@ -16,6 +16,13 @@ const effortSchema = z.enum([
   'high',
   'xhigh',
 ]);
+const concurrencySchema = z
+  .object({
+    scenarios: z.number().int().positive().default(1),
+    judgments: z.number().int().positive().default(1),
+  })
+  .strict()
+  .default({ scenarios: 1, judgments: 1 });
 
 export const providerTypeSchema = z.enum([
   'openai',
@@ -85,6 +92,7 @@ export const evolutionConfigSchema = z
           .object({ limit: z.number().int().positive().default(20) })
           .strict()
           .default({ limit: 20 }),
+        concurrency: concurrencySchema,
       })
       .strict(),
   })
@@ -111,7 +119,8 @@ export const evalVerdictSchema = z
 
 export const judgeOutputSchema = z
   .object({
-    results: z.array(evalVerdictSchema),
+    reasoning: textSchema,
+    passed: z.boolean(),
   })
   .strict();
 

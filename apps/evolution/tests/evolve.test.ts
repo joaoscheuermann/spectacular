@@ -5,7 +5,7 @@ import type { CompletionFor } from '../src/completion.js';
 import { evolveModels } from '../src/evolve.js';
 import type { HistoryRecord } from '../src/history.js';
 import { compressionSystemPrompt } from '../src/prompts.js';
-import { fakeCompletion, matrix, scenarios, validConfig } from './fakes.js';
+import { fakeCompletion, judgment, scenarios, validConfig } from './fakes.js';
 
 const priorAttempt = (
   overrides: Partial<HistoryRecord> = {},
@@ -34,9 +34,7 @@ test('uses two normal temperatures then one plateau escape temperature', async (
       }));
     }
     if (model.model === 'judge-model') {
-      return fakeCompletion(undefined, async () => ({
-        results: matrix(['global'], false),
-      }));
+      return fakeCompletion(undefined, async () => judgment(false));
     }
     return fakeCompletion(async () => 'bad output');
   };
@@ -53,8 +51,24 @@ test('uses two normal temperatures then one plateau escape temperature', async (
 });
 
 test('accepts strict training improvement, compresses once, and isolates validation', async () => {
-  const config = validConfig();
-  const optimizerInputs: string[] = [];
+  const base = validConfig();
+  const config = {
+    ...base,
+    providers: [
+      ...base.providers,
+      { id: 'target-provider-sentinel', type: 'lmstudio-openai' as const },
+    ],
+    models: [
+      {
+        id: 'target-id-sentinel',
+        provider: 'target-provider-sentinel',
+        model: 'target-model-sentinel',
+      },
+    ],
+  };
+  const optimizerRequests: { readonly system: string; readonly input: string }[] =
+    [];
+  const targetInputs: string[] = [];
   const goodPrompt = 'good ' + 'x'.repeat(95);
   const compressed = 'good ' + 'x'.repeat(70);
   let optimizerCalls = 0;
@@ -62,7 +76,7 @@ test('accepts strict training improvement, compresses once, and isolates validat
   const completeFor: CompletionFor = (model) => {
     if (model.model === 'optimizer-model') {
       return fakeCompletion(undefined, async (system, input) => {
-        optimizerInputs.push(input);
+        optimizerRequests.push({ system, input });
         optimizerCalls += 1;
         return system === compressionSystemPrompt
           ? { prompt: compressed, strategy: 'remove repetition' }
@@ -71,20 +85,14 @@ test('accepts strict training improvement, compresses once, and isolates validat
     }
     if (model.model === 'judge-model') {
       return fakeCompletion(undefined, async (_system, input) => {
-        const payload = JSON.parse(input) as {
-          readonly input: string;
-          readonly outputs: readonly { output: string }[];
-        };
-        if (payload.input === 'validation input') validationJudgments += 1;
-        return {
-          results: matrix(
-            ['global'],
-            payload.outputs.every(({ output }) => output.startsWith('good ')),
-          ),
-        };
+        if (input.includes('validation input')) validationJudgments += 1;
+        return judgment(input.includes('good '));
       });
     }
-    return fakeCompletion(async (system) => system);
+    return fakeCompletion(async (system, input) => {
+      targetInputs.push(input);
+      return system;
+    });
   };
 
   const [result] = await evolveModels(
@@ -98,10 +106,70 @@ test('accepts strict training improvement, compresses once, and isolates validat
   assert.equal(result?.refactored, true);
   assert.equal(result?.prompt, compressed);
   assert.equal(result?.stopReason, 'approved');
-  assert.equal(validationJudgments, 1);
-  assert.equal(
-    optimizerInputs.some((input) => input.includes('validation input')),
-    false,
+  assert.equal(validationJudgments, 3);
+  const proposalInput = optimizerRequests.find(
+    ({ system }) => system !== compressionSystemPrompt,
+  )?.input;
+  const compression = optimizerRequests.find(
+    ({ system }) => system === compressionSystemPrompt,
+  )?.input;
+  assert.ok(proposalInput);
+  assert.ok(compression);
+  assert.deepEqual(proposalInput.match(/^# .+$/gmu), [
+    '# Prompt',
+    '# Training Scenarios',
+    '# Current Failures',
+    '# Matching History',
+    '# Prohibited Prompts',
+    '# Prohibited Strategies',
+  ]);
+  assert.deepEqual(compression.match(/^# .+$/gmu), [
+    '# Prompt',
+    '# Training Scenarios',
+  ]);
+  for (const input of [proposalInput, compression]) {
+    assert.match(input, /training input/u);
+    assert.match(input, /Always applies\./u);
+    assert.equal(input.includes('validation input'), false);
+    for (const identity of [
+      'target-id-sentinel',
+      'target-provider-sentinel',
+      'target-model-sentinel',
+    ]) {
+      assert.equal(input.includes(identity), false);
+    }
+  }
+  assert.deepEqual(targetInputs, [
+    ...Array<string>(9).fill('training input'),
+    ...Array<string>(3).fill('validation input'),
+  ]);
+});
+
+test('continues validating structured optimizer responses with Markdown inputs', async () => {
+  const config = {
+    ...validConfig(),
+    evolution: { ...validConfig().evolution, epochs: 1 },
+  };
+  const completeFor: CompletionFor = (model) => {
+    if (model.model === 'optimizer-model') {
+      return fakeCompletion(undefined, async () => ({ prompt: 'candidate' }));
+    }
+    if (model.model === 'judge-model') {
+      return fakeCompletion(undefined, async () => judgment(false));
+    }
+    return fakeCompletion(async () => 'bad');
+  };
+
+  await assert.rejects(
+    evolveModels(config, 'original', scenarios(), completeFor),
+    (error: unknown) => {
+      assert.ok(error instanceof AggregateError);
+      const targetError = error.errors[0];
+      assert.ok(targetError instanceof Error);
+      assert.ok(targetError.cause instanceof Error);
+      assert.equal(targetError.cause.name, 'ZodError');
+      return true;
+    },
   );
 });
 
@@ -123,9 +191,7 @@ test('rejects equivalent prompts without target evaluation and respects max epoc
       }));
     }
     if (model.model === 'judge-model') {
-      return fakeCompletion(undefined, async () => ({
-        results: matrix(['global'], false),
-      }));
+      return fakeCompletion(undefined, async () => judgment(false));
     }
     return fakeCompletion(async () => {
       targetCalls += 1;
@@ -165,9 +231,7 @@ test('omits Codex optimizer temperature and warns exactly once per run', async (
       }));
     }
     if (model.model === 'judge-model') {
-      return fakeCompletion(undefined, async () => ({
-        results: matrix(['global'], false),
-      }));
+      return fakeCompletion(undefined, async () => judgment(false));
     }
     return fakeCompletion(async () => 'bad');
   };
@@ -198,9 +262,7 @@ test('continues independent targets after one target throws', async () => {
       return fakeCompletion(async () => 'good');
     }
     if (model.model === 'judge-model') {
-      return fakeCompletion(undefined, async () => ({
-        results: matrix(['global']),
-      }));
+      return fakeCompletion(undefined, async () => judgment());
     }
     return fakeCompletion(undefined, async () => ({
       prompt: 'x'.repeat(75),
@@ -234,9 +296,7 @@ test('projects matching history to training-only feedback and rejects a failed s
       });
     }
     if (model.model === 'judge-model') {
-      return fakeCompletion(undefined, async () => ({
-        results: matrix(['global'], false),
-      }));
+      return fakeCompletion(undefined, async () => judgment(false));
     }
     return fakeCompletion(async () => {
       targetCalls += 1;
@@ -291,15 +351,7 @@ test('falls back without evaluating a compression candidate of invalid length', 
     }
     if (model.model === 'judge-model') {
       return fakeCompletion(undefined, async (_system, input) => {
-        const payload = JSON.parse(input) as {
-          readonly outputs: readonly { readonly output: string }[];
-        };
-        return {
-          results: matrix(
-            ['global'],
-            payload.outputs.every(({ output }) => output === original),
-          ),
-        };
+        return judgment(input.includes(original));
       });
     }
     return fakeCompletion(async (system) => {
@@ -332,15 +384,7 @@ test('falls back when a correctly sized compression loses training accuracy', as
     }
     if (model.model === 'judge-model') {
       return fakeCompletion(undefined, async (_system, input) => {
-        const payload = JSON.parse(input) as {
-          readonly outputs: readonly { readonly output: string }[];
-        };
-        return {
-          results: matrix(
-            ['global'],
-            payload.outputs.every(({ output }) => output === original),
-          ),
-        };
+        return judgment(input.includes(original));
       });
     }
     return fakeCompletion(async (system) => {
@@ -372,11 +416,8 @@ test('evaluates validation once and reports validation failure', async () => {
     }
     if (model.model === 'judge-model') {
       return fakeCompletion(undefined, async (_system, input) => {
-        const payload = JSON.parse(input) as { readonly input: string };
-        if (payload.input === 'validation input') validationCalls += 1;
-        return {
-          results: matrix(['global'], payload.input === 'training input'),
-        };
+        if (input.includes('validation input')) validationCalls += 1;
+        return judgment(input.includes('training input'));
       });
     }
     return fakeCompletion(async () => 'output');
@@ -387,7 +428,7 @@ test('evaluates validation once and reports validation failure', async () => {
     scenarios(),
     completeFor,
   );
-  assert.equal(validationCalls, 1);
+  assert.equal(validationCalls, 3);
   assert.equal(result?.approved, false);
   assert.equal(result?.validationAccuracy, 0);
   assert.equal(result?.stopReason, 'validation-failed');
@@ -416,15 +457,10 @@ test('returns to normal temperature after a successful plateau escape', async ()
     }
     if (model.model === 'judge-model') {
       return fakeCompletion(undefined, async (_system, input) => {
-        const payload = JSON.parse(input) as {
-          readonly outputs: readonly { readonly output: string }[];
-        };
-        const escaped = payload.outputs[0]?.output === 'candidate-2';
-        const results = matrix(['global'], false).map((entry) => ({
-          ...entry,
-          passed: escaped && entry.sampleIndex === 0,
-        }));
-        return { results };
+        return judgment(
+          input.includes('candidate-2') &&
+            /# Sample\n\nIndex: 0(?:\n|$)/u.test(input),
+        );
       });
     }
     return fakeCompletion(async (system) => system);

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
 
@@ -7,7 +8,7 @@ import { loadScenarios, prepareScenarios } from '../src/scenarios.js';
 import { scenarioSchema } from '../src/schema.js';
 import { validConfig } from './fakes.js';
 
-test('defaults nested history limit and validates the single judge reference', () => {
+test('defaults nested history and concurrency settings', () => {
   const config = validConfig();
   const evolution = {
     accuracy: config.evolution.accuracy,
@@ -16,7 +17,65 @@ test('defaults nested history limit and validates the single judge reference', (
   };
   const parsed = parseConfig({ ...config, evolution });
   assert.equal(parsed.evolution.history.limit, 20);
+  assert.deepEqual(parsed.evolution.concurrency, {
+    scenarios: 1,
+    judgments: 1,
+  });
   assert.equal(parsed.judge.model, 'judge-model');
+});
+
+test('accepts explicit and partial concurrency settings', () => {
+  const config = validConfig();
+  assert.deepEqual(
+    parseConfig({
+      ...config,
+      evolution: {
+        ...config.evolution,
+        concurrency: { scenarios: 4, judgments: 7 },
+      },
+    }).evolution.concurrency,
+    { scenarios: 4, judgments: 7 },
+  );
+  assert.deepEqual(
+    parseConfig({
+      ...config,
+      evolution: {
+        ...config.evolution,
+        concurrency: { scenarios: 3 },
+      },
+    }).evolution.concurrency,
+    { scenarios: 3, judgments: 1 },
+  );
+  assert.deepEqual(
+    parseConfig({
+      ...config,
+      evolution: {
+        ...config.evolution,
+        concurrency: { judgments: 5 },
+      },
+    }).evolution.concurrency,
+    { scenarios: 1, judgments: 5 },
+  );
+});
+
+test('rejects unknown and non-positive-integer concurrency settings', () => {
+  const config = validConfig();
+  for (const concurrency of [
+    { scenarios: 1, judgments: 1, extra: 1 },
+    { scenarios: 0, judgments: 1 },
+    { scenarios: -1, judgments: 1 },
+    { scenarios: 1.5, judgments: 1 },
+    { scenarios: 1, judgments: 0 },
+    { scenarios: 1, judgments: -1 },
+    { scenarios: 1, judgments: 1.5 },
+  ]) {
+    assert.throws(() =>
+      parseConfig({
+        ...config,
+        evolution: { ...config.evolution, concurrency },
+      }),
+    );
+  }
 });
 
 test('strictly rejects legacy fields and optimizer temperature', () => {
@@ -99,7 +158,15 @@ test('loads the tracked OKF config and six curated scenarios', async () => {
     'analyze',
     'source_code',
   );
-  const config = await loadConfig(join(root, 'evolution.config.json'));
+  const path = join(root, 'evolution.config.json');
+  const tracked = JSON.parse(await readFile(path, 'utf8')) as {
+    readonly evolution?: { readonly concurrency?: unknown };
+  };
+  assert.deepEqual(tracked.evolution?.concurrency, {
+    scenarios: 1,
+    judgments: 1,
+  });
+  const config = await loadConfig(path);
   const scenarios = await loadScenarios(join(root, 'scenarios'), config.evals);
   assert.equal(scenarios.length, 6);
   assert.equal(scenarios.filter(({ split }) => split === 'train').length, 4);
