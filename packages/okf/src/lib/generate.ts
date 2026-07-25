@@ -1,22 +1,32 @@
-import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { SYSTEM_PROMPT } from '../../prompts/analyze/index.js';
-import { analyze, type Analysis } from './agents/analyze/index.js';
-import { classify } from './agents/classify/index.js';
-import type { Kind } from './agents/classify/kinds.js';
-import { frontmatter, type Frontmatter } from './agents/frontmatter/index.js';
+import { hasRecipeHash, renderConcept } from './concept.js';
+import {
+  createOkfError,
+  isAbortError,
+  isOkfError,
+  type OkfErrorCode,
+} from './classes/okf-error.js';
 import { DEFAULT_BATCH_SIZE, DEFAULT_IGNORE } from './constants.js';
+import { detectType, isSupportedType } from './detect.js';
+import { parseInterface } from './interface.js';
 import { loadPrompts, type Prompts } from './prompts.js';
-import { redactRegex } from './redact.js';
+import { recipeHash } from './recipe.js';
+import { describe, selectTags, summarize } from './summarize.js';
 import {
   outputPath,
   parseDescription,
   renderTree,
   type TreeEntry,
 } from './tree.js';
-import type { GenerateResult, OkfConfig } from './types/okf.js';
+import type { ModuleInterface } from './types/interface.js';
+import type {
+  GenerateResult,
+  OkfConfig,
+  Progress,
+  ProgressEvent,
+} from './types/okf.js';
 import { walk } from './walk.js';
 
 type Paths = {
@@ -26,28 +36,22 @@ type Paths = {
 
 type WorkContext = Paths & {
   readonly config: OkfConfig;
-  readonly analyzePrompt: (kind: Kind) => Promise<string>;
+  readonly emit: Progress;
   readonly prompts: Prompts;
+  readonly promptTarget: string;
 };
 
-type WorkResult = 'cached' | 'generated';
+type WorkOutcome = 'cached' | 'generated';
 
-type Evidence = {
-  readonly front: Frontmatter;
-  readonly analysis: Analysis;
-};
-
-type ConceptInput = {
+type WorkResult = {
   readonly source: string;
-  readonly hash: string;
-  readonly front: Frontmatter;
-  readonly summary: string;
+  readonly outcome: WorkOutcome;
 };
 
 type ResultInput = Paths & {
   readonly index: string;
   readonly files: readonly string[];
-  readonly results: ReadonlyMap<string, WorkResult>;
+  readonly results: ReadonlyMap<string, WorkOutcome>;
 };
 
 /** Returns the conventional project-bundle output directory for a root. */
@@ -61,63 +65,230 @@ export const generate = async (
   output?: string,
 ): Promise<GenerateResult> => {
   const paths = await resolvePaths(root, output);
-  const prompts = await loadPrompts(config.promptTarget);
-  const analyzePrompt = SYSTEM_PROMPT(config.promptTarget ?? 'default');
-  const context = { ...paths, config, prompts, analyzePrompt };
-  const results = new Map<string, WorkResult>();
+  const promptTarget = config.promptTarget ?? 'default';
+  const prompts = await boundary(
+    () => loadPrompts(promptTarget),
+    'OKF_PROMPT_LOAD_FAILED',
+  );
+  const emit = gated(config.progress);
+  const context: WorkContext = {
+    ...paths,
+    config,
+    emit,
+    prompts,
+    promptTarget,
+  };
+  const results = new Map<string, WorkOutcome>();
+  const batchSize = config.batchSize ?? DEFAULT_BATCH_SIZE;
+  let processed = 0;
 
-  await fs.mkdir(paths.output, { recursive: true });
+  emit({
+    event: 'okf.generate.start',
+    batchSize,
+  });
+
+  await boundary(
+    () => fs.mkdir(paths.output, { recursive: true }),
+    'OKF_OUTPUT_PREPARE_FAILED',
+  );
   const files = await walk(
     paths.root,
     async (file, body) => {
-      results.set(file, await work(context, file, body));
+      const outcome = await work(context, file, body);
+      processed += 1;
+      terminal(emit, outcome, processed);
+      results.set(file, outcome.outcome);
     },
     {
-      batchSize: config.batchSize ?? DEFAULT_BATCH_SIZE,
+      batchSize,
       ignore: [...DEFAULT_IGNORE, ...(config.ignore ?? [])],
       signal: config.signal,
     },
   );
-  const entries = await Promise.all(files.map((file) => entry(paths, file)));
+  emit({ event: 'okf.index.start', files: files.length });
   const index = path.join(paths.output, 'index.md');
-  await fs.writeFile(index, renderTree(entries), 'utf-8');
+  await boundary(async () => {
+    const entries = await Promise.all(files.map((file) => entry(paths, file)));
+    await fs.writeFile(index, renderTree(entries), 'utf-8');
+  }, 'OKF_INDEX_FAILED');
+  emit({ event: 'okf.index.complete', files: files.length });
+  const generated = result({ ...paths, index, files, results });
 
-  return result({ ...paths, index, files, results });
+  emit({
+    event: 'okf.generate.complete',
+    files: generated.files.length,
+    generated: generated.generated,
+    cached: generated.cached,
+  });
+  return generated;
 };
 
+const terminal = (
+  emit: Progress,
+  result: WorkResult,
+  processed: number,
+): void => {
+  const event: ProgressEvent = {
+    event:
+      result.outcome === 'cached' ? 'okf.file.cached' : 'okf.file.generated',
+    source: result.source,
+    processed,
+  };
+  emit(event);
+};
+
+const gated = (observer: Progress | undefined): Progress => {
+  let failed = false;
+
+  return (event) => {
+    if (failed || observer === undefined) return;
+
+    try {
+      observer(event);
+    } catch (error) {
+      failed = true;
+      throw error;
+    }
+  };
+};
+
+const work = async (
+  context: WorkContext,
+  file: string,
+  content: string,
+): Promise<WorkResult> => {
+  const source = relativeFile(context.root, file);
+  context.emit({ event: 'okf.file.start', source });
+  const type = detectType(source);
+  const moduleInterface = await interfaceFor(
+    context.root,
+    source,
+    type,
+    content,
+  );
+  const hash = recipeHash({
+    config: context.config,
+    content,
+    interface: moduleInterface,
+    path: source,
+    prompts: context.prompts,
+    promptTarget: context.promptTarget,
+    type,
+  });
+  const target = path.join(context.output, outputPath(source));
+  if (await cached(target, hash, source)) return { source, outcome: 'cached' };
+
+  context.emit({ event: 'okf.file.cache.miss', source });
+  const completionConfig = {
+    provider: context.config.provider,
+    model: context.config.model,
+    effort: context.config.effort,
+    signal: context.config.signal,
+  };
+  context.emit({ event: 'okf.file.summary.start', source });
+  const sourceSummary = await boundary(
+    () =>
+      summarize(completionConfig, context.prompts.summary, {
+        path: source,
+        type,
+        interface: moduleInterface,
+        content,
+      }),
+    'OKF_SUMMARY_FAILED',
+    source,
+  );
+  context.emit({ event: 'okf.file.summary.complete', source });
+  context.emit({ event: 'okf.file.description.start', source });
+  const description = await boundary(
+    () =>
+      describe(
+        completionConfig,
+        context.prompts.description,
+        source,
+        sourceSummary,
+      ),
+    'OKF_DESCRIPTION_FAILED',
+    source,
+  );
+  context.emit({ event: 'okf.file.description.complete', source });
+  context.emit({ event: 'okf.file.tags.start', source });
+  const tags = await boundary(
+    () =>
+      selectTags(completionConfig, context.prompts.tags, source, sourceSummary),
+    'OKF_TAGS_FAILED',
+    source,
+  );
+  context.emit({ event: 'okf.file.tags.complete', source });
+  await boundary(
+    async () => {
+      await fs.mkdir(path.dirname(target), { recursive: true });
+      await fs.writeFile(
+        target,
+        renderConcept({
+          analysis: sourceSummary,
+          description,
+          tags,
+          source,
+          type,
+          hash,
+          interface: moduleInterface,
+          timestamp: new Date().toISOString(),
+        }),
+        'utf-8',
+      );
+    },
+    'OKF_CONCEPT_WRITE_FAILED',
+    source,
+  );
+  return { source, outcome: 'generated' };
+};
+
+const interfaceFor = (
+  root: string,
+  source: string,
+  type: string,
+  content: string,
+): Promise<ModuleInterface | undefined> =>
+  isSupportedType(type)
+    ? parseInterface({ root, source, type, content })
+    : Promise.resolve(undefined);
+
 const resolvePaths = async (root: string, output?: string): Promise<Paths> => {
-  const resolvedRoot = await fs.realpath(path.resolve(root));
-  const stat = await fs.stat(resolvedRoot);
-  if (!stat.isDirectory()) {
-    throw new Error(`OKF root is not a directory: ${root}`);
-  }
+  const resolvedRoot = await boundary(async () => {
+    const resolved = await fs.realpath(path.resolve(root));
+    const stat = await fs.stat(resolved);
+    if (!stat.isDirectory()) throw createOkfError('OKF_ROOT_INVALID');
+    return resolved;
+  }, 'OKF_ROOT_INVALID');
 
   const bundleRoot = path.join(resolvedRoot, '.agents', 'bundles');
   const resolvedOutput =
     output === undefined
       ? defaultOutput(resolvedRoot)
       : path.resolve(resolvedRoot, output);
-  const relative = path.relative(bundleRoot, resolvedOutput);
-
-  if (!isChild(relative)) {
-    throw new Error(`OKF output must be inside ${bundleRoot}`);
+  if (!isChild(path.relative(bundleRoot, resolvedOutput))) {
+    throw createOkfError('OKF_OUTPUT_INVALID');
   }
 
-  const physicalBundle = await projectedRealPath(bundleRoot);
-  const physicalOutput = await projectedRealPath(resolvedOutput);
+  const [physicalBundle, physicalOutput] = await boundary(
+    () =>
+      Promise.all([
+        projectedRealPath(bundleRoot),
+        projectedRealPath(resolvedOutput),
+      ]),
+    'OKF_OUTPUT_INVALID',
+  );
   if (
     !isContained(resolvedRoot, physicalBundle) ||
     !isContained(physicalBundle, physicalOutput)
   ) {
-    throw new Error(`OKF output must be inside ${bundleRoot}`);
+    throw createOkfError('OKF_OUTPUT_INVALID');
   }
-
   return { root: resolvedRoot, output: resolvedOutput };
 };
 
 const projectedRealPath = async (target: string): Promise<string> => {
   let current = target;
-
   while (true) {
     try {
       const resolved = await fs.realpath(current);
@@ -125,95 +296,11 @@ const projectedRealPath = async (target: string): Promise<string> => {
     } catch (error) {
       if (!isAbsent(error)) throw error;
     }
-
     const parent = path.dirname(current);
     if (parent === current) throw new Error(`Cannot resolve path: ${target}`);
     current = parent;
   }
 };
-
-const isContained = (parent: string, child: string): boolean =>
-  isChild(path.relative(parent, child));
-
-const isChild = (relative: string): boolean =>
-  relative.length > 0 &&
-  relative !== '..' &&
-  !relative.startsWith(`..${path.sep}`) &&
-  !path.isAbsolute(relative);
-
-const work = async (
-  context: WorkContext,
-  file: string,
-  body: string,
-): Promise<WorkResult> => {
-  const relative = relativeFile(context.root, file);
-  const target = path.join(context.output, outputPath(relative));
-  const hash = crypto.createHash('sha256').update(body).digest('hex');
-  if (await containsHash(target, hash)) return 'cached';
-
-  const evidence = await describe(context, relative, redactRegex(body));
-  await fs.mkdir(path.dirname(target), { recursive: true });
-  await fs.writeFile(
-    target,
-    concept({
-      source: relative,
-      hash,
-      front: evidence.front,
-      summary: evidence.analysis.summary,
-    }),
-    'utf-8',
-  );
-  return 'generated';
-};
-
-const describe = async (
-  context: WorkContext,
-  source: string,
-  content: string,
-): Promise<Evidence> => {
-  const completion = {
-    provider: context.config.provider,
-    model: context.config.model,
-    effort: context.config.effort,
-    signal: context.config.signal,
-  };
-  const classification = await classify(
-    completion,
-    context.prompts.classify,
-    source,
-    content,
-  );
-  const analyzePrompt = await context.analyzePrompt(classification.type);
-  const front = await frontmatter(
-    completion,
-    context.prompts.frontmatter,
-    source,
-    content,
-    classification,
-  );
-  const analysis = await analyze(
-    completion,
-    analyzePrompt,
-    source,
-    content,
-    classification,
-  );
-
-  return { front, analysis };
-};
-
-const concept = (input: ConceptInput): string => `---
-type: ${yamlString(input.front.type)}
-title: ${yamlString(input.front.title)}
-description: ${yamlString(input.front.description)}
-resource: ${yamlString(`source:${input.source}`)}
-tags: [${input.front.tags.map(yamlString).join(', ')}]
-timestamp: ${yamlString(new Date().toISOString())}
-hash: ${yamlString(input.hash)}
----
-
-${input.summary}
-`;
 
 const entry = async (paths: Paths, file: string): Promise<TreeEntry> => {
   const relative = relativeFile(paths.root, file);
@@ -221,13 +308,11 @@ const entry = async (paths: Paths, file: string): Promise<TreeEntry> => {
     path.join(paths.output, outputPath(relative)),
     'utf-8',
   );
-
   return { path: relative, description: parseDescription(markdown) };
 };
 
 const result = (input: ResultInput): GenerateResult => {
   const values = [...input.results.values()];
-
   return {
     root: input.root,
     output: input.output,
@@ -243,18 +328,31 @@ const relativeFile = (root: string, file: string): string => {
   if (relative.startsWith('..') || path.isAbsolute(relative)) {
     throw new Error(`Cannot represent a file outside the OKF root: ${file}`);
   }
-
   return relative.split(path.sep).join('/');
 };
 
-const containsHash = async (file: string, hash: string): Promise<boolean> => {
+const cached = async (
+  file: string,
+  hash: string,
+  source: string,
+): Promise<boolean> => {
   try {
-    return (await fs.readFile(file, 'utf-8')).includes(hash);
+    return hasRecipeHash(await fs.readFile(file, 'utf-8'), hash);
   } catch (error) {
     if (isMissing(error)) return false;
-    throw error;
+    if (isOkfError(error) || isAbortError(error)) throw error;
+    throw createOkfError('OKF_CACHE_READ_FAILED', source);
   }
 };
+
+const isContained = (parent: string, child: string): boolean =>
+  isChild(path.relative(parent, child));
+
+const isChild = (relative: string): boolean =>
+  relative.length > 0 &&
+  relative !== '..' &&
+  !relative.startsWith(`..${path.sep}`) &&
+  !path.isAbsolute(relative);
 
 const isMissing = (error: unknown): error is NodeJS.ErrnoException =>
   error instanceof Error && 'code' in error && error.code === 'ENOENT';
@@ -264,4 +362,15 @@ const isAbsent = (error: unknown): error is NodeJS.ErrnoException =>
   'code' in error &&
   (error.code === 'ENOENT' || error.code === 'ENOTDIR');
 
-const yamlString = (value: string): string => JSON.stringify(value);
+const boundary = async <Result>(
+  operation: () => Promise<Result>,
+  code: OkfErrorCode,
+  source?: string,
+): Promise<Result> => {
+  try {
+    return await operation();
+  } catch (error) {
+    if (isOkfError(error) || isAbortError(error)) throw error;
+    throw createOkfError(code, source);
+  }
+};

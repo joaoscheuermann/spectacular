@@ -70,6 +70,10 @@ export type ProviderCallFlags = {
   readonly reasoning?: boolean | ReasoningRequest;
   readonly serviceTier?: 'auto' | 'default' | 'priority';
   readonly includeUsage?: boolean;
+  /** Omits model output from diagnostics and debug records for this call. */
+  readonly sensitiveOutput?: boolean;
+  /** Adds the structured output JSON Schema to the model's system prompt. */
+  readonly includeStructuredSchemaOnSystemPrompt?: boolean;
 };
 
 export type FinishReason =

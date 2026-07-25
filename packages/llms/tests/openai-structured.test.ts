@@ -394,4 +394,58 @@ test('logs OpenAI stream structured output failures with finish context', async 
   assert.match(String(cause.message), /JSON/);
 });
 
+test('omits sensitive structured output from errors and debug records', async () => {
+  const sentinel = 'RATIONALE_DEBUG_PRIVATE';
+  const records: LlmDebugRecord[] = [];
+  const provider = createOpenAiProvider({
+    transport: fakeTransport({
+      responses: [
+        response({
+          status: 'completed',
+          output_text: JSON.stringify({ reasoning: sentinel }),
+          output: [],
+        }),
+      ],
+    }),
+    apiKey: 'sk-testSecret123',
+    debugLogger: {
+      async log(record): Promise<void> {
+        records.push(record);
+      },
+    },
+  });
+
+  let caught: unknown;
+  try {
+    await provider.complete({
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Hi' }],
+      schema: z.object({ answer: z.string() }),
+      flags: { sensitiveOutput: true },
+    });
+  } catch (error) {
+    caught = error;
+  }
+
+  assert.ok(caught instanceof ProviderErrorObject);
+  assert.equal(caught.data.code, 'invalid_structured_output');
+  assert.equal(caught.data.diagnostic, undefined);
+  assert.equal(
+    (caught as Error & { readonly cause?: unknown }).cause,
+    undefined,
+  );
+  assert.doesNotMatch(JSON.stringify(records), new RegExp(sentinel, 'u'));
+  assert.doesNotMatch(
+    JSON.stringify({
+      message: caught.message,
+      data: caught.data,
+      cause: (caught as Error & { readonly cause?: unknown }).cause,
+    }),
+    new RegExp(sentinel, 'u'),
+  );
+  const finish = records.find((record) => record.event === 'response.finish')
+    ?.fields?.finish as Record<string, unknown>;
+  assert.equal(finish.textExcerpt, undefined);
+});
+
 const sse = (value: unknown): string => `data: ${JSON.stringify(value)}\n\n`;

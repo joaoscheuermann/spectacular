@@ -75,6 +75,7 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
     body: Record<string, unknown>,
   ): Promise<Record<string, unknown>> => {
     const auth = await authorization(deps);
+    const sensitiveOutput = request.flags?.sensitiveOutput === true;
 
     const response = await deps.transport.request({
       method: 'POST',
@@ -92,14 +93,22 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
       provider: debugProvider,
       target: 'responses',
       event: 'http.response',
-      fields: { status: response.status, body: response.body },
+      fields: {
+        status: response.status,
+        ...(sensitiveOutput ? {} : { body: response.body }),
+      },
     });
 
     if (response.status >= 400) {
-      throw httpError('openai', response.status, response.body);
+      throw httpError(
+        'openai',
+        response.status,
+        response.body,
+        sensitiveOutput,
+      );
     }
 
-    return parseJsonBody('openai', response.body);
+    return parseJsonBody('openai', response.body, sensitiveOutput);
   };
 
   return {
@@ -131,6 +140,7 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
       request: ProviderRequest<Output>,
     ): AsyncIterable<ProviderStreamEvent<Output>> {
       requireRequestInput('openai', request);
+      const sensitiveOutput = request.flags?.sensitiveOutput === true;
       const body = openAiBody(request, true);
       const text: string[] = [];
       const reasoning: string[] = [];
@@ -171,18 +181,20 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
         let payload: Record<string, unknown>;
 
         try {
-          payload = parseJsonBody('openai', event.data);
+          payload = parseJsonBody('openai', event.data, sensitiveOutput);
         } catch {
           await logger?.log({
             provider: debugProvider,
             target: 'responses',
             event: 'stream.event.invalid_json',
-            fields: { data: event.data },
+            fields: sensitiveOutput ? {} : { data: event.data },
           });
           yield streamErrorEvent(
             'openai',
             'malformed_stream_event',
             event.data,
+            undefined,
+            sensitiveOutput,
           );
           return;
         }
@@ -211,7 +223,7 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
             provider: debugProvider,
             target: 'responses',
             event: 'stream.response.completed',
-            fields: { payload },
+            fields: sensitiveOutput ? {} : { payload },
           });
           const response = recordField(payload, 'response') ?? payload;
           const finish = await parseStructuredOutputWithDebug(
@@ -242,12 +254,14 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
             provider: debugProvider,
             target: 'responses',
             event: 'stream.response.failed',
-            fields: { payload },
+            fields: sensitiveOutput ? {} : { payload },
           });
           yield streamErrorEvent(
             'openai',
             'provider_error',
             'OpenAI stream failed.',
+            undefined,
+            sensitiveOutput,
           );
           return;
         }

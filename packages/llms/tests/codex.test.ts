@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { z } from 'zod';
 
 import {
   ProviderErrorObject,
@@ -143,6 +144,51 @@ test('preserves caller-provided Codex instructions', async () => {
     JSON.parse(transport.requests[0]?.body ?? '{}').instructions,
     'Use the repository conventions.',
   );
+});
+
+test('adds a schema instruction to Codex requests while retaining text format', async () => {
+  const transport = fakeTransport({
+    streams: [
+      [
+        sse({
+          type: 'response.completed',
+          response: {
+            status: 'completed',
+            output_text: '{"answer":"Done"}',
+            output: [],
+          },
+        }),
+        'data: [DONE]\n\n',
+      ],
+    ],
+  });
+  const provider = createCodexProvider({
+    transport,
+    authorization: 'Bearer codex-token',
+  });
+
+  await provider.complete({
+    model: 'gpt-5.5',
+    messages: [
+      { role: 'system', content: 'Follow policy.' },
+      { role: 'user', content: 'Return JSON.' },
+    ],
+    schema: z.object({ answer: z.string() }),
+    flags: { includeStructuredSchemaOnSystemPrompt: true },
+  });
+  const body = JSON.parse(transport.requests[0]?.body ?? '{}');
+
+  assert.match(
+    body.instructions,
+    /^Follow policy\.[\s\S]*Return exactly one JSON object[\s\S]*JSON Schema/u,
+  );
+  assert.equal(body.text.format.type, 'json_schema');
+  assert.deepEqual(body.input, [
+    {
+      role: 'user',
+      content: [{ type: 'input_text', text: 'Return JSON.' }],
+    },
+  ]);
 });
 
 test('rejects Codex complete when the stream emits a provider error', async () => {

@@ -3,6 +3,11 @@ import path from 'node:path';
 
 import { glob } from 'glob';
 
+import {
+  createOkfError,
+  isAbortError,
+  isOkfError,
+} from './classes/okf-error.js';
 import { filterIgnored } from './git.js';
 import { DEFAULT_BATCH_SIZE } from './constants.js';
 
@@ -24,22 +29,7 @@ export async function walk(
     throw new Error('batchSize must be a positive integer');
   }
 
-  const candidates = (
-    await glob(['**/*', '**/.gitignore'], {
-      cwd: root,
-      ignore: ['**/.agents/**', '**/.doric/**', '**/.git/**'],
-      nodir: true,
-      windowsPathsNoEscape: true,
-    })
-  )
-    .map(normalize)
-    .sort();
-  const discovered = await regularFiles(root, candidates);
-  const relativeFiles = await filterIgnored(
-    root,
-    discovered,
-    options.ignore ?? [],
-  );
+  const relativeFiles = await discover(root, options.ignore ?? []);
   const files = relativeFiles.map((file) =>
     path.join(root, ...file.split('/')),
   );
@@ -52,7 +42,7 @@ export async function walk(
         options.signal?.throwIfAborted();
         if (!(await isRegularFile(file))) return;
 
-        const buffer = await fs.promises.readFile(file);
+        const buffer = await readSource(file);
         if (isBinary(buffer)) return;
 
         const body = buffer.toString('utf-8');
@@ -64,6 +54,38 @@ export async function walk(
 
   return textFiles.sort();
 }
+
+const discover = async (
+  root: string,
+  ignore: readonly string[],
+): Promise<readonly string[]> => {
+  try {
+    const candidates = (
+      await glob(['**/*', '**/.gitignore'], {
+        cwd: root,
+        ignore: ['**/.agents/**', '**/.doric/**', '**/.git/**'],
+        nodir: true,
+        windowsPathsNoEscape: true,
+      })
+    )
+      .map(normalize)
+      .sort();
+    const discovered = await regularFiles(root, candidates);
+    return await filterIgnored(root, discovered, ignore);
+  } catch (error) {
+    if (isOkfError(error) || isAbortError(error)) throw error;
+    throw createOkfError('OKF_DISCOVERY_FAILED');
+  }
+};
+
+const readSource = async (file: string): Promise<Buffer> => {
+  try {
+    return await fs.promises.readFile(file);
+  } catch (error) {
+    if (isAbortError(error)) throw error;
+    throw createOkfError('OKF_DISCOVERY_FAILED');
+  }
+};
 
 const normalize = (value: string): string =>
   value.replaceAll('\\', '/').replace(/^\.\//u, '');

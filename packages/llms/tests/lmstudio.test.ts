@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { z } from 'zod';
 
 import {
   ProviderErrorObject,
@@ -7,6 +8,18 @@ import {
   type ProviderStreamEvent,
 } from '../src/index.js';
 import { collect, fakeTransport, response } from './fakes.js';
+
+const schema = z.object({
+  answer: z.string().describe('May contain ```json without ending the fence.'),
+});
+
+const assertSchemaInstruction = (prompt: string): void => {
+  assert.match(prompt, /Return exactly one JSON object/u);
+  assert.match(prompt, /JSON Schema/u);
+  assert.match(prompt, /~~~json\n\{/u);
+  assert.match(prompt, /\n\}\n~~~/u);
+  assert.match(prompt, /"answer"/u);
+};
 
 test('sends LM Studio chat requests to the default native endpoint without auth', async () => {
   const transport = fakeTransport({
@@ -48,11 +61,11 @@ test('sends LM Studio chat requests to the default native endpoint without auth'
   assert.equal(provider.capabilities.tools, false);
   assert.equal(provider.capabilities.reasoning, true);
   assert.equal(provider.capabilities.serviceTier, false);
+  assert.equal(transport.requests[0]?.url, 'http://localhost:1234/api/v1/chat');
   assert.equal(
-    transport.requests[0]?.url,
-    'http://localhost:1234/api/v1/chat',
+    'authorization' in (transport.requests[0]?.headers ?? {}),
+    false,
   );
-  assert.equal('authorization' in (transport.requests[0]?.headers ?? {}), false);
   assert.deepEqual(body, {
     model: 'qwen3-coder-fast',
     input: 'Hi',
@@ -72,6 +85,105 @@ test('sends LM Studio chat requests to the default native endpoint without auth'
     reasoningTokens: 2,
   });
   assert.deepEqual(result.toolCalls, []);
+});
+
+test('adds one structured schema instruction after authored native system messages', async () => {
+  const transport = fakeTransport({
+    responses: [
+      response({
+        output: [{ type: 'message', content: '{"answer":"Done"}' }],
+      }),
+    ],
+  });
+  const provider = createLmStudioProvider({ transport });
+  const messages = [
+    { role: 'system' as const, content: 'First policy.' },
+    { role: 'system' as const, content: 'Second policy.' },
+    { role: 'user' as const, content: 'Answer.' },
+  ];
+  const request = {
+    model: 'local-model',
+    messages,
+    schema,
+    flags: { includeStructuredSchemaOnSystemPrompt: true },
+  } as const;
+
+  const result = await provider.complete(request);
+  const body = JSON.parse(transport.requests[0]?.body ?? '{}');
+
+  assert.ok(
+    body.system_prompt.startsWith('First policy.\n\nSecond policy.\n\n'),
+  );
+  assert.equal(body.system_prompt.match(/JSON Schema/gu)?.length, 1);
+  assertSchemaInstruction(body.system_prompt);
+  assert.equal(body.input, 'Answer.');
+  assert.deepEqual(result.structured, { answer: 'Done' });
+  assert.deepEqual(request.messages, messages);
+  assert.equal(request.messages, messages);
+});
+
+test('uses the same structured schema instruction for native streams', async () => {
+  const transport = fakeTransport({
+    streams: [
+      [
+        sse('chat.end', {
+          result: {
+            output: [{ type: 'message', content: '{"answer":"Done"}' }],
+          },
+        }),
+      ],
+    ],
+  });
+  const provider = createLmStudioProvider({ transport });
+
+  await collect(
+    provider.stream({
+      model: 'local-model',
+      messages: [{ role: 'user', content: 'Answer.' }],
+      schema,
+      flags: { includeStructuredSchemaOnSystemPrompt: true },
+    }),
+  );
+  const body = JSON.parse(transport.requests[0]?.body ?? '{}');
+
+  assertSchemaInstruction(body.system_prompt);
+  assert.equal(body.input, 'Answer.');
+});
+
+test('does not add schema instructions unless both the flag and schema are present', async () => {
+  const transport = fakeTransport({
+    responses: [
+      response({
+        output: [{ type: 'message', content: '{"answer":"Done"}' }],
+      }),
+      response({ output: [{ type: 'message', content: 'Done.' }] }),
+    ],
+  });
+  const provider = createLmStudioProvider({ transport });
+
+  await provider.complete({
+    model: 'local-model',
+    messages: [
+      { role: 'system', content: 'Policy.' },
+      { role: 'user', content: 'Answer.' },
+    ],
+    schema,
+  });
+  await provider.complete({
+    model: 'local-model',
+    messages: [
+      { role: 'system', content: 'Policy.' },
+      { role: 'user', content: 'Answer.' },
+    ],
+    flags: { includeStructuredSchemaOnSystemPrompt: true },
+  });
+
+  assert.deepEqual(
+    transport.requests.map(
+      (request) => JSON.parse(request.body ?? '{}').system_prompt,
+    ),
+    ['Policy.', 'Policy.'],
+  );
 });
 
 test('normalizes top-level LM Studio reasoning effort values for native requests', async () => {
@@ -201,10 +313,7 @@ test('maps LM Studio named stream events to provider events', async () => {
   const body = JSON.parse(transport.requests[0]?.body ?? '{}');
   const finished = events.at(-1);
 
-  assert.equal(
-    transport.requests[0]?.url,
-    'http://localhost:1234/api/v1/chat',
-  );
+  assert.equal(transport.requests[0]?.url, 'http://localhost:1234/api/v1/chat');
   assert.equal(body.model, 'local-model-fast');
   assert.equal(body.stream, true);
   assert.deepEqual(events[0], {
@@ -335,7 +444,10 @@ test('maps LM Studio model identity and validation errors', async () => {
     transport.requests[0]?.url,
     'http://localhost:1234/api/v1/models',
   );
-  assert.equal('authorization' in (transport.requests[0]?.headers ?? {}), false);
+  assert.equal(
+    'authorization' in (transport.requests[0]?.headers ?? {}),
+    false,
+  );
   assert.equal(models.length, 1);
   assert.deepEqual(models[0], {
     id: 'local-model',
@@ -373,7 +485,10 @@ test('sends LM Studio model requests with API key auth', async () => {
     transport.requests[0]?.url,
     'http://localhost:1234/api/v1/models',
   );
-  assert.equal(transport.requests[0]?.headers?.authorization, 'Bearer local-key');
+  assert.equal(
+    transport.requests[0]?.headers?.authorization,
+    'Bearer local-key',
+  );
 });
 
 const sse = (event: string, payload: unknown): string =>

@@ -16,11 +16,12 @@ export const parseStructuredOutputWithDebug = async <Output = JsonValue>(
   finish: ProviderFinished,
   source: string,
 ): Promise<ProviderFinished<Output>> => {
+  const sensitiveOutput = request.flags?.sensitiveOutput === true;
   await logger?.log({
     provider: debugProvider,
     target: 'responses',
     event: 'response.finish',
-    fields: { source, finish: finishDebugFields(finish) },
+    fields: { source, finish: finishDebugFields(finish, sensitiveOutput) },
   });
 
   try {
@@ -32,8 +33,8 @@ export const parseStructuredOutputWithDebug = async <Output = JsonValue>(
       event: 'structured_output.error',
       fields: {
         source,
-        finish: finishDebugFields(finish),
-        error: errorDebugFields(error),
+        finish: finishDebugFields(finish, sensitiveOutput),
+        error: errorDebugFields(error, sensitiveOutput),
       },
     });
     throw error;
@@ -42,10 +43,13 @@ export const parseStructuredOutputWithDebug = async <Output = JsonValue>(
 
 const finishDebugFields = (
   finish: ProviderFinished,
+  sensitiveOutput: boolean,
 ): Record<string, unknown> => ({
   finishReason: finish.finishReason,
   textLength: finish.text.length,
-  textExcerpt: diagnosticExcerpt(finish.text, 512),
+  ...(sensitiveOutput
+    ? {}
+    : { textExcerpt: diagnosticExcerpt(finish.text, 512) }),
   refusalPresent: finish.refusal !== undefined,
   reasoningPresent: finish.reasoning?.text !== undefined,
   toolCallCount: finish.toolCalls.length,
@@ -57,14 +61,21 @@ const finishDebugFields = (
   usage: finish.usage,
 });
 
-const errorDebugFields = (error: unknown): Record<string, unknown> => {
+const errorDebugFields = (
+  error: unknown,
+  sensitiveOutput: boolean,
+): Record<string, unknown> => {
   if (error instanceof ProviderErrorObject) {
     return {
       name: error.name,
       code: error.data.code,
       message: error.data.message,
-      diagnostic: error.data.diagnostic,
-      cause: causeDebugFields(error),
+      ...(sensitiveOutput
+        ? {}
+        : {
+            diagnostic: error.data.diagnostic,
+            cause: causeDebugFields(error),
+          }),
     };
   }
 
@@ -72,11 +83,13 @@ const errorDebugFields = (error: unknown): Record<string, unknown> => {
     return {
       name: error.name,
       message: error.message,
-      cause: causeDebugFields(error),
+      ...(sensitiveOutput ? {} : { cause: causeDebugFields(error) }),
     };
   }
 
-  return { value: String(error) };
+  return sensitiveOutput
+    ? { value: 'Sensitive provider error.' }
+    : { value: String(error) };
 };
 
 const causeDebugFields = (

@@ -9,19 +9,10 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "prompts/analyze/index.ts"],
+  "include": ["src/**/*.ts"],
   "references": [
     {
-      "path": "../agent/tsconfig.lib.json"
-    },
-    {
       "path": "../llms/tsconfig.lib.json"
-    },
-    {
-      "path": "../messages/tsconfig.lib.json"
-    },
-    {
-      "path": "../tools/tsconfig.lib.json"
     }
   ]
 }

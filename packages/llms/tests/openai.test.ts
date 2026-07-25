@@ -235,6 +235,38 @@ test('maps OpenAI structured output schemas to text format DTOs', () => {
   });
 });
 
+test('adds a schema system instruction while retaining OpenAI text format', () => {
+  const body = openAiBody(
+    {
+      model: 'gpt-5',
+      messages: [
+        { role: 'system', content: 'First policy.' },
+        { role: 'system', content: 'Second policy.' },
+        { role: 'user', content: 'Return JSON.' },
+      ],
+      schema: z.object({ answer: z.string() }),
+      flags: { includeStructuredSchemaOnSystemPrompt: true },
+    },
+    false,
+  );
+
+  assert.match(
+    body.instructions as string,
+    /^First policy\.\n\nSecond policy\.[\s\S]*Return exactly one JSON object[\s\S]*JSON Schema/u,
+  );
+  assert.equal(
+    (body.text as { readonly format?: { readonly type?: string } }).format
+      ?.type,
+    'json_schema',
+  );
+  assert.deepEqual(body.input, [
+    {
+      role: 'user',
+      content: [{ type: 'input_text', text: 'Return JSON.' }],
+    },
+  ]);
+});
+
 test('maps OpenAI nested union structured output schemas to text format DTOs', () => {
   const body = openAiBody(
     {

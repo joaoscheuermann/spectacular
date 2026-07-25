@@ -11,8 +11,19 @@ import {
 } from '../src/index.js';
 import { collect, fakeTransport, response } from './fakes.js';
 
-const answerJsonSchema = { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object', properties: { answer: { type: 'string' } }, required: ['answer'], additionalProperties: false } as const;
-const lookupInputSchema = { type: 'object', properties: { query: { type: 'string' } }, required: ['query'], additionalProperties: false } as const;
+const answerJsonSchema = {
+  $schema: 'https://json-schema.org/draft/2020-12/schema',
+  type: 'object',
+  properties: { answer: { type: 'string' } },
+  required: ['answer'],
+  additionalProperties: false,
+} as const;
+const lookupInputSchema = {
+  type: 'object',
+  properties: { query: { type: 'string' } },
+  required: ['query'],
+  additionalProperties: false,
+} as const;
 
 test('logs LM Studio OpenAI-compatible completion request and response', async () => {
   const records: LlmDebugRecord[] = [];
@@ -82,8 +93,14 @@ test('sends LM Studio OpenAI-compatible structured output requests without tools
   assert.equal(provider.metadata.baseUrl, 'http://localhost:1234/v1');
   assert.equal(provider.capabilities.tools, true);
   assert.equal(provider.capabilities.structuredOutputs, true);
-  assert.equal(transport.requests[0]?.url, 'http://localhost:1234/v1/chat/completions');
-  assert.equal('authorization' in (transport.requests[0]?.headers ?? {}), false);
+  assert.equal(
+    transport.requests[0]?.url,
+    'http://localhost:1234/v1/chat/completions',
+  );
+  assert.equal(
+    'authorization' in (transport.requests[0]?.headers ?? {}),
+    false,
+  );
   assert.deepEqual(body, {
     model: 'local-model',
     messages: [
@@ -111,6 +128,47 @@ test('sends LM Studio OpenAI-compatible structured output requests without tools
     reasoningTokens: undefined,
     cachedInputTokens: undefined,
   });
+});
+
+test('adds a schema system instruction while retaining LM Studio response format', async () => {
+  const transport = fakeTransport({
+    responses: [
+      response({
+        choices: [
+          {
+            finish_reason: 'stop',
+            message: { content: '{"answer":"Done"}' },
+          },
+        ],
+      }),
+    ],
+  });
+  const provider = createLmStudioOpenAiProvider({ transport });
+
+  await provider.complete({
+    model: 'local-model',
+    messages: [
+      { role: 'system', content: 'First policy.' },
+      { role: 'system', content: 'Second policy.' },
+      { role: 'user', content: 'Return JSON.' },
+    ],
+    schema: z.object({ answer: z.string() }),
+    flags: { includeStructuredSchemaOnSystemPrompt: true },
+  });
+  const body = JSON.parse(transport.requests[0]?.body ?? '{}');
+
+  assert.deepEqual(
+    body.messages.map((message: { readonly role: string }) => message.role),
+    ['system', 'system', 'system', 'user'],
+  );
+  assert.equal(body.messages[0].content, 'First policy.');
+  assert.equal(body.messages[1].content, 'Second policy.');
+  assert.match(
+    body.messages[2].content,
+    /Return exactly one JSON object[\s\S]*JSON Schema/u,
+  );
+  assert.equal(body.messages[3].content, 'Return JSON.');
+  assert.equal(body.response_format.type, 'json_schema');
 });
 
 test('sends LM Studio OpenAI-compatible reasoning effort as top-level chat field', async () => {
@@ -235,7 +293,10 @@ test('lists LM Studio OpenAI-compatible models with custom base URL and API key 
   const models = await provider.models();
 
   assert.equal(transport.requests[0]?.url, 'http://127.0.0.1:4321/v1/models');
-  assert.equal(transport.requests[0]?.headers?.authorization, 'Bearer local-key');
+  assert.equal(
+    transport.requests[0]?.headers?.authorization,
+    'Bearer local-key',
+  );
   assert.deepEqual(models, [
     {
       id: 'local-model',
@@ -396,5 +457,7 @@ test('rejects LM Studio OpenAI-compatible structured streams with tools before s
 const sse = (value: unknown): string => `data: ${JSON.stringify(value)}\n\n`;
 
 const debugLogger = (records: LlmDebugRecord[]) => ({
-  log: async (record: LlmDebugRecord): Promise<void> => { records.push(record); },
+  log: async (record: LlmDebugRecord): Promise<void> => {
+    records.push(record);
+  },
 });

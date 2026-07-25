@@ -104,6 +104,42 @@ test('maps OpenRouter structured output schemas to response format DTOs', () => 
   });
 });
 
+test('adds a schema system instruction while retaining OpenRouter response format', () => {
+  const messages = [
+    { role: 'system' as const, content: 'Follow policy.' },
+    { role: 'user' as const, content: 'Return JSON.' },
+  ];
+  const request = {
+    model: 'openai/gpt-5',
+    messages,
+    schema: z.object({ answer: z.string() }),
+    flags: { includeStructuredSchemaOnSystemPrompt: true },
+  } as const;
+
+  const body = openRouterBody(request, false);
+  const bodyMessages = body.messages as readonly {
+    readonly role: string;
+    readonly content: string;
+  }[];
+
+  assert.deepEqual(
+    bodyMessages.map(({ role }) => role),
+    ['system', 'system', 'user'],
+  );
+  assert.equal(bodyMessages[0]?.content, 'Follow policy.');
+  assert.match(
+    bodyMessages[1]?.content ?? '',
+    /Return exactly one JSON object[\s\S]*JSON Schema/u,
+  );
+  assert.equal(bodyMessages[2]?.content, 'Return JSON.');
+  assert.equal(
+    (body.response_format as { readonly type?: string }).type,
+    'json_schema',
+  );
+  assert.equal(request.messages, messages);
+  assert.deepEqual(request.messages, messages);
+});
+
 test('maps OpenRouter nested union structured output schemas to response format DTOs', () => {
   const body = openRouterBody(
     {

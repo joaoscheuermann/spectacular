@@ -11,7 +11,7 @@
       "options": {
         "commands": [
           "tsc -p packages/okf/tsconfig.spec.json",
-          "node --test packages/okf/dist-tests/tests/analyze-prompts.test.js packages/okf/dist-tests/tests/generate.test.js packages/okf/dist-tests/tests/redact.test.js packages/okf/dist-tests/tests/tree.test.js packages/okf/dist-tests/tests/walk.test.js"
+          "node --test packages/okf/dist-tests/tests/generate.test.js packages/okf/dist-tests/tests/interface.test.js packages/okf/dist-tests/tests/pipeline.test.js packages/okf/dist-tests/tests/tree.test.js packages/okf/dist-tests/tests/walk.test.js"
         ],
         "parallel": false
       }

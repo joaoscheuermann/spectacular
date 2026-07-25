@@ -64,6 +64,7 @@ export const httpError = (
   provider: ProviderId,
   status: number,
   body: string,
+  sensitiveOutput = false,
 ): ProviderErrorObject =>
   new ProviderErrorObject({
     provider,
@@ -71,7 +72,7 @@ export const httpError = (
     message: `${provider} request failed with HTTP ${status}.`,
     status,
     retryable: status === 429 || status >= 500,
-    diagnostic: diagnosticExcerpt(body),
+    ...(sensitiveOutput ? {} : { diagnostic: diagnosticExcerpt(body) }),
   });
 
 export const streamErrorEvent = (
@@ -79,14 +80,17 @@ export const streamErrorEvent = (
   code: string,
   message: string,
   diagnostic?: string,
+  sensitiveOutput = false,
 ): { readonly type: 'error'; readonly error: ProviderError } => ({
   type: 'error',
   error: {
     provider,
     code,
-    message,
+    message: sensitiveOutput ? `${provider} stream failed.` : message,
     diagnostic:
-      diagnostic === undefined ? undefined : diagnosticExcerpt(diagnostic),
+      sensitiveOutput || diagnostic === undefined
+        ? undefined
+        : diagnosticExcerpt(diagnostic),
   },
 });
 
@@ -150,6 +154,7 @@ export const finishReason = (value: unknown): FinishReason => {
 export const parseJsonBody = (
   provider: ProviderId,
   body: string,
+  sensitiveOutput = false,
 ): Record<string, unknown> => {
   try {
     const parsed = asRecord(JSON.parse(body));
@@ -158,22 +163,22 @@ export const parseJsonBody = (
       return parsed;
     }
   } catch (cause) {
-    throw new ProviderErrorObject(
-      {
-        provider,
-        code: 'invalid_json',
-        message: `${provider} returned invalid JSON.`,
-        diagnostic: diagnosticExcerpt(body),
-      },
-      { cause },
-    );
+    const data = {
+      provider,
+      code: 'invalid_json',
+      message: `${provider} returned invalid JSON.`,
+      ...(sensitiveOutput ? {} : { diagnostic: diagnosticExcerpt(body) }),
+    };
+    throw sensitiveOutput
+      ? new ProviderErrorObject(data)
+      : new ProviderErrorObject(data, { cause });
   }
 
   throw new ProviderErrorObject({
     provider,
     code: 'invalid_json',
     message: `${provider} returned a non-object JSON body.`,
-    diagnostic: diagnosticExcerpt(body),
+    ...(sensitiveOutput ? {} : { diagnostic: diagnosticExcerpt(body) }),
   });
 };
 
@@ -224,6 +229,61 @@ export const structuredJsonSchema = (
   return json;
 };
 
+export const messagesWithStructuredSchema = (
+  provider: ProviderId,
+  request: ProviderRequest<unknown>,
+  convertedSchema?: JsonObject,
+): readonly ProviderMessage[] => {
+  if (
+    request.flags?.includeStructuredSchemaOnSystemPrompt !== true ||
+    request.schema === undefined
+  ) {
+    return request.messages;
+  }
+
+  const schema =
+    convertedSchema ?? structuredJsonSchema(provider, request.schema);
+
+  if (schema === undefined) {
+    return request.messages;
+  }
+
+  const content = structuredSchemaPrompt(schema);
+  const system = request.messages.filter(
+    (message) => message.role === 'system',
+  );
+  const nonSystem = request.messages.filter(
+    (message) => message.role !== 'system',
+  );
+
+  return [...system, { role: 'system', content }, ...nonSystem];
+};
+
+const structuredSchemaPrompt = (schema: JsonObject): string => {
+  const json = JSON.stringify(schema, null, 2);
+  const fence = commonMarkFence(json);
+
+  return `# Structured Output
+
+Return exactly one JSON object that matches the JSON Schema below. Do not include Markdown fences or any text outside the JSON object.
+
+${fence}json
+${json}
+${fence}`;
+};
+
+const commonMarkFence = (value: string): string => {
+  const backticks = longestRun(value, /`+/g);
+  const tildes = longestRun(value, /~+/g);
+  const marker = backticks <= tildes ? '`' : '~';
+  const longest = marker === '`' ? backticks : tildes;
+
+  return marker.repeat(Math.max(3, longest + 1));
+};
+
+const longestRun = (value: string, pattern: RegExp): number =>
+  Math.max(0, ...[...value.matchAll(pattern)].map(([run]) => run.length));
+
 export const parseStructuredOutput = <Output = JsonValue>(
   provider: ProviderId,
   request: ProviderRequest<Output>,
@@ -244,20 +304,28 @@ export const parseStructuredOutput = <Output = JsonValue>(
   try {
     parsed = JSON.parse(finish.text) as unknown;
   } catch (cause) {
-    throw new ProviderErrorObject(
-      {
-        provider,
-        code: 'invalid_structured_output',
-        message: `${provider} returned invalid structured output.`,
-        diagnostic: diagnosticExcerpt(finish.text),
-      },
-      { cause },
-    );
+    const sensitiveOutput = request.flags?.sensitiveOutput === true;
+    const data = {
+      provider,
+      code: 'invalid_structured_output',
+      message: `${provider} returned invalid structured output.`,
+      ...(sensitiveOutput
+        ? {}
+        : { diagnostic: diagnosticExcerpt(finish.text) }),
+    };
+    throw sensitiveOutput
+      ? new ProviderErrorObject(data)
+      : new ProviderErrorObject(data, { cause });
   }
 
   return {
     ...finish,
-    structured: validateStructuredOutput(provider, schema, parsed) as Output,
+    structured: validateStructuredOutput(
+      provider,
+      schema,
+      parsed,
+      request.flags?.sensitiveOutput === true,
+    ) as Output,
   };
 };
 
@@ -265,6 +333,7 @@ const validateStructuredOutput = <Schema extends StructuredOutputSchema>(
   provider: ProviderId,
   schema: Schema,
   value: unknown,
+  sensitiveOutput: boolean,
 ): z.output<Schema> => {
   const parsed = schema.safeParse(value);
 
@@ -276,7 +345,9 @@ const validateStructuredOutput = <Schema extends StructuredOutputSchema>(
     provider,
     code: 'invalid_structured_output',
     message: `${provider} structured output failed schema validation.`,
-    diagnostic: parsed.error.issues.map(issueDiagnostic).join('; '),
+    ...(sensitiveOutput
+      ? {}
+      : { diagnostic: parsed.error.issues.map(issueDiagnostic).join('; ') }),
   });
 };
 

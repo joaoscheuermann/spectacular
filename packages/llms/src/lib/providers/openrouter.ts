@@ -66,6 +66,7 @@ export const createOpenRouterProvider = (
     request: ProviderRequest<unknown>,
     body: Record<string, unknown>,
   ): Promise<Record<string, unknown>> => {
+    const sensitiveOutput = request.flags?.sensitiveOutput === true;
     const response = await deps.transport.request({
       method: 'POST',
       url: `${baseUrl}/chat/completions`,
@@ -82,14 +83,22 @@ export const createOpenRouterProvider = (
       provider: 'openrouter',
       target: 'chat/completions',
       event: 'http.response',
-      fields: { status: response.status, body: response.body },
+      fields: {
+        status: response.status,
+        ...(sensitiveOutput ? {} : { body: response.body }),
+      },
     });
 
     if (response.status >= 400) {
-      throw httpError('openrouter', response.status, response.body);
+      throw httpError(
+        'openrouter',
+        response.status,
+        response.body,
+        sensitiveOutput,
+      );
     }
 
-    return parseJsonBody('openrouter', response.body);
+    return parseJsonBody('openrouter', response.body, sensitiveOutput);
   };
 
   return {
@@ -119,6 +128,7 @@ export const createOpenRouterProvider = (
       request: ProviderRequest<Output>,
     ): AsyncIterable<ProviderStreamEvent<Output>> {
       requireRequestInput('openrouter', request);
+      const sensitiveOutput = request.flags?.sensitiveOutput === true;
       const body = openRouterBody(request, true);
       const chunks = deps.transport.stream({
         method: 'POST',
@@ -147,12 +157,14 @@ export const createOpenRouterProvider = (
         let payload: Record<string, unknown>;
 
         try {
-          payload = parseJsonBody('openrouter', event.data);
+          payload = parseJsonBody('openrouter', event.data, sensitiveOutput);
         } catch {
           yield streamErrorEvent(
             'openrouter',
             'malformed_stream_event',
             event.data,
+            undefined,
+            sensitiveOutput,
           );
           return;
         }
@@ -163,6 +175,7 @@ export const createOpenRouterProvider = (
             'provider_error',
             'OpenRouter stream error.',
             event.data,
+            sensitiveOutput,
           );
           return;
         }

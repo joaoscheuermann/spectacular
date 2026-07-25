@@ -57,7 +57,7 @@ test('renders deterministic links to mirrored outputs without folder indexes', (
   assert.doesNotMatch(renderTree(entries), /\]\(src\/nested\/index\.md\)/u);
 });
 
-test('parses a JSON-quoted description from CRLF frontmatter', () => {
+test('parses a quoted YAML description from CRLF frontmatter', () => {
   const description = 'Explains "quoted" values at C:\\repo.\nSecond line.';
   const markdown = [
     '---',
@@ -107,7 +107,7 @@ test('escapes Markdown-active filename characters without changing path separato
   );
 });
 
-test('rejects missing and non-string frontmatter descriptions', () => {
+test('rejects missing and non-string YAML frontmatter descriptions', () => {
   assert.throws(
     () =>
       parseDescription(
@@ -117,6 +117,6 @@ test('rejects missing and non-string frontmatter descriptions', () => {
   );
   assert.throws(
     () => parseDescription('---\ndescription: 42\n---\n'),
-    /description must be a JSON string/u,
+    /description must be a string/u,
   );
 });

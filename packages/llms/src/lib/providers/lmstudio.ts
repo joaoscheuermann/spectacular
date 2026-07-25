@@ -22,6 +22,7 @@ import {
 import { parseSseEvents } from '../utils/sse.js';
 import {
   httpError,
+  messagesWithStructuredSchema,
   messageText,
   parseJsonBody,
   parseStructuredOutput,
@@ -68,6 +69,7 @@ export const createLmStudioProvider = (
       request: ProviderRequest<Output>,
     ): Promise<ProviderFinished<Output>> {
       requireRequestInput('lmstudio', request);
+      const sensitiveOutput = request.flags?.sensitiveOutput === true;
       const response = await deps.transport.request({
         method: 'POST',
         url: `${baseUrl}/api/v1/chat`,
@@ -81,13 +83,21 @@ export const createLmStudioProvider = (
       });
 
       if (response.status >= 400) {
-        throw httpError('lmstudio', response.status, response.body);
+        throw httpError(
+          'lmstudio',
+          response.status,
+          response.body,
+          sensitiveOutput,
+        );
       }
 
       return parseStructuredOutput(
         'lmstudio',
         request,
-        finished(parseJsonBody('lmstudio', response.body), 'stop'),
+        finished(
+          parseJsonBody('lmstudio', response.body, sensitiveOutput),
+          'stop',
+        ),
       );
     },
 
@@ -95,6 +105,7 @@ export const createLmStudioProvider = (
       request: ProviderRequest<Output>,
     ): AsyncIterable<ProviderStreamEvent<Output>> {
       requireRequestInput('lmstudio', request);
+      const sensitiveOutput = request.flags?.sensitiveOutput === true;
       const text: string[] = [];
       const reasoning: string[] = [];
       const auth = await authHeader(deps);
@@ -134,6 +145,7 @@ export const createLmStudioProvider = (
             'malformed_stream_event',
             'Malformed LM Studio stream event.',
             event.data,
+            sensitiveOutput,
           );
           return;
         }
@@ -158,6 +170,7 @@ export const createLmStudioProvider = (
             'provider_error',
             errorMessage(payload),
             event.data,
+            sensitiveOutput,
           );
           continue;
         }
@@ -230,16 +243,19 @@ export const createLmStudioProvider = (
 const chatBody = (
   request: ProviderRequest<unknown>,
   stream: boolean,
-): Record<string, unknown> =>
-  prune({
+): Record<string, unknown> => {
+  const messages = messagesWithStructuredSchema('lmstudio', request);
+
+  return prune({
     model: request.model,
-    input: input(request.messages),
-    system_prompt: systemPrompt(request.messages),
+    input: input(messages),
+    system_prompt: systemPrompt(messages),
     stream,
     temperature: request.temperature,
     max_output_tokens: request.maxOutputTokens,
     reasoning: reasoningEffort(request),
   });
+};
 
 const reasoningEffort = (
   request: ProviderRequest<unknown>,

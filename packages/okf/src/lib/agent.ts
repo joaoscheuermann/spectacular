@@ -1,8 +1,4 @@
-import { createAgent } from 'agent';
 import type { LlmProvider, ReasoningEffort } from 'llms';
-import { createMessageStorage } from 'messages';
-import { createToolStorage } from 'tools';
-import type * as z from 'zod';
 
 export type CompletionConfig = {
   readonly effort?: ReasoningEffort;
@@ -11,33 +7,53 @@ export type CompletionConfig = {
   readonly signal?: AbortSignal;
 };
 
-export type CompletionInput<Schema extends z.ZodType> = CompletionConfig & {
+export type TextCompletionInput = CompletionConfig & {
   readonly input: string;
   readonly maxOutputTokens: number;
-  readonly schema: Schema;
   readonly stage: string;
   readonly system: string;
 };
 
-/** Runs one structured, tool-free completion and validates its output. */
-export const complete = async <Schema extends z.ZodType>(
-  input: CompletionInput<Schema>,
-): Promise<z.output<Schema>> => {
-  const response = await createAgent({
-    provider: input.provider,
-    tools: createToolStorage([]),
-    messages: createMessageStorage(),
-    system: input.system,
-    model: input.model,
-    effort: input.effort,
-    temperature: 0,
-    maxOutputTokens: input.maxOutputTokens,
-  }).complete(input.input, { schema: input.schema, signal: input.signal });
-  const result = input.schema.safeParse(response.structured);
+const messages = (system: string, input: string) => [
+  { role: 'system' as const, content: system },
+  { role: 'user' as const, content: input },
+];
 
-  if (!result.success) {
-    throw new Error(`${input.stage} did not return valid structured output`);
+/** Runs one text, tool-free completion and requires a non-empty result. */
+export const completeText = async (
+  input: TextCompletionInput,
+): Promise<string> => {
+  if (wasAborted(input.signal)) throw sanitizedAbort();
+
+  try {
+    const response = await input.provider.complete({
+      model: input.model,
+      messages: messages(input.system, input.input),
+      effort: input.effort,
+      temperature: 0,
+      maxOutputTokens: input.maxOutputTokens,
+      flags: { sensitiveOutput: true },
+      signal: input.signal,
+    });
+    const result = response.text?.trim();
+
+    if (wasAborted(input.signal)) throw sanitizedAbort();
+    if (result) return result;
+  } catch (error) {
+    if (wasAborted(input.signal) || isAbortError(error)) throw sanitizedAbort();
   }
 
-  return result.data;
+  throw new Error(`${input.stage} did not return valid text output`);
 };
+
+const wasAborted = (signal: AbortSignal | undefined): boolean =>
+  signal?.aborted === true;
+
+const isAbortError = (error: unknown): boolean =>
+  typeof error === 'object' &&
+  error !== null &&
+  'name' in error &&
+  error.name === 'AbortError';
+
+const sanitizedAbort = (): DOMException =>
+  new DOMException('The operation was aborted.', 'AbortError');

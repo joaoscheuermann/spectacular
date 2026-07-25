@@ -10,6 +10,7 @@ type Output = (
   system: string,
   input: string,
   index: number,
+  request: ProviderRequest<unknown>,
 ) => unknown | Promise<unknown>;
 
 export type ProviderFake = {
@@ -46,7 +47,7 @@ export const createProvider = (
         requests.push(request);
         const system = text(request, 'system');
         const input = text(request, 'user');
-        const structured = await output(system, input, index);
+        const structured = await output(system, input, index, request);
 
         return finish(structured) as ProviderFinished<Result>;
       },
@@ -70,31 +71,29 @@ const text = (
   return content;
 };
 
-const defaultOutput: Output = (system, input) => {
-  const evidence = JSON.parse(input) as { readonly path: string };
+const defaultOutput: Output = (_system, _input, index) =>
+  index % 3 === 0
+    ? '# Subject\n\nRepository documentation.'
+    : index % 3 === 1
+      ? 'Documents repository behavior.'
+      : 'documentation';
 
-  if (system.startsWith('Classify one repository file')) {
-    return { type: 'documentation' };
-  }
-
-  if (system.startsWith('Generate OKF metadata')) {
-    return {
-      type: 'Documentation',
-      title: evidence.path,
-      description: `Documents ${evidence.path}.`,
-      tags: ['documentation'],
-    };
-  }
-
-  return {
-    summary:
-      '# Subject\n- Repository documentation.\n# Instructions And Decisions\n- Not present in the input.\n# References\n- Not present in the input.\n# Constraints And Open Questions\n- Not present in the input.',
-  };
+export const evidencePath = (input: string): string => {
+  const match = input.match(
+    /^## Path\r?\n\r?\n(`{3,}|~{3,})text\r?\n([\s\S]*?)\r?\n\1\r?$/mu,
+  );
+  if (match?.[2] === undefined) throw new Error('Missing Path evidence');
+  return match[2];
 };
 
 const finish = (structured: unknown): ProviderFinished<unknown> => ({
-  text: structured === undefined ? '' : JSON.stringify(structured),
+  text:
+    structured === undefined
+      ? ''
+      : typeof structured === 'string'
+        ? structured
+        : JSON.stringify(structured),
   finishReason: 'stop',
   toolCalls: [],
-  structured,
+  structured: typeof structured === 'string' ? undefined : structured,
 });

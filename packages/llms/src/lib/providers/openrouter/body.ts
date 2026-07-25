@@ -1,6 +1,7 @@
 import type { ProviderRequest } from '../../types/provider.js';
 import {
   messageText,
+  messagesWithStructuredSchema,
   requireRequestInput,
   structuredJsonSchema,
 } from '../common.js';
@@ -13,10 +14,11 @@ export const openRouterBody = (
 ): Record<string, unknown> => {
   requireRequestInput('openrouter', request);
   const schema = structuredJsonSchema('openrouter', request.schema);
+  const messages = messagesWithStructuredSchema('openrouter', request, schema);
 
   return prune({
     model: request.model,
-    messages: request.messages.map((message) =>
+    messages: messages.map((message) =>
       prune({
         role: message.role,
         content: messageText(message),
@@ -65,7 +67,9 @@ const reasoningRequest = (
   const value = request.flags?.reasoning;
 
   if (value === undefined || value === false) {
-    return request.effort === undefined ? undefined : { effort: request.effort };
+    return request.effort === undefined
+      ? undefined
+      : { effort: request.effort };
   }
 
   return value === true

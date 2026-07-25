@@ -1,3 +1,5 @@
+import { parseDocument } from 'yaml';
+
 export type TreeEntry = {
   readonly path: string;
   readonly description: string;
@@ -6,7 +8,6 @@ export type TreeEntry = {
 type Tree = Map<string, Tree | TreeEntry>;
 
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u;
-const DESCRIPTION = /^description:[ \t]*([^\r\n]*)\r?$/mu;
 
 /** Maps source paths without colliding with reserved OKF index or log files. */
 export const outputPath = (source: string): string => {
@@ -22,28 +23,19 @@ const pathName = (source: string): string => {
   return source.slice(separator + 1);
 };
 
-/** Extracts the JSON-quoted description from generated OKF frontmatter. */
+/** Extracts the description from parsed generated OKF YAML frontmatter. */
 export const parseDescription = (markdown: string): string => {
   const frontmatter = FRONTMATTER.exec(markdown)?.[1] ?? '';
-  const serialized = DESCRIPTION.exec(frontmatter)?.[1];
-
-  if (serialized === undefined) {
+  const document = parseDocument(frontmatter, { uniqueKeys: true });
+  if (document.errors.length > 0) {
+    throw new Error('Generated OKF frontmatter must be valid YAML');
+  }
+  const description = document.get('description');
+  if (description === undefined) {
     throw new Error('Generated OKF frontmatter is missing description');
   }
-
-  let description: unknown;
-  try {
-    description = JSON.parse(serialized);
-  } catch {
-    throw new Error(
-      'Generated OKF frontmatter description must be a JSON string',
-    );
-  }
-
   if (typeof description !== 'string') {
-    throw new Error(
-      'Generated OKF frontmatter description must be a JSON string',
-    );
+    throw new Error('Generated OKF frontmatter description must be a string');
   }
 
   return description;

@@ -17,6 +17,7 @@ import { asRecord, arrayField, stringField } from '../utils/json.js';
 import { parseSseEvents } from '../utils/sse.js';
 import {
   httpError,
+  messagesWithStructuredSchema,
   messageText,
   parseJsonBody,
   parseStructuredOutput,
@@ -81,6 +82,7 @@ export const createLmStudioOpenAiProvider = (
     request: ProviderRequest<unknown>,
     body: Record<string, unknown>,
   ): Promise<Record<string, unknown>> => {
+    const sensitiveOutput = request.flags?.sensitiveOutput === true;
     const response = await deps.transport.request({
       method: 'POST',
       url: `${baseUrl}/chat/completions`,
@@ -95,14 +97,19 @@ export const createLmStudioOpenAiProvider = (
 
     await log('chat/completions', 'http.response', {
       status: response.status,
-      body: response.body,
+      ...(sensitiveOutput ? {} : { body: response.body }),
     });
 
     if (response.status >= 400) {
-      throw httpError('lmstudio-openai', response.status, response.body);
+      throw httpError(
+        'lmstudio-openai',
+        response.status,
+        response.body,
+        sensitiveOutput,
+      );
     }
 
-    return parseJsonBody('lmstudio-openai', response.body);
+    return parseJsonBody('lmstudio-openai', response.body, sensitiveOutput);
   };
 
   return {
@@ -127,6 +134,7 @@ export const createLmStudioOpenAiProvider = (
       request: ProviderRequest<Output>,
     ): AsyncIterable<ProviderStreamEvent<Output>> {
       requireRequestInput('lmstudio-openai', request);
+      const sensitiveOutput = request.flags?.sensitiveOutput === true;
       const body = chatBody(request, true);
       const state = createStreamState();
       await log('chat/completions', 'http.request', { body });
@@ -158,29 +166,35 @@ export const createLmStudioOpenAiProvider = (
         let payload: Record<string, unknown>;
 
         try {
-          payload = parseJsonBody('lmstudio-openai', event.data);
+          payload = parseJsonBody(
+            'lmstudio-openai',
+            event.data,
+            sensitiveOutput,
+          );
         } catch {
           await log('chat/completions', 'stream.event.invalid_json', {
-            data: event.data,
+            ...(sensitiveOutput ? {} : { data: event.data }),
           });
           yield streamErrorEvent(
             'lmstudio-openai',
             'malformed_stream_event',
             event.data,
+            undefined,
+            sensitiveOutput,
           );
           return;
         }
 
         if (hasProviderError(payload)) {
           await log('chat/completions', 'stream.provider_error', {
-            data: event.data,
-            payload,
+            ...(sensitiveOutput ? {} : { data: event.data, payload }),
           });
           yield streamErrorEvent(
             'lmstudio-openai',
             'provider_error',
             'LM Studio OpenAI-compatible stream error.',
             event.data,
+            sensitiveOutput,
           );
           return;
         }
@@ -253,11 +267,16 @@ const chatBody = (
   assertStructuredToolsSupported(request);
 
   const schema = structuredJsonSchema('lmstudio-openai', request.schema);
+  const messages = messagesWithStructuredSchema(
+    'lmstudio-openai',
+    request,
+    schema,
+  );
   const tools = chatTools(request);
 
   return prune({
     model: request.model,
-    messages: request.messages.map(chatMessage),
+    messages: messages.map(chatMessage),
     tools,
     temperature: request.temperature,
     max_tokens: request.maxOutputTokens,

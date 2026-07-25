@@ -8,6 +8,7 @@ import type {
 import { asRecord } from '../../utils/json.js';
 import {
   messageText,
+  messagesWithStructuredSchema,
   requireRequestInput,
   structuredJsonSchema,
 } from '../common.js';
@@ -20,19 +21,18 @@ export const openAiBody = (
 ): Record<string, unknown> => {
   requireRequestInput('openai', request);
   const schema = structuredJsonSchema('openai', request.schema);
+  const messages = messagesWithStructuredSchema('openai', request, schema);
   const strictSchema =
     schema === undefined
       ? undefined
       : (strictSchemaValue(schema) as JsonObject);
   const alias = fastAlias(request.model);
-  const system = request.messages
+  const system = messages
     .filter((message) => message.role === 'system')
     .map(messageText)
     .filter((text) => text !== '')
     .join('\n\n');
-  const nonSystem = request.messages.filter(
-    (message) => message.role !== 'system',
-  );
+  const nonSystem = messages.filter((message) => message.role !== 'system');
 
   return prune({
     model: alias.model,
@@ -114,7 +114,9 @@ const reasoningRequest = (
   const value = request.flags?.reasoning;
 
   if (value === undefined || value === false) {
-    return request.effort === undefined ? undefined : { effort: request.effort };
+    return request.effort === undefined
+      ? undefined
+      : { effort: request.effort };
   }
 
   if (value === true) {

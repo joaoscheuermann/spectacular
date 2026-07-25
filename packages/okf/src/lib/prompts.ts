@@ -2,30 +2,24 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export type Prompts = {
-  readonly classify: string;
-  readonly frontmatter: string;
-};
-
-const STAGES = ['classify', 'frontmatter'] as const;
 const TARGET = /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/u;
 const DEVICE = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/u;
 
-/** Loads the stage-level prompts that do not depend on classification. */
+export type Prompts = {
+  readonly summary: string;
+  readonly description: string;
+  readonly tags: string;
+};
+
+/** Loads all prompts selected by promptTarget as one required prompt set. */
 export const loadPrompts = async (target = 'default'): Promise<Prompts> => {
   const model = validatePromptTarget(target);
-
-  const entries = await Promise.all(
-    STAGES.map(
-      async (stage) =>
-        [
-          stage,
-          await readPrompt([stage, model], `${stage} prompt target ${model}`),
-        ] as const,
-    ),
-  );
-
-  return Object.fromEntries(entries) as Prompts;
+  const [summary, description, tags] = await Promise.all([
+    readPrompt(['summarize', model], `summarize prompt target ${model}`),
+    readPrompt(['describe', model], `describe prompt target ${model}`),
+    readPrompt(['tags', model], `tags prompt target ${model}`),
+  ]);
+  return { summary, description, tags };
 };
 
 export const validatePromptTarget = (target: string): string => {

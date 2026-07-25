@@ -52,6 +52,14 @@ for await (const event of provider.stream({
 `*-fast` OpenAI model aliases are sent to the Responses API without the
 suffix and with `service_tier: "priority"`.
 
+Structured requests may set
+`flags.includeStructuredSchemaOnSystemPrompt: true` to append a deterministic
+system message containing the converted JSON Schema. Authored system messages
+remain first and in order, followed by the generated schema message and then
+all non-system messages. Omitting the flag, setting it to `false`, or using it
+without `schema` leaves messages unchanged. Native structured-output fields
+remain enabled for providers that support them.
+
 ## Codex with a rendered authorization header
 
 ```ts

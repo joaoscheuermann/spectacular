@@ -63,19 +63,92 @@ optional output path. The default output is
 `<root>/.agents/bundles`, including after resolving existing symbolic links or
 junctions. The generator discovers a complete regular-file snapshot, respects
 scoped target `.gitignore` rules, excludes symbolic links and binary content,
-and processes readable text in configurable concurrent batches.
-Production OKF retains raw source bodies for SHA-256 cache identity while
-redacting slash-delimited regex literals from model input. It preserves the
-classification, frontmatter, and classification-routed analysis stages, using
-the caller's provider instead of a package-selected provider. Complete
-classification and frontmatter system prompts live under
-`packages/okf/prompts/<stage>/<target>/SYSTEM_PROMPT.md`; analysis has one
-complete prompt per supported file kind under
-`packages/okf/prompts/analyze/<kind>/<target>/SYSTEM_PROMPT.md`. The
-prompt-evolution CLI can evolve each prompt independently, and callers select
-a common prompt target. Generated concepts mirror source paths without using
-reserved `index.md` or `log.md` concept names, and one deterministic project
-index is written to the bundle root.
+and processes every readable text file in configurable concurrent batches.
+OKF derives type from the lowercase final extension and strictly validates TS,
+TSX, JS, JSX, and JSON with the official Tree-sitter binding and grammars.
+TS/JS concepts include deterministically sorted imports, resolved relative
+targets, exports/re-exports, CommonJS relationships, and public members of
+exported classes; JSON is syntax-validation-only, while unsupported extensions
+remain ordinary text. Supported parsing uses a Tree-sitter buffer derived from
+the JavaScript UTF-16 source length plus one, with a 32 KiB minimum rounded up
+to the next power of two and bounded by the parser's unsigned 32-bit limit.
+Parser buffer calculation, construction, language setup, and parsing failures
+become a curated source-scoped `OKF_SOURCE_PARSE_FAILED` error at the `parse`
+stage, while a parsed tree with syntax errors remains
+`OKF_SOURCE_SYNTAX_INVALID` at the `syntax` stage. Each cache miss makes exactly three sequential
+temperature-zero, tool-free plain-text completions using
+`prompts/summarize/<target>/SYSTEM_PROMPT.md`,
+`prompts/describe/<target>/SYSTEM_PROMPT.md`, and
+`prompts/tags/<target>/SYSTEM_PROMPT.md`. The first request is
+collision-safe Markdown containing Path, Type, an extracted Module Interface
+when available, and the exact raw source with UTF-8 byte-length and
+terminal-newline framing, so readable source is intentionally sent unchanged
+to the caller-configured provider. Valid JSON uses a labeled `json` fence; all
+other content uses `text`. Its non-empty trimmed Markdown analysis must not
+begin with YAML frontmatter. The second and third calls each receive only that
+analysis under `# Source Summary` in a collision-safe Markdown fence, without
+path, type, interface, or raw content. The second prompt guides the model to
+return one plain-text sentence of 1 to 240 characters ending in punctuation,
+but runtime acceptance requires only the non-empty trimmed text guaranteed by
+the completion boundary. Every such description is preserved without
+normalization, truncation, repair, or restrictions on length, punctuation,
+sentence count, or internal newlines. The third accepts
+comma- or newline-separated plain text with an optional leading `Tags:`, a JSON
+string array, an ordinary JSON object whose only own key is a `tags` string
+array, or one complete matching Markdown fence containing one of those forms.
+Plain items may have one whitespace-delimited bullet or decimal-list prefix
+and one matching pair of single quotes, double quotes, or backticks. The prompt
+guides the model toward concise tags, but runtime acceptance permits every
+non-empty trimmed response. Recognized items preserve case, punctuation,
+order, duplicates, and count after structural cleanup. Multiple non-empty
+plain-text lines split by line; a single line splits by comma only with an
+explicit `Tags:` label or when every comma candidate lacks sentence
+punctuation. Malformed or unsupported JSON, non-string values, extra object
+keys, mismatched or partial fences, content outside a fence, and recognized
+forms with no remaining items fall back to the original trimmed response as
+one tag. No call requests structured output or schema injection. All calls are
+flagged as sensitive output, without
+logging, response excerpts, or diagnostic/cause propagation. Generated
+concepts persist the first result as analysis with the later description and
+tags in deterministic YAML metadata plus Markdown. YAML preserves the complete
+trimmed description, including internal newlines; the deterministic project
+index folds whitespace only in its one-line tree entry and does not alter
+concept metadata. The recipe includes normalized source identity, extension
+type, sorted relationships,
+and a recipe-aware SHA-256 covering source, relationships, parser/extractor,
+concept-schema, YAML and plain-text validator versions (with
+`plain-text-fields-v4` invalidating earlier description and tag-validation
+caches), an explicit three-stage pipeline version, a versioned
+next-power-of-two parser-buffer policy, all three exact prompts, provider ID,
+model, and effort.
+Cache hits make zero provider calls and parse
+YAML for an exact hash match and still strictly parse supported source files.
+Concepts mirror source paths without using reserved `index.md` or `log.md`
+names, and one deterministic project index is written to the bundle root. The
+public generator accepts an optional provider-neutral progress observer for
+generation, per-file inspection, cache outcome, summary, description, and tags
+stage start/completion, concept completion, index, and
+final-summary events. Concurrent file events may interleave; each file is
+identified only by its validated, normalized repository-relative source path,
+and terminal file events include the synchronously updated processed count.
+Host applications own stderr rendering; the root runner uses
+`pino`/`pino-pretty`. Progress and failure logs exclude absolute root, output,
+and filesystem paths; source bodies; prompts; provider/model identity;
+responses; credentials; diagnostics; causes; thrown values; and
+error names, messages, and stacks.
+Known OKF operational failures use package-constructed, publicly inspectable
+but non-constructible `OkfError` details: a fixed message, closed code and
+stage, fixed hint, and, only for source-scoped stages, the validated normalized
+repository-relative source. The exported `isOkfError` package-authenticity
+guard is the sole trust check for logging; `instanceof`, prototypes, and field
+shape are not authorization. Representative syntax,
+parse, summary, description, and tags failures identify their safe stage and source
+without retaining provider, parser, or filesystem diagnostics. Sanitized `AbortError`
+values and progress-observer exceptions preserve their behavior and identity;
+unknown failures may escape for hosts to replace with fixed output. Neither
+the error nor host logging may include absolute paths, provider or filesystem
+diagnostics, source bodies, prompts, responses, credentials, or caught
+messages, names, stacks, codes, or causes.
 
 `tools/okf` owns the provider-neutral, read-only `okf_search` tool for consuming
 bundles below `<workspace>/.agents/bundles`. It performs bounded deterministic
@@ -189,6 +262,18 @@ optional provider-neutral `effort` value of `none`, `minimal`, `low`,
 the same effort alias. Config parsing rejects models that provide conflicting
 `effort` and `reasoning` values. Provider requests may include top-level
 `effort`, which takes precedence over legacy `flags.reasoning.effort`.
+Provider requests may also set `flags.sensitiveOutput`; repository-owned
+providers then omit model-response bodies, excerpts, diagnostics, and causes
+from debug and error surfaces while preserving the normal completion result.
+Provider requests may set
+`flags.includeStructuredSchemaOnSystemPrompt: true` together with `schema` to
+append one deterministic, collision-safe Markdown system message containing
+the converted JSON Schema. Authored system messages retain their order before
+that generated message, followed by all non-system messages in their original
+order. The flag is additive to provider-native structured-output fields;
+omitting it, setting it to false, or using it without a schema leaves messages
+unchanged. `flags.sensitiveOutput`, independently, controls repository-provider
+diagnostic suppression for private calls.
 OpenAI, Codex, and OpenRouter send resolved effort through `reasoning.effort`;
 LM Studio OpenAI compatibility sends `reasoning_effort`; LM Studio native sends
 its native `reasoning` value with `none` mapped to `off`, `minimal` to `low`,
@@ -344,6 +429,18 @@ record the answer where useful.
 Enforcement: do not treat silence, model confidence, or relative ranking as
 user approval.
 
+### HC-010 Keep Completion And Stream Inputs Human-Readable
+
+Newly written or materially revised user-message inputs passed to model
+`complete` or `stream` calls must not use raw or serialized JSON objects or
+arrays as their outer prompt envelope.
+
+Enforcement: write the outer prompt as simple, direct, unambiguous,
+evidence-grounded Markdown. Literal JSON source material is allowed only in a
+labeled fenced `json` block within that Markdown. This constraint does not
+apply to provider transports, JSON-RPC, configuration, storage or persistence,
+tools or tool payloads, schemas, or other non-prompt JSON.
+
 ## Convention Parameters
 
 | ID     | Convention                                     | Default                                                                    | Deviation rule                                                            |
@@ -356,3 +453,4 @@ user approval.
 | CP-006 | Prefer durable provenance.                     | Name changed files, validation commands, decisions, and generated outputs. | Explain why provenance cannot be recorded.                                |
 | CP-007 | Prefer implementation over chat-only advice.   | Land requested repository deliverables in files and verify them.           | Explain any blocker that prevents file changes.                           |
 | CP-008 | Prefer Nx-managed package boundaries.          | Use Nx-visible workspace packages and public package entrypoints.          | Explain why a folder, manual scaffold, or direct source import is safer.  |
+| CP-009 | Author model prompts for people first.         | Use simple, direct, unambiguous, evidence-grounded Markdown.               | Explain why another prompt format is necessary.                           |
