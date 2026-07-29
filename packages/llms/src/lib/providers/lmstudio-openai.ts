@@ -6,21 +6,27 @@ import type {
   LlmProvider,
   Model,
   ProviderCapabilities,
+  ProviderEmbeddingRequest,
   ProviderFinished,
   ProviderMessage,
   ProviderMetadata,
   ProviderRequest,
+  ProviderStructuredFinished,
   ProviderStreamEvent,
   ProviderToolCall,
+  StructuredOutputSchema,
+  StructuredOutputValue,
 } from '../types/provider.js';
 import { asRecord, arrayField, stringField } from '../utils/json.js';
 import { parseSseEvents } from '../utils/sse.js';
 import {
   httpError,
+  parseEmbedding,
   messagesWithStructuredSchema,
   messageText,
   parseJsonBody,
   parseStructuredOutput,
+  requireEmbeddingInput,
   requestReasoningEffort,
   requireRequestInput,
   streamErrorEvent,
@@ -59,6 +65,7 @@ export const lmStudioOpenAiMetadata: ProviderMetadata = {
 
 export const lmStudioOpenAiCapabilities: ProviderCapabilities = {
   streaming: true,
+  embeddings: true,
   tools: true,
   reasoning: true,
   modelListing: true,
@@ -112,23 +119,33 @@ export const createLmStudioOpenAiProvider = (
     return parseJsonBody('lmstudio-openai', response.body, sensitiveOutput);
   };
 
+  async function complete<Schema extends StructuredOutputSchema>(
+    request: ProviderRequest<StructuredOutputValue<Schema>, Schema> & {
+      readonly schema: Schema;
+    },
+  ): Promise<ProviderStructuredFinished<StructuredOutputValue<Schema>>>;
+  async function complete<Output = JsonValue>(
+    request: ProviderRequest<Output>,
+  ): Promise<ProviderFinished<Output>>;
+  async function complete<Output = JsonValue>(
+    request: ProviderRequest<Output>,
+  ): Promise<ProviderFinished<Output>> {
+    requireRequestInput('lmstudio-openai', request);
+    const body = chatBody(request, false);
+    await log('chat/completions', 'http.request', { body });
+
+    return parseStructuredOutput(
+      'lmstudio-openai',
+      request,
+      parseFinished(await post(request, body)),
+    );
+  }
+
   return {
     metadata: lmStudioOpenAiMetadata,
     capabilities: lmStudioOpenAiCapabilities,
 
-    async complete<Output = JsonValue>(
-      request: ProviderRequest<Output>,
-    ): Promise<ProviderFinished<Output>> {
-      requireRequestInput('lmstudio-openai', request);
-      const body = chatBody(request, false);
-      await log('chat/completions', 'http.request', { body });
-
-      return parseStructuredOutput(
-        'lmstudio-openai',
-        request,
-        parseFinished(await post(request, body)),
-      );
-    },
+    complete,
 
     async *stream<Output = JsonValue>(
       request: ProviderRequest<Output>,
@@ -214,8 +231,47 @@ export const createLmStudioOpenAiProvider = (
           'lmstudio-openai',
           request,
           streamFinish(state),
+          false,
         ),
       };
+    },
+
+    async embedding(
+      request: ProviderEmbeddingRequest,
+    ): Promise<readonly number[]> {
+      requireEmbeddingInput('lmstudio-openai', request);
+      const sensitiveOutput = request.flags?.sensitiveOutput === true;
+      const body = { model: request.model, input: request.input };
+      await log('embeddings', 'http.request', { body });
+      const response = await deps.transport.request({
+        method: 'POST',
+        url: `${baseUrl}/embeddings`,
+        headers: {
+          ...(await authHeader(deps)),
+          'content-type': 'application/json',
+          accept: 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: request.signal,
+      });
+      await log('embeddings', 'http.response', {
+        status: response.status,
+        ...(sensitiveOutput ? {} : { body: response.body }),
+      });
+
+      if (response.status >= 400) {
+        throw httpError(
+          'lmstudio-openai',
+          response.status,
+          response.body,
+          sensitiveOutput,
+        );
+      }
+
+      return parseEmbedding(
+        'lmstudio-openai',
+        parseJsonBody('lmstudio-openai', response.body, sensitiveOutput),
+      );
     },
 
     async models(signal?: AbortSignal): Promise<readonly Model[]> {

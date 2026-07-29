@@ -98,7 +98,15 @@ test('streams OpenAI text reasoning usage finish and tool calls', async () => {
   assert.ok(events.some((event) => event.type === 'reasoning.delta'));
   assert.ok(events.some((event) => event.type === 'tool_call.done'));
   assert.ok(events.some((event) => event.type === 'usage'));
-  assert.equal(events.at(-1)?.type, 'response.finished');
+  const finished = events.at(-1);
+
+  assert.equal(finished?.type, 'response.finished');
+
+  if (finished?.type !== 'response.finished') {
+    assert.fail('Expected final response.finished event.');
+  }
+
+  assert.equal(finished.finish.structured, undefined);
 });
 
 test('keeps streamed OpenAI tool calls from completed responses without output', async () => {

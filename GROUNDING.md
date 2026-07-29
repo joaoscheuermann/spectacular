@@ -229,6 +229,22 @@ result.
 Node.js CLI host. It provides Doric-owned text, select, and queued prompt APIs
 instead of coupling CLI user-input handling to Inquirer-shaped contracts.
 
+`packages/victor` is the explicitly requested Node.js-compatible, process-local
+in-memory vector database. It accepts caller-injected embedding generation for
+storage and queries, stores caller values through per-add text transformation,
+and returns original values from cosine-similarity top-K search; it has no
+persistence or provider integration.
+
+`models/skillrouter-embedding` is the user-approved Nx/uv conversion utility
+for the pinned SkillRouter checkpoint. Only its export target may fetch
+upstream model bytes. Its `artifact/` directory and ONNX sidecars are ignored,
+non-committed generated output; the converter source, pinned revision, and
+`uv.lock` provide provenance. It remains a standalone utility. Doric generates
+embeddings through LM Studio's local OpenAI-compatible
+`http://localhost:1234/v1/embeddings` endpoint using the
+`text-embedding-qwen3-embedding-0.6b` model. Doric fails when that endpoint is
+unavailable, rejects the request, or returns no embedding.
+
 CLI streamed A2A event output is visible console rendering through
 `pino`/`pino-pretty`. Redaction must be applied to message text and structured
 fields before events are handed to the logger, and this rendering is not
@@ -255,6 +271,9 @@ through chat completions `response_format` rather than OpenAI Responses
 both requested, LM Studio OpenAI compatibility rejects the request with a
 provider error before sending HTTP because LM Studio rejects `tools` and
 `response_format` together.
+The OpenAI, OpenRouter, and LM Studio OpenAI-compatible integrations support
+single-text embeddings through their OpenAI-compatible `/embeddings` endpoint;
+Codex and LM Studio native do not support embeddings.
 Provider configs may include an optional `baseUrl` string to
 override provider endpoints that support it. Model configs may include an
 optional provider-neutral `effort` value of `none`, `minimal`, `low`,
@@ -274,6 +293,11 @@ order. The flag is additive to provider-native structured-output fields;
 omitting it, setting it to false, or using it without a schema leaves messages
 unchanged. `flags.sensitiveOutput`, independently, controls repository-provider
 diagnostic suppression for private calls.
+Every `provider.complete` request with a schema resolves only after a JSON
+response has been parsed and validated by that schema. Refusals, tool calls,
+missing or invalid JSON, and schema-validation failures reject with
+`invalid_structured_output`; successful structured completions always include
+the validated `structured` value.
 OpenAI, Codex, and OpenRouter send resolved effort through `reasoning.effort`;
 LM Studio OpenAI compatibility sends `reasoning_effort`; LM Studio native sends
 its native `reasoning` value with `none` mapped to `off`, `minimal` to `low`,

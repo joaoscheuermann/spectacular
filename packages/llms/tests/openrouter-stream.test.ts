@@ -60,6 +60,7 @@ test('streams OpenRouter deltas usage finish and accumulated tool calls', async 
     provider.stream({
       model: 'openai/gpt-5',
       messages: [{ role: 'user', content: 'Hi' }],
+      schema: z.object({ answer: z.string() }),
     }),
   );
   const finished = events.at(-1);
@@ -122,9 +123,10 @@ test('streams OpenRouter deltas usage finish and accumulated tool calls', async 
   assert.equal(finished.finish.refusal, 'no');
   assert.equal(finished.finish.finishReason, 'tool_calls');
   assert.deepEqual(finished.finish.toolCalls, expectedToolCalls);
+  assert.equal(finished.finish.structured, undefined);
 });
 
-test('returns parsed OpenRouter structured output from stream finishes', async () => {
+test('allows OpenRouter structured output from stream finishes without parsing', async () => {
   const provider = createOpenRouterProvider({
     transport: fakeTransport({
       streams: [
@@ -157,10 +159,10 @@ test('returns parsed OpenRouter structured output from stream finishes', async (
     assert.fail('Expected final response.finished event.');
   }
 
-  assert.deepEqual(finished.finish.structured, { answer: 'Done' });
+  assert.equal(finished.finish.structured, undefined);
 });
 
-test('rejects invalid OpenRouter structured JSON', async () => {
+test('allows invalid OpenRouter structured JSON from streams', async () => {
   const completeProvider = createOpenRouterProvider({
     transport: fakeTransport({
       responses: [
@@ -203,12 +205,17 @@ test('rejects invalid OpenRouter structured JSON', async () => {
       error instanceof ProviderErrorObject &&
       error.data.code === 'invalid_structured_output',
   );
-  await assert.rejects(
-    collect(streamProvider.stream(request)),
-    (error: unknown) =>
-      error instanceof ProviderErrorObject &&
-      error.data.code === 'invalid_structured_output',
-  );
+  const events = await collect(streamProvider.stream(request));
+  const finished = events.at(-1);
+
+  assert.equal(finished?.type, 'response.finished');
+
+  if (finished?.type !== 'response.finished') {
+    assert.fail('Expected final response.finished event.');
+  }
+
+  assert.equal(finished.finish.text, 'not-json');
+  assert.equal(finished.finish.structured, undefined);
 });
 
 test('returns OpenRouter stream error events for malformed and provider errors', async () => {

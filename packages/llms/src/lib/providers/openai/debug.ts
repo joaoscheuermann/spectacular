@@ -15,6 +15,7 @@ export const parseStructuredOutputWithDebug = async <Output = JsonValue>(
   request: ProviderRequest<Output>,
   finish: ProviderFinished,
   source: string,
+  rejectNonStructured = true,
 ): Promise<ProviderFinished<Output>> => {
   const sensitiveOutput = request.flags?.sensitiveOutput === true;
   await logger?.log({
@@ -25,7 +26,12 @@ export const parseStructuredOutputWithDebug = async <Output = JsonValue>(
   });
 
   try {
-    return parseStructuredOutput('openai', request, finish);
+    return parseStructuredOutput(
+      'openai',
+      request,
+      finish,
+      rejectNonStructured,
+    );
   } catch (error) {
     await logger?.log({
       provider: debugProvider,

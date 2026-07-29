@@ -9,12 +9,13 @@
   },
   "private": true,
   "dependencies": {
-    "@a2a-js/sdk": "^0.3.13"
+    "@a2a-js/sdk": "^0.3.13",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@monodon/rust": "^2.3.0",
     "@nx/js": "^22.6.5",
-    "@nxlv/python": "^22.1.1",
+    "@nxlv/python": "^22.2.2",
     "@swc-node/register": "1.11.1",
     "@swc/core": "1.15.8",
     "@swc/helpers": "0.5.18",

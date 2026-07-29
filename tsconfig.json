@@ -80,6 +80,9 @@
     },
     {
       "path": "./packages/okf"
+    },
+    {
+      "path": "./packages/victor"
     }
   ]
 }

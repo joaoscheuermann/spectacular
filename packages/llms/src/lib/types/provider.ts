@@ -13,6 +13,7 @@ export type ProviderMetadata = {
 
 export type ProviderCapabilities = {
   readonly streaming: boolean;
+  readonly embeddings: boolean;
   readonly tools: boolean;
   readonly reasoning: boolean;
   readonly modelListing: boolean;
@@ -109,6 +110,14 @@ export type ProviderFinished<Output = JsonValue> = {
   readonly structured?: Output;
 };
 
+/** A completion that was parsed and validated against its requested schema. */
+export type ProviderStructuredFinished<Output> = Omit<
+  ProviderFinished<Output>,
+  'structured'
+> & {
+  readonly structured: Output;
+};
+
 export type ProviderError = {
   readonly provider: ProviderId;
   readonly code: string;
@@ -175,16 +184,24 @@ export type ProviderRequest<
   readonly signal?: AbortSignal;
 };
 
+/** A single-text embedding request supported by OpenAI-compatible providers. */
+export type ProviderEmbeddingRequest = {
+  readonly model: string;
+  readonly input: string;
+  readonly flags?: ProviderCallFlags;
+  readonly signal?: AbortSignal;
+};
+
 /** Provider-neutral completion and streaming contract for agent-core callers. */
 export interface LlmProvider {
   readonly metadata: ProviderMetadata;
   readonly capabilities: ProviderCapabilities;
 
-  complete<Schema extends StructuredOutputSchema, Output = z.output<Schema>>(
-    request: ProviderRequest<Output, Schema> & {
+  complete<Schema extends StructuredOutputSchema>(
+    request: ProviderRequest<z.output<Schema>, Schema> & {
       readonly schema: Schema;
     },
-  ): Promise<ProviderFinished<Output>>;
+  ): Promise<ProviderStructuredFinished<z.output<Schema>>>;
 
   complete<Output = JsonValue>(
     request: ProviderRequest<Output>,
@@ -199,6 +216,8 @@ export interface LlmProvider {
   stream<Output = JsonValue>(
     request: ProviderRequest<Output>,
   ): AsyncIterable<ProviderStreamEvent<Output>>;
+
+  embedding(request: ProviderEmbeddingRequest): Promise<readonly number[]>;
 
   models(signal?: AbortSignal): Promise<readonly Model[]>;
 

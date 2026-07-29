@@ -52,3 +52,10 @@ Thumbs.db
 .nx/polygraph
 
 .journal
+
+# generated local model artifacts
+/models/skillrouter-embedding/artifact/
+/models/skillrouter-embedding/artifact.previous/
+/models/skillrouter-embedding/.venv/
+/models/skillrouter-embedding/.ruff_cache/
+/models/skillrouter-embedding/skillrouter-export-*/

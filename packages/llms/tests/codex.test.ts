@@ -212,6 +212,37 @@ test('rejects Codex complete when the stream emits a provider error', async () =
   );
 });
 
+test('rejects Codex complete refusals when structured output is required', async () => {
+  const transport = fakeTransport({
+    streams: [
+      [
+        sse({ type: 'response.refusal.delta', delta: 'No.' }),
+        sse({
+          type: 'response.completed',
+          response: { status: 'completed' },
+        }),
+        'data: [DONE]\n\n',
+      ],
+    ],
+  });
+  const provider = createCodexProvider({
+    transport,
+    authorization: 'Bearer codex-token',
+  });
+
+  await assert.rejects(
+    provider.complete({
+      model: 'gpt-5.5',
+      messages: [{ role: 'user', content: 'Hi' }],
+      schema: z.object({ answer: z.string() }),
+    }),
+    (error: unknown) =>
+      error instanceof ProviderErrorObject &&
+      error.data.provider === 'codex' &&
+      error.data.code === 'invalid_structured_output',
+  );
+});
+
 test('maps Codex stream provider identity', async () => {
   const transport = fakeTransport({
     streams: [

@@ -6,11 +6,16 @@ import type {
   LlmProvider,
   Model,
   ProviderCapabilities,
+  ProviderEmbeddingRequest,
   ProviderFinished,
   ProviderMetadata,
   ProviderRequest,
+  ProviderStructuredFinished,
   ProviderStreamEvent,
+  StructuredOutputSchema,
+  StructuredOutputValue,
 } from '../types/provider.js';
+import { parseStructuredOutput } from './common.js';
 import { createOpenAiProvider, type SecretSource } from './openai.js';
 
 const codexBaseUrl = 'https://chatgpt.com/backend-api/codex';
@@ -33,6 +38,7 @@ export const codexMetadata: ProviderMetadata = {
 
 export const codexCapabilities: ProviderCapabilities = {
   streaming: true,
+  embeddings: false,
   tools: true,
   reasoning: true,
   modelListing: true,
@@ -51,36 +57,46 @@ export const createCodexProvider = (deps: CodexProviderDeps): LlmProvider => {
     debugProviderId: 'codex',
   });
 
+  async function complete<Schema extends StructuredOutputSchema>(
+    request: ProviderRequest<StructuredOutputValue<Schema>, Schema> & {
+      readonly schema: Schema;
+    },
+  ): Promise<ProviderStructuredFinished<StructuredOutputValue<Schema>>>;
+  async function complete<Output = JsonValue>(
+    request: ProviderRequest<Output>,
+  ): Promise<ProviderFinished<Output>>;
+  async function complete<Output = JsonValue>(
+    request: ProviderRequest<Output>,
+  ): Promise<ProviderFinished<Output>> {
+    try {
+      for await (const event of openai.stream(request)) {
+        const mapped = codexEvent(event);
+
+        if (mapped.type === 'response.finished') {
+          return parseStructuredOutput('codex', request, mapped.finish);
+        }
+
+        if (mapped.type === 'error') {
+          throw new ProviderErrorObject(mapped.error);
+        }
+      }
+
+      throw new ProviderErrorObject({
+        provider: 'codex',
+        code: 'missing_stream_finish',
+        message: 'Codex stream ended before a final response.',
+      });
+    } catch (error) {
+      throw codexError(error);
+    }
+  }
+
   return {
     ...openai,
     metadata: codexMetadata,
     capabilities: codexCapabilities,
 
-    async complete<Output = JsonValue>(
-      request: ProviderRequest<Output>,
-    ): Promise<ProviderFinished<Output>> {
-      try {
-        for await (const event of openai.stream(request)) {
-          const mapped = codexEvent(event);
-
-          if (mapped.type === 'response.finished') {
-            return mapped.finish;
-          }
-
-          if (mapped.type === 'error') {
-            throw new ProviderErrorObject(mapped.error);
-          }
-        }
-
-        throw new ProviderErrorObject({
-          provider: 'codex',
-          code: 'missing_stream_finish',
-          message: 'Codex stream ended before a final response.',
-        });
-      } catch (error) {
-        throw codexError(error);
-      }
-    },
+    complete,
 
     async *stream<Output = JsonValue>(
       request: ProviderRequest<Output>,
@@ -92,6 +108,16 @@ export const createCodexProvider = (deps: CodexProviderDeps): LlmProvider => {
       } catch (error) {
         throw codexError(error);
       }
+    },
+
+    async embedding(
+      _request: ProviderEmbeddingRequest,
+    ): Promise<readonly number[]> {
+      throw new ProviderErrorObject({
+        provider: 'codex',
+        code: 'unsupported_embeddings',
+        message: 'Codex provider does not support embeddings.',
+      });
     },
 
     async models(signal?: AbortSignal): Promise<readonly Model[]> {

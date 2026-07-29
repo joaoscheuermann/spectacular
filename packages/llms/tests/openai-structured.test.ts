@@ -10,7 +10,7 @@ import {
 } from '../src/index.js';
 import { collect, fakeTransport, response } from './fakes.js';
 
-test('returns parsed OpenAI structured output from stream finishes', async () => {
+test('allows OpenAI structured output from stream finishes without parsing', async () => {
   const provider = createOpenAiProvider({
     transport: fakeTransport({
       streams: [
@@ -46,10 +46,10 @@ test('returns parsed OpenAI structured output from stream finishes', async () =>
     assert.fail('Expected final response.finished event.');
   }
 
-  assert.deepEqual(finished.finish.structured, { answer: 'Done' });
+  assert.equal(finished.finish.structured, undefined);
 });
 
-test('returns parsed OpenAI structured output from content part stream snapshots', async () => {
+test('allows OpenAI content part stream snapshots without structured parsing', async () => {
   const provider = createOpenAiProvider({
     transport: fakeTransport({
       streams: [
@@ -83,10 +83,10 @@ test('returns parsed OpenAI structured output from content part stream snapshots
     assert.fail('Expected final response.finished event.');
   }
 
-  assert.deepEqual(finished.finish.structured, { answer: 'Done' });
+  assert.equal(finished.finish.structured, undefined);
 });
 
-test('returns parsed OpenAI structured output from snapshots when final output text is empty', async () => {
+test('allows OpenAI stream snapshots when final output text is empty', async () => {
   const provider = createOpenAiProvider({
     transport: fakeTransport({
       streams: [
@@ -120,10 +120,10 @@ test('returns parsed OpenAI structured output from snapshots when final output t
     assert.fail('Expected final response.finished event.');
   }
 
-  assert.deepEqual(finished.finish.structured, { answer: 'Snapshot' });
+  assert.equal(finished.finish.structured, undefined);
 });
 
-test('prefers OpenAI text deltas over stream snapshots', async () => {
+test('prefers OpenAI text deltas over stream snapshots without structured parsing', async () => {
   const provider = createOpenAiProvider({
     transport: fakeTransport({
       streams: [
@@ -164,10 +164,10 @@ test('prefers OpenAI text deltas over stream snapshots', async () => {
     assert.fail('Expected final response.finished event.');
   }
 
-  assert.deepEqual(finished.finish.structured, { answer: 'Delta' });
+  assert.equal(finished.finish.structured, undefined);
 });
 
-test('returns parsed OpenAI structured output from output item stream snapshots', async () => {
+test('allows OpenAI output item stream snapshots without structured parsing', async () => {
   const provider = createOpenAiProvider({
     transport: fakeTransport({
       streams: [
@@ -205,10 +205,10 @@ test('returns parsed OpenAI structured output from output item stream snapshots'
     assert.fail('Expected final response.finished event.');
   }
 
-  assert.deepEqual(finished.finish.structured, { answer: 'Done' });
+  assert.equal(finished.finish.structured, undefined);
 });
 
-test('returns parsed OpenAI structured output from text done stream snapshots', async () => {
+test('allows OpenAI text done stream snapshots without structured parsing', async () => {
   const provider = createOpenAiProvider({
     transport: fakeTransport({
       streams: [
@@ -242,7 +242,7 @@ test('returns parsed OpenAI structured output from text done stream snapshots', 
     assert.fail('Expected final response.finished event.');
   }
 
-  assert.deepEqual(finished.finish.structured, { answer: 'Done' });
+  assert.equal(finished.finish.structured, undefined);
 });
 
 test('returns OpenAI stream refusals without structured parsing', async () => {
@@ -282,7 +282,7 @@ test('returns OpenAI stream refusals without structured parsing', async () => {
   assert.equal(finished.finish.structured, undefined);
 });
 
-test('rejects invalid OpenAI structured JSON', async () => {
+test('allows invalid OpenAI structured JSON from streams', async () => {
   const completeProvider = createOpenAiProvider({
     transport: fakeTransport({
       responses: [
@@ -323,15 +323,20 @@ test('rejects invalid OpenAI structured JSON', async () => {
       error instanceof ProviderErrorObject &&
       error.data.code === 'invalid_structured_output',
   );
-  await assert.rejects(
-    collect(streamProvider.stream(request)),
-    (error: unknown) =>
-      error instanceof ProviderErrorObject &&
-      error.data.code === 'invalid_structured_output',
-  );
+  const events = await collect(streamProvider.stream(request));
+  const finished = events.at(-1);
+
+  assert.equal(finished?.type, 'response.finished');
+
+  if (finished?.type !== 'response.finished') {
+    assert.fail('Expected final response.finished event.');
+  }
+
+  assert.equal(finished.finish.text, 'not-json');
+  assert.equal(finished.finish.structured, undefined);
 });
 
-test('logs OpenAI stream structured output failures with finish context', async () => {
+test('does not log OpenAI stream structured output failures', async () => {
   const records: LlmDebugRecord[] = [];
   const provider = createOpenAiProvider({
     transport: fakeTransport({
@@ -356,42 +361,31 @@ test('logs OpenAI stream structured output failures with finish context', async 
     },
   });
 
-  await assert.rejects(
-    collect(
-      provider.stream({
-        model: 'gpt-5',
-        messages: [{ role: 'user', content: 'Hi' }],
-        schema: z.object({ answer: z.string() }),
-      }),
-    ),
-    (error: unknown) =>
-      error instanceof ProviderErrorObject &&
-      error.data.code === 'invalid_structured_output',
+  const events = await collect(
+    provider.stream({
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Hi' }],
+      schema: z.object({ answer: z.string() }),
+    }),
   );
+  const finished = events.at(-1);
 
   assert.ok(records.some((record) => record.event === 'http.request'));
   assert.ok(
     records.some((record) => record.event === 'stream.response.completed'),
   );
 
-  const finishRecord = records.find(
-    (record) => record.event === 'response.finish',
-  );
-  const errorRecord = records.find(
-    (record) => record.event === 'structured_output.error',
-  );
-  const finishFields = finishRecord?.fields as Record<string, unknown>;
-  const errorFields = errorRecord?.fields as Record<string, unknown>;
-  const finish = errorFields.finish as Record<string, unknown>;
-  const error = errorFields.error as Record<string, unknown>;
-  const cause = error.cause as Record<string, unknown>;
+  assert.equal(finished?.type, 'response.finished');
 
-  assert.equal(finishFields.source, 'stream');
-  assert.equal(errorFields.source, 'stream');
-  assert.equal(finish.textLength, 0);
-  assert.equal(finish.textExcerpt, '');
-  assert.equal(error.code, 'invalid_structured_output');
-  assert.match(String(cause.message), /JSON/);
+  if (finished?.type !== 'response.finished') {
+    assert.fail('Expected final response.finished event.');
+  }
+
+  assert.equal(finished.finish.structured, undefined);
+  assert.equal(
+    records.some((record) => record.event === 'structured_output.error'),
+    false,
+  );
 });
 
 test('omits sensitive structured output from errors and debug records', async () => {

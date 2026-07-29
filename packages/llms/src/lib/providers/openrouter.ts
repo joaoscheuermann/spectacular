@@ -6,16 +6,22 @@ import type {
   LlmProvider,
   Model,
   ProviderCapabilities,
+  ProviderEmbeddingRequest,
   ProviderFinished,
   ProviderMetadata,
   ProviderRequest,
+  ProviderStructuredFinished,
   ProviderStreamEvent,
+  StructuredOutputSchema,
+  StructuredOutputValue,
 } from '../types/provider.js';
 import { parseSseEvents } from '../utils/sse.js';
 import {
   httpError,
+  parseEmbedding,
   parseJsonBody,
   parseStructuredOutput,
+  requireEmbeddingInput,
   requireRequestInput,
   streamErrorEvent,
 } from './common.js';
@@ -48,6 +54,7 @@ export const openRouterMetadata: ProviderMetadata = {
 
 export const openRouterCapabilities: ProviderCapabilities = {
   streaming: true,
+  embeddings: true,
   tools: true,
   reasoning: true,
   modelListing: true,
@@ -101,28 +108,38 @@ export const createOpenRouterProvider = (
     return parseJsonBody('openrouter', response.body, sensitiveOutput);
   };
 
+  async function complete<Schema extends StructuredOutputSchema>(
+    request: ProviderRequest<StructuredOutputValue<Schema>, Schema> & {
+      readonly schema: Schema;
+    },
+  ): Promise<ProviderStructuredFinished<StructuredOutputValue<Schema>>>;
+  async function complete<Output = JsonValue>(
+    request: ProviderRequest<Output>,
+  ): Promise<ProviderFinished<Output>>;
+  async function complete<Output = JsonValue>(
+    request: ProviderRequest<Output>,
+  ): Promise<ProviderFinished<Output>> {
+    requireRequestInput('openrouter', request);
+    const body = openRouterBody(request, false);
+    await logger?.log({
+      provider: 'openrouter',
+      target: 'chat/completions',
+      event: 'http.request',
+      fields: { body },
+    });
+
+    return parseStructuredOutput(
+      'openrouter',
+      request,
+      parseFinished(await post(request, body)),
+    );
+  }
+
   return {
     metadata: openRouterMetadata,
     capabilities: openRouterCapabilities,
 
-    async complete<Output = JsonValue>(
-      request: ProviderRequest<Output>,
-    ): Promise<ProviderFinished<Output>> {
-      requireRequestInput('openrouter', request);
-      const body = openRouterBody(request, false);
-      await logger?.log({
-        provider: 'openrouter',
-        target: 'chat/completions',
-        event: 'http.request',
-        fields: { body },
-      });
-
-      return parseStructuredOutput(
-        'openrouter',
-        request,
-        parseFinished(await post(request, body)),
-      );
-    },
+    complete,
 
     async *stream<Output = JsonValue>(
       request: ProviderRequest<Output>,
@@ -195,8 +212,57 @@ export const createOpenRouterProvider = (
           'openrouter',
           request,
           streamFinish(state),
+          false,
         ),
       };
+    },
+
+    async embedding(
+      request: ProviderEmbeddingRequest,
+    ): Promise<readonly number[]> {
+      requireEmbeddingInput('openrouter', request);
+      const sensitiveOutput = request.flags?.sensitiveOutput === true;
+      const body = { model: request.model, input: request.input };
+      await logger?.log({
+        provider: 'openrouter',
+        target: 'embeddings',
+        event: 'http.request',
+        fields: { body },
+      });
+      const response = await deps.transport.request({
+        method: 'POST',
+        url: `${baseUrl}/embeddings`,
+        headers: {
+          authorization: await authorization(deps.apiKey),
+          'content-type': 'application/json',
+          accept: 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: request.signal,
+      });
+      await logger?.log({
+        provider: 'openrouter',
+        target: 'embeddings',
+        event: 'http.response',
+        fields: {
+          status: response.status,
+          ...(sensitiveOutput ? {} : { body: response.body }),
+        },
+      });
+
+      if (response.status >= 400) {
+        throw httpError(
+          'openrouter',
+          response.status,
+          response.body,
+          sensitiveOutput,
+        );
+      }
+
+      return parseEmbedding(
+        'openrouter',
+        parseJsonBody('openrouter', response.body, sensitiveOutput),
+      );
     },
 
     async models(signal?: AbortSignal): Promise<readonly Model[]> {

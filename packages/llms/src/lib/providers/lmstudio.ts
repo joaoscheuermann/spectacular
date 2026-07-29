@@ -5,11 +5,15 @@ import type {
   LlmProvider,
   Model,
   ProviderCapabilities,
+  ProviderEmbeddingRequest,
   ProviderFinished,
   ProviderMessage,
   ProviderMetadata,
   ProviderRequest,
+  ProviderStructuredFinished,
   ProviderStreamEvent,
+  StructuredOutputSchema,
+  StructuredOutputValue,
   UsageMetadata,
 } from '../types/provider.js';
 import {
@@ -48,6 +52,7 @@ export const lmStudioMetadata: ProviderMetadata = {
 
 export const lmStudioCapabilities: ProviderCapabilities = {
   streaming: true,
+  embeddings: false,
   tools: false,
   reasoning: true,
   modelListing: true,
@@ -61,45 +66,52 @@ export const createLmStudioProvider = (
 ): LlmProvider => {
   const baseUrl = deps.baseUrl ?? lmStudioMetadata.baseUrl;
 
+  async function complete<Schema extends StructuredOutputSchema>(
+    request: ProviderRequest<StructuredOutputValue<Schema>, Schema> & {
+      readonly schema: Schema;
+    },
+  ): Promise<ProviderStructuredFinished<StructuredOutputValue<Schema>>>;
+  async function complete<Output = JsonValue>(
+    request: ProviderRequest<Output>,
+  ): Promise<ProviderFinished<Output>>;
+  async function complete<Output = JsonValue>(
+    request: ProviderRequest<Output>,
+  ): Promise<ProviderFinished<Output>> {
+    requireRequestInput('lmstudio', request);
+    const sensitiveOutput = request.flags?.sensitiveOutput === true;
+    const response = await deps.transport.request({
+      method: 'POST',
+      url: `${baseUrl}/api/v1/chat`,
+      headers: {
+        ...(await authHeader(deps)),
+        'content-type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify(chatBody(request, false)),
+      signal: request.signal,
+    });
+
+    if (response.status >= 400) {
+      throw httpError(
+        'lmstudio',
+        response.status,
+        response.body,
+        sensitiveOutput,
+      );
+    }
+
+    return parseStructuredOutput(
+      'lmstudio',
+      request,
+      finished(parseJsonBody('lmstudio', response.body, sensitiveOutput), 'stop'),
+    );
+  }
+
   return {
     metadata: lmStudioMetadata,
     capabilities: lmStudioCapabilities,
 
-    async complete<Output = JsonValue>(
-      request: ProviderRequest<Output>,
-    ): Promise<ProviderFinished<Output>> {
-      requireRequestInput('lmstudio', request);
-      const sensitiveOutput = request.flags?.sensitiveOutput === true;
-      const response = await deps.transport.request({
-        method: 'POST',
-        url: `${baseUrl}/api/v1/chat`,
-        headers: {
-          ...(await authHeader(deps)),
-          'content-type': 'application/json',
-          accept: 'application/json',
-        },
-        body: JSON.stringify(chatBody(request, false)),
-        signal: request.signal,
-      });
-
-      if (response.status >= 400) {
-        throw httpError(
-          'lmstudio',
-          response.status,
-          response.body,
-          sensitiveOutput,
-        );
-      }
-
-      return parseStructuredOutput(
-        'lmstudio',
-        request,
-        finished(
-          parseJsonBody('lmstudio', response.body, sensitiveOutput),
-          'stop',
-        ),
-      );
-    },
+    complete,
 
     async *stream<Output = JsonValue>(
       request: ProviderRequest<Output>,
@@ -181,6 +193,7 @@ export const createLmStudioProvider = (
             'lmstudio',
             request,
             finished(result, 'stop', text.join(''), reasoning.join('')),
+            false,
           );
 
           if (finish.usage !== undefined) {
@@ -200,8 +213,18 @@ export const createLmStudioProvider = (
           reasoning:
             reasoning.length === 0 ? undefined : { text: reasoning.join('') },
           toolCalls: [],
-        }),
+        }, false),
       };
+    },
+
+    async embedding(
+      _request: ProviderEmbeddingRequest,
+    ): Promise<readonly number[]> {
+      throw new ProviderErrorObject({
+        provider: 'lmstudio',
+        code: 'unsupported_embeddings',
+        message: 'LM Studio provider does not support embeddings.',
+      });
     },
 
     async models(signal?: AbortSignal): Promise<readonly Model[]> {

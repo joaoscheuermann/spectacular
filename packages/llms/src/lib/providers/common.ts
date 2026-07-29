@@ -4,16 +4,23 @@ import type {
   JsonObject,
   JsonValue,
   ProviderError,
+  ProviderEmbeddingRequest,
   ProviderFinished,
   ProviderId,
   ProviderMessage,
   ProviderRequest,
+  ProviderStructuredFinished,
   ReasoningEffort,
   StructuredOutputSchema,
   UsageMetadata,
 } from '../types/provider.js';
 import { diagnosticExcerpt } from '../utils/diagnostics.js';
-import { asRecord, numberField, recordField } from '../utils/json.js';
+import {
+  arrayField,
+  asRecord,
+  numberField,
+  recordField,
+} from '../utils/json.js';
 import { z } from 'zod';
 
 export const requireRequestInput = (
@@ -33,6 +40,27 @@ export const requireRequestInput = (
       provider,
       code: 'missing_input',
       message: 'Provider request requires at least one message.',
+    });
+  }
+};
+
+export const requireEmbeddingInput = (
+  provider: ProviderId,
+  request: ProviderEmbeddingRequest,
+): void => {
+  if (request.model.trim() === '') {
+    throw new ProviderErrorObject({
+      provider,
+      code: 'missing_model',
+      message: 'Provider request requires a model.',
+    });
+  }
+
+  if (request.input.trim() === '') {
+    throw new ProviderErrorObject({
+      provider,
+      code: 'missing_input',
+      message: 'Provider request requires input.',
     });
   }
 };
@@ -182,6 +210,27 @@ export const parseJsonBody = (
   });
 };
 
+export const parseEmbedding = (
+  provider: ProviderId,
+  body: Record<string, unknown>,
+): readonly number[] => {
+  const data = arrayField(body, 'data');
+  const embedding = arrayField(asRecord(data[0]) ?? {}, 'embedding');
+
+  if (embedding.length > 0 && embedding.every(isFiniteNumber)) {
+    return embedding as readonly number[];
+  }
+
+  throw new ProviderErrorObject({
+    provider,
+    code: 'invalid_embedding',
+    message: `${provider} returned an invalid embedding.`,
+  });
+};
+
+const isFiniteNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value);
+
 export const structuredJsonSchema = (
   provider: ProviderId,
   schema: StructuredOutputSchema | undefined,
@@ -263,10 +312,7 @@ const structuredSchemaPrompt = (schema: JsonObject): string => {
   const json = JSON.stringify(schema, null, 2);
   const fence = commonMarkFence(json);
 
-  return `# Structured Output
-
-Return exactly one JSON object that matches the JSON Schema below. Do not include Markdown fences or any text outside the JSON object.
-
+  return `Return exactly one JSON object that matches the JSON Schema below. Output just the JSON object string, DO NOT include any Markdown fences or any text outside the JSON object.
 ${fence}json
 ${json}
 ${fence}`;
@@ -287,7 +333,8 @@ const longestRun = (value: string, pattern: RegExp): number =>
 export const parseStructuredOutput = <Output = JsonValue>(
   provider: ProviderId,
   request: ProviderRequest<Output>,
-  finish: ProviderFinished,
+  finish: ProviderFinished<unknown>,
+  rejectNonStructured = true,
 ): ProviderFinished<Output> => {
   const schema = request.schema;
 
@@ -295,8 +342,16 @@ export const parseStructuredOutput = <Output = JsonValue>(
     return finish as ProviderFinished<Output>;
   }
 
-  if (finish.refusal !== undefined || finish.toolCalls.length > 0) {
+  if (!rejectNonStructured) {
     return finish as ProviderFinished<Output>;
+  }
+
+  if (finish.refusal !== undefined || finish.toolCalls.length > 0) {
+    throw new ProviderErrorObject({
+      provider,
+      code: 'invalid_structured_output',
+      message: `${provider} returned a refusal or tool call instead of structured output.`,
+    });
   }
 
   let parsed: unknown;
@@ -318,7 +373,7 @@ export const parseStructuredOutput = <Output = JsonValue>(
       : new ProviderErrorObject(data, { cause });
   }
 
-  return {
+  const structured: ProviderStructuredFinished<Output> = {
     ...finish,
     structured: validateStructuredOutput(
       provider,
@@ -327,6 +382,8 @@ export const parseStructuredOutput = <Output = JsonValue>(
       request.flags?.sensitiveOutput === true,
     ) as Output,
   };
+
+  return structured;
 };
 
 const validateStructuredOutput = <Schema extends StructuredOutputSchema>(

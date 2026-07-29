@@ -6,12 +6,16 @@ import type {
   LlmProvider,
   Model,
   ProviderCapabilities,
+  ProviderEmbeddingRequest,
   ProviderFinished,
   ProviderId,
   ProviderMetadata,
   ProviderRequest,
+  ProviderStructuredFinished,
   ProviderStreamEvent,
   ProviderToolCall,
+  StructuredOutputSchema,
+  StructuredOutputValue,
 } from '../types/provider.js';
 import {
   asRecord,
@@ -21,7 +25,9 @@ import {
 } from '../utils/json.js';
 import {
   httpError,
+  parseEmbedding,
   parseJsonBody,
+  requireEmbeddingInput,
   requireRequestInput,
   streamErrorEvent,
 } from './common.js';
@@ -57,6 +63,7 @@ export const openAiMetadata: ProviderMetadata = {
 
 export const openAiCapabilities: ProviderCapabilities = {
   streaming: true,
+  embeddings: true,
   tools: true,
   reasoning: true,
   modelListing: true,
@@ -111,30 +118,40 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
     return parseJsonBody('openai', response.body, sensitiveOutput);
   };
 
+  async function complete<Schema extends StructuredOutputSchema>(
+    request: ProviderRequest<StructuredOutputValue<Schema>, Schema> & {
+      readonly schema: Schema;
+    },
+  ): Promise<ProviderStructuredFinished<StructuredOutputValue<Schema>>>;
+  async function complete<Output = JsonValue>(
+    request: ProviderRequest<Output>,
+  ): Promise<ProviderFinished<Output>>;
+  async function complete<Output = JsonValue>(
+    request: ProviderRequest<Output>,
+  ): Promise<ProviderFinished<Output>> {
+    requireRequestInput('openai', request);
+    const body = openAiBody(request, false);
+    await logger?.log({
+      provider: debugProvider,
+      target: 'responses',
+      event: 'http.request',
+      fields: { body },
+    });
+
+    return parseStructuredOutputWithDebug(
+      logger,
+      debugProvider,
+      request,
+      parseFinished(await send(request, body)),
+      'complete',
+    );
+  }
+
   return {
     metadata: openAiMetadata,
     capabilities: openAiCapabilities,
 
-    async complete<Output = JsonValue>(
-      request: ProviderRequest<Output>,
-    ): Promise<ProviderFinished<Output>> {
-      requireRequestInput('openai', request);
-      const body = openAiBody(request, false);
-      await logger?.log({
-        provider: debugProvider,
-        target: 'responses',
-        event: 'http.request',
-        fields: { body },
-      });
-
-      return parseStructuredOutputWithDebug(
-        logger,
-        debugProvider,
-        request,
-        parseFinished(await send(request, body)),
-        'complete',
-      );
-    },
+    complete,
 
     async *stream<Output = JsonValue>(
       request: ProviderRequest<Output>,
@@ -238,6 +255,7 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
               [...calls.values()],
             ),
             'stream',
+            false,
           );
           const usage = finish.usage;
 
@@ -281,8 +299,58 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
             toolCalls: [...calls.values()],
           },
           'stream_end',
+          false,
         ),
       };
+    },
+
+    async embedding(
+      request: ProviderEmbeddingRequest,
+    ): Promise<readonly number[]> {
+      requireEmbeddingInput('openai', request);
+      const auth = await authorization(deps);
+      const sensitiveOutput = request.flags?.sensitiveOutput === true;
+      const body = { model: request.model, input: request.input };
+      await logger?.log({
+        provider: debugProvider,
+        target: 'embeddings',
+        event: 'http.request',
+        fields: { body },
+      });
+      const response = await deps.transport.request({
+        method: 'POST',
+        url: `${baseUrl}/embeddings`,
+        headers: {
+          ...(auth === undefined ? {} : { authorization: auth }),
+          'content-type': 'application/json',
+          accept: 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: request.signal,
+      });
+      await logger?.log({
+        provider: debugProvider,
+        target: 'embeddings',
+        event: 'http.response',
+        fields: {
+          status: response.status,
+          ...(sensitiveOutput ? {} : { body: response.body }),
+        },
+      });
+
+      if (response.status >= 400) {
+        throw httpError(
+          'openai',
+          response.status,
+          response.body,
+          sensitiveOutput,
+        );
+      }
+
+      return parseEmbedding(
+        'openai',
+        parseJsonBody('openai', response.body, sensitiveOutput),
+      );
     },
 
     async models(signal?: AbortSignal): Promise<readonly Model[]> {

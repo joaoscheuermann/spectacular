@@ -1,82 +1,78 @@
-import express from 'express';
-import cors from 'cors';
+import * as z from 'zod';
 import pino from 'pino';
+import pretty from 'pino-pretty';
 
-import { agentCardHandler, UserBuilder } from '@a2a-js/sdk/server/express';
-import { DefaultRequestHandler, InMemoryTaskStore } from '@a2a-js/sdk/server';
+import { glob } from 'glob';
 
-import { createSessionStore } from 'session';
-import { createSandbox } from 'sandbox';
-import { createDockerClient } from 'docker';
+import { createVectorDatabase } from 'victor';
 
-import { DEFAULT_HOST, DEFAULT_PORT } from './lib/constants/server.js';
+import { createFetchTransport, createOpenAiProvider } from 'llms';
 
-import { createAgentCard } from './lib/card.js';
-import { createExecutor, DoricSessionContext } from './lib/executor.js';
-import { createRequestLogger } from './lib/middlewares/request-logger.js';
-import { createDoricJsonRpcHandler } from './lib/rpc.js';
-import { createRecordingEventBusManager } from './lib/runtime/event-bus.js';
-import { createRuntimeStore } from './lib/runtime/store.js';
+import skill, { type Skill } from './lib/skill/index.js';
 
-const app = express();
+const logger = pino(pretty());
 
-const host = String(process.env.HOST || DEFAULT_HOST);
-const port = Number(process.env.PORT || DEFAULT_PORT);
-const logLevel = process.env.LOG_LEVEL?.trim() || 'info';
-const logger = pino({ level: logLevel });
-const httpLogger = logger.child({ component: 'http' });
-
-const sessions = createSessionStore<DoricSessionContext>();
-const runtime = createRuntimeStore();
-
-const card = createAgentCard(`${host}:${port}`);
-
-const tasks = new InMemoryTaskStore();
-const eventBusManager = createRecordingEventBusManager(runtime);
-
-const executor = createExecutor({
-  sessions,
-  createDockerClient,
-  createSandbox,
-  logger: logger.child({ component: 'executor' }),
+const provider = createOpenAiProvider({
+  transport: createFetchTransport(),
+  baseUrl: 'https://openrouter.ai/api/v1',
+  apiKey: process.env.OPENROUTER_API_KEY
 });
 
-const requestHandler = new DefaultRequestHandler(
-  card,
-  tasks,
-  executor,
-  eventBusManager,
-);
+const vectors = createVectorDatabase<Skill>({
+  dimensions: 2560,
+  embedding: async (data: string) => provider.embedding({ model: 'perplexity/pplx-embed-v1-4b', input: data }),
+})
 
-app.use(cors());
-app.use(express.json());
-app.use(createRequestLogger(httpLogger));
+async function main() {
+  logger.info({ msg: 'initializing' });
 
-// Sends the agent card for the other Agent
-app.use(
-  '/.well-known/a2a-agent-card',
-  agentCardHandler({ agentCardProvider: async () => card }),
-);
+  // Find all skill locally.
+  const paths =  await glob(
+    'C:/Users/jvito/Documents/git/spectacular/doric/.agents/skills/**/SKILL.md',
+  )
 
-// Standard JSON-RPC endpoint with Doric-owned session management methods.
-app.use(
-  '/rpc',
-  createDoricJsonRpcHandler({
-    requestHandler,
-    runtime,
-    sessions,
-    userBuilder: UserBuilder.noAuthentication,
-  }),
-);
+  logger.info({ msg: 'skills found', paths });
 
-app.listen(port, host, () => {
-  logger.info(
-    {
-      host,
-      port,
-      discoveryPath: '/.well-known/a2a-agent-card',
-      rpcPath: '/rpc',
-    },
-    'Doric A2A server listening',
-  );
-});
+  // Converts each skill path into an entry in the vector database
+  for (const path of paths) {
+    const { name, description, body, tools, metadata } = await skill(path);
+
+    await vectors.add(
+      { name, description, body, tools, metadata },
+      ({ name, description, body }) => `${name} | ${description} | ${body}`,
+    )
+
+    logger.info({ msg: 'skill ingested', title: name, description });
+  }
+
+  const prompt = "Prompt: Crie um prompt para meu agente, esse prompt vai instruir meu agente à extrair todos os numeros encontrados em um texto."
+
+  const system = `
+    You are a task decomposition assistant.
+    Given a complex user query, break it down into atomic sub-tasks.
+    Each string should be a concise, actionable sub-task description.
+  `
+
+  const test = await provider.complete({
+    messages: [
+      {
+        role: "system",
+        content: system
+      },
+      {
+        role: "user",
+        content: prompt
+      }
+    ],
+    model: `google/gemini-3.5-flash-lite`,
+    schema: z.object({
+      steps: z.array(z.string()).describe("an array of steps")
+    })
+  })
+
+  console.log(test.structured)
+}
+
+main()
+  .then()
+  .catch();
