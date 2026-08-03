@@ -11,6 +11,8 @@ import type {
   ProviderMessage,
   ProviderMetadata,
   ProviderRequest,
+  ProviderRerankRequest,
+  ProviderRerankResult,
   ProviderStructuredFinished,
   ProviderStreamEvent,
   ProviderToolCall,
@@ -22,11 +24,13 @@ import { parseSseEvents } from '../utils/sse.js';
 import {
   httpError,
   parseEmbedding,
+  parseRerank,
   messagesWithStructuredSchema,
   messageText,
   parseJsonBody,
   parseStructuredOutput,
   requireEmbeddingInput,
+  requireRerankInput,
   requestReasoningEffort,
   requireRequestInput,
   streamErrorEvent,
@@ -66,6 +70,7 @@ export const lmStudioOpenAiMetadata: ProviderMetadata = {
 export const lmStudioOpenAiCapabilities: ProviderCapabilities = {
   streaming: true,
   embeddings: true,
+  reranking: true,
   tools: true,
   reasoning: true,
   modelListing: true,
@@ -269,6 +274,49 @@ export const createLmStudioOpenAiProvider = (
       }
 
       return parseEmbedding(
+        'lmstudio-openai',
+        parseJsonBody('lmstudio-openai', response.body, sensitiveOutput),
+      );
+    },
+
+    async rerank(
+      request: ProviderRerankRequest,
+    ): Promise<readonly ProviderRerankResult[]> {
+      requireRerankInput('lmstudio-openai', request);
+      const sensitiveOutput = request.flags?.sensitiveOutput === true;
+      const body = {
+        model: request.model,
+        query: request.query,
+        documents: request.documents,
+        ...(request.topN === undefined ? {} : { top_n: request.topN }),
+      };
+      await log('rerank', 'http.request', { body });
+      const response = await deps.transport.request({
+        method: 'POST',
+        url: `${baseUrl}/rerank`,
+        headers: {
+          ...(await authHeader(deps)),
+          'content-type': 'application/json',
+          accept: 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: request.signal,
+      });
+      await log('rerank', 'http.response', {
+        status: response.status,
+        ...(sensitiveOutput ? {} : { body: response.body }),
+      });
+
+      if (response.status >= 400) {
+        throw httpError(
+          'lmstudio-openai',
+          response.status,
+          response.body,
+          sensitiveOutput,
+        );
+      }
+
+      return parseRerank(
         'lmstudio-openai',
         parseJsonBody('lmstudio-openai', response.body, sensitiveOutput),
       );

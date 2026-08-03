@@ -14,6 +14,7 @@ export type ProviderMetadata = {
 export type ProviderCapabilities = {
   readonly streaming: boolean;
   readonly embeddings: boolean;
+  readonly reranking: boolean;
   readonly tools: boolean;
   readonly reasoning: boolean;
   readonly modelListing: boolean;
@@ -192,6 +193,21 @@ export type ProviderEmbeddingRequest = {
   readonly signal?: AbortSignal;
 };
 
+/** A text-document rerank request supported by compatible providers. */
+export type ProviderRerankRequest = {
+  readonly model: string;
+  readonly query: string;
+  readonly documents: readonly string[];
+  readonly topN?: number;
+  readonly flags?: ProviderCallFlags;
+  readonly signal?: AbortSignal;
+};
+
+export type ProviderRerankResult = {
+  readonly index: number;
+  readonly relevanceScore: number;
+};
+
 /** Provider-neutral completion and streaming contract for agent-core callers. */
 export interface LlmProvider {
   readonly metadata: ProviderMetadata;
@@ -218,6 +234,10 @@ export interface LlmProvider {
   ): AsyncIterable<ProviderStreamEvent<Output>>;
 
   embedding(request: ProviderEmbeddingRequest): Promise<readonly number[]>;
+
+  rerank(
+    request: ProviderRerankRequest,
+  ): Promise<readonly ProviderRerankResult[]>;
 
   models(signal?: AbortSignal): Promise<readonly Model[]>;
 

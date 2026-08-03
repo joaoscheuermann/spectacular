@@ -9,6 +9,8 @@ import type {
   ProviderId,
   ProviderMessage,
   ProviderRequest,
+  ProviderRerankRequest,
+  ProviderRerankResult,
   ProviderStructuredFinished,
   ReasoningEffort,
   StructuredOutputSchema,
@@ -61,6 +63,42 @@ export const requireEmbeddingInput = (
       provider,
       code: 'missing_input',
       message: 'Provider request requires input.',
+    });
+  }
+};
+
+export const requireRerankInput = (
+  provider: ProviderId,
+  request: ProviderRerankRequest,
+): void => {
+  if (request.model.trim() === '') {
+    throw new ProviderErrorObject({
+      provider,
+      code: 'missing_model',
+      message: 'Provider request requires a model.',
+    });
+  }
+
+  if (
+    request.query.trim() === '' ||
+    request.documents.length === 0 ||
+    request.documents.some((document) => document.trim() === '')
+  ) {
+    throw new ProviderErrorObject({
+      provider,
+      code: 'missing_input',
+      message: 'Provider rerank request requires a query and documents.',
+    });
+  }
+
+  if (
+    request.topN !== undefined &&
+    (!Number.isInteger(request.topN) || request.topN < 1)
+  ) {
+    throw new ProviderErrorObject({
+      provider,
+      code: 'invalid_top_n',
+      message: 'Provider rerank request topN must be a positive integer.',
     });
   }
 };
@@ -227,6 +265,42 @@ export const parseEmbedding = (
     message: `${provider} returned an invalid embedding.`,
   });
 };
+
+export const parseRerank = (
+  provider: ProviderId,
+  body: Record<string, unknown>,
+): readonly ProviderRerankResult[] => {
+  const results = arrayField(body, 'results');
+  const parsed = results.map((value) => {
+    const result = asRecord(value);
+    const index =
+      result === undefined ? undefined : numberField(result, 'index');
+    const relevanceScore =
+      result === undefined ? undefined : numberField(result, 'relevance_score');
+
+    return index !== undefined &&
+      Number.isInteger(index) &&
+      index >= 0 &&
+      relevanceScore !== undefined &&
+      Number.isFinite(relevanceScore)
+      ? { index, relevanceScore }
+      : undefined;
+  });
+
+  if (parsed.length > 0 && parsed.every(isRerankResult)) {
+    return parsed;
+  }
+
+  throw new ProviderErrorObject({
+    provider,
+    code: 'invalid_rerank',
+    message: `${provider} returned an invalid rerank response.`,
+  });
+};
+
+const isRerankResult = (
+  value: ProviderRerankResult | undefined,
+): value is ProviderRerankResult => value !== undefined;
 
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value);

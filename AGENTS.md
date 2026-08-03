@@ -68,56 +68,6 @@ revising model-facing prompts.
   configuration, storage or persistence, tools or tool payloads, schemas, or
   other non-prompt JSON.
 
-## Code Work
-
-For production code updates, the top-level agent must coordinate the following
-five phases in order. It manages handoffs and information isolation but does
-not perform work assigned to a phase. Use a different, fresh sub-agent context
-for each phase role; do not combine roles or skip a phase.
-
-Every handoff must tell the child that it is the sub-agent for that assignment
-and must execute only the bounded handoff. Specify the goal, supplied inputs,
-read scope, write scope, non-goals, required proof, stop conditions, and the
-requirement to preserve unrelated worktree changes.
-
-1. **Exploration:** Assign read-only discovery of the applicable instructions,
-   skills, ownership boundaries, source, tests, manifests, and configured
-   checks. The explorer must return an evidence-backed context report without
-   planning the change or editing files.
-2. **Planning:** Give the planner the goal and exploration report. The planner
-   must define the intended behavior, interfaces, dependency direction,
-   failure handling, acceptance criteria, implementation scope, and non-goals
-   without writing code or tests.
-3. **Test writing:** Give the test writer the approved goal, plan, and
-   interfaces. It may edit only approved test files and test-support artifacts.
-   It must run the narrowest relevant test to establish red evidence for the
-   expected behavioral reason. If meaningful red evidence is inapplicable, it
-   must explain why and identify the closest validation proof before work
-   continues.
-4. **Code implementation:** Give the implementation agent the goal, plan,
-   interfaces, production write scope, and non-goals. It may edit only
-   production code. It must never read, search, list, or otherwise query test
-   files or test-support artifacts; run tests; or consume test output. It may
-   run only production-scoped, non-test checks such as build, typecheck, or
-   lint.
-5. **Validation:** Give an independent, read-only validator the goal, plan,
-   implementation, tests, and configured checks. It must load
-   `.agents/skills/coding-conventions/SKILL.md`, run the relevant tests and
-   checks, review architecture and behavior, and verify worktree scope. It must
-   report findings, green evidence, and proposed fixes without editing files.
-
-The top-level agent must not disclose test paths, contents, diffs, assertions,
-or results to the implementation agent. Route validation findings by
-ownership: test defects to the test writer, production defects to the
-implementation agent using only test-safe behavior or convention descriptions,
-and contract defects to the planner. Preserve the implementation agent's test
-isolation during corrections, and repeat independent validation after every
-correction.
-
-If the required sub-agent mechanism is unavailable, blocked, or unsafe, stop
-before code changes unless the user explicitly authorizes a scoped top-level
-edit.
-
 ## Nx And Packages
 
 - Product packages belong under `packages/*`; do not add root-level product

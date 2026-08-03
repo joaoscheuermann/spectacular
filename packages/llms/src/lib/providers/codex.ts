@@ -10,6 +10,8 @@ import type {
   ProviderFinished,
   ProviderMetadata,
   ProviderRequest,
+  ProviderRerankRequest,
+  ProviderRerankResult,
   ProviderStructuredFinished,
   ProviderStreamEvent,
   StructuredOutputSchema,
@@ -39,6 +41,7 @@ export const codexMetadata: ProviderMetadata = {
 export const codexCapabilities: ProviderCapabilities = {
   streaming: true,
   embeddings: false,
+  reranking: false,
   tools: true,
   reasoning: true,
   modelListing: true,
@@ -117,6 +120,16 @@ export const createCodexProvider = (deps: CodexProviderDeps): LlmProvider => {
         provider: 'codex',
         code: 'unsupported_embeddings',
         message: 'Codex provider does not support embeddings.',
+      });
+    },
+
+    async rerank(
+      _request: ProviderRerankRequest,
+    ): Promise<readonly ProviderRerankResult[]> {
+      throw new ProviderErrorObject({
+        provider: 'codex',
+        code: 'unsupported_reranking',
+        message: 'Codex provider does not support reranking.',
       });
     },
 

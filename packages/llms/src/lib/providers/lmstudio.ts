@@ -10,6 +10,8 @@ import type {
   ProviderMessage,
   ProviderMetadata,
   ProviderRequest,
+  ProviderRerankRequest,
+  ProviderRerankResult,
   ProviderStructuredFinished,
   ProviderStreamEvent,
   StructuredOutputSchema,
@@ -53,6 +55,7 @@ export const lmStudioMetadata: ProviderMetadata = {
 export const lmStudioCapabilities: ProviderCapabilities = {
   streaming: true,
   embeddings: false,
+  reranking: false,
   tools: false,
   reasoning: true,
   modelListing: true,
@@ -103,7 +106,10 @@ export const createLmStudioProvider = (
     return parseStructuredOutput(
       'lmstudio',
       request,
-      finished(parseJsonBody('lmstudio', response.body, sensitiveOutput), 'stop'),
+      finished(
+        parseJsonBody('lmstudio', response.body, sensitiveOutput),
+        'stop',
+      ),
     );
   }
 
@@ -207,13 +213,18 @@ export const createLmStudioProvider = (
 
       yield {
         type: 'response.finished',
-        finish: parseStructuredOutput('lmstudio', request, {
-          text: text.join(''),
-          finishReason: 'unknown',
-          reasoning:
-            reasoning.length === 0 ? undefined : { text: reasoning.join('') },
-          toolCalls: [],
-        }, false),
+        finish: parseStructuredOutput(
+          'lmstudio',
+          request,
+          {
+            text: text.join(''),
+            finishReason: 'unknown',
+            reasoning:
+              reasoning.length === 0 ? undefined : { text: reasoning.join('') },
+            toolCalls: [],
+          },
+          false,
+        ),
       };
     },
 
@@ -224,6 +235,16 @@ export const createLmStudioProvider = (
         provider: 'lmstudio',
         code: 'unsupported_embeddings',
         message: 'LM Studio provider does not support embeddings.',
+      });
+    },
+
+    async rerank(
+      _request: ProviderRerankRequest,
+    ): Promise<readonly ProviderRerankResult[]> {
+      throw new ProviderErrorObject({
+        provider: 'lmstudio',
+        code: 'unsupported_reranking',
+        message: 'LM Studio provider does not support reranking.',
       });
     },
 

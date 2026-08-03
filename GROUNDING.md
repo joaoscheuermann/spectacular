@@ -1,6 +1,6 @@
 # Doric Grounding
 
-Last reviewed: 2026-07-13
+Last reviewed: 2026-07-30
 
 This is Doric's repository validity contract. Every agent working in this
 repository must read it before non-trivial planning, reviewing, artifact
@@ -48,6 +48,11 @@ product scope and current files support the change.
 Doric-owned JSON-RPC session management methods under the `doric/*` namespace.
 Standard A2A JSON-RPC methods remain delegated to the A2A SDK transport
 handler.
+
+Doric loads immediate manifest-marked bundle directories from its configured
+bundle root. It validates skills and tool descriptors within each bundle,
+deduplicates structurally identical cross-bundle tool descriptors, and rejects
+cross-bundle descriptor conflicts.
 
 `apps/cli` is the explicitly requested Node.js command-line host surface for
 interacting with the Doric A2A agent. The CLI is scoped to A2A message
@@ -254,6 +259,10 @@ Prompt open-question artifacts carry concrete selectable solution options.
 Doric input-required A2A events expose those options directly instead of
 synthesizing a recommendation-only choice.
 
+Doric evaluates decomposition hints for candidate skills concurrently. The
+hints method retains its existing inputs and `Set<SkillExtraction>` output,
+with successful extractions ordered by their candidate input order.
+
 `agents/doric` receives first-message config and later config replacements from
 `requestContext.userMessage.metadata.configuration`. Sandbox creation, Git
 setup, repository cloning, and initial workdir state are tied to session
@@ -272,8 +281,12 @@ both requested, LM Studio OpenAI compatibility rejects the request with a
 provider error before sending HTTP because LM Studio rejects `tools` and
 `response_format` together.
 The OpenAI, OpenRouter, and LM Studio OpenAI-compatible integrations support
-single-text embeddings through their OpenAI-compatible `/embeddings` endpoint;
-Codex and LM Studio native do not support embeddings.
+single-text embeddings through their OpenAI-compatible `/embeddings` endpoint
+and text-document reranking through `/rerank` below the configured base URL.
+Rerank requests carry a model, query, non-empty document list, and optional
+positive `topN`; successful results expose each original document index and
+finite relevance score. Codex and LM Studio native support neither embeddings
+nor reranking.
 Provider configs may include an optional `baseUrl` string to
 override provider endpoints that support it. Model configs may include an
 optional provider-neutral `effort` value of `none`, `minimal`, `low`,

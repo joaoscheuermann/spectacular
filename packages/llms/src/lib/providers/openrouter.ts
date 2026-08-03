@@ -10,6 +10,8 @@ import type {
   ProviderFinished,
   ProviderMetadata,
   ProviderRequest,
+  ProviderRerankRequest,
+  ProviderRerankResult,
   ProviderStructuredFinished,
   ProviderStreamEvent,
   StructuredOutputSchema,
@@ -19,9 +21,11 @@ import { parseSseEvents } from '../utils/sse.js';
 import {
   httpError,
   parseEmbedding,
+  parseRerank,
   parseJsonBody,
   parseStructuredOutput,
   requireEmbeddingInput,
+  requireRerankInput,
   requireRequestInput,
   streamErrorEvent,
 } from './common.js';
@@ -55,6 +59,7 @@ export const openRouterMetadata: ProviderMetadata = {
 export const openRouterCapabilities: ProviderCapabilities = {
   streaming: true,
   embeddings: true,
+  reranking: true,
   tools: true,
   reasoning: true,
   modelListing: true,
@@ -260,6 +265,59 @@ export const createOpenRouterProvider = (
       }
 
       return parseEmbedding(
+        'openrouter',
+        parseJsonBody('openrouter', response.body, sensitiveOutput),
+      );
+    },
+
+    async rerank(
+      request: ProviderRerankRequest,
+    ): Promise<readonly ProviderRerankResult[]> {
+      requireRerankInput('openrouter', request);
+      const sensitiveOutput = request.flags?.sensitiveOutput === true;
+      const body = {
+        model: request.model,
+        query: request.query,
+        documents: request.documents,
+        ...(request.topN === undefined ? {} : { top_n: request.topN }),
+      };
+      await logger?.log({
+        provider: 'openrouter',
+        target: 'rerank',
+        event: 'http.request',
+        fields: { body },
+      });
+      const response = await deps.transport.request({
+        method: 'POST',
+        url: `${baseUrl}/rerank`,
+        headers: {
+          authorization: await authorization(deps.apiKey),
+          'content-type': 'application/json',
+          accept: 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: request.signal,
+      });
+      await logger?.log({
+        provider: 'openrouter',
+        target: 'rerank',
+        event: 'http.response',
+        fields: {
+          status: response.status,
+          ...(sensitiveOutput ? {} : { body: response.body }),
+        },
+      });
+
+      if (response.status >= 400) {
+        throw httpError(
+          'openrouter',
+          response.status,
+          response.body,
+          sensitiveOutput,
+        );
+      }
+
+      return parseRerank(
         'openrouter',
         parseJsonBody('openrouter', response.body, sensitiveOutput),
       );

@@ -4,6 +4,13 @@
   "projectType": "application",
   "sourceRoot": "agents/doric/src",
   "targets": {
+    "run": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "node agents/doric/dist/index.js"
+      }
+    },
     "serve": {
       "executor": "nx:run-commands",
       "dependsOn": ["build"],

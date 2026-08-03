@@ -11,6 +11,8 @@ import type {
   ProviderId,
   ProviderMetadata,
   ProviderRequest,
+  ProviderRerankRequest,
+  ProviderRerankResult,
   ProviderStructuredFinished,
   ProviderStreamEvent,
   ProviderToolCall,
@@ -26,8 +28,10 @@ import {
 import {
   httpError,
   parseEmbedding,
+  parseRerank,
   parseJsonBody,
   requireEmbeddingInput,
+  requireRerankInput,
   requireRequestInput,
   streamErrorEvent,
 } from './common.js';
@@ -64,6 +68,7 @@ export const openAiMetadata: ProviderMetadata = {
 export const openAiCapabilities: ProviderCapabilities = {
   streaming: true,
   embeddings: true,
+  reranking: true,
   tools: true,
   reasoning: true,
   modelListing: true,
@@ -348,6 +353,60 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
       }
 
       return parseEmbedding(
+        'openai',
+        parseJsonBody('openai', response.body, sensitiveOutput),
+      );
+    },
+
+    async rerank(
+      request: ProviderRerankRequest,
+    ): Promise<readonly ProviderRerankResult[]> {
+      requireRerankInput('openai', request);
+      const auth = await authorization(deps);
+      const sensitiveOutput = request.flags?.sensitiveOutput === true;
+      const body = {
+        model: request.model,
+        query: request.query,
+        documents: request.documents,
+        ...(request.topN === undefined ? {} : { top_n: request.topN }),
+      };
+      await logger?.log({
+        provider: debugProvider,
+        target: 'rerank',
+        event: 'http.request',
+        fields: { body },
+      });
+      const response = await deps.transport.request({
+        method: 'POST',
+        url: `${baseUrl}/rerank`,
+        headers: {
+          ...(auth === undefined ? {} : { authorization: auth }),
+          'content-type': 'application/json',
+          accept: 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: request.signal,
+      });
+      await logger?.log({
+        provider: debugProvider,
+        target: 'rerank',
+        event: 'http.response',
+        fields: {
+          status: response.status,
+          ...(sensitiveOutput ? {} : { body: response.body }),
+        },
+      });
+
+      if (response.status >= 400) {
+        throw httpError(
+          'openai',
+          response.status,
+          response.body,
+          sensitiveOutput,
+        );
+      }
+
+      return parseRerank(
         'openai',
         parseJsonBody('openai', response.body, sensitiveOutput),
       );

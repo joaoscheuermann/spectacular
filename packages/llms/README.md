@@ -52,6 +52,27 @@ for await (const event of provider.stream({
 `*-fast` OpenAI model aliases are sent to the Responses API without the
 suffix and with `service_tier: "priority"`.
 
+## Reranking
+
+OpenAI, OpenRouter, and LM Studio OpenAI-compatible providers expose a common
+text-document reranking API. The request is sent to `/rerank` below the
+provider's configured base URL (for example, OpenRouter uses
+`https://openrouter.ai/api/v1/rerank`).
+
+```ts
+const results = await provider.rerank({
+  model: 'cohere/rerank-v3.5',
+  query: 'What is the capital of France?',
+  documents: [
+    'Berlin is the capital of Germany.',
+    'Paris is the capital of France.',
+  ],
+  topN: 1,
+});
+
+// [{ index: 1, relevanceScore: 0.98 }]
+```
+
 Structured requests may set
 `flags.includeStructuredSchemaOnSystemPrompt: true` to append a deterministic
 system message containing the converted JSON Schema. Authored system messages
