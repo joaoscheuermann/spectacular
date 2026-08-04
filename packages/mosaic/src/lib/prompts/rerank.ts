@@ -1,4 +1,4 @@
-import { Node } from '../../types/graph.js';
+import type { Node } from '../types/graph.js';
 
 export function rerankQuery(prompt: string, node: Node) {
   const sections = [

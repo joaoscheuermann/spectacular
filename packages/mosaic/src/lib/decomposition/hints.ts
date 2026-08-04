@@ -1,12 +1,12 @@
-import { LlmProvider } from 'llms';
-import { Logger } from 'pino';
-import { VectorDatabase } from 'victor';
-import * as hintsPrompt from '../../prompts/hints/index.js';
-import { SkillHintExtractionSchema } from '../../schemas/hint/index.js';
-import { SkillExtraction } from '../../types/hint.js';
+import type { LlmProvider } from 'llms';
+import type { Logger } from 'pino';
+import type { VectorDatabase } from 'victor';
+import * as hintsPrompt from '../prompts/hints.js';
+import { SkillHintExtractionSchema } from '../schemas/hint.js';
+import type { SkillExtraction } from '../types/hint.js';
 import type { Skill } from 'bundle';
-import { Graph } from '../../types/graph.js';
-import { GoalSkills } from '../candidates/index.js';
+import type { Graph } from '../types/graph.js';
+import type { GoalSkills } from './candidates.js';
 
 interface HintsContext {
   logger: Logger;

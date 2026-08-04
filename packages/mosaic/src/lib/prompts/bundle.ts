@@ -1,4 +1,4 @@
-import { Node } from '../../types/graph.js';
+import type { Node } from '../types/graph.js';
 import type { Skill } from 'bundle';
 
 function escapeXml(value: string | number | boolean) {

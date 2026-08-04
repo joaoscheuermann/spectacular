@@ -1,6 +1,6 @@
 # Doric Grounding
 
-Last reviewed: 2026-07-30
+Last reviewed: 2026-08-04
 
 This is Doric's repository validity contract. Every agent working in this
 repository must read it before non-trivial planning, reviewing, artifact
@@ -250,14 +250,23 @@ storage and queries, stores caller values through per-add text transformation,
 and returns original values from cosine-similarity top-K search; it has no
 persistence or provider integration.
 
-`packages/mosaic` owns the incomplete Doric goal workflow: decomposition and
-revision, skill retrieval and reranking, and per-node skill/tool menu
-composition. Its public factory accepts injected provider, logger, model IDs,
-session placeholder, bundle skills and executable tools, and their vector
-databases. `agents/doric` remains the composition root that loads bundles,
-constructs and populates the vector databases, and invokes Mosaic. Mosaic does
-not yet execute nodes or tools; after marking the current ready wave it
-preserves the existing failure when no pending node remains ready.
+`packages/state-machine` owns reusable, process-local typed transition
+execution. A definition stores only its exhaustive handler map; each run keeps
+its context, current state, and artifacts local and resolves with a finished,
+domain-failed, or engine-error result. It owns no workflow policy, persistence,
+listeners, recovery hooks, or external side effects.
+
+`packages/mosaic` depends on `packages/state-machine` but owns the incomplete
+Doric goal-workflow policy: decomposition and revision, scheduling, skill
+retrieval and reranking, and per-node skill/tool menu composition. Its public
+factory accepts injected provider, logger, model IDs, bundle skills and
+executable tools, and their vector databases; it has no session option.
+`agents/doric` remains the composition root that loads bundles, constructs and
+populates the vector databases, and invokes Mosaic. Mosaic runs the fixed
+`decompose -> schedule -> prepare -> schedule` planning and preparation
+lifecycle. It succeeds for an already-completed graph but does not yet execute
+nodes or tools; otherwise it preserves the intentional missing-ready domain
+failure when progress cannot continue.
 
 `models/skillrouter-embedding` is the user-approved Nx/uv conversion utility
 for the pinned SkillRouter checkpoint. Only its export target may fetch

@@ -1,5 +1,5 @@
-import type { Graph } from '../../types/graph.js';
-import type { SkillExtraction } from '../../types/hint.js';
+import type { Graph } from '../types/graph.js';
+import type { SkillExtraction } from '../types/hint.js';
 
 export function system() {
   return `

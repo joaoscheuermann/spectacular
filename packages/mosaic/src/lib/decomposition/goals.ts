@@ -1,6 +1,6 @@
-import { LlmProvider } from 'llms';
-import * as goalsPrompt from '../../prompts/goals/index.js';
-import { StrictGraphSchema } from '../../schemas/graph/index.js';
+import type { LlmProvider } from 'llms';
+import * as goalsPrompt from '../prompts/goals.js';
+import { StrictGraphSchema } from '../schemas/graph.js';
 
 interface DecomposeContext {
   provider: LlmProvider;

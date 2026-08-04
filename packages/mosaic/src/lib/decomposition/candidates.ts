@@ -1,7 +1,7 @@
-import { VectorDatabase } from 'victor';
+import type { VectorDatabase } from 'victor';
 
-import { Graph } from '../../types/graph.js';
-import { search } from '../../prompts/candidates/index.js';
+import type { Graph } from '../types/graph.js';
+import { search } from '../prompts/candidates.js';
 import type { Skill } from 'bundle';
 
 export interface SkillsContext {

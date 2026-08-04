@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  StateMachineErrorObject,
+  StateMachineError,
   createStateMachine,
+  type StateMachineErrorCode,
   type StateMachineHandler,
+  type StateMachineHandlers,
 } from '../src/index.js';
 
-type State = 'start' | 'middle' | 'done' | 'recover';
+type State = 'start' | 'middle' | 'done';
 type Context = {
   readonly runId: string;
 };
@@ -21,215 +23,320 @@ type Artifacts = {
   readonly done: {
     readonly output: string;
   };
-  readonly recover: {
-    readonly reason: string;
-  };
+};
+type DomainFailure = {
+  readonly code: 'cancelled';
 };
 
-test('checks state-specific artifacts at compile time', async () => {
-  const machine = createStateMachine<State, Context, Artifacts>({
-    runId: 'typed',
-  });
+test('checks exhaustive handlers and state-specific artifacts at compile time', () => {
+  const definition = createStateMachine<
+    State,
+    Context,
+    Artifacts,
+    string,
+    DomainFailure
+  >({
+    start: (artifacts, { state, transition }) => {
+      const current: 'start' = state;
+      const input: string = artifacts.input;
+      void current;
+      void input;
 
-  const assertTypes = () => {
-    void machine.dispatch('start', { input: 'ok' });
-
-    // @ts-expect-error start artifacts require input, not output.
-    void machine.dispatch('start', { output: 'wrong' });
-
-    machine.register('middle', (artifacts, { finish }) => {
+      // @ts-expect-error start artifacts do not expose middle's count.
       const count: number = artifacts.count;
       void count;
 
-      // @ts-expect-error middle artifacts do not expose input.
-      const input: string = artifacts.input;
-      void input;
+      // @ts-expect-error middle transitions require middle artifacts.
+      return transition('middle', { output: 'wrong' });
+    },
+    middle: (artifacts, { transition }) =>
+      transition('done', { output: String(artifacts.count) }),
+    done: (artifacts, { finish, fail }) => {
+      // @ts-expect-error fail requires the configured domain failure.
+      void fail();
 
-      return finish();
+      return artifacts.output === ''
+        ? fail({ code: 'cancelled' })
+        : finish(artifacts.output);
+    },
+  });
+
+  const assertTypes = () => {
+    void definition.run({
+      context: { runId: 'typed' },
+      state: 'start',
+      artifacts: { input: 'ok' },
     });
+
+    void definition.run({
+      context: { runId: 'typed' },
+      state: 'start',
+      // @ts-expect-error initial start state requires start artifacts.
+      artifacts: { count: 1 },
+    });
+
+    // @ts-expect-error every state requires a handler.
+    createStateMachine<State, Context, Artifacts, string, DomainFailure>({
+      start: (_artifacts, { finish }) => finish('start'),
+      middle: (_artifacts, { finish }) => finish('middle'),
+    });
+
+    const supported: StateMachineErrorCode = 'handler_failed';
+    void supported;
+
+    // @ts-expect-error lifecycle errors were removed from reusable definitions.
+    const removed: StateMachineErrorCode = 'concurrent_dispatch';
+    void removed;
   };
 
   assert.equal(typeof assertTypes, 'function');
 });
 
-test('runs async handler chains and reports transition finish and status state', async () => {
-  const machine = createStateMachine<State, Context, Artifacts, string>({
-    runId: 'chain',
+test('runs an asynchronous handler chain to completion', async () => {
+  const definition = createStateMachine<
+    State,
+    Context,
+    Artifacts,
+    string,
+    DomainFailure
+  >({
+    start: async (artifacts, { transition }) => {
+      await Promise.resolve();
+
+      return transition('middle', { count: artifacts.input.length });
+    },
+    middle: (artifacts, { transition }) =>
+      transition('done', { output: String(artifacts.count) }),
+    done: (artifacts, { finish }) => finish(artifacts.output),
   });
-  const transitions: string[] = [];
-  const finished: string[] = [];
+  const context = { runId: 'chain' };
 
-  machine.on('transition', (from, to) => transitions.push(`${from}->${to}`));
-  machine.on('finish', (result) => finished.push(result.value ?? ''));
+  const result = await definition.run({
+    context,
+    state: 'start',
+    artifacts: { input: 'doric' },
+  });
 
-  machine
-    .register('start', async (artifacts, { dispatch }) =>
-      dispatch('middle', { count: artifacts.input.length }),
-    )
-    .register('middle', (artifacts, { dispatch }) =>
-      dispatch('done', { output: String(artifacts.count) }),
-    )
-    .register('done', (artifacts, { finish }) => finish(artifacts.output));
-
-  assert.equal(machine.status(), 'idle');
-
-  const result = await machine.dispatch('start', { input: 'doric' });
-
-  assert.deepEqual(transitions, ['start->middle', 'middle->done']);
-  assert.deepEqual(finished, ['5']);
   assert.deepEqual(result, {
     status: 'finished',
     value: '5',
     state: 'done',
-    context: { runId: 'chain' },
-  });
-  assert.equal(machine.isDone(), true);
-  assert.equal(machine.status(), 'finished');
-  assert.deepEqual(machine.result(), result);
-});
-
-test('continues to a recovery state when an error listener returns a transition', async () => {
-  const machine = createStateMachine<State, Context, Artifacts, string>({
-    runId: 'recoverable',
-  });
-  const errors: string[] = [];
-  const transitions: string[] = [];
-
-  machine.on('transition', (from, to) => transitions.push(`${from}->${to}`));
-  machine.on('error', (error, dispatch) => {
-    errors.push(error.data.code);
-
-    return dispatch('recover', { reason: error.data.code });
-  });
-  machine.register('start', () => {
-    throw new Error('boom');
-  });
-  machine.register('recover', (artifacts, { finish }) =>
-    finish(artifacts.reason),
-  );
-
-  const result = await machine.dispatch('start', { input: 'bad' });
-
-  assert.deepEqual(errors, ['handler_failed']);
-  assert.deepEqual(transitions, ['start->recover']);
-  assert.deepEqual(result, {
-    status: 'finished',
-    value: 'handler_failed',
-    state: 'recover',
-    context: { runId: 'recoverable' },
+    context,
   });
 });
 
-test('resolves an error result when handler errors are not recovered', async () => {
-  const machine = createStateMachine<State, Context, Artifacts>({
-    runId: 'unrecovered',
+test('returns the exact domain failure passed to fail', async () => {
+  const failure: DomainFailure = { code: 'cancelled' };
+  const definition = createStateMachine<
+    State,
+    Context,
+    Artifacts,
+    string,
+    DomainFailure
+  >({
+    start: (_artifacts, { fail }) => fail(failure),
+    middle: (_artifacts, { finish }) => finish('middle'),
+    done: (artifacts, { finish }) => finish(artifacts.output),
+  });
+  const context = { runId: 'failed' };
+
+  const result = await definition.run({
+    context,
+    state: 'start',
+    artifacts: { input: 'stop' },
   });
 
-  machine.register('start', () => {
-    throw new Error('boom');
+  assert.equal(result.status, 'failed');
+
+  if (result.status === 'failed') {
+    assert.equal(result.error, failure);
+    assert.equal(result.state, 'start');
+    assert.equal(result.context, context);
+  }
+});
+
+test('preserves a thrown handler value as the engine error cause', async () => {
+  const thrown = { reason: 'boom' };
+  const definition = createStateMachine<
+    State,
+    Context,
+    Artifacts,
+    void,
+    DomainFailure
+  >({
+    start: () => {
+      throw thrown;
+    },
+    middle: (_artifacts, { finish }) => finish(),
+    done: (_artifacts, { finish }) => finish(),
   });
 
-  const result = await machine.dispatch('start', { input: 'bad' });
+  const result = await definition.run({
+    context: { runId: 'thrown' },
+    state: 'start',
+    artifacts: { input: 'bad' },
+  });
 
   assert.equal(result.status, 'error');
-  assert.equal(result.state, 'start');
-  assert.ok(result.error instanceof StateMachineErrorObject);
-  assert.equal(result.error.data.code, 'handler_failed');
-  assert.equal(machine.isDone(), true);
-  assert.equal(machine.status(), 'error');
+
+  if (result.status === 'error') {
+    assert.ok(result.error instanceof StateMachineError);
+    assert.equal(result.error.data.code, 'handler_failed');
+    assert.equal(result.error.cause, thrown);
+  }
 });
 
-test('rejects duplicate state registrations with structured errors', () => {
-  const machine = createStateMachine<State, Context, Artifacts>({
-    runId: 'duplicate',
+test('reuses one definition for independent sequential runs', async () => {
+  const definition = createStateMachine<
+    State,
+    Context,
+    Artifacts,
+    string,
+    DomainFailure
+  >({
+    start: (artifacts, { context, finish }) =>
+      finish(`${context.runId}:${artifacts.input}`),
+    middle: (_artifacts, { finish }) => finish('middle'),
+    done: (artifacts, { finish }) => finish(artifacts.output),
   });
 
-  machine.register('start', (_artifacts, { finish }) => finish());
+  const first = await definition.run({
+    context: { runId: 'first' },
+    state: 'start',
+    artifacts: { input: 'one' },
+  });
+  const second = await definition.run({
+    context: { runId: 'second' },
+    state: 'start',
+    artifacts: { input: 'two' },
+  });
 
-  assert.throws(
-    () => machine.register('start', (_artifacts, { finish }) => finish()),
-    (error: unknown) =>
-      error instanceof StateMachineErrorObject &&
-      error.data.code === 'duplicate_state_registration',
+  assert.equal(
+    first.status === 'finished' ? first.value : undefined,
+    'first:one',
+  );
+  assert.equal(
+    second.status === 'finished' ? second.value : undefined,
+    'second:two',
   );
 });
 
-test('resolves a structured error when a handler is missing', async () => {
-  const machine = createStateMachine<State, Context, Artifacts>({
-    runId: 'missing',
-  });
+test('isolates concurrent runs of one definition', async () => {
+  type ConcurrentArtifacts = {
+    readonly start: {
+      readonly input: string;
+      readonly gate: Promise<void>;
+    };
+  };
 
-  const result = await machine.dispatch('start', { input: 'none' });
-
-  assert.equal(result.status, 'error');
-  assert.equal(result.state, 'start');
-  assert.equal(result.error.data.code, 'missing_handler');
-});
-
-test('resolves a structured error when a handler returns an invalid action', async () => {
-  const machine = createStateMachine<State, Context, Artifacts>({
-    runId: 'invalid',
-  });
-
-  machine.register(
+  const definition = createStateMachine<
     'start',
-    (() => undefined) as unknown as StateMachineHandler<
+    Context,
+    ConcurrentArtifacts,
+    string,
+    never
+  >({
+    start: async (artifacts, { context, finish }) => {
+      await artifacts.gate;
+
+      return finish(`${context.runId}:${artifacts.input}`);
+    },
+  });
+  let releaseFirst: () => void = () => undefined;
+  let releaseSecond: () => void = () => undefined;
+  const firstGate = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  const secondGate = new Promise<void>((resolve) => {
+    releaseSecond = resolve;
+  });
+
+  const first = definition.run({
+    context: { runId: 'first' },
+    state: 'start',
+    artifacts: { input: 'one', gate: firstGate },
+  });
+  const second = definition.run({
+    context: { runId: 'second' },
+    state: 'start',
+    artifacts: { input: 'two', gate: secondGate },
+  });
+
+  releaseSecond();
+  const secondResult = await second;
+  releaseFirst();
+  const firstResult = await first;
+
+  assert.equal(
+    firstResult.status === 'finished' ? firstResult.value : undefined,
+    'first:one',
+  );
+  assert.equal(
+    secondResult.status === 'finished' ? secondResult.value : undefined,
+    'second:two',
+  );
+});
+
+test('returns an engine error when a handler returns an invalid action', async () => {
+  const definition = createStateMachine<
+    State,
+    Context,
+    Artifacts,
+    void,
+    DomainFailure
+  >({
+    start: (() => undefined) as unknown as StateMachineHandler<
       State,
       'start',
       Context,
       Artifacts,
-      void
+      void,
+      DomainFailure
     >,
-  );
+    middle: (_artifacts, { finish }) => finish(),
+    done: (_artifacts, { finish }) => finish(),
+  });
 
-  const result = await machine.dispatch('start', { input: 'bad' });
+  const result = await definition.run({
+    context: { runId: 'invalid' },
+    state: 'start',
+    artifacts: { input: 'bad' },
+  });
 
   assert.equal(result.status, 'error');
-  assert.equal(result.state, 'start');
-  assert.equal(result.error.data.code, 'invalid_handler_return');
+
+  if (result.status === 'error') {
+    assert.equal(result.error.data.code, 'invalid_handler_return');
+    assert.equal(result.state, 'start');
+  }
 });
 
-test('rejects concurrent public dispatch with a structured lifecycle error', async () => {
-  const machine = createStateMachine<State, Context, Artifacts>({
-    runId: 'concurrent',
-  });
-  let release: (() => void) | undefined;
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
+test('defensively returns an engine error when a handler is missing', async () => {
+  const handlers = {} as StateMachineHandlers<
+    State,
+    Context,
+    Artifacts,
+    void,
+    DomainFailure
+  >;
+  const definition = createStateMachine<
+    State,
+    Context,
+    Artifacts,
+    void,
+    DomainFailure
+  >(handlers);
 
-  machine.register('start', async (_artifacts, { finish }) => {
-    await gate;
-
-    return finish();
-  });
-
-  const first = machine.dispatch('start', { input: 'wait' });
-
-  await assert.rejects(
-    () => machine.dispatch('start', { input: 'again' }),
-    (error: unknown) =>
-      error instanceof StateMachineErrorObject &&
-      error.data.code === 'concurrent_dispatch',
-  );
-
-  release?.();
-  await first;
-});
-
-test('rejects dispatch after terminal completion with a structured lifecycle error', async () => {
-  const machine = createStateMachine<State, Context, Artifacts>({
-    runId: 'terminal',
+  const result = await definition.run({
+    context: { runId: 'missing' },
+    state: 'start',
+    artifacts: { input: 'none' },
   });
 
-  machine.register('start', (_artifacts, { finish }) => finish());
+  assert.equal(result.status, 'error');
 
-  await machine.dispatch('start', { input: 'done' });
-
-  await assert.rejects(
-    () => machine.dispatch('start', { input: 'again' }),
-    (error: unknown) =>
-      error instanceof StateMachineErrorObject &&
-      error.data.code === 'terminal_dispatch',
-  );
+  if (result.status === 'error') {
+    assert.equal(result.error.data.code, 'missing_handler');
+    assert.equal(result.state, 'start');
+  }
 });

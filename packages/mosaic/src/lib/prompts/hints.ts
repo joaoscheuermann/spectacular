@@ -1,7 +1,7 @@
 import type { Skill } from 'bundle';
 
-import type { Node } from '../../types/graph.js';
-import { markdownNumberedList } from '../utils/index.js';
+import type { Node } from '../types/graph.js';
+import { markdownNumberedList } from './list.js';
 
 export function system() {
   return `

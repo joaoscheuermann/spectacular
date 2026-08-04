@@ -1,311 +1,288 @@
-import {
-  StateMachineErrorObject,
-  stateMachineError,
-} from './classes/state-machine-error.js';
+import { StateMachineError } from './classes/state-machine-error.js';
 import type {
-  StateMachine,
   StateMachineAction,
-  StateMachineErrorListener,
-  StateMachineFinish,
-  StateMachineFinishListener,
+  StateMachineDefinition,
+  StateMachineErrorCode,
+  StateMachineErrorData,
+  StateMachineErrorResult,
+  StateMachineFailFunction,
+  StateMachineFinishFunction,
   StateMachineHandler,
+  StateMachineHandlers,
+  StateMachineHandlerScope,
   StateMachineResult,
-  StateMachineStatus,
+  StateMachineRunInput,
   StateMachineTransition,
-  StateMachineTransitionListener,
+  StateMachineTransitionArguments,
+  StateMachineTransitionFunction,
 } from './types/state-machine.js';
 
-type HandlerMap<
+type RuntimeHandler<
   States extends string,
   Context,
   ArtifactsByState extends Record<States, unknown>,
   Finished,
-> = Map<
+  Failed,
+> = StateMachineHandler<
   States,
-  StateMachineHandler<States, States, Context, ArtifactsByState, Finished>
+  States,
+  Context,
+  ArtifactsByState,
+  Finished,
+  Failed
 >;
 
-type RunStep<
+type RuntimeHandlers<
+  States extends string,
+  Context,
+  ArtifactsByState extends Record<States, unknown>,
+  Finished,
+  Failed,
+> = Partial<
+  Record<
+    States,
+    RuntimeHandler<States, Context, ArtifactsByState, Finished, Failed>
+  >
+>;
+
+type Actions<
   States extends string,
   ArtifactsByState extends Record<States, unknown>,
-> = StateMachineTransition<States, ArtifactsByState>;
+  Finished,
+  Failed,
+> = {
+  readonly transition: StateMachineTransitionFunction<States, ArtifactsByState>;
+  readonly finish: StateMachineFinishFunction<Finished>;
+  readonly fail: StateMachineFailFunction<Failed>;
+};
 
-/** Creates an embeddable in-memory runner for typed agent-core state transitions. */
+type HandlerCall =
+  | { readonly type: 'returned'; readonly action: unknown }
+  | { readonly type: 'threw'; readonly cause: unknown };
+
+/** Creates a reusable definition whose run state is isolated to each call. */
 export const createStateMachine = <
   States extends string,
   Context,
   ArtifactsByState extends Record<States, unknown>,
   Finished = void,
+  Failed = never,
 >(
-  context: Context,
-): StateMachine<States, Context, ArtifactsByState, Finished> => {
-  const handlers: HandlerMap<States, Context, ArtifactsByState, Finished> =
-    new Map();
-  const transitionListeners: StateMachineTransitionListener<States>[] = [];
-  const errorListeners: StateMachineErrorListener<
-    States,
-    ArtifactsByState
-  >[] = [];
-  const finishListeners: StateMachineFinishListener<
+  handlers: StateMachineHandlers<
     States,
     Context,
-    Finished
-  >[] = [];
+    ArtifactsByState,
+    Finished,
+    Failed
+  >,
+): StateMachineDefinition<
+  States,
+  Context,
+  ArtifactsByState,
+  Finished,
+  Failed
+> => {
+  const runtimeHandlers = { ...handlers } as RuntimeHandlers<
+    States,
+    Context,
+    ArtifactsByState,
+    Finished,
+    Failed
+  >;
+  const actions = createActions<States, ArtifactsByState, Finished, Failed>();
 
-  let currentStatus: StateMachineStatus = 'idle';
-  let currentResult:
-    | StateMachineResult<States, Context, Finished>
-    | undefined;
+  return {
+    run: (input) => execute(input, runtimeHandlers, actions),
+  };
+};
 
-  const dispatchAction = <State extends States>(
-    state: State,
-    artifacts: ArtifactsByState[State],
-  ): StateMachineTransition<States, ArtifactsByState> => ({
-    type: 'transition',
-    state,
-    artifacts,
-  });
+const createActions = <
+  States extends string,
+  ArtifactsByState extends Record<States, unknown>,
+  Finished,
+  Failed,
+>(): Actions<States, ArtifactsByState, Finished, Failed> => {
+  const transition: StateMachineTransitionFunction<States, ArtifactsByState> = (
+    ...args: StateMachineTransitionArguments<States, ArtifactsByState>
+  ) => {
+    const [state, artifacts] = args;
 
-  const finishAction = (value?: Finished): StateMachineFinish<Finished> => ({
+    return {
+      type: 'transition',
+      state,
+      artifacts,
+    } as StateMachineTransition<States, ArtifactsByState>;
+  };
+  const finish: StateMachineFinishFunction<Finished> = (value) => ({
     type: 'finish',
     value,
   });
+  const fail: StateMachineFailFunction<Failed> = (error) => ({
+    type: 'fail',
+    error,
+  });
 
-  const failBeforeRun = (code: 'concurrent_dispatch' | 'terminal_dispatch') => {
-    const message =
-      code === 'concurrent_dispatch'
-        ? 'State machine is already running.'
-        : 'State machine has already reached a terminal state.';
+  return { transition, finish, fail };
+};
 
-    throw stateMachineError<States>(code, message);
-  };
+const execute = async <
+  States extends string,
+  Context,
+  ArtifactsByState extends Record<States, unknown>,
+  Finished,
+  Failed,
+>(
+  input: StateMachineRunInput<States, Context, ArtifactsByState>,
+  handlers: RuntimeHandlers<
+    States,
+    Context,
+    ArtifactsByState,
+    Finished,
+    Failed
+  >,
+  actions: Actions<States, ArtifactsByState, Finished, Failed>,
+): Promise<StateMachineResult<States, Context, Finished, Failed>> => {
+  let step = initialStep(input);
 
-  const recover = async (
-    error: StateMachineErrorObject<States>,
-  ): Promise<StateMachineTransition<States, ArtifactsByState> | undefined> => {
-    for (const listener of errorListeners) {
-      try {
-        const action = await listener(error, dispatchAction);
+  while (true) {
+    const state = step.state;
+    const handler = ownHandler(handlers, state);
 
-        if (action !== undefined) {
-          return isTransition<States, ArtifactsByState>(action)
-            ? action
-            : Promise.reject(
-                stateMachineError(
-                  'invalid_handler_return',
-                  'Error listener returned an invalid transition action.',
-                  error.data.state,
-                ),
-              );
-        }
-      } catch (cause) {
-        return Promise.reject(
-          stateMachineError(
-            'error_listener_failed',
-            'Error listener failed while handling a state-machine error.',
-            error.data.state,
-            cause,
-          ),
-        );
-      }
+    if (handler === undefined) {
+      return engineError(
+        issue(
+          'missing_handler',
+          `No state handler defined for: ${state}`,
+          state,
+        ),
+        input.context,
+      );
     }
 
-    return undefined;
-  };
+    const call = await callHandler(handler, step.artifacts, {
+      context: input.context,
+      state,
+      ...actions,
+    });
 
-  const emitTransition = (from: States, to: States) => {
-    transitionListeners.forEach((listener) => listener(from, to));
-  };
+    if (call.type === 'threw') {
+      return engineError(
+        issue('handler_failed', `State handler failed: ${state}`, state),
+        input.context,
+        { cause: call.cause },
+      );
+    }
 
-  const run = async (
-    initial: RunStep<States, ArtifactsByState>,
-  ): Promise<StateMachineResult<States, Context, Finished>> => {
-    let step = initial;
-
-    while (true) {
-      const state = step.state;
-      const handler = handlers.get(state);
-
-      if (handler === undefined) {
-        const error = stateMachineError(
-          'missing_handler',
-          `No state handler registered for: ${state}`,
-          state,
-        );
-        const recovered = await recover(error);
-
-        if (recovered !== undefined) {
-          emitTransition(state, recovered.state);
-          step = recovered;
-          continue;
-        }
-
-        return commitError(error, state);
-      }
-
-      let action: unknown;
-
-      try {
-        action = await handler(step.artifacts, {
-          context,
-          state,
-          dispatch: dispatchAction,
-          finish: finishAction,
-        });
-      } catch (cause) {
-        const error = stateMachineError(
-          'handler_failed',
-          `State handler failed: ${state}`,
-          state,
-          cause,
-        );
-        const recovered = await recover(error);
-
-        if (recovered !== undefined) {
-          emitTransition(state, recovered.state);
-          step = recovered;
-          continue;
-        }
-
-        return commitError(error, state);
-      }
-
-      if (!isAction<States, ArtifactsByState, Finished>(action)) {
-        const error = stateMachineError(
+    if (!isAction<States, ArtifactsByState, Finished, Failed>(call.action)) {
+      return engineError(
+        issue(
           'invalid_handler_return',
           `State handler returned an invalid action: ${state}`,
           state,
-        );
-        const recovered = await recover(error);
-
-        if (recovered !== undefined) {
-          emitTransition(state, recovered.state);
-          step = recovered;
-          continue;
-        }
-
-        return commitError(error, state);
-      }
-
-      if (action.type === 'finish') {
-        return commitFinish(action, state);
-      }
-
-      emitTransition(state, action.state);
-      step = action;
+        ),
+        input.context,
+      );
     }
-  };
 
-  const commitFinish = (
-    action: StateMachineFinish<Finished>,
-    state: States,
-  ): StateMachineResult<States, Context, Finished> => {
-    const result = {
-      status: 'finished',
-      value: action.value,
-      state,
-      context,
-    } as const;
-
-    currentStatus = 'finished';
-    currentResult = result;
-    finishListeners.forEach((listener) => listener(result));
-
-    return result;
-  };
-
-  const commitError = (
-    error: StateMachineErrorObject<States>,
-    state: States,
-  ): StateMachineResult<States, Context, Finished> => {
-    const result = {
-      status: 'error',
-      error,
-      state,
-      context,
-    } as const;
-
-    currentStatus = 'error';
-    currentResult = result;
-
-    return result;
-  };
-
-  const machine: StateMachine<States, Context, ArtifactsByState, Finished> = {
-    register(state, handler) {
-      if (handlers.has(state)) {
-        throw stateMachineError(
-          'duplicate_state_registration',
-          `State handler already registered for: ${state}`,
-          state,
-        );
-      }
-
-      handlers.set(
+    if (call.action.type === 'finish') {
+      return {
+        status: 'finished',
+        value: call.action.value,
         state,
-        handler as StateMachineHandler<
-          States,
-          States,
-          Context,
-          ArtifactsByState,
-          Finished
-        >,
-      );
-
-      return machine;
-    },
-    async dispatch(state, artifacts) {
-      if (currentStatus === 'running') {
-        failBeforeRun('concurrent_dispatch');
-      }
-
-      if (currentStatus === 'finished' || currentStatus === 'error') {
-        failBeforeRun('terminal_dispatch');
-      }
-
-      currentStatus = 'running';
-
-      try {
-        return await run(dispatchAction(state, artifacts));
-      } catch (cause) {
-        const error =
-          cause instanceof StateMachineErrorObject
-            ? cause
-            : stateMachineError(
-                'handler_failed',
-                'State-machine run failed.',
-                state,
-                cause,
-              );
-
-        return commitError(error, error.data.state ?? state);
-      }
-    },
-    on(event, listener) {
-      const listeners = listenersFor(
-        event,
-        transitionListeners,
-        errorListeners,
-        finishListeners,
-      );
-
-      listeners.push(listener as never);
-
-      return () => {
-        const index = listeners.indexOf(listener as never);
-
-        if (index >= 0) {
-          listeners.splice(index, 1);
-        }
+        context: input.context,
       };
-    },
-    isDone: () => currentStatus === 'finished' || currentStatus === 'error',
-    status: () => currentStatus,
-    result: () => currentResult,
-  };
+    }
 
-  return machine;
+    if (call.action.type === 'fail') {
+      return {
+        status: 'failed',
+        error: call.action.error,
+        state,
+        context: input.context,
+      };
+    }
+
+    step = call.action;
+  }
 };
+
+const initialStep = <
+  States extends string,
+  Context,
+  ArtifactsByState extends Record<States, unknown>,
+>(
+  input: StateMachineRunInput<States, Context, ArtifactsByState>,
+): StateMachineTransition<States, ArtifactsByState> =>
+  ({
+    type: 'transition',
+    state: input.state,
+    artifacts: input.artifacts,
+  }) as StateMachineTransition<States, ArtifactsByState>;
+
+const ownHandler = <
+  States extends string,
+  Context,
+  ArtifactsByState extends Record<States, unknown>,
+  Finished,
+  Failed,
+>(
+  handlers: RuntimeHandlers<
+    States,
+    Context,
+    ArtifactsByState,
+    Finished,
+    Failed
+  >,
+  state: States,
+):
+  | RuntimeHandler<States, Context, ArtifactsByState, Finished, Failed>
+  | undefined =>
+  Object.prototype.hasOwnProperty.call(handlers, state) &&
+  typeof handlers[state] === 'function'
+    ? handlers[state]
+    : undefined;
+
+const callHandler = async <
+  States extends string,
+  Context,
+  ArtifactsByState extends Record<States, unknown>,
+  Finished,
+  Failed,
+>(
+  handler: RuntimeHandler<States, Context, ArtifactsByState, Finished, Failed>,
+  artifacts: ArtifactsByState[States],
+  scope: StateMachineHandlerScope<
+    States,
+    States,
+    Context,
+    ArtifactsByState,
+    Finished,
+    Failed
+  >,
+): Promise<HandlerCall> => {
+  try {
+    return { type: 'returned', action: await handler(artifacts, scope) };
+  } catch (cause) {
+    return { type: 'threw', cause };
+  }
+};
+
+const issue = <States extends string>(
+  code: StateMachineErrorCode,
+  message: string,
+  state: States,
+): StateMachineErrorData<States> => ({ code, message, state });
+
+const engineError = <States extends string, Context>(
+  data: StateMachineErrorData<States>,
+  context: Context,
+  options?: ErrorOptions,
+): StateMachineErrorResult<States, Context> => ({
+  status: 'error',
+  error: new StateMachineError(data, options),
+  state: data.state,
+  context,
+});
 
 const isTransition = <
   States extends string,
@@ -320,34 +297,27 @@ const isTransition = <
 
 const isFinish = <Finished>(
   value: unknown,
-): value is StateMachineFinish<Finished> =>
-  isRecord(value) && value.type === 'finish' && 'value' in value;
+): value is {
+  readonly type: 'finish';
+  readonly value: Finished | undefined;
+} => isRecord(value) && value.type === 'finish' && 'value' in value;
+
+const isFail = <Failed>(
+  value: unknown,
+): value is {
+  readonly type: 'fail';
+  readonly error: Failed;
+} => isRecord(value) && value.type === 'fail' && 'error' in value;
 
 const isAction = <
   States extends string,
   ArtifactsByState extends Record<States, unknown>,
   Finished,
+  Failed,
 >(
   value: unknown,
-): value is StateMachineAction<States, ArtifactsByState, Finished> =>
-  isTransition(value) || isFinish(value);
+): value is StateMachineAction<States, ArtifactsByState, Finished, Failed> =>
+  isTransition(value) || isFinish<Finished>(value) || isFail<Failed>(value);
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
-
-const listenersFor = (
-  event: 'transition' | 'error' | 'finish',
-  transitionListeners: unknown[],
-  errorListeners: unknown[],
-  finishListeners: unknown[],
-): unknown[] => {
-  if (event === 'transition') {
-    return transitionListeners;
-  }
-
-  if (event === 'error') {
-    return errorListeners;
-  }
-
-  return finishListeners;
-};

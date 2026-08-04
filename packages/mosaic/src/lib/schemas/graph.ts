@@ -1,5 +1,5 @@
 import * as z from 'zod';
-import { validateGraphSchema } from './validations.js';
+import { validateGraphSchema } from './graph-validations.js';
 
 /**
  * Validation schema for one goal node.

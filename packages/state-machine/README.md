@@ -1,62 +1,73 @@
 # state-machine
 
-Typed in-memory state-machine control flow for the TypeScript agent core.
+Typed, reusable state-machine definitions for the TypeScript agent core.
 
 ```ts
 import { createStateMachine } from 'state-machine';
 
 type State = 'draft' | 'review' | 'complete';
+type Context = {
+  readonly cancelled: boolean;
+};
 type Artifacts = {
-  draft: { prompt: string };
-  review: { summary: string };
-  complete: { answer: string };
+  readonly draft: { readonly prompt: string };
+  readonly review: { readonly summary: string };
+  readonly complete: { readonly answer: string };
+};
+type Failure = {
+  readonly code: 'cancelled';
 };
 
-const machine = createStateMachine<State, { runId: string }, Artifacts, string>({
-  runId: 'run_1',
+const definition = createStateMachine<
+  State,
+  Context,
+  Artifacts,
+  string,
+  Failure
+>({
+  draft: async (artifacts, { transition }) =>
+    transition('review', { summary: artifacts.prompt.trim() }),
+  review: (artifacts, { context, transition, fail }) =>
+    context.cancelled
+      ? fail({ code: 'cancelled' })
+      : transition('complete', { answer: artifacts.summary }),
+  complete: (artifacts, { finish }) => finish(artifacts.answer),
 });
 
-machine
-  .register('draft', async (artifacts, { dispatch }) =>
-    dispatch('review', { summary: artifacts.prompt.trim() }),
-  )
-  .register('review', (artifacts, { dispatch }) =>
-    dispatch('complete', { answer: artifacts.summary }),
-  )
-  .register('complete', (artifacts, { finish }) => finish(artifacts.answer));
-
-machine.on('transition', (from, to) => {
-  console.log(`${from} -> ${to}`);
+const result = await definition.run({
+  context: { cancelled: false },
+  state: 'draft',
+  artifacts: { prompt: 'hello' },
 });
-
-machine.on('error', (error, dispatch) => {
-  if (error.data.code === 'handler_failed') {
-    return dispatch('complete', { answer: 'recovered' });
-  }
-});
-
-const result = await machine.dispatch('draft', { prompt: 'hello' });
 ```
 
-`createStateMachine` stores handlers and listeners in memory only. It does not
-persist state, run external services, or provide a workflow framework. Public
-`dispatch(state, artifacts)` starts one run at a time, and the artifact payload
-is checked against the state-specific artifact map at compile time.
+The handler map is exhaustive. Each handler receives artifacts for its own
+state and a scope containing exactly `context`, `state`, `transition`,
+`finish`, and `fail`. Both initial run artifacts and transition artifacts are
+correlated with their state at compile time.
 
-Handlers return either `dispatch(nextState, artifacts)` to continue or
-`finish(value?)` to close the run. Initial public dispatch does not emit a
-transition event; handler-returned transitions emit `transition(from, to)`
-before the next handler runs.
+A definition stores only its handler map. Every `run` keeps its context,
+current state, and artifacts local to that call, so the same definition can be
+run repeatedly or concurrently.
 
-Runtime inspection is available through `status()`, `isDone()`, and `result()`.
-Duplicate registrations, concurrent dispatch, dispatch after terminal
-completion, missing handlers, invalid handler returns, and unrecovered handler
-failures use `StateMachineErrorObject`.
+## Results
 
-## Building
+`run` resolves one of three results:
 
-Run `nx build state-machine` to build the library.
+- `status: 'finished'` contains the value passed to `finish`, the terminal
+  state, and the run context.
+- `status: 'failed'` contains the exact domain value passed to `fail`, the
+  terminal state, and the run context.
+- `status: 'error'` contains a `StateMachineError`, the failing state, and the
+  run context.
+
+Engine errors use only `handler_failed`, `invalid_handler_return`, and
+`missing_handler`. A value thrown by a handler is preserved unchanged at
+`result.error.cause` on a `handler_failed` result.
+
+The package is process-local and has no persistence, listeners, recovery
+hooks, or external side effects.
 
 ## Testing
 
-Run `nx test state-machine` to compile and run the package tests.
+Run `npx nx test state-machine` to compile and run the package tests.

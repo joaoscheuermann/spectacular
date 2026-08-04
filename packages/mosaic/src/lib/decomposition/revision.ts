@@ -1,9 +1,9 @@
-import { LlmProvider } from 'llms';
-import { Logger } from 'pino';
-import * as revisionPrompt from '../../prompts/revision/index.js';
-import { StrictGraphSchema } from '../../schemas/graph/index.js';
-import { Graph } from '../../types/graph.js';
-import { SkillExtraction } from '../../types/hint.js';
+import type { LlmProvider } from 'llms';
+import type { Logger } from 'pino';
+import * as revisionPrompt from '../prompts/revision.js';
+import { StrictGraphSchema } from '../schemas/graph.js';
+import type { Graph } from '../types/graph.js';
+import type { SkillExtraction } from '../types/hint.js';
 
 interface DecomposeContext {
   provider: LlmProvider;

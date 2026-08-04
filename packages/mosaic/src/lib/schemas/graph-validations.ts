@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { GraphSchema } from './index.js'; // Assuming your schemas are here
+import { GraphSchema } from './graph.js';
 
 export interface ValidationResult {
   success: boolean;
