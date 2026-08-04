@@ -1,16 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { ProviderErrorObject, type LlmProvider } from '../src/index.js';
 import {
-  ProviderErrorObject,
   createCodexProvider,
   createLmStudioOpenAiProvider,
   createLmStudioProvider,
   createOpenAiProvider,
   createOpenRouterProvider,
-  type LlmProvider,
-} from '../src/index.js';
-import { fakeTransport, response } from './fakes.js';
+  fakeTransport,
+  response,
+} from './fakes.js';
 
 type CompatibleProvider = {
   readonly name: string;
@@ -123,12 +123,14 @@ test('rejects OpenAI embedding requests without a model or input before networki
   await assert.rejects(
     provider.embedding({ model: ' ', input: 'A short document.' }),
     (error: unknown) =>
-      error instanceof ProviderErrorObject && error.data.code === 'missing_model',
+      error instanceof ProviderErrorObject &&
+      error.data.code === 'missing_model',
   );
   await assert.rejects(
     provider.embedding({ model: 'text-embedding-3-small', input: '' }),
     (error: unknown) =>
-      error instanceof ProviderErrorObject && error.data.code === 'missing_input',
+      error instanceof ProviderErrorObject &&
+      error.data.code === 'missing_input',
   );
   assert.equal(transport.requests.length, 0);
 });

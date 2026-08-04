@@ -2,16 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { z } from 'zod';
 
-import {
-  ProviderErrorObject,
-  createCodexProvider,
-  type LlmDebugRecord,
-  type ProviderStreamEvent,
-} from '../src/index.js';
-import { collect, fakeTransport } from './fakes.js';
+import { ProviderErrorObject, type ProviderStreamEvent } from '../src/index.js';
+import { collect, createCodexProvider, fakeTransport } from './fakes.js';
 
 test('sends Codex ChatGPT account headers to the Codex backend', async () => {
-  const debugRecords: LlmDebugRecord[] = [];
   const transport = fakeTransport({
     streams: [
       [
@@ -32,11 +26,6 @@ test('sends Codex ChatGPT account headers to the Codex backend', async () => {
     authorization: 'Bearer codex-token',
     chatGptAccountId: 'acct_123',
     fedramp: true,
-    debugLogger: {
-      async log(record): Promise<void> {
-        debugRecords.push(record);
-      },
-    },
   });
 
   const result = await provider.complete({
@@ -68,14 +57,6 @@ test('sends Codex ChatGPT account headers to the Codex backend', async () => {
     'acct_123',
   );
   assert.equal(transport.requests[0]?.headers?.['X-OpenAI-Fedramp'], 'true');
-  assert.equal(
-    debugRecords.find((record) => record.event === 'http.request')?.provider,
-    'codex',
-  );
-  assert.equal(
-    debugRecords.find((record) => record.event === 'response.finish')?.provider,
-    'codex',
-  );
 });
 
 test('allows overriding the Codex backend base URL', async () => {

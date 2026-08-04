@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createTool, createToolStorage } from 'tools';
+import { createToolStorage, defineTool } from 'tool';
 import { z } from 'zod';
 
 import { ProviderErrorObject, openAiBody } from '../src/index.js';
@@ -390,12 +390,12 @@ test('maps nested optional structured output properties to required schema prope
 
 test('accepts tool definitions from shared tool storage', () => {
   const tools = createToolStorage([
-    createTool({
+    defineTool({
       name: 'lookup',
       description: 'Lookup context',
       schema: z.object({ query: z.string() }),
-      execute: ({ query }) => query,
-    }),
+      execute: (_sandbox, { query }) => query,
+    })(undefined as never),
   ]);
 
   const body = openAiBody(

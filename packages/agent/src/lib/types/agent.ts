@@ -12,7 +12,7 @@ import type {
   UsageMetadata,
 } from 'llms';
 import type { MessageStorage } from 'messages';
-import type { ToolCall, ToolStorage } from 'tools';
+import type { ToolCall, ToolStorage } from 'tool';
 
 export type AgentOptions = {
   readonly provider: LlmProvider;

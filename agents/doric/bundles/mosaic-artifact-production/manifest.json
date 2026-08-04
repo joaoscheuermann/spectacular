@@ -1,5 +1,0 @@
-{
-  "name": "mosaic-artifact-production",
-  "description": "Technical writing and artifact-persistence skills for README files, ADRs, changelogs, new files, append-only updates, and explicit overwrites.",
-  "version": "0.1.0"
-}

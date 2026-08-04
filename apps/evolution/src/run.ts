@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 
+import type { Logger } from 'pino';
 import { createCompletionFor, type CompletionFor } from './completion.js';
 import { loadConfig } from './config.js';
 import { evolveModels, type TargetResult } from './evolve.js';
@@ -36,7 +37,8 @@ export type RunSummary = {
   }[];
 };
 
-type RunDependencies = {
+export type RunDependencies = {
+  readonly logger: Logger;
   readonly completionFactory?: (config: EvolutionConfig) => CompletionFor;
   readonly progress?: Progress;
   readonly warn?: (message: string) => void;
@@ -162,7 +164,7 @@ const matchingHistory = async (
 /** Executes one assertion-based evolution run and returns a body-free summary. */
 export const runEvolution = async (
   options: RunOptions,
-  dependencies: RunDependencies = {},
+  dependencies: RunDependencies,
 ): Promise<RunSummary> => {
   const configPath = resolve(options.config);
   const root = dirname(configPath);
@@ -178,7 +180,8 @@ export const runEvolution = async (
     scenarios,
   );
   const completeFor =
-    dependencies.completionFactory?.(config) ?? createCompletionFor(config);
+    dependencies.completionFactory?.(config) ??
+    createCompletionFor(config, { logger: dependencies.logger });
   const targets = await evolveModels(
     config,
     originalPrompt,

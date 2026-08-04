@@ -19,7 +19,7 @@
       "path": "../messages/tsconfig.lib.json"
     },
     {
-      "path": "../tools/tsconfig.lib.json"
+      "path": "../tool/tsconfig.lib.json"
     }
   ]
 }

@@ -3,12 +3,8 @@ import test from 'node:test';
 
 import { z } from 'zod';
 
-import {
-  ProviderErrorObject,
-  createOpenRouterProvider,
-  openRouterBody,
-} from '../src/index.js';
-import { fakeTransport, response } from './fakes.js';
+import { ProviderErrorObject, openRouterBody } from '../src/index.js';
+import { createOpenRouterProvider, fakeTransport, response } from './fakes.js';
 
 test('maps OpenRouter chat completions DTO with messages tools and reasoning', () => {
   const body = openRouterBody(

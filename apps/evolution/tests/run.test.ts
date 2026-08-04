@@ -11,11 +11,14 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import pino from 'pino';
 
 import type { CompletionFor } from '../src/completion.js';
 import { runEvolution } from '../src/run.js';
 import { compressionSystemPrompt } from '../src/prompts.js';
 import { fakeCompletion, judgment, validConfig } from './fakes.js';
+
+const logger = pino({ enabled: false });
 
 const workspace = async () => {
   const root = await mkdtemp(join(tmpdir(), 'evolution-run-'));
@@ -61,7 +64,7 @@ test('writes approved prompt and append-only training history without scenario w
   const optimizerInputs: string[] = [];
   const summary = await runEvolution(
     { config: configPath, dryRun: false },
-    { completionFactory: () => completions(optimizerInputs) },
+    { logger, completionFactory: () => completions(optimizerInputs) },
   );
   assert.equal(summary.targets[0]?.approved, true);
   assert.equal(
@@ -84,7 +87,7 @@ test('dry run reads providers but performs no prompt or history writes', async (
   const { root, configPath } = await workspace();
   await runEvolution(
     { config: configPath, dryRun: true },
-    { completionFactory: () => completions([]) },
+    { logger, completionFactory: () => completions([]) },
   );
   await assert.rejects(access(join(root, 'model')));
 });
@@ -105,6 +108,7 @@ test('rejects an incomplete suite before constructing completions', async () => 
     runEvolution(
       { config: configPath, dryRun: true },
       {
+        logger,
         completionFactory: () => {
           factories += 1;
           return completions([]);
@@ -127,7 +131,7 @@ test('preflights an approved prompt path before appending terminal history', asy
   await assert.rejects(
     runEvolution(
       { config: configPath, dryRun: false },
-      { completionFactory: () => completions([]) },
+      { logger, completionFactory: () => completions([]) },
     ),
     /targets failed/,
   );
@@ -174,7 +178,7 @@ test('isolates malformed target history and persists unaffected targets', async 
   await assert.rejects(
     runEvolution(
       { config: configPath, dryRun: false },
-      { completionFactory: () => completeFor },
+      { logger, completionFactory: () => completeFor },
     ),
     /targets failed/,
   );

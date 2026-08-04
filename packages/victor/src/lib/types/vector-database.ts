@@ -1,3 +1,5 @@
+import type { Logger } from 'pino';
+
 /** Generates a vector for text. */
 export type Embedding = (data: string) => Promise<ReadonlyArray<number>>;
 
@@ -5,6 +7,7 @@ export type Embedding = (data: string) => Promise<ReadonlyArray<number>>;
 export type VectorDatabaseOptions = {
   readonly dimensions: number;
   readonly embedding: Embedding;
+  readonly logger: Logger;
 };
 
 /** One cosine-similarity match returned by a search. */

@@ -1,5 +1,6 @@
+import type { Logger } from 'pino';
+
 import { ProviderErrorObject } from '../classes/provider-error.js';
-import type { LlmDebugLogger } from '../debug.js';
 import type { HttpTransport } from '../types/http.js';
 import type {
   JsonValue,
@@ -8,7 +9,6 @@ import type {
   ProviderCapabilities,
   ProviderEmbeddingRequest,
   ProviderFinished,
-  ProviderId,
   ProviderMetadata,
   ProviderRequest,
   ProviderRerankRequest,
@@ -30,6 +30,7 @@ import {
   parseEmbedding,
   parseRerank,
   parseJsonBody,
+  parseStructuredOutput,
   requireEmbeddingInput,
   requireRerankInput,
   requireRequestInput,
@@ -37,7 +38,6 @@ import {
 } from './common.js';
 import { authorization, type SecretSource } from './openai/auth.js';
 import { openAiBody } from './openai/body.js';
-import { parseStructuredOutputWithDebug } from './openai/debug.js';
 import {
   createTextSnapshots,
   parseFinished,
@@ -46,6 +46,7 @@ import {
   streamText,
 } from './openai/parse.js';
 import { parseSseEvents } from '../utils/sse.js';
+import { withProviderLogging } from './logging.js';
 
 export type { SecretSource } from './openai/auth.js';
 export { openAiBody } from './openai/body.js';
@@ -55,8 +56,7 @@ export type OpenAiProviderDeps = {
   readonly apiKey?: SecretSource;
   readonly authorization?: SecretSource;
   readonly baseUrl?: string;
-  readonly debugLogger?: LlmDebugLogger;
-  readonly debugProviderId?: ProviderId;
+  readonly logger: Logger;
 };
 
 export const openAiMetadata: ProviderMetadata = {
@@ -77,10 +77,13 @@ export const openAiCapabilities: ProviderCapabilities = {
   structuredOutputs: true,
 };
 
-export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
+export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider =>
+  withProviderLogging(createOpenAiProviderCore(deps), deps.logger);
+
+export const createOpenAiProviderCore = (
+  deps: Omit<OpenAiProviderDeps, 'logger'>,
+): LlmProvider => {
   const baseUrl = deps.baseUrl ?? openAiMetadata.baseUrl;
-  const logger = deps.debugLogger;
-  const debugProvider = deps.debugProviderId ?? 'openai';
 
   const send = async (
     request: ProviderRequest<unknown>,
@@ -99,16 +102,6 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
       },
       body: JSON.stringify(body),
       signal: request.signal,
-    });
-
-    await logger?.log({
-      provider: debugProvider,
-      target: 'responses',
-      event: 'http.response',
-      fields: {
-        status: response.status,
-        ...(sensitiveOutput ? {} : { body: response.body }),
-      },
     });
 
     if (response.status >= 400) {
@@ -136,19 +129,10 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
   ): Promise<ProviderFinished<Output>> {
     requireRequestInput('openai', request);
     const body = openAiBody(request, false);
-    await logger?.log({
-      provider: debugProvider,
-      target: 'responses',
-      event: 'http.request',
-      fields: { body },
-    });
-
-    return parseStructuredOutputWithDebug(
-      logger,
-      debugProvider,
+    return parseStructuredOutput(
+      'openai',
       request,
       parseFinished(await send(request, body)),
-      'complete',
     );
   }
 
@@ -169,12 +153,6 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
       const refusals: string[] = [];
       const textSnapshots = createTextSnapshots();
       const calls = new Map<number, ProviderToolCall>();
-      await logger?.log({
-        provider: debugProvider,
-        target: 'responses',
-        event: 'http.request',
-        fields: { body },
-      });
       const auth = await authorization(deps);
 
       yield {
@@ -205,12 +183,6 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
         try {
           payload = parseJsonBody('openai', event.data, sensitiveOutput);
         } catch {
-          await logger?.log({
-            provider: debugProvider,
-            target: 'responses',
-            event: 'stream.event.invalid_json',
-            fields: sensitiveOutput ? {} : { data: event.data },
-          });
           yield streamErrorEvent(
             'openai',
             'malformed_stream_event',
@@ -241,16 +213,9 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
         }
 
         if (payload.type === 'response.completed') {
-          await logger?.log({
-            provider: debugProvider,
-            target: 'responses',
-            event: 'stream.response.completed',
-            fields: sensitiveOutput ? {} : { payload },
-          });
           const response = recordField(payload, 'response') ?? payload;
-          const finish = await parseStructuredOutputWithDebug(
-            logger,
-            debugProvider,
+          const finish = parseStructuredOutput(
+            'openai',
             request,
             parseFinished(
               response,
@@ -259,7 +224,6 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
               refusals.join('') || undefined,
               [...calls.values()],
             ),
-            'stream',
             false,
           );
           const usage = finish.usage;
@@ -273,12 +237,6 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
         }
 
         if (payload.type === 'response.failed') {
-          await logger?.log({
-            provider: debugProvider,
-            target: 'responses',
-            event: 'stream.response.failed',
-            fields: sensitiveOutput ? {} : { payload },
-          });
           yield streamErrorEvent(
             'openai',
             'provider_error',
@@ -292,9 +250,8 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
 
       yield {
         type: 'response.finished',
-        finish: await parseStructuredOutputWithDebug(
-          logger,
-          debugProvider,
+        finish: parseStructuredOutput(
+          'openai',
           request,
           {
             text: streamText(text, textSnapshots) ?? '',
@@ -303,7 +260,6 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
             finishReason: 'unknown',
             toolCalls: [...calls.values()],
           },
-          'stream_end',
           false,
         ),
       };
@@ -316,12 +272,6 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
       const auth = await authorization(deps);
       const sensitiveOutput = request.flags?.sensitiveOutput === true;
       const body = { model: request.model, input: request.input };
-      await logger?.log({
-        provider: debugProvider,
-        target: 'embeddings',
-        event: 'http.request',
-        fields: { body },
-      });
       const response = await deps.transport.request({
         method: 'POST',
         url: `${baseUrl}/embeddings`,
@@ -333,16 +283,6 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
         body: JSON.stringify(body),
         signal: request.signal,
       });
-      await logger?.log({
-        provider: debugProvider,
-        target: 'embeddings',
-        event: 'http.response',
-        fields: {
-          status: response.status,
-          ...(sensitiveOutput ? {} : { body: response.body }),
-        },
-      });
-
       if (response.status >= 400) {
         throw httpError(
           'openai',
@@ -370,12 +310,6 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
         documents: request.documents,
         ...(request.topN === undefined ? {} : { top_n: request.topN }),
       };
-      await logger?.log({
-        provider: debugProvider,
-        target: 'rerank',
-        event: 'http.request',
-        fields: { body },
-      });
       const response = await deps.transport.request({
         method: 'POST',
         url: `${baseUrl}/rerank`,
@@ -387,16 +321,6 @@ export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider => {
         body: JSON.stringify(body),
         signal: request.signal,
       });
-      await logger?.log({
-        provider: debugProvider,
-        target: 'rerank',
-        event: 'http.response',
-        fields: {
-          status: response.status,
-          ...(sensitiveOutput ? {} : { body: response.body }),
-        },
-      });
-
       if (response.status >= 400) {
         throw httpError(
           'openai',

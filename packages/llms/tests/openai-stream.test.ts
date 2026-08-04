@@ -3,8 +3,8 @@ import test from 'node:test';
 
 import { z } from 'zod';
 
-import { createOpenAiProvider, type ProviderStreamEvent } from '../src/index.js';
-import { collect, fakeTransport } from './fakes.js';
+import { type ProviderStreamEvent } from '../src/index.js';
+import { collect, createOpenAiProvider, fakeTransport } from './fakes.js';
 
 test('streams OpenAI requests without an authorization header when credentials are omitted', async () => {
   const transport = fakeTransport({
@@ -33,7 +33,10 @@ test('streams OpenAI requests without an authorization header when credentials a
 
   assert.equal(events[0]?.type, 'response.started');
   assert.equal(events.at(-1)?.type, 'response.finished');
-  assert.equal('authorization' in (transport.requests[0]?.headers ?? {}), false);
+  assert.equal(
+    'authorization' in (transport.requests[0]?.headers ?? {}),
+    false,
+  );
 });
 
 test('streams OpenAI text reasoning usage finish and tool calls', async () => {

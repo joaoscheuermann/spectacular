@@ -1,8 +1,5 @@
-import type { SandboxSession } from 'sandbox';
-
 export type OkfToolOptions = {
   readonly workspaceRoot: string;
-  readonly sandbox: SandboxSession;
 };
 
 export type OkfSearchResult = {

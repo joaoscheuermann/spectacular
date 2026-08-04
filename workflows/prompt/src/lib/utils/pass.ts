@@ -1,7 +1,7 @@
 import { createAgent } from 'agent';
 import type { StructuredOutputSchema, StructuredOutputValue } from 'llms';
 import { createMessageStorage } from 'messages';
-import type { ToolStorage } from 'tools';
+import type { ToolStorage } from 'tool';
 
 import type {
   PromptArtifact,

@@ -1,6 +1,6 @@
 import { posix as path } from 'node:path';
 
-import type { SandboxSession } from 'sandbox';
+import type { Sandbox } from 'sandbox';
 
 import {
   isForbiddenAbsolutePath,
@@ -10,7 +10,7 @@ import {
 
 export type ExplorationOptions = {
   readonly workspaceRoot: string;
-  readonly sandbox: SandboxSession;
+  readonly sandbox: Sandbox;
 };
 
 export type PathKind = 'directory' | 'file' | 'missing' | 'other';

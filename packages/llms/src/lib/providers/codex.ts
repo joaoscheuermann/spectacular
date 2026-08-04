@@ -1,5 +1,6 @@
+import type { Logger } from 'pino';
+
 import { ProviderErrorObject } from '../classes/provider-error.js';
-import type { LlmDebugLogger } from '../debug.js';
 import type { HttpRequest, HttpTransport } from '../types/http.js';
 import type {
   JsonValue,
@@ -18,7 +19,8 @@ import type {
   StructuredOutputValue,
 } from '../types/provider.js';
 import { parseStructuredOutput } from './common.js';
-import { createOpenAiProvider, type SecretSource } from './openai.js';
+import { withProviderLogging } from './logging.js';
+import { createOpenAiProviderCore, type SecretSource } from './openai.js';
 
 const codexBaseUrl = 'https://chatgpt.com/backend-api/codex';
 const codexDefaultInstructions = 'You are Codex, a coding agent.';
@@ -29,7 +31,7 @@ export type CodexProviderDeps = {
   readonly chatGptAccountId?: SecretSource;
   readonly fedramp?: boolean;
   readonly baseUrl?: string;
-  readonly debugLogger?: LlmDebugLogger;
+  readonly logger: Logger;
 };
 
 export const codexMetadata: ProviderMetadata = {
@@ -52,12 +54,10 @@ export const codexCapabilities: ProviderCapabilities = {
 
 /** Creates a Codex-authenticated provider over ChatGPT's Codex Responses API. */
 export const createCodexProvider = (deps: CodexProviderDeps): LlmProvider => {
-  const openai = createOpenAiProvider({
+  const openai = createOpenAiProviderCore({
     transport: withCodexHeaders(deps.transport, deps),
     authorization: deps.authorization,
     baseUrl: deps.baseUrl ?? codexBaseUrl,
-    debugLogger: deps.debugLogger,
-    debugProviderId: 'codex',
   });
 
   async function complete<Schema extends StructuredOutputSchema>(
@@ -94,66 +94,69 @@ export const createCodexProvider = (deps: CodexProviderDeps): LlmProvider => {
     }
   }
 
-  return {
-    ...openai,
-    metadata: codexMetadata,
-    capabilities: codexCapabilities,
+  return withProviderLogging(
+    {
+      ...openai,
+      metadata: codexMetadata,
+      capabilities: codexCapabilities,
 
-    complete,
+      complete,
 
-    async *stream<Output = JsonValue>(
-      request: ProviderRequest<Output>,
-    ): AsyncIterable<ProviderStreamEvent<Output>> {
-      try {
-        for await (const event of openai.stream(request)) {
-          yield codexEvent(event);
+      async *stream<Output = JsonValue>(
+        request: ProviderRequest<Output>,
+      ): AsyncIterable<ProviderStreamEvent<Output>> {
+        try {
+          for await (const event of openai.stream(request)) {
+            yield codexEvent(event);
+          }
+        } catch (error) {
+          throw codexError(error);
         }
-      } catch (error) {
-        throw codexError(error);
-      }
-    },
+      },
 
-    async embedding(
-      _request: ProviderEmbeddingRequest,
-    ): Promise<readonly number[]> {
-      throw new ProviderErrorObject({
-        provider: 'codex',
-        code: 'unsupported_embeddings',
-        message: 'Codex provider does not support embeddings.',
-      });
-    },
-
-    async rerank(
-      _request: ProviderRerankRequest,
-    ): Promise<readonly ProviderRerankResult[]> {
-      throw new ProviderErrorObject({
-        provider: 'codex',
-        code: 'unsupported_reranking',
-        message: 'Codex provider does not support reranking.',
-      });
-    },
-
-    async models(signal?: AbortSignal): Promise<readonly Model[]> {
-      try {
-        return (await openai.models(signal)).map((model) => ({
-          ...model,
+      async embedding(
+        _request: ProviderEmbeddingRequest,
+      ): Promise<readonly number[]> {
+        throw new ProviderErrorObject({
           provider: 'codex',
-        }));
-      } catch (error) {
-        throw codexError(error);
-      }
-    },
+          code: 'unsupported_embeddings',
+          message: 'Codex provider does not support embeddings.',
+        });
+      },
 
-    async validateModel(model: string, signal?: AbortSignal): Promise<Model> {
-      try {
-        const found = await openai.validateModel(model, signal);
+      async rerank(
+        _request: ProviderRerankRequest,
+      ): Promise<readonly ProviderRerankResult[]> {
+        throw new ProviderErrorObject({
+          provider: 'codex',
+          code: 'unsupported_reranking',
+          message: 'Codex provider does not support reranking.',
+        });
+      },
 
-        return { ...found, provider: 'codex' };
-      } catch (error) {
-        throw codexError(error);
-      }
+      async models(signal?: AbortSignal): Promise<readonly Model[]> {
+        try {
+          return (await openai.models(signal)).map((model) => ({
+            ...model,
+            provider: 'codex',
+          }));
+        } catch (error) {
+          throw codexError(error);
+        }
+      },
+
+      async validateModel(model: string, signal?: AbortSignal): Promise<Model> {
+        try {
+          const found = await openai.validateModel(model, signal);
+
+          return { ...found, provider: 'codex' };
+        } catch (error) {
+          throw codexError(error);
+        }
+      },
     },
-  };
+    deps.logger,
+  );
 };
 
 const withCodexHeaders = (

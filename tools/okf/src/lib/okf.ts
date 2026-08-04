@@ -1,7 +1,8 @@
 import { Buffer } from 'node:buffer';
 import { posix as path } from 'node:path';
 
-import { createTool as defineTool } from 'tools';
+import type { Sandbox } from 'sandbox';
+import { defineTool } from 'tool';
 import * as YAML from 'yaml';
 import { z } from 'zod';
 
@@ -43,6 +44,7 @@ export const schema = z
   .strict();
 
 type Input = z.output<typeof schema>;
+type Options = OkfToolOptions & { readonly sandbox: Sandbox };
 
 type Concept = Omit<OkfSearchResult, 'contentTruncated' | 'score'> & {
   readonly sourceTruncated: boolean;
@@ -63,11 +65,12 @@ export const createTool = (options: OkfToolOptions) =>
     name: 'okf_search',
     description,
     schema,
-    execute: (input): Promise<OkfSearchOutput> => execute(options, input),
+    execute: (sandbox, input): Promise<OkfSearchOutput> =>
+      execute({ ...options, sandbox }, input),
   });
 
 const execute = async (
-  options: OkfToolOptions,
+  options: Options,
   input: Input,
 ): Promise<OkfSearchOutput> => {
   const query = queryTerms(input.query);
@@ -134,7 +137,7 @@ const missingMessage = (bundle: string | undefined, kind: PathKind): string => {
 };
 
 const listConcepts = async (
-  options: OkfToolOptions,
+  options: Options,
   bundleRoot: string,
   target: string,
 ): Promise<
@@ -166,7 +169,7 @@ const isConceptPath = (bundleRoot: string, file: string): boolean => {
 };
 
 const loadConcept = async (
-  options: OkfToolOptions,
+  options: Options,
   bundleRoot: string,
   file: string,
 ): Promise<LoadResult> => {
@@ -329,10 +332,7 @@ const queryTerms = (
     : { normalized, terms };
 };
 
-const pathKind = async (
-  options: OkfToolOptions,
-  value: string,
-): Promise<PathKind> => {
+const pathKind = async (options: Options, value: string): Promise<PathKind> => {
   const result = await options.sandbox.exec({
     cwd: options.workspaceRoot,
     cmd: [

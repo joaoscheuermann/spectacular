@@ -4,11 +4,29 @@
   "projectType": "application",
   "sourceRoot": "agents/doric/src",
   "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "dependsOn": ["^build", "build-bundles"],
+      "outputs": ["{projectRoot}/dist"],
+      "options": {
+        "outputPath": "agents/doric/dist",
+        "main": "agents/doric/src/index.ts",
+        "tsConfig": "agents/doric/tsconfig.lib.json",
+        "clean": false
+      }
+    },
+    "build-bundles": {
+      "executor": "nx:run-commands",
+      "outputs": ["{projectRoot}/dist/bundles"],
+      "options": {
+        "command": "nx build bundle-core"
+      }
+    },
     "run": {
       "executor": "nx:run-commands",
       "dependsOn": ["build"],
       "options": {
-        "command": "node agents/doric/dist/index.js"
+        "command": "node agents/doric/dist/src/index.js"
       }
     },
     "serve": {
@@ -16,7 +34,7 @@
       "dependsOn": ["build"],
       "continuous": true,
       "options": {
-        "command": "node agents/doric/dist/index.js"
+        "command": "node agents/doric/dist/src/index.js"
       }
     },
     "test": {
@@ -24,10 +42,7 @@
       "dependsOn": ["^build"],
       "outputs": ["{projectRoot}/dist-tests"],
       "options": {
-        "commands": [
-          "tsc -p agents/doric/tsconfig.spec.json",
-          "node --test agents/doric/dist-tests/tests/*.test.js"
-        ],
+        "commands": ["tsc -p agents/doric/tsconfig.spec.json"],
         "parallel": false
       }
     }

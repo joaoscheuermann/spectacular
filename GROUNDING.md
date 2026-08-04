@@ -49,10 +49,20 @@ Doric-owned JSON-RPC session management methods under the `doric/*` namespace.
 Standard A2A JSON-RPC methods remain delegated to the A2A SDK transport
 handler.
 
-Doric loads immediate manifest-marked bundle directories from its configured
-bundle root. It validates skills and tool descriptors within each bundle,
-deduplicates structurally identical cross-bundle tool descriptors, and rejects
-cross-bundle descriptor conflicts.
+Repository-owned executable bundles live as individual Nx packages immediately
+below `/bundles`; each bundle owns its package metadata, TypeScript build, and
+isolated output below `agents/doric/dist/bundles/<name>`. `/bundles/core` owns
+the built-in `edit`, `find`, `grep`, `terminal`, `tree`, `web`, and `write`
+tools. `packages/bundle` owns strict manifest validation and runtime loading.
+Doric loads only immediate bundle directories, in lexical order, from its
+built `dist/bundles` artifact. Manifests explicitly order every resource and
+carry `alwaysAvailable` flags for tools and skills. Runtime tools are compiled
+ESM `.js` default exports created through `packages/tool`; each export is an
+inspectable `ToolFactory` that Doric binds to a sandbox in its composition
+root. Runtime TypeScript is rejected. Skill `allowed-tools` references resolve
+only within their declaring bundle. Bundle, skill, and tool-factory names are
+globally unique, and duplicates are rejected rather than aliased or
+deduplicated.
 
 `apps/cli` is the explicitly requested Node.js command-line host surface for
 interacting with the Doric A2A agent. The CLI is scoped to A2A message
@@ -240,6 +250,15 @@ storage and queries, stores caller values through per-add text transformation,
 and returns original values from cosine-similarity top-K search; it has no
 persistence or provider integration.
 
+`packages/mosaic` owns the incomplete Doric goal workflow: decomposition and
+revision, skill retrieval and reranking, and per-node skill/tool menu
+composition. Its public factory accepts injected provider, logger, model IDs,
+session placeholder, bundle skills and executable tools, and their vector
+databases. `agents/doric` remains the composition root that loads bundles,
+constructs and populates the vector databases, and invokes Mosaic. Mosaic does
+not yet execute nodes or tools; after marking the current ready wave it
+preserves the existing failure when no pending node remains ready.
+
 `models/skillrouter-embedding` is the user-approved Nx/uv conversion utility
 for the pinned SkillRouter checkpoint. Only its export target may fetch
 upstream model bytes. Its `artifact/` directory and ONNX sidecars are ignored,
@@ -270,6 +289,25 @@ creation; later config replacement updates only the stored session config.
 GitHub repository config may include an optional `github.repo.branch` string,
 which is used only when initially cloning a sandbox repository.
 
+`packages/sandpool` owns process-local `SandboxSession` capacity, FIFO leasing,
+background warming, replacement, and disposal. It accepts an injected sandbox
+factory, depends only on the public `sandbox` contract at runtime, never reuses
+released sessions, and has no Docker-specific creation policy or persistence.
+The public `Sandbox` contract contains operational methods only;
+`SandboxSession` adds lifecycle disposal. Doric creates a Docker-backed pool,
+acquires one lease per prompt, binds every bundle tool factory to that shared
+sandbox, releases the lease after success or failure, and disposes the pool on
+process shutdown.
+
+Sandpool, each repository-owned LLM provider, and Victor require an injected
+`pino.Logger` and create their own component child logger. They emit only safe,
+structured `info` operation logs: lifecycle and allowlisted counts/identifiers,
+never prompts, model inputs or outputs, stored values, vectors, credentials,
+URLs, headers, diagnostics, causes, or thrown values. A provider request with
+`flags.sensitiveOutput` emits no provider operational logs. Composition roots
+pass their existing logger to these dependencies; private OKF provider calls
+use a disabled Pino logger.
+
 Doric supports OpenAI, OpenRouter, LM Studio native, LM Studio OpenAI
 compatibility, and Codex as separate provider integrations. LM Studio native
 uses its native REST API at `http://localhost:1234` by default. LM Studio
@@ -295,8 +333,9 @@ the same effort alias. Config parsing rejects models that provide conflicting
 `effort` and `reasoning` values. Provider requests may include top-level
 `effort`, which takes precedence over legacy `flags.reasoning.effort`.
 Provider requests may also set `flags.sensitiveOutput`; repository-owned
-providers then omit model-response bodies, excerpts, diagnostics, and causes
-from debug and error surfaces while preserving the normal completion result.
+providers then suppress operational logs for the call and omit model-response
+bodies, excerpts, diagnostics, and causes from error surfaces while preserving
+the normal completion result.
 Provider requests may set
 `flags.includeStructuredSchemaOnSystemPrompt: true` together with `schema` to
 append one deterministic, collision-safe Markdown system message containing

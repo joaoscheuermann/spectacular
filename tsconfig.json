@@ -16,9 +16,6 @@
       "path": "./packages/llms"
     },
     {
-      "path": "./packages/tools"
-    },
-    {
       "path": "./packages/messages"
     },
     {
@@ -32,27 +29,6 @@
     },
     {
       "path": "./agents/doric"
-    },
-    {
-      "path": "./tools/edit"
-    },
-    {
-      "path": "./tools/find"
-    },
-    {
-      "path": "./tools/grep"
-    },
-    {
-      "path": "./tools/terminal"
-    },
-    {
-      "path": "./tools/tree"
-    },
-    {
-      "path": "./tools/web"
-    },
-    {
-      "path": "./tools/write"
     },
     {
       "path": "./packages/artifacts"
@@ -83,6 +59,21 @@
     },
     {
       "path": "./packages/victor"
+    },
+    {
+      "path": "./packages/bundle"
+    },
+    {
+      "path": "./packages/tool"
+    },
+    {
+      "path": "./packages/mosaic"
+    },
+    {
+      "path": "./bundles/core"
+    },
+    {
+      "path": "./packages/sandpool"
     }
   ]
 }

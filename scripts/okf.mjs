@@ -112,6 +112,7 @@ if (!model) {
   try {
     const provider = createLmStudioProvider({
       transport: createFetchTransport(),
+      logger: pino({ enabled: false }),
     });
     await generate({ provider, model, progress }, ROOT_DIR);
   } catch (error) {

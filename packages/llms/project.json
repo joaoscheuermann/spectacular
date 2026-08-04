@@ -4,12 +4,25 @@
   "projectType": "library",
   "sourceRoot": "packages/llms/src",
   "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["^build"],
+      "outputs": ["{projectRoot}/dist"],
+      "options": {
+        "commands": [
+          "node -e \"require('node:fs').rmSync('packages/llms/dist',{recursive:true,force:true})\"",
+          "tsc -p packages/llms/tsconfig.lib.json"
+        ],
+        "parallel": false
+      }
+    },
     "test": {
       "executor": "nx:run-commands",
       "dependsOn": ["^build"],
       "outputs": ["{projectRoot}/dist-tests"],
       "options": {
         "commands": [
+          "node -e \"require('node:fs').rmSync('packages/llms/dist-tests',{recursive:true,force:true})\"",
           "tsc -p packages/llms/tsconfig.spec.json",
           "node --test packages/llms/dist-tests/tests/*.test.js"
         ],

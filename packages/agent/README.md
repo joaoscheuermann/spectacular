@@ -13,24 +13,27 @@ errors pass through unchanged.
 import { createAgent } from 'agent';
 import { createFetchTransport, createOpenAiProvider } from 'llms';
 import { createMessageStorage } from 'messages';
-import { createTool, createToolStorage } from 'tools';
+import pino from 'pino';
+import { createToolStorage, defineTool } from 'tool';
 import { z } from 'zod';
+
+const logger = pino();
 
 const provider = createOpenAiProvider({
   transport: createFetchTransport(),
   apiKey: process.env.CODEX_API_KEY ?? '',
+  logger,
 });
 
-const tools = createToolStorage([
-  createTool({
-    name: 'lookup',
-    description: 'Lookup indexed project context.',
-    schema: z.object({ query: z.string() }),
-    async execute({ query }) {
-      return { result: `context for ${query}` };
-    },
-  }),
-]);
+const lookup = defineTool({
+  name: 'lookup',
+  description: 'Lookup indexed project context.',
+  schema: z.object({ query: z.string() }),
+  async execute(sandbox, { query }) {
+    return { result: `context for ${query}` };
+  },
+});
+const tools = createToolStorage([lookup(sandbox)]);
 
 const messages = createMessageStorage();
 

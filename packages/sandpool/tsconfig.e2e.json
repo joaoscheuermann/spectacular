@@ -1,0 +1,25 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "emitDeclarationOnly": false,
+    "outDir": "dist-e2e",
+    "rootDir": ".",
+    "tsBuildInfoFile": "dist-e2e/tsconfig.e2e.tsbuildinfo",
+    "types": ["node"]
+  },
+  "include": ["tests/**/*.e2e.ts"],
+  "references": [
+    {
+      "path": "./tsconfig.lib.json"
+    },
+    {
+      "path": "../docker/tsconfig.lib.json"
+    },
+    {
+      "path": "../sandbox/tsconfig.lib.json"
+    }
+  ]
+}

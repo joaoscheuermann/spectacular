@@ -1,5 +1,0 @@
-{
-  "name": "mosaic-reasoning-core",
-  "description": "Cross-cutting reasoning, evidence, comparison, extraction, and scope-control skills, with general-purpose tools and opaque benchmark lookup helpers.",
-  "version": "0.1.0"
-}

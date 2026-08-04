@@ -17,6 +17,7 @@ import type {
   SandboxNetworkPolicy,
   SandboxSession,
 } from './types/sandbox.js';
+
 import { extractFirstFile, packFile } from './utils/tar.js';
 
 type SandboxState = {

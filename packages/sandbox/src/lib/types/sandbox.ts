@@ -72,7 +72,7 @@ export type SandboxDiffInput = {
   readonly cwd?: string;
 };
 
-export interface SandboxSession {
+export interface Sandbox {
   readonly id: string;
   readonly root: string;
   exec(input: SandboxExecInput): Promise<SandboxExecResult>;
@@ -82,5 +82,8 @@ export interface SandboxSession {
   putFile(path: string, bytes: Uint8Array): Promise<void>;
   getFile(path: string): Promise<Uint8Array>;
   diff(input?: SandboxDiffInput): Promise<string>;
+}
+
+export interface SandboxSession extends Sandbox {
   dispose(): Promise<void>;
 }

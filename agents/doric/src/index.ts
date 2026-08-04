@@ -1,53 +1,17 @@
-import type * as z from 'zod';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import pino from 'pino';
 import pretty from 'pino-pretty';
 
+import { loadBundles, type Skill } from 'bundle';
+import { createDockerClient } from 'docker';
+import { createFetchTransport, createOpenAiProvider } from 'llms';
+import mosaic from 'mosaic';
+import { createSandbox } from 'sandbox';
+import { createSandpool } from 'sandpool';
+import type { Tool } from 'tool';
 import { createVectorDatabase } from 'victor';
-import { createFetchTransport, createOpenAiProvider, LlmProvider } from 'llms';
 
-import { K_RETRIEVE, WAVE_MAX } from './lib/constants/index.js';
-import { Skill } from './lib/types/skill.js';
-import { bundles } from './lib/loaders/index.js';
-import { decompose } from './lib/decomposition/index.js';
-import { Node } from './lib/types/graph.js';
-import { markdownNumberedList } from './lib/decomposition/utils/index.js';
-import { rerankQuery } from './lib/prompts/rerank/index.js';
-
-import * as bundle from './lib/prompts/bundle/index.js';
-import { BundleSchema } from './lib/schemas/bundle/index.js';
-
-interface CompleteContext<Schema extends z.ZodObject> {
-  provider: LlmProvider;
-  schema: Schema;
-  model: string;
-}
-
-const complete = async <Schema extends z.ZodObject>(
-  system: string,
-  user: string,
-  { provider, schema, model }: CompleteContext<Schema>,
-): Promise<z.output<Schema>> => {
-  const result = await provider.complete({
-    model: model,
-    messages: [
-      {
-        role: 'system',
-        content: system,
-      },
-      {
-        role: 'user',
-        content: user,
-      },
-    ],
-    schema: schema,
-  });
-
-  return result.structured;
-};
-
-/**
- * Main entry point!
- */
 async function main() {
   const logger = pino(pretty());
 
@@ -55,150 +19,152 @@ async function main() {
     transport: createFetchTransport(),
     baseUrl: 'https://openrouter.ai/api/v1',
     apiKey: process.env.OPENROUTER_API_KEY,
+    logger,
   });
 
-  const vectors = createVectorDatabase<Skill>({
-    dimensions: 2560,
-    embedding: async (data: string) =>
-      provider.embedding({ model: 'perplexity/pplx-embed-v1-4b', input: data }),
-  });
+  const models = {
+    default: 'openai/gpt-5.6-luna',
+    reranker: 'voyageai/rerank-2.5-lite',
+    embedder: 'perplexity/pplx-embed-v1-4b',
+  } as const;
 
   logger.info({ msg: 'initializing' });
 
-  // Find all skill locally.
-  const { skills, tools } = await bundles(
-    'C:/Users/jvito/Documents/git/spectacular/doric/agents/doric/bundles',
-  );
+  const pool = createSandpool({
+    minIdle: 1,
+    maxContainers: 10,
+    logger,
+    create: () =>
+      createSandbox({
+        docker: createDockerClient(),
+        image: 'node:22-slim',
+        network: { mode: 'disabled' },
+      }),
+  });
 
-  logger.info({ msg: 'loaded bundles' });
-
-  for (const skill of skills) {
-    await vectors.add(
-      skill,
-      ({ name, description, allowedTools, body }) =>
-        `${name} | ${description} | ${allowedTools.join(',')} | ${body}`,
+  try {
+    const bundles = await loadBundles(
+      join(dirname(fileURLToPath(import.meta.url)), '..', 'bundles'),
     );
-  }
 
-  logger.info({ msg: 'embedded all skills' });
+    const lease = await pool.acquire();
 
-  const prompt = `
-    Localize o relatório financeiro mais recente da empresa e confirme que ele
-    corresponde ao segundo trimestre de 2026.
+    try {
+      const bundleTools = bundles.flatMap((bundle) => bundle.tools);
+      const bundleSkills = bundles.flatMap((bundle) => bundle.skills);
 
-    Depois:
+      const skills = bundleSkills.map(({ skill }) => skill);
+      const tools = bundleTools.map(({ factory, alwaysAvailable }) => ({
+        tool: factory(lease.sandbox),
+        alwaysAvailable,
+      }));
 
-    1. extraia os principais dados de receita, margem, custos e geração de caixa;
-    2. compare esses resultados com o trimestre anterior;
-    3. identifique a melhor oportunidade de melhoria com base nas evidências;
-    4. produza um resumo executivo em Markdown;
-    5. salve o resumo em um arquivo chamado financial-review.md;
-    6. envie uma mensagem ao canal #finance do Slack contendo a recomendação e a
-       referência para o arquivo criado.
-
-    Não invente dados ausentes e explicite limitações encontradas no relatório.
-  `;
-
-  const graph = await decompose(prompt, { logger, provider, vectors });
-
-  logger.info({ msg: 'generated the execution plan' });
-
-  console.log(JSON.stringify(graph));
-
-  // Only stops when all nodes are delivered
-  while (!graph.nodes.every((node) => node.status === 'completed')) {
-    // Get all ready nodes for this execution
-    const nodes = graph.nodes
-      .reduce((ready, evaluationNode) => {
-        // If the node ran already, we skip
-        if (evaluationNode.status !== 'pending') return ready;
-
-        // If it have no depedency, it's already ready
-        if (!evaluationNode.dependsOn.length) return [...ready, evaluationNode];
-        // Check all other dependencies for necessary states
-        else {
-          const dependenciesCompleted = graph.nodes
-            .filter((graphNode) =>
-              evaluationNode.dependsOn.includes(graphNode.id),
-            )
-            .every((dependency) => dependency.status === 'completed');
-
-          if (dependenciesCompleted) return [...ready, evaluationNode];
-        }
-
-        return ready;
-      }, [] as Array<Node>)
-      .sort((a, b) => b.index - a.index); // Order
-
-    // Maximum ammount of nodes for this run, this is meant to adjust parallelism
-    const wave = nodes.slice(0, WAVE_MAX);
-
-    if (!nodes.length)
-      throw new Error('Impossible to continue, missing ready nodes!');
-
-    for (const node of wave) {
-      // TODO: improve the side effect, this should not mutate the original graph state...
-      node.status = 'ready';
-
-      // Search for matches for the current goal
-      const matches = await vectors.search(
-        [
-          `Original Request:\n${prompt}`,
-          `Current Goal::\n${node.goal}`,
-          `Completion Criteria:\n${markdownNumberedList(node.doneWhen)}`,
-          // TODO: get the context from previous complete nodes, we are missing the global state management
-        ].join('\n\n'),
-        K_RETRIEVE,
-      );
-
-      const candidates = matches.map((result) => result.data);
-
-      // Re-rank all the candidates, so they are meaningfull for the end result
-      const ranking = await provider.rerank({
-        model: 'voyageai/rerank-2.5-lite',
-        query: rerankQuery(prompt, node),
-        documents: candidates.map((skill) =>
-          [
-            `Skill name: ${skill.name}`,
-            `Description:\n${skill.description.trim()}`,
-            `Canonical body:\n${skill.body.trim()}`,
-          ].join('\n\n'),
-        ),
-        topN: K_RETRIEVE,
+      const skillEmbeddings = createVectorDatabase<Skill>({
+        dimensions: 2560,
+        logger,
+        embedding: async (input) =>
+          provider.embedding({ model: models.embedder, input }),
       });
 
-      // Rebuild the Skill map with the reranked skills
-      const reranked = ranking.map((result) => candidates[result.index]);
+      const toolEmbeddings = createVectorDatabase<Tool>({
+        dimensions: 2560,
+        logger,
+        embedding: async (input) =>
+          provider.embedding({ model: models.embedder, input }),
+      });
 
-      // Decides which skills are kept
-      const selectedSkills = await complete(
-        bundle.system(),
-        bundle.user(prompt, node, reranked),
-        {
-          provider,
-          schema: BundleSchema,
-          model: `openai/gpt-5.6-luna`,
+      logger.info({ msg: 'loaded bundles' });
+
+      for (const skill of skills) {
+        await skillEmbeddings.add(
+          skill,
+          ({ name, description, allowedTools, body }) =>
+            `${name} | ${description} | ${allowedTools.join(',')} | ${body}`,
+        );
+      }
+
+      for (const { tool } of tools) {
+        await toolEmbeddings.add(
+          tool,
+          ({ name, description }) => `${name} | ${description ?? ''}`,
+        );
+      }
+
+      logger.info({ msg: 'embedded all skills' });
+
+      const prompt = `
+        Extend the existing MOSAIC catalog with a new reusable capability for publishing finalized messages to Slack.
+
+        The runtime currently has no Slack-specific operations. The capability must allow an agent to:
+
+        1. discover available Slack channels;
+        2. resolve a channel from a human-readable name;
+        3. send a finalized message to the selected channel;
+        4. report the observable result of the operation.
+
+        Inspect the existing bundle before making changes. Determine whether this capability requires behavioral instructions, executable operations, or both. Create only the minimum coherent set of artifacts and do not duplicate capabilities that already exist.
+
+        Authoring requirements:
+
+        - Write all artifact contents in English.
+        - Represent executable operations as JSON tool descriptors containing their names, descriptions, input schemas, and output schemas.
+        - Do not implement handlers or runtime logic.
+        - Represent reusable behavioral guidance as focused \`SKILL.md\` micro-skills.
+        - Keep each skill centered on one coherent behavioral concern.
+        - Do not create a monolithic “Slack agent” skill.
+        - Include clear applicability, non-applicability, procedure, and completion guidance in each skill body.
+        - Declare only the tools that the skill may actually require in \`allowed-tools\`.
+        - Do not create a skill that merely repeats a tool description.
+        - Register every new skill and tool in \`manifest.json\`.
+        - Use \`alwaysAvailable: false\` unless an artifact is genuinely required by almost every unrelated objective.
+        - Preserve the existing \`skills/*\`, \`tools/*\`, and \`manifest.json\` structure.
+        - Reuse the existing core file, search, editing, shell, and validation capabilities instead of recreating them.
+
+        Before completing the task, validate:
+
+        - JSON syntax;
+        - YAML frontmatter;
+        - unique skill and tool names;
+        - manifest paths;
+        - resolution of every \`allowed-tools\` entry against the tool registry;
+        - absence of redundant or overlapping artifacts.
+
+        The result is complete when the MOSAIC bundle contains the smallest valid set of reusable skills and tool descriptors required for Slack channel discovery and message publication, all entries are registered, and the catalog remains internally consistent.
+
+        Return a concise summary explaining:
+
+        - which files were created or modified;
+        - why each new artifact is a skill or a tool;
+        - why no additional artifacts were necessary;
+        - how the final capability should be composed during execution.
+        `;
+
+      const agent = mosaic({
+        logger,
+        provider,
+        models,
+        skills: {
+          required: bundleSkills
+            .filter(({ alwaysAvailable }) => alwaysAvailable)
+            .map(({ skill }) => skill),
+          menu: skills,
+          embeddings: skillEmbeddings,
         },
-      );
+        tools: {
+          required: tools
+            .filter(({ alwaysAvailable }) => alwaysAvailable)
+            .map(({ tool }) => tool),
+          menu: tools.map(({ tool }) => tool),
+          embeddings: toolEmbeddings,
+        },
+      });
 
-      // Pick all the skills documents from the already retrieved skills
-      const skillsMenu = selectedSkills.skills.map((pick) =>
-        candidates.find((skill) => skill.name === pick),
-      );
-
-      // TODO: we should have a base set of tools, we don't have a mechanism to define that yet...
-      // probably it will be defined in the manifest.json file when we implement the complete bundle loading in the monorepo.
-
-      // Pick all tools available from the always available toolset and the tools defined by the 'allowedTools' property into a skill
-      const toolsMenu = [
-        ...new Set(skillsMenu.flatMap((skill) => skill?.allowedTools ?? [])),
-      ]
-        .map((name) => tools.find((tool) => tool.name === name));
-
-      console.log(JSON.stringify(selectedSkills));
-      console.log(JSON.stringify(skillsMenu));
-      console.log(JSON.stringify(toolsMenu));
+      await agent.prompt(prompt);
+    } finally {
+      await lease.release();
     }
+  } finally {
+    await pool.dispose();
   }
 }
 

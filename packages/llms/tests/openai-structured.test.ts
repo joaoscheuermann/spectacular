@@ -3,12 +3,13 @@ import test from 'node:test';
 
 import { z } from 'zod';
 
+import { ProviderErrorObject } from '../src/index.js';
 import {
-  ProviderErrorObject,
+  collect,
   createOpenAiProvider,
-  type LlmDebugRecord,
-} from '../src/index.js';
-import { collect, fakeTransport, response } from './fakes.js';
+  fakeTransport,
+  response,
+} from './fakes.js';
 
 test('allows OpenAI structured output from stream finishes without parsing', async () => {
   const provider = createOpenAiProvider({
@@ -336,61 +337,8 @@ test('allows invalid OpenAI structured JSON from streams', async () => {
   assert.equal(finished.finish.structured, undefined);
 });
 
-test('does not log OpenAI stream structured output failures', async () => {
-  const records: LlmDebugRecord[] = [];
-  const provider = createOpenAiProvider({
-    transport: fakeTransport({
-      streams: [
-        [
-          sse({
-            type: 'response.completed',
-            response: {
-              status: 'completed',
-              output_text: '',
-              output: [],
-            },
-          }),
-        ],
-      ],
-    }),
-    apiKey: 'sk-testSecret123',
-    debugLogger: {
-      async log(record): Promise<void> {
-        records.push(record);
-      },
-    },
-  });
-
-  const events = await collect(
-    provider.stream({
-      model: 'gpt-5',
-      messages: [{ role: 'user', content: 'Hi' }],
-      schema: z.object({ answer: z.string() }),
-    }),
-  );
-  const finished = events.at(-1);
-
-  assert.ok(records.some((record) => record.event === 'http.request'));
-  assert.ok(
-    records.some((record) => record.event === 'stream.response.completed'),
-  );
-
-  assert.equal(finished?.type, 'response.finished');
-
-  if (finished?.type !== 'response.finished') {
-    assert.fail('Expected final response.finished event.');
-  }
-
-  assert.equal(finished.finish.structured, undefined);
-  assert.equal(
-    records.some((record) => record.event === 'structured_output.error'),
-    false,
-  );
-});
-
-test('omits sensitive structured output from errors and debug records', async () => {
+test('omits sensitive structured output from errors', async () => {
   const sentinel = 'RATIONALE_DEBUG_PRIVATE';
-  const records: LlmDebugRecord[] = [];
   const provider = createOpenAiProvider({
     transport: fakeTransport({
       responses: [
@@ -402,11 +350,6 @@ test('omits sensitive structured output from errors and debug records', async ()
       ],
     }),
     apiKey: 'sk-testSecret123',
-    debugLogger: {
-      async log(record): Promise<void> {
-        records.push(record);
-      },
-    },
   });
 
   let caught: unknown;
@@ -428,7 +371,6 @@ test('omits sensitive structured output from errors and debug records', async ()
     (caught as Error & { readonly cause?: unknown }).cause,
     undefined,
   );
-  assert.doesNotMatch(JSON.stringify(records), new RegExp(sentinel, 'u'));
   assert.doesNotMatch(
     JSON.stringify({
       message: caught.message,
@@ -437,9 +379,6 @@ test('omits sensitive structured output from errors and debug records', async ()
     }),
     new RegExp(sentinel, 'u'),
   );
-  const finish = records.find((record) => record.event === 'response.finish')
-    ?.fields?.finish as Record<string, unknown>;
-  assert.equal(finish.textExcerpt, undefined);
 });
 
 const sse = (value: unknown): string => `data: ${JSON.stringify(value)}\n\n`;

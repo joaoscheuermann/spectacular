@@ -12,7 +12,7 @@ import type {
   ToolDefinition,
   ToolStorage,
   ToolTurn,
-} from 'tools';
+} from 'tool';
 
 type ProviderFake = {
   readonly provider: LlmProvider;

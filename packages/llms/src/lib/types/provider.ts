@@ -1,7 +1,7 @@
-import type { JsonValue, ToolCallRequest, ToolDefinition } from 'tools';
+import type { JsonValue, ToolCallRequest, ToolDefinition } from 'tool';
 import type { z } from 'zod';
 
-export type { JsonArray, JsonObject, JsonPrimitive, JsonValue } from 'tools';
+export type { JsonArray, JsonObject, JsonPrimitive, JsonValue } from 'tool';
 
 export type ProviderId = string;
 
@@ -72,7 +72,7 @@ export type ProviderCallFlags = {
   readonly reasoning?: boolean | ReasoningRequest;
   readonly serviceTier?: 'auto' | 'default' | 'priority';
   readonly includeUsage?: boolean;
-  /** Omits model output from diagnostics and debug records for this call. */
+  /** Suppresses operational logs and omits model output from diagnostics. */
   readonly sensitiveOutput?: boolean;
   /** Adds the structured output JSON Schema to the model's system prompt. */
   readonly includeStructuredSchemaOnSystemPrompt?: boolean;

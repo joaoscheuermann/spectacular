@@ -3,12 +3,13 @@ import test from 'node:test';
 
 import { z } from 'zod';
 
+import { ProviderErrorObject, type ProviderStreamEvent } from '../src/index.js';
 import {
-  ProviderErrorObject,
+  collect,
   createOpenRouterProvider,
-  type ProviderStreamEvent,
-} from '../src/index.js';
-import { collect, fakeTransport, response } from './fakes.js';
+  fakeTransport,
+  response,
+} from './fakes.js';
 
 test('streams OpenRouter deltas usage finish and accumulated tool calls', async () => {
   const provider = createOpenRouterProvider({

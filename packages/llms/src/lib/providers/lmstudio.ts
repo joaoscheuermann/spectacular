@@ -1,3 +1,5 @@
+import type { Logger } from 'pino';
+
 import { ProviderErrorObject } from '../classes/provider-error.js';
 import type { HttpTransport } from '../types/http.js';
 import type {
@@ -36,6 +38,7 @@ import {
   requireRequestInput,
   streamErrorEvent,
 } from './common.js';
+import { withProviderLogging } from './logging.js';
 
 type SecretSource = string | (() => string | Promise<string>);
 
@@ -44,6 +47,7 @@ export type LmStudioProviderDeps = {
   readonly apiKey?: SecretSource;
   readonly authorization?: SecretSource;
   readonly baseUrl?: string;
+  readonly logger: Logger;
 };
 
 export const lmStudioMetadata: ProviderMetadata = {
@@ -113,175 +117,180 @@ export const createLmStudioProvider = (
     );
   }
 
-  return {
-    metadata: lmStudioMetadata,
-    capabilities: lmStudioCapabilities,
+  return withProviderLogging(
+    {
+      metadata: lmStudioMetadata,
+      capabilities: lmStudioCapabilities,
 
-    complete,
+      complete,
 
-    async *stream<Output = JsonValue>(
-      request: ProviderRequest<Output>,
-    ): AsyncIterable<ProviderStreamEvent<Output>> {
-      requireRequestInput('lmstudio', request);
-      const sensitiveOutput = request.flags?.sensitiveOutput === true;
-      const text: string[] = [];
-      const reasoning: string[] = [];
-      const auth = await authHeader(deps);
+      async *stream<Output = JsonValue>(
+        request: ProviderRequest<Output>,
+      ): AsyncIterable<ProviderStreamEvent<Output>> {
+        requireRequestInput('lmstudio', request);
+        const sensitiveOutput = request.flags?.sensitiveOutput === true;
+        const text: string[] = [];
+        const reasoning: string[] = [];
+        const auth = await authHeader(deps);
 
-      yield {
-        type: 'response.started',
-        provider: 'lmstudio',
-        model: request.model,
-      };
+        yield {
+          type: 'response.started',
+          provider: 'lmstudio',
+          model: request.model,
+        };
 
-      for await (const event of parseSseEvents(
-        deps.transport.stream({
-          method: 'POST',
-          url: `${baseUrl}/api/v1/chat`,
-          headers: {
-            ...auth,
-            'content-type': 'application/json',
-            accept: 'text/event-stream',
-          },
-          body: JSON.stringify(chatBody(request, true)),
-          signal: request.signal,
-        }),
-      )) {
-        if (event.done) {
-          break;
-        }
-
-        if (event.event === 'chat.start' || event.event === undefined) {
-          continue;
-        }
-
-        const payload = streamPayload(event.data);
-
-        if (payload === undefined) {
-          yield streamErrorEvent(
-            'lmstudio',
-            'malformed_stream_event',
-            'Malformed LM Studio stream event.',
-            event.data,
-            sensitiveOutput,
-          );
-          return;
-        }
-
-        if (event.event === 'message.delta') {
-          const content = stringField(payload, 'content') ?? '';
-          text.push(content);
-          yield { type: 'text.delta', delta: content };
-          continue;
-        }
-
-        if (event.event === 'reasoning.delta') {
-          const content = stringField(payload, 'content') ?? '';
-          reasoning.push(content);
-          yield { type: 'reasoning.delta', delta: content };
-          continue;
-        }
-
-        if (event.event === 'error') {
-          yield streamErrorEvent(
-            'lmstudio',
-            'provider_error',
-            errorMessage(payload),
-            event.data,
-            sensitiveOutput,
-          );
-          continue;
-        }
-
-        if (event.event === 'chat.end') {
-          const result = recordField(payload, 'result') ?? payload;
-          const finish = parseStructuredOutput(
-            'lmstudio',
-            request,
-            finished(result, 'stop', text.join(''), reasoning.join('')),
-            false,
-          );
-
-          if (finish.usage !== undefined) {
-            yield { type: 'usage', usage: finish.usage };
+        for await (const event of parseSseEvents(
+          deps.transport.stream({
+            method: 'POST',
+            url: `${baseUrl}/api/v1/chat`,
+            headers: {
+              ...auth,
+              'content-type': 'application/json',
+              accept: 'text/event-stream',
+            },
+            body: JSON.stringify(chatBody(request, true)),
+            signal: request.signal,
+          }),
+        )) {
+          if (event.done) {
+            break;
           }
 
-          yield { type: 'response.finished', finish };
-          return;
+          if (event.event === 'chat.start' || event.event === undefined) {
+            continue;
+          }
+
+          const payload = streamPayload(event.data);
+
+          if (payload === undefined) {
+            yield streamErrorEvent(
+              'lmstudio',
+              'malformed_stream_event',
+              'Malformed LM Studio stream event.',
+              event.data,
+              sensitiveOutput,
+            );
+            return;
+          }
+
+          if (event.event === 'message.delta') {
+            const content = stringField(payload, 'content') ?? '';
+            text.push(content);
+            yield { type: 'text.delta', delta: content };
+            continue;
+          }
+
+          if (event.event === 'reasoning.delta') {
+            const content = stringField(payload, 'content') ?? '';
+            reasoning.push(content);
+            yield { type: 'reasoning.delta', delta: content };
+            continue;
+          }
+
+          if (event.event === 'error') {
+            yield streamErrorEvent(
+              'lmstudio',
+              'provider_error',
+              errorMessage(payload),
+              event.data,
+              sensitiveOutput,
+            );
+            continue;
+          }
+
+          if (event.event === 'chat.end') {
+            const result = recordField(payload, 'result') ?? payload;
+            const finish = parseStructuredOutput(
+              'lmstudio',
+              request,
+              finished(result, 'stop', text.join(''), reasoning.join('')),
+              false,
+            );
+
+            if (finish.usage !== undefined) {
+              yield { type: 'usage', usage: finish.usage };
+            }
+
+            yield { type: 'response.finished', finish };
+            return;
+          }
         }
-      }
 
-      yield {
-        type: 'response.finished',
-        finish: parseStructuredOutput(
-          'lmstudio',
-          request,
-          {
-            text: text.join(''),
-            finishReason: 'unknown',
-            reasoning:
-              reasoning.length === 0 ? undefined : { text: reasoning.join('') },
-            toolCalls: [],
-          },
-          false,
-        ),
-      };
-    },
+        yield {
+          type: 'response.finished',
+          finish: parseStructuredOutput(
+            'lmstudio',
+            request,
+            {
+              text: text.join(''),
+              finishReason: 'unknown',
+              reasoning:
+                reasoning.length === 0
+                  ? undefined
+                  : { text: reasoning.join('') },
+              toolCalls: [],
+            },
+            false,
+          ),
+        };
+      },
 
-    async embedding(
-      _request: ProviderEmbeddingRequest,
-    ): Promise<readonly number[]> {
-      throw new ProviderErrorObject({
-        provider: 'lmstudio',
-        code: 'unsupported_embeddings',
-        message: 'LM Studio provider does not support embeddings.',
-      });
-    },
-
-    async rerank(
-      _request: ProviderRerankRequest,
-    ): Promise<readonly ProviderRerankResult[]> {
-      throw new ProviderErrorObject({
-        provider: 'lmstudio',
-        code: 'unsupported_reranking',
-        message: 'LM Studio provider does not support reranking.',
-      });
-    },
-
-    async models(signal?: AbortSignal): Promise<readonly Model[]> {
-      const response = await deps.transport.request({
-        method: 'GET',
-        url: `${baseUrl}/api/v1/models`,
-        headers: {
-          ...(await authHeader(deps)),
-          accept: 'application/json',
-        },
-        signal,
-      });
-
-      if (response.status >= 400) {
-        throw httpError('lmstudio', response.status, response.body);
-      }
-
-      return models(parseJsonBody('lmstudio', response.body));
-    },
-
-    async validateModel(model: string, signal?: AbortSignal): Promise<Model> {
-      const found = (await this.models(signal)).find(
-        (item) => item.id === model,
-      );
-
-      if (found === undefined) {
+      async embedding(
+        _request: ProviderEmbeddingRequest,
+      ): Promise<readonly number[]> {
         throw new ProviderErrorObject({
           provider: 'lmstudio',
-          code: 'missing_model',
-          message: `LM Studio model is not available: ${model}`,
+          code: 'unsupported_embeddings',
+          message: 'LM Studio provider does not support embeddings.',
         });
-      }
+      },
 
-      return found;
+      async rerank(
+        _request: ProviderRerankRequest,
+      ): Promise<readonly ProviderRerankResult[]> {
+        throw new ProviderErrorObject({
+          provider: 'lmstudio',
+          code: 'unsupported_reranking',
+          message: 'LM Studio provider does not support reranking.',
+        });
+      },
+
+      async models(signal?: AbortSignal): Promise<readonly Model[]> {
+        const response = await deps.transport.request({
+          method: 'GET',
+          url: `${baseUrl}/api/v1/models`,
+          headers: {
+            ...(await authHeader(deps)),
+            accept: 'application/json',
+          },
+          signal,
+        });
+
+        if (response.status >= 400) {
+          throw httpError('lmstudio', response.status, response.body);
+        }
+
+        return models(parseJsonBody('lmstudio', response.body));
+      },
+
+      async validateModel(model: string, signal?: AbortSignal): Promise<Model> {
+        const found = (await this.models(signal)).find(
+          (item) => item.id === model,
+        );
+
+        if (found === undefined) {
+          throw new ProviderErrorObject({
+            provider: 'lmstudio',
+            code: 'missing_model',
+            message: `LM Studio model is not available: ${model}`,
+          });
+        }
+
+        return found;
+      },
     },
-  };
+    deps.logger,
+  );
 };
 
 const chatBody = (

@@ -12,13 +12,13 @@
   "include": ["src/**/*.ts"],
   "references": [
     {
-      "path": "../llms/tsconfig.lib.json"
+      "path": "../tool/tsconfig.lib.json"
     },
     {
       "path": "../messages/tsconfig.lib.json"
     },
     {
-      "path": "../tools/tsconfig.lib.json"
+      "path": "../llms/tsconfig.lib.json"
     }
   ]
 }

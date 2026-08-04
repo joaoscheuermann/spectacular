@@ -2,12 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { z } from 'zod';
 
+import { ProviderErrorObject, type ProviderStreamEvent } from '../src/index.js';
 import {
-  ProviderErrorObject,
+  collect,
   createLmStudioProvider,
-  type ProviderStreamEvent,
-} from '../src/index.js';
-import { collect, fakeTransport, response } from './fakes.js';
+  fakeTransport,
+  response,
+} from './fakes.js';
 
 const schema = z.object({
   answer: z.string().describe('May contain ```json without ending the fence.'),

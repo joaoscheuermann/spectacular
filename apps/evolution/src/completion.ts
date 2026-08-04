@@ -11,6 +11,7 @@ import {
   type StructuredOutputSchema,
 } from 'llms';
 import { codexCredentialFromToken } from 'oauth';
+import type { Logger } from 'pino';
 import type { z } from 'zod';
 
 import type {
@@ -32,6 +33,12 @@ export type Completion = {
 };
 
 export type CompletionFor = (model: ModelRef) => Completion;
+
+export type ProviderDependencies = {
+  readonly logger: Logger;
+  readonly env?: Environment;
+  readonly transport?: HttpTransport;
+};
 
 const defaultTokenEnvs: Readonly<Record<ProviderType, string>> = {
   openai: 'OPENAI_API_KEY',
@@ -78,15 +85,17 @@ const optionalAuth = (
 /** Composes one public llms provider without persisting resolved credentials. */
 export const createProvider = (
   config: ProviderConfig,
-  env: Environment = process.env,
-  transport: HttpTransport = createFetchTransport(),
+  dependencies: ProviderDependencies,
 ): LlmProvider => {
+  const env = dependencies.env ?? process.env;
+  const transport = dependencies.transport ?? createFetchTransport();
   const baseUrl =
     config.baseUrl === undefined ? {} : { baseUrl: config.baseUrl };
 
   if (config.type === 'openai') {
     return createOpenAiProvider({
       transport,
+      logger: dependencies.logger,
       ...baseUrl,
       ...optionalAuth(token(config, env)),
     });
@@ -95,6 +104,7 @@ export const createProvider = (
   if (config.type === 'openrouter') {
     return createOpenRouterProvider({
       transport,
+      logger: dependencies.logger,
       ...baseUrl,
       apiKey: bearerValue(requiredToken(config, env)),
     });
@@ -103,6 +113,7 @@ export const createProvider = (
   if (config.type === 'lmstudio') {
     return createLmStudioProvider({
       transport,
+      logger: dependencies.logger,
       ...baseUrl,
       ...optionalAuth(token(config, env)),
     });
@@ -111,6 +122,7 @@ export const createProvider = (
   if (config.type === 'lmstudio-openai') {
     return createLmStudioOpenAiProvider({
       transport,
+      logger: dependencies.logger,
       ...baseUrl,
       ...optionalAuth(token(config, env)),
     });
@@ -119,6 +131,7 @@ export const createProvider = (
   const credential = codexCredentialFromToken(requiredToken(config, env));
   return createCodexProvider({
     transport,
+    logger: dependencies.logger,
     ...baseUrl,
     authorization: credential.authorization,
     ...(credential.accountId === undefined
@@ -175,8 +188,7 @@ const completion = (provider: LlmProvider, model: ModelRef): Completion => ({
 /** Resolves model references to cached provider instances for one run. */
 export const createCompletionFor = (
   config: EvolutionConfig,
-  env: Environment = process.env,
-  transport: HttpTransport = createFetchTransport(),
+  dependencies: ProviderDependencies,
 ): CompletionFor => {
   const configs = new Map(
     config.providers.map((provider) => [provider.id, provider]),
@@ -190,7 +202,7 @@ export const createCompletionFor = (
     }
     const provider =
       providers.get(model.provider) ??
-      createProvider(providerConfig, env, transport);
+      createProvider(providerConfig, dependencies);
     providers.set(model.provider, provider);
     return completion(provider, model);
   };

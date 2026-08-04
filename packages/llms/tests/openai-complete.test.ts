@@ -3,8 +3,8 @@ import test from 'node:test';
 
 import { z } from 'zod';
 
-import { ProviderErrorObject, createOpenAiProvider } from '../src/index.js';
-import { fakeTransport, response } from './fakes.js';
+import { ProviderErrorObject } from '../src/index.js';
+import { createOpenAiProvider, fakeTransport, response } from './fakes.js';
 
 test('rejects OpenAI requests that are missing model or input', async () => {
   const provider = createOpenAiProvider({
@@ -278,7 +278,10 @@ test('omits OpenAI authorization header when credentials are omitted', async () 
     messages: [{ role: 'user', content: 'Hi' }],
   });
 
-  assert.equal('authorization' in (transport.requests[0]?.headers ?? {}), false);
+  assert.equal(
+    'authorization' in (transport.requests[0]?.headers ?? {}),
+    false,
+  );
 });
 
 test('omits OpenAI authorization header when credentials are blank', async () => {
@@ -298,7 +301,10 @@ test('omits OpenAI authorization header when credentials are blank', async () =>
     messages: [{ role: 'user', content: 'Hi' }],
   });
 
-  assert.equal('authorization' in (transport.requests[0]?.headers ?? {}), false);
+  assert.equal(
+    'authorization' in (transport.requests[0]?.headers ?? {}),
+    false,
+  );
 });
 
 test('rejects ambiguous OpenAI auth configuration', async () => {

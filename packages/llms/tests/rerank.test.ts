@@ -1,16 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { ProviderErrorObject, type LlmProvider } from '../src/index.js';
 import {
-  ProviderErrorObject,
   createCodexProvider,
   createLmStudioOpenAiProvider,
   createLmStudioProvider,
   createOpenAiProvider,
   createOpenRouterProvider,
-  type LlmProvider,
-} from '../src/index.js';
-import { fakeTransport, response } from './fakes.js';
+  fakeTransport,
+  response,
+} from './fakes.js';
 
 type CompatibleProvider = {
   readonly name: string;

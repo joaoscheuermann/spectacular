@@ -1,3 +1,5 @@
+import type { Logger } from 'pino';
+
 import type {
   Embedding,
   VectorDatabase,
@@ -51,6 +53,17 @@ const validateDimensions = (dimensions: number): void => {
     throw invalid('dimensions: expected a positive safe integer');
   }
 };
+
+function validateLogger(logger: unknown): asserts logger is Logger {
+  if (
+    typeof logger !== 'object' ||
+    logger === null ||
+    typeof (logger as { info?: unknown }).info !== 'function' ||
+    typeof (logger as { child?: unknown }).child !== 'function'
+  ) {
+    throw invalid('logger: expected an object with info and child functions');
+  }
+}
 
 function validateEmbedding(embedding: unknown): asserts embedding is Embedding {
   if (typeof embedding !== 'function') {
@@ -107,69 +120,113 @@ export const createVectorDatabase = <Data = unknown>(
 ): VectorDatabase<Data> => {
   const dimensions = options?.dimensions;
   const embedding = options?.embedding;
+  const parentLogger = options?.logger;
 
   validateDimensions(dimensions);
   validateEmbedding(embedding);
+  validateLogger(parentLogger);
+
+  const logger = parentLogger.child({ component: 'victor' });
 
   const entries: Entry<Data>[] = [];
 
   const embed = async (data: string): Promise<Entry<Data>['vector']> =>
     validateVector(await embedding(data), dimensions);
 
+  logger.info({ dimensions }, 'vector database created');
+
   return {
     async add(data: Data, transform: (data: Data) => string): Promise<void> {
-      if (typeof transform !== 'function') {
-        throw invalid('transform: expected a function');
+      logger.info(
+        { dimensions, entryCount: entries.length },
+        'vector database add started',
+      );
+
+      try {
+        if (typeof transform !== 'function') {
+          throw invalid('transform: expected a function');
+        }
+
+        const text = transform(data);
+
+        if (typeof text !== 'string') {
+          throw invalid('transform result: expected a string');
+        }
+
+        const vector = await embed(text);
+        const magnitude = magnitudeOf(vector);
+
+        if (magnitude === undefined) {
+          throw invalid('embedding result: expected a non-zero magnitude');
+        }
+
+        entries.push({ data, vector, magnitude });
+        logger.info(
+          { dimensions, entryCount: entries.length },
+          'vector database add completed',
+        );
+      } catch (error) {
+        logger.info(
+          { dimensions, entryCount: entries.length },
+          'vector database add failed',
+        );
+        throw error;
       }
-
-      const text = transform(data);
-
-      if (typeof text !== 'string') {
-        throw invalid('transform result: expected a string');
-      }
-
-      const vector = await embed(text);
-      const magnitude = magnitudeOf(vector);
-
-      if (magnitude === undefined) {
-        throw invalid('embedding result: expected a non-zero magnitude');
-      }
-
-      entries.push({ data, vector, magnitude });
     },
 
     async search(
       query,
       topK,
     ): Promise<ReadonlyArray<VectorSearchResult<Data>>> {
-      if (!Number.isSafeInteger(topK) || topK < 0) {
-        throw invalid('topK: expected a nonnegative safe integer');
+      const safeTopK = Number.isFinite(topK) ? topK : undefined;
+      const fields = { dimensions, entryCount: entries.length, topK: safeTopK };
+
+      logger.info(fields, 'vector database search started');
+
+      try {
+        if (!Number.isSafeInteger(topK) || topK < 0) {
+          throw invalid('topK: expected a nonnegative safe integer');
+        }
+
+        if (topK === 0 || entries.length === 0) {
+          logger.info(
+            { ...fields, resultCount: 0 },
+            'vector database search completed',
+          );
+          return [];
+        }
+
+        const vector = await embed(query);
+        const magnitude = magnitudeOf(vector);
+
+        if (magnitude === undefined) {
+          throw invalid('embedding result: expected a non-zero magnitude');
+        }
+
+        const results = entries
+          .map(
+            (entry, index): ScoredEntry<Data> => ({
+              data: entry.data,
+              score: cosine(entry.vector, entry.magnitude, vector, magnitude),
+              index,
+            }),
+          )
+          .sort(
+            (left, right) =>
+              right.score - left.score || left.index - right.index,
+          )
+          .slice(0, topK)
+          .map(({ data, score }) => ({ data, score }));
+
+        logger.info(
+          { ...fields, resultCount: results.length },
+          'vector database search completed',
+        );
+        return results;
+      } catch (error) {
+        logger.info(fields, 'vector database search failed');
+        throw error;
       }
-
-      if (topK === 0 || entries.length === 0) {
-        return [];
-      }
-
-      const vector = await embed(query);
-      const magnitude = magnitudeOf(vector);
-
-      if (magnitude === undefined) {
-        throw invalid('embedding result: expected a non-zero magnitude');
-      }
-
-      return entries
-        .map(
-          (entry, index): ScoredEntry<Data> => ({
-            data: entry.data,
-            score: cosine(entry.vector, entry.magnitude, vector, magnitude),
-            index,
-          }),
-        )
-        .sort(
-          (left, right) => right.score - left.score || left.index - right.index,
-        )
-        .slice(0, topK)
-        .map(({ data, score }) => ({ data, score }));
     },
   };
 };

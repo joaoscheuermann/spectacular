@@ -26,8 +26,7 @@ describe('OKF search tool', () => {
     const fake = createFakeSandbox(root);
     const output = await createTool({
       workspaceRoot: WORKSPACE_ROOT,
-      sandbox: fake.session,
-    }).execute({ query: 'authentication architecture' });
+    })(fake.session).execute({ query: 'authentication architecture' });
 
     assert.deepEqual(
       output.results.map((result) => result.conceptId),
@@ -62,8 +61,7 @@ describe('OKF search tool', () => {
     const fake = createFakeSandbox(root);
     const output = await createTool({
       workspaceRoot: WORKSPACE_ROOT,
-      sandbox: fake.session,
-    }).execute({ query: 'users', bundle: 'project' });
+    })(fake.session).execute({ query: 'users', bundle: 'project' });
 
     assert.deepEqual(output.results[0], {
       bundle: 'project',
@@ -100,8 +98,7 @@ describe('OKF search tool', () => {
     const fake = createFakeSandbox(root);
     const output = await createTool({
       workspaceRoot: WORKSPACE_ROOT,
-      sandbox: fake.session,
-    }).execute({ query: 'searchable' });
+    })(fake.session).execute({ query: 'searchable' });
 
     assert.deepEqual(
       output.results.map((result) => result.conceptId),
@@ -118,8 +115,7 @@ describe('OKF search tool', () => {
 
     const output = await createTool({
       workspaceRoot: WORKSPACE_ROOT,
-      sandbox: fake.session,
-    }).execute({ query: 'private', bundle: '../skills' });
+    })(fake.session).execute({ query: 'private', bundle: '../skills' });
 
     assert.match(output.error ?? '', /Invalid bundle name/u);
     assert.deepEqual(fake.reads, []);
@@ -144,8 +140,7 @@ describe('OKF search tool', () => {
     const fake = createFakeSandbox(root);
     const output = await createTool({
       workspaceRoot: WORKSPACE_ROOT,
-      sandbox: fake.session,
-    }).execute({ query: 'needle' });
+    })(fake.session).execute({ query: 'needle' });
 
     assert.equal(output.total, 0);
     assert.deepEqual(fake.reads, []);
@@ -154,8 +149,7 @@ describe('OKF search tool', () => {
     const missingFake = createFakeSandbox(missingRoot);
     const missing = await createTool({
       workspaceRoot: WORKSPACE_ROOT,
-      sandbox: missingFake.session,
-    }).execute({ query: 'anything' });
+    })(missingFake.session).execute({ query: 'anything' });
 
     assert.match(missing.error ?? '', /bundle root not found/u);
     await rm(root, { recursive: true, force: true });
@@ -178,8 +172,7 @@ describe('OKF search tool', () => {
     const fake = createFakeSandbox(root);
     const output = await createTool({
       workspaceRoot: WORKSPACE_ROOT,
-      sandbox: fake.session,
-    }).execute({ query: 'needle', limit: 1 });
+    })(fake.session).execute({ query: 'needle', limit: 1 });
 
     assert.equal(output.results.length, 1);
     assert.equal(output.total, 2);

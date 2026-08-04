@@ -1,6 +1,6 @@
 import { posix as path } from 'node:path';
 
-import type { SandboxSession } from 'sandbox';
+import type { Sandbox } from 'sandbox';
 
 import { escapeRegExp, type SafeTarget } from './safety.js';
 
@@ -30,7 +30,7 @@ const MAX_OUTPUT_BYTES = 50 * 1024;
 const MAX_LINE_LENGTH = 500;
 
 export const collectGrep = async (
-  sandbox: SandboxSession,
+  sandbox: Sandbox,
   target: Extract<SafeTarget, { readonly absolutePath: string }>,
   files: readonly string[],
   isSingleFile: boolean,

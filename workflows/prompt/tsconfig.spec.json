@@ -28,16 +28,7 @@
       "path": "../../packages/sandbox/tsconfig.lib.json"
     },
     {
-      "path": "../../packages/tools/tsconfig.lib.json"
-    },
-    {
-      "path": "../../tools/find/tsconfig.lib.json"
-    },
-    {
-      "path": "../../tools/grep/tsconfig.lib.json"
-    },
-    {
-      "path": "../../tools/tree/tsconfig.lib.json"
+      "path": "../../packages/tool/tsconfig.lib.json"
     }
   ]
 }

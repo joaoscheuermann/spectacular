@@ -1,5 +1,6 @@
+import type { Logger } from 'pino';
+
 import { ProviderErrorObject } from '../classes/provider-error.js';
-import type { LlmDebugLogger } from '../debug.js';
 import type { HttpTransport } from '../types/http.js';
 import type {
   JsonValue,
@@ -44,21 +45,16 @@ import {
   streamFinish,
   streamToolCalls,
 } from './openrouter/parse.js';
+import { withProviderLogging } from './logging.js';
 
 type SecretSource = string | (() => string | Promise<string>);
-type DebugFields = Readonly<Record<string, unknown>>;
-type DebugLog = (
-  target: string,
-  event: string,
-  fields?: DebugFields,
-) => Promise<void>;
 
 export type LmStudioOpenAiProviderDeps = {
   readonly transport: HttpTransport;
   readonly apiKey?: SecretSource;
   readonly authorization?: SecretSource;
   readonly baseUrl?: string;
-  readonly debugLogger?: LlmDebugLogger;
+  readonly logger: Logger;
 };
 
 export const lmStudioOpenAiMetadata: ProviderMetadata = {
@@ -84,12 +80,6 @@ export const createLmStudioOpenAiProvider = (
 ): LlmProvider => {
   const baseUrl = deps.baseUrl ?? lmStudioOpenAiMetadata.baseUrl;
 
-  const logger = deps.debugLogger;
-
-  const log: DebugLog = async (target, event, fields) => {
-    await logger?.log({ provider: 'lmstudio-openai', target, event, fields });
-  };
-
   const post = async (
     request: ProviderRequest<unknown>,
     body: Record<string, unknown>,
@@ -105,11 +95,6 @@ export const createLmStudioOpenAiProvider = (
       },
       body: JSON.stringify(body),
       signal: request.signal,
-    });
-
-    await log('chat/completions', 'http.response', {
-      status: response.status,
-      ...(sensitiveOutput ? {} : { body: response.body }),
     });
 
     if (response.status >= 400) {
@@ -137,8 +122,6 @@ export const createLmStudioOpenAiProvider = (
   ): Promise<ProviderFinished<Output>> {
     requireRequestInput('lmstudio-openai', request);
     const body = chatBody(request, false);
-    await log('chat/completions', 'http.request', { body });
-
     return parseStructuredOutput(
       'lmstudio-openai',
       request,
@@ -146,222 +129,200 @@ export const createLmStudioOpenAiProvider = (
     );
   }
 
-  return {
-    metadata: lmStudioOpenAiMetadata,
-    capabilities: lmStudioOpenAiCapabilities,
+  return withProviderLogging(
+    {
+      metadata: lmStudioOpenAiMetadata,
+      capabilities: lmStudioOpenAiCapabilities,
 
-    complete,
+      complete,
 
-    async *stream<Output = JsonValue>(
-      request: ProviderRequest<Output>,
-    ): AsyncIterable<ProviderStreamEvent<Output>> {
-      requireRequestInput('lmstudio-openai', request);
-      const sensitiveOutput = request.flags?.sensitiveOutput === true;
-      const body = chatBody(request, true);
-      const state = createStreamState();
-      await log('chat/completions', 'http.request', { body });
-      const auth = await authHeader(deps);
+      async *stream<Output = JsonValue>(
+        request: ProviderRequest<Output>,
+      ): AsyncIterable<ProviderStreamEvent<Output>> {
+        requireRequestInput('lmstudio-openai', request);
+        const sensitiveOutput = request.flags?.sensitiveOutput === true;
+        const body = chatBody(request, true);
+        const state = createStreamState();
+        const auth = await authHeader(deps);
 
-      yield {
-        type: 'response.started',
-        provider: 'lmstudio-openai',
-        model: request.model,
-      };
+        yield {
+          type: 'response.started',
+          provider: 'lmstudio-openai',
+          model: request.model,
+        };
 
-      for await (const event of parseSseEvents(
-        deps.transport.stream({
+        for await (const event of parseSseEvents(
+          deps.transport.stream({
+            method: 'POST',
+            url: `${baseUrl}/chat/completions`,
+            headers: {
+              ...auth,
+              'content-type': 'application/json',
+              accept: 'text/event-stream',
+            },
+            body: JSON.stringify(body),
+            signal: request.signal,
+          }),
+        )) {
+          if (event.done) {
+            break;
+          }
+
+          let payload: Record<string, unknown>;
+
+          try {
+            payload = parseJsonBody(
+              'lmstudio-openai',
+              event.data,
+              sensitiveOutput,
+            );
+          } catch {
+            yield streamErrorEvent(
+              'lmstudio-openai',
+              'malformed_stream_event',
+              event.data,
+              undefined,
+              sensitiveOutput,
+            );
+            return;
+          }
+
+          if (hasProviderError(payload)) {
+            yield streamErrorEvent(
+              'lmstudio-openai',
+              'provider_error',
+              'LM Studio OpenAI-compatible stream error.',
+              event.data,
+              sensitiveOutput,
+            );
+            return;
+          }
+
+          for (const parsed of streamEvents(payload, state)) {
+            yield parsed;
+          }
+        }
+
+        for (const call of streamToolCalls(state)) {
+          yield { type: 'tool_call.done', call };
+        }
+
+        yield {
+          type: 'response.finished',
+          finish: parseStructuredOutput(
+            'lmstudio-openai',
+            request,
+            streamFinish(state),
+            false,
+          ),
+        };
+      },
+
+      async embedding(
+        request: ProviderEmbeddingRequest,
+      ): Promise<readonly number[]> {
+        requireEmbeddingInput('lmstudio-openai', request);
+        const sensitiveOutput = request.flags?.sensitiveOutput === true;
+        const body = { model: request.model, input: request.input };
+        const response = await deps.transport.request({
           method: 'POST',
-          url: `${baseUrl}/chat/completions`,
+          url: `${baseUrl}/embeddings`,
           headers: {
-            ...auth,
+            ...(await authHeader(deps)),
             'content-type': 'application/json',
-            accept: 'text/event-stream',
+            accept: 'application/json',
           },
           body: JSON.stringify(body),
           signal: request.signal,
-        }),
-      )) {
-        if (event.done) {
-          break;
-        }
-
-        let payload: Record<string, unknown>;
-
-        try {
-          payload = parseJsonBody(
-            'lmstudio-openai',
-            event.data,
-            sensitiveOutput,
-          );
-        } catch {
-          await log('chat/completions', 'stream.event.invalid_json', {
-            ...(sensitiveOutput ? {} : { data: event.data }),
-          });
-          yield streamErrorEvent(
-            'lmstudio-openai',
-            'malformed_stream_event',
-            event.data,
-            undefined,
-            sensitiveOutput,
-          );
-          return;
-        }
-
-        if (hasProviderError(payload)) {
-          await log('chat/completions', 'stream.provider_error', {
-            ...(sensitiveOutput ? {} : { data: event.data, payload }),
-          });
-          yield streamErrorEvent(
-            'lmstudio-openai',
-            'provider_error',
-            'LM Studio OpenAI-compatible stream error.',
-            event.data,
-            sensitiveOutput,
-          );
-          return;
-        }
-
-        for (const parsed of streamEvents(payload, state)) {
-          yield parsed;
-        }
-      }
-
-      for (const call of streamToolCalls(state)) {
-        yield { type: 'tool_call.done', call };
-      }
-
-      yield {
-        type: 'response.finished',
-        finish: parseStructuredOutput(
-          'lmstudio-openai',
-          request,
-          streamFinish(state),
-          false,
-        ),
-      };
-    },
-
-    async embedding(
-      request: ProviderEmbeddingRequest,
-    ): Promise<readonly number[]> {
-      requireEmbeddingInput('lmstudio-openai', request);
-      const sensitiveOutput = request.flags?.sensitiveOutput === true;
-      const body = { model: request.model, input: request.input };
-      await log('embeddings', 'http.request', { body });
-      const response = await deps.transport.request({
-        method: 'POST',
-        url: `${baseUrl}/embeddings`,
-        headers: {
-          ...(await authHeader(deps)),
-          'content-type': 'application/json',
-          accept: 'application/json',
-        },
-        body: JSON.stringify(body),
-        signal: request.signal,
-      });
-      await log('embeddings', 'http.response', {
-        status: response.status,
-        ...(sensitiveOutput ? {} : { body: response.body }),
-      });
-
-      if (response.status >= 400) {
-        throw httpError(
-          'lmstudio-openai',
-          response.status,
-          response.body,
-          sensitiveOutput,
-        );
-      }
-
-      return parseEmbedding(
-        'lmstudio-openai',
-        parseJsonBody('lmstudio-openai', response.body, sensitiveOutput),
-      );
-    },
-
-    async rerank(
-      request: ProviderRerankRequest,
-    ): Promise<readonly ProviderRerankResult[]> {
-      requireRerankInput('lmstudio-openai', request);
-      const sensitiveOutput = request.flags?.sensitiveOutput === true;
-      const body = {
-        model: request.model,
-        query: request.query,
-        documents: request.documents,
-        ...(request.topN === undefined ? {} : { top_n: request.topN }),
-      };
-      await log('rerank', 'http.request', { body });
-      const response = await deps.transport.request({
-        method: 'POST',
-        url: `${baseUrl}/rerank`,
-        headers: {
-          ...(await authHeader(deps)),
-          'content-type': 'application/json',
-          accept: 'application/json',
-        },
-        body: JSON.stringify(body),
-        signal: request.signal,
-      });
-      await log('rerank', 'http.response', {
-        status: response.status,
-        ...(sensitiveOutput ? {} : { body: response.body }),
-      });
-
-      if (response.status >= 400) {
-        throw httpError(
-          'lmstudio-openai',
-          response.status,
-          response.body,
-          sensitiveOutput,
-        );
-      }
-
-      return parseRerank(
-        'lmstudio-openai',
-        parseJsonBody('lmstudio-openai', response.body, sensitiveOutput),
-      );
-    },
-
-    async models(signal?: AbortSignal): Promise<readonly Model[]> {
-      await log('models', 'http.request', { method: 'GET' });
-      const response = await deps.transport.request({
-        method: 'GET',
-        url: `${baseUrl}/models`,
-        headers: {
-          ...(await authHeader(deps)),
-          accept: 'application/json',
-        },
-        signal,
-      });
-
-      await log('models', 'http.response', {
-        status: response.status,
-        body: response.body,
-      });
-
-      if (response.status >= 400) {
-        throw httpError('lmstudio-openai', response.status, response.body);
-      }
-
-      return models(parseJsonBody('lmstudio-openai', response.body));
-    },
-
-    async validateModel(model: string, signal?: AbortSignal): Promise<Model> {
-      const found = (await this.models(signal)).find(
-        (item) => item.id === model,
-      );
-
-      if (found === undefined) {
-        throw new ProviderErrorObject({
-          provider: 'lmstudio-openai',
-          code: 'missing_model',
-          message: `LM Studio OpenAI-compatible model is not available: ${model}`,
         });
-      }
+        if (response.status >= 400) {
+          throw httpError(
+            'lmstudio-openai',
+            response.status,
+            response.body,
+            sensitiveOutput,
+          );
+        }
 
-      return found;
+        return parseEmbedding(
+          'lmstudio-openai',
+          parseJsonBody('lmstudio-openai', response.body, sensitiveOutput),
+        );
+      },
+
+      async rerank(
+        request: ProviderRerankRequest,
+      ): Promise<readonly ProviderRerankResult[]> {
+        requireRerankInput('lmstudio-openai', request);
+        const sensitiveOutput = request.flags?.sensitiveOutput === true;
+        const body = {
+          model: request.model,
+          query: request.query,
+          documents: request.documents,
+          ...(request.topN === undefined ? {} : { top_n: request.topN }),
+        };
+        const response = await deps.transport.request({
+          method: 'POST',
+          url: `${baseUrl}/rerank`,
+          headers: {
+            ...(await authHeader(deps)),
+            'content-type': 'application/json',
+            accept: 'application/json',
+          },
+          body: JSON.stringify(body),
+          signal: request.signal,
+        });
+        if (response.status >= 400) {
+          throw httpError(
+            'lmstudio-openai',
+            response.status,
+            response.body,
+            sensitiveOutput,
+          );
+        }
+
+        return parseRerank(
+          'lmstudio-openai',
+          parseJsonBody('lmstudio-openai', response.body, sensitiveOutput),
+        );
+      },
+
+      async models(signal?: AbortSignal): Promise<readonly Model[]> {
+        const response = await deps.transport.request({
+          method: 'GET',
+          url: `${baseUrl}/models`,
+          headers: {
+            ...(await authHeader(deps)),
+            accept: 'application/json',
+          },
+          signal,
+        });
+
+        if (response.status >= 400) {
+          throw httpError('lmstudio-openai', response.status, response.body);
+        }
+
+        return models(parseJsonBody('lmstudio-openai', response.body));
+      },
+
+      async validateModel(model: string, signal?: AbortSignal): Promise<Model> {
+        const found = (await this.models(signal)).find(
+          (item) => item.id === model,
+        );
+
+        if (found === undefined) {
+          throw new ProviderErrorObject({
+            provider: 'lmstudio-openai',
+            code: 'missing_model',
+            message: `LM Studio OpenAI-compatible model is not available: ${model}`,
+          });
+        }
+
+        return found;
+      },
     },
-  };
+    deps.logger,
+  );
 };
 
 const chatBody = (

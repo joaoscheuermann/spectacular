@@ -4,6 +4,51 @@ import type {
   HttpStreamChunk,
   HttpTransport,
 } from '../src/index.js';
+import {
+  createCodexProvider as createCodexProviderBase,
+  createLmStudioOpenAiProvider as createLmStudioOpenAiProviderBase,
+  createLmStudioProvider as createLmStudioProviderBase,
+  createOpenAiProvider as createOpenAiProviderBase,
+  createOpenRouterProvider as createOpenRouterProviderBase,
+  type CodexProviderDeps,
+  type LmStudioOpenAiProviderDeps,
+  type LmStudioProviderDeps,
+  type OpenAiProviderDeps,
+  type OpenRouterProviderDeps,
+} from '../src/index.js';
+import pino, { type Logger } from 'pino';
+
+type TestDeps<Deps extends { readonly logger: Logger }> = Omit<
+  Deps,
+  'logger'
+> & { readonly logger?: Logger };
+
+export const silentLogger = pino({ enabled: false });
+
+export const createOpenAiProvider = (deps: TestDeps<OpenAiProviderDeps>) =>
+  createOpenAiProviderBase({ ...deps, logger: deps.logger ?? silentLogger });
+
+export const createOpenRouterProvider = (
+  deps: TestDeps<OpenRouterProviderDeps>,
+) =>
+  createOpenRouterProviderBase({
+    ...deps,
+    logger: deps.logger ?? silentLogger,
+  });
+
+export const createLmStudioProvider = (deps: TestDeps<LmStudioProviderDeps>) =>
+  createLmStudioProviderBase({ ...deps, logger: deps.logger ?? silentLogger });
+
+export const createLmStudioOpenAiProvider = (
+  deps: TestDeps<LmStudioOpenAiProviderDeps>,
+) =>
+  createLmStudioOpenAiProviderBase({
+    ...deps,
+    logger: deps.logger ?? silentLogger,
+  });
+
+export const createCodexProvider = (deps: TestDeps<CodexProviderDeps>) =>
+  createCodexProviderBase({ ...deps, logger: deps.logger ?? silentLogger });
 
 export type FakeTransport = HttpTransport & {
   readonly requests: readonly HttpRequest[];

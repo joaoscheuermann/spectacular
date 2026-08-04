@@ -1,10 +1,16 @@
 export * from './lib/classes/provider-error.js';
-export * from './lib/debug.js';
 export * from './lib/http.js';
 export * from './lib/providers/codex.js';
 export * from './lib/providers/lmstudio-openai.js';
 export * from './lib/providers/lmstudio.js';
-export * from './lib/providers/openai.js';
+export {
+  createOpenAiProvider,
+  openAiBody,
+  openAiCapabilities,
+  openAiMetadata,
+  type OpenAiProviderDeps,
+  type SecretSource,
+} from './lib/providers/openai.js';
 export * from './lib/providers/openrouter.js';
 export * from './lib/types/http.js';
 export * from './lib/types/provider.js';

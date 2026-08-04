@@ -29,7 +29,7 @@ const progress: Progress = ({ event, ...fields }) => logger.info(fields, event);
 
 try {
   await createProgram((options) =>
-    runEvolution(options, { progress }),
+    runEvolution(options, { logger, progress }),
   ).parseAsync(process.argv);
 } catch (error) {
   logger.error(

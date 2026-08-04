@@ -12,7 +12,7 @@
   "include": ["src/**/*.ts"],
   "references": [
     {
-      "path": "../../packages/victor/tsconfig.lib.json"
+      "path": "../../packages/tool/tsconfig.lib.json"
     },
     {
       "path": "../../workflows/prompt/tsconfig.lib.json"
@@ -24,7 +24,16 @@
       "path": "../../packages/sandbox/tsconfig.lib.json"
     },
     {
+      "path": "../../packages/sandpool/tsconfig.lib.json"
+    },
+    {
       "path": "../../packages/oauth/tsconfig.lib.json"
+    },
+    {
+      "path": "../../packages/victor/tsconfig.lib.json"
+    },
+    {
+      "path": "../../packages/mosaic/tsconfig.lib.json"
     },
     {
       "path": "../../packages/llms/tsconfig.lib.json"
@@ -34,6 +43,9 @@
     },
     {
       "path": "../../packages/config/tsconfig.lib.json"
+    },
+    {
+      "path": "../../packages/bundle/tsconfig.lib.json"
     },
     {
       "path": "../../packages/artifacts/tsconfig.lib.json"

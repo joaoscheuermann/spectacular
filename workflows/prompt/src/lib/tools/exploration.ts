@@ -1,11 +1,9 @@
 import { posix as path } from 'node:path';
 
-import { createTool as createFindTool, schema as findSchema } from 'tool-find';
-import { createTool as createGrepTool, schema as grepSchema } from 'tool-grep';
-import { createTool as createTreeTool, schema as treeSchema } from 'tool-tree';
-import { createTool, createToolStorage } from 'tools';
-import type { ToolStorage } from 'tools';
+import { createToolStorage, defineTool } from 'tool';
+import type { ToolStorage } from 'tool';
 import type { z } from 'zod';
+import { z as zod } from 'zod';
 
 import { collectFind, type FindOutput } from './find-results.js';
 import { collectGrep, compileSearch, type GrepOutput } from './grep-results.js';
@@ -29,6 +27,31 @@ type FindInput = z.output<typeof findSchema>;
 type GrepInput = z.output<typeof grepSchema>;
 type TreeInput = z.output<typeof treeSchema>;
 
+const findSchema = zod
+  .object({
+    pattern: zod.string(),
+    path: zod.string().optional(),
+    limit: zod.number().int().nonnegative().optional(),
+  })
+  .strict();
+const grepSchema = zod
+  .object({
+    pattern: zod.string(),
+    path: zod.string().optional(),
+    glob: zod.string().optional(),
+    ignoreCase: zod.boolean().optional(),
+    literal: zod.boolean().optional(),
+    context: zod.number().int().nonnegative().optional(),
+    limit: zod.number().int().nonnegative().optional(),
+  })
+  .strict();
+const treeSchema = zod
+  .object({
+    path: zod.string().optional(),
+    exclude: zod.array(zod.string()).optional(),
+  })
+  .strict();
+
 const DEFAULT_FIND_LIMIT = 1000;
 const DEFAULT_GREP_LIMIT = 100;
 
@@ -44,39 +67,42 @@ export const createSafeExplorationTools = (options: Options): ToolStorage =>
   ]);
 
 const createSafeFindTool = (options: Options) => {
-  const base = createFindTool(options);
-
-  return createTool({
-    name: base.name,
+  const factory = defineTool({
+    name: 'find',
     description:
       'Search non-guidance files by glob pattern. Guidance markdown, docs, README files, AGENTS.md, GROUNDING.md, and .agents are excluded.',
     schema: findSchema,
-    execute: (input): Promise<FindOutput> => find(options, input),
+    execute: (sandbox, input): Promise<FindOutput> =>
+      find({ ...options, sandbox }, input),
   });
+
+  return factory(options.sandbox);
 };
 
 const createSafeGrepTool = (options: Options) => {
-  const base = createGrepTool(options);
-
-  return createTool({
-    name: base.name,
+  const factory = defineTool({
+    name: 'grep',
     description:
       'Search non-guidance file contents. Requires a non-markdown file path or clearly non-markdown glob.',
     schema: grepSchema,
-    execute: (input): Promise<GrepOutput> => grep(options, input),
+    execute: (sandbox, input): Promise<GrepOutput> =>
+      grep({ ...options, sandbox }, input),
   });
+
+  return factory(options.sandbox);
 };
 
 const createSafeTreeTool = (options: Options) => {
-  const base = createTreeTool(options);
-
-  return createTool({
-    name: base.name,
+  const factory = defineTool({
+    name: 'tree',
     description:
       'Display directory structure without repository guidance markdown, docs, README files, AGENTS.md, GROUNDING.md, or .agents.',
     schema: treeSchema,
-    execute: (input): Promise<string> => tree(options, input),
+    execute: (sandbox, input): Promise<string> =>
+      tree({ ...options, sandbox }, input),
   });
+
+  return factory(options.sandbox);
 };
 
 const find = async (

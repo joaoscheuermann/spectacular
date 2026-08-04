@@ -7,11 +7,13 @@ can use fakes and host surfaces can own sensitive behavior.
 ## OpenRouter with an API key
 
 ```ts
+import pino from 'pino';
 import { createFetchTransport, createOpenRouterProvider } from 'llms';
 
 const provider = createOpenRouterProvider({
   transport: createFetchTransport(),
   apiKey: process.env.OPENROUTER_API_KEY ?? '',
+  logger: pino(),
 });
 
 const result = await provider.complete({
@@ -29,11 +31,13 @@ const result = await provider.complete({
 ## OpenAI with an API key
 
 ```ts
+import pino from 'pino';
 import { createFetchTransport, createOpenAiProvider } from 'llms';
 
 const provider = createOpenAiProvider({
   transport: createFetchTransport(),
   apiKey: process.env.CODEX_API_KEY ?? '',
+  logger: pino(),
 });
 
 for await (const event of provider.stream({
@@ -84,6 +88,7 @@ remain enabled for providers that support them.
 ## Codex with a rendered authorization header
 
 ```ts
+import pino from 'pino';
 import { createCodexProvider, createFetchTransport } from 'llms';
 import { createCodexOAuth } from 'oauth';
 
@@ -100,6 +105,7 @@ const credential = await codex.credential();
 const provider = createCodexProvider({
   transport: createFetchTransport(),
   authorization: credential.authorization,
+  logger: pino(),
 });
 ```
 
@@ -111,6 +117,7 @@ not the public OpenAI Responses API.
 ## Fake transport tests
 
 ```ts
+import pino from 'pino';
 import { createOpenRouterProvider, type HttpTransport } from 'llms';
 
 const requests = [];
@@ -129,8 +136,18 @@ const transport: HttpTransport = {
   },
 };
 
-const provider = createOpenRouterProvider({ transport, apiKey: 'test-key' });
+const provider = createOpenRouterProvider({
+  transport,
+  apiKey: 'test-key',
+  logger: pino({ enabled: false }),
+});
 ```
+
+Every provider requires a Pino logger and creates a child bound to
+`{ component: 'llms', provider }`. Operational events contain only safe counts,
+model identifiers, finish reasons, and token usage. Set
+`flags.sensitiveOutput: true` on completion, stream, embedding, or rerank calls
+to suppress all operational events for that call.
 
 ## Building
 

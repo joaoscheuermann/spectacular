@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import pino from 'pino';
 import {
   createCompletionFor,
   createProvider,
@@ -13,6 +14,8 @@ import {
   type EvolutionConfig,
   type ProviderConfig,
 } from '../src/schema.js';
+
+const logger = pino({ enabled: false });
 
 const transport = (requests: HttpRequest[]): HttpTransport => ({
   async request(request) {
@@ -70,7 +73,11 @@ test('composes every public provider branch and forwards base URLs', async () =>
   ];
 
   for (const config of configs) {
-    const provider = createProvider(config, env, transport(requests));
+    const provider = createProvider(config, {
+      logger,
+      env,
+      transport: transport(requests),
+    });
     assert.equal(provider.metadata.id, config.type);
     await provider.models();
   }
@@ -95,20 +102,37 @@ test('composes every public provider branch and forwards base URLs', async () =>
 test('requires runtime secrets only for OpenRouter and Codex', () => {
   const fake = transport([]);
   assert.doesNotThrow(() =>
-    createProvider({ id: 'openai', type: 'openai' }, {}, fake),
+    createProvider(
+      { id: 'openai', type: 'openai' },
+      { logger, env: {}, transport: fake },
+    ),
   );
   assert.doesNotThrow(() =>
-    createProvider({ id: 'local', type: 'lmstudio' }, {}, fake),
+    createProvider(
+      { id: 'local', type: 'lmstudio' },
+      { logger, env: {}, transport: fake },
+    ),
   );
   assert.doesNotThrow(() =>
-    createProvider({ id: 'local', type: 'lmstudio-openai' }, {}, fake),
+    createProvider(
+      { id: 'local', type: 'lmstudio-openai' },
+      { logger, env: {}, transport: fake },
+    ),
   );
   assert.throws(
-    () => createProvider({ id: 'router', type: 'openrouter' }, {}, fake),
+    () =>
+      createProvider(
+        { id: 'router', type: 'openrouter' },
+        { logger, env: {}, transport: fake },
+      ),
     /OPENROUTER_API_KEY/,
   );
   assert.throws(
-    () => createProvider({ id: 'codex', type: 'codex' }, {}, fake),
+    () =>
+      createProvider(
+        { id: 'codex', type: 'codex' },
+        { logger, env: {}, transport: fake },
+      ),
     /CODEX_AUTHORIZATION/,
   );
 });
@@ -153,11 +177,11 @@ test('parses native LM Studio JSON text for structured evolution roles', async (
     },
   };
 
-  const judgment = await createCompletionFor(
-    config,
-    {},
-    nativeTransport,
-  )(config.judge).structured(
+  const judgment = await createCompletionFor(config, {
+    logger,
+    env: {},
+    transport: nativeTransport,
+  })(config.judge).structured(
     resultJudgeSystemPrompt,
     'Judge this.',
     judgeOutputSchema,

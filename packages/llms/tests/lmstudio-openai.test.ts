@@ -3,13 +3,13 @@ import test from 'node:test';
 
 import { z } from 'zod';
 
+import { ProviderErrorObject, type ProviderStreamEvent } from '../src/index.js';
 import {
-  ProviderErrorObject,
+  collect,
   createLmStudioOpenAiProvider,
-  type LlmDebugRecord,
-  type ProviderStreamEvent,
-} from '../src/index.js';
-import { collect, fakeTransport, response } from './fakes.js';
+  fakeTransport,
+  response,
+} from './fakes.js';
 
 const answerJsonSchema = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
@@ -24,41 +24,6 @@ const lookupInputSchema = {
   required: ['query'],
   additionalProperties: false,
 } as const;
-
-test('logs LM Studio OpenAI-compatible completion request and response', async () => {
-  const records: LlmDebugRecord[] = [];
-  const completion = response({
-    choices: [{ finish_reason: 'stop', message: { content: 'ok' } }],
-  });
-  const provider = createLmStudioOpenAiProvider({
-    transport: fakeTransport({ responses: [completion] }),
-    debugLogger: debugLogger(records),
-  });
-
-  await provider.complete({
-    model: 'local-model',
-    messages: [{ role: 'user', content: 'Hi' }],
-  });
-
-  assert.deepEqual(
-    records.map(({ provider, target, event }) => [provider, target, event]),
-    [
-      ['lmstudio-openai', 'chat/completions', 'http.request'],
-      ['lmstudio-openai', 'chat/completions', 'http.response'],
-    ],
-  );
-  assert.deepEqual(records[0]?.fields, {
-    body: {
-      model: 'local-model',
-      messages: [{ role: 'user', content: 'Hi' }],
-      stream: false,
-    },
-  });
-  assert.deepEqual(records[1]?.fields, {
-    status: 200,
-    body: completion.body,
-  });
-});
 
 test('sends LM Studio OpenAI-compatible structured output requests without tools through response format', async () => {
   const transport = fakeTransport({
@@ -455,9 +420,3 @@ test('rejects LM Studio OpenAI-compatible structured streams with tools before s
 });
 
 const sse = (value: unknown): string => `data: ${JSON.stringify(value)}\n\n`;
-
-const debugLogger = (records: LlmDebugRecord[]) => ({
-  log: async (record: LlmDebugRecord): Promise<void> => {
-    records.push(record);
-  },
-});

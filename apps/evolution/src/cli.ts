@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 
 import { initializeWorkspace, type InitSummary } from './init.js';
-import { runEvolution, type RunOptions, type RunSummary } from './run.js';
+import type { RunOptions, RunSummary } from './run.js';
 
 type Runner = (options: RunOptions) => Promise<RunSummary>;
 type Initializer = (directory?: string) => Promise<InitSummary>;
@@ -14,7 +14,7 @@ const stdout: Emit = (summary): void => {
 
 /** Creates the Commander surface with injectable execution for CLI tests. */
 export const createProgram = (
-  run: Runner = runEvolution,
+  run: Runner,
   emit: Emit = stdout,
   init: Initializer = initializeWorkspace,
 ): Command => {

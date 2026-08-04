@@ -3,8 +3,8 @@
 Provider-neutral, read-only search over Open Knowledge Format bundles stored at
 `<workspace>/.agents/bundles`.
 
-The exported `createTool({ workspaceRoot, sandbox })` factory creates the
-`okf_search` tool. Its input accepts a natural-language `query`, an optional
+The exported `createTool({ workspaceRoot })` definition returns a factory that
+binds `okf_search` to a sandbox. Its input accepts a natural-language `query`, an optional
 top-level `bundle`, and an optional result `limit`. Results contain OKF concept
 metadata and bounded Markdown content ordered by deterministic lexical
 relevance.
