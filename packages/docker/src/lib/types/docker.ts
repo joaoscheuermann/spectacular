@@ -8,6 +8,14 @@ export type DockerConnection =
       readonly pipePath?: string;
     };
 
+export type CreateDockerClientOptions = {
+  readonly connection?: DockerConnection;
+  readonly request?: DockerTransport;
+  readonly timeoutMs?: number;
+  readonly dropbearPath?: string;
+  readonly statePath?: string;
+};
+
 export type DockerRequestQuery = Readonly<
   Record<string, string | number | boolean | undefined>
 >;
@@ -60,15 +68,33 @@ export type CreateContainerInput = {
   readonly name?: string;
   readonly hostConfig?: Readonly<Record<string, unknown>>;
   readonly networkDisabled?: boolean;
+  readonly exposedPorts?: readonly string[];
 };
 
 export type PullImageInput = {
   readonly image: string;
 };
 
+export type ImageInspect = {
+  readonly id: string;
+  readonly raw: Readonly<Record<string, unknown>>;
+};
+
 export type ContainerRef = {
   readonly id: string;
   readonly warnings: readonly string[];
+};
+
+export type ContainerInspect = {
+  readonly id: string;
+  readonly ipAddress?: string;
+  readonly ports: Readonly<
+    Record<
+      string,
+      readonly { readonly hostIp: string; readonly hostPort: number }[]
+    >
+  >;
+  readonly raw: Readonly<Record<string, unknown>>;
 };
 
 export type RemoveContainerOptions = DockerRequestOptions & {
@@ -104,13 +130,17 @@ export type ArchiveReadInput = {
   readonly path: string;
 };
 
-export interface DockerClient {
+export interface DockerClient extends SandboxProvider {
   ping(options?: DockerRequestOptions): Promise<void>;
   version(options?: DockerRequestOptions): Promise<DockerVersion>;
   pullImage(
     input: PullImageInput,
     options?: DockerRequestOptions,
   ): Promise<void>;
+  inspectImage(
+    image: string,
+    options?: DockerRequestOptions,
+  ): Promise<ImageInspect | undefined>;
   createContainer(
     input: CreateContainerInput,
     options?: DockerRequestOptions,
@@ -119,11 +149,19 @@ export interface DockerClient {
     container: ContainerRef | string,
     options?: DockerRequestOptions,
   ): Promise<void>;
+  inspectContainer(
+    container: ContainerRef | string,
+    options?: DockerRequestOptions,
+  ): Promise<ContainerInspect>;
   removeContainer(
     container: ContainerRef | string,
     options?: RemoveContainerOptions,
   ): Promise<void>;
   exec(container: ContainerRef | string, input: ExecInput): Promise<ExecResult>;
+  execDetached(
+    container: ContainerRef | string,
+    input: ExecInput,
+  ): Promise<string>;
   putArchive(
     container: ContainerRef | string,
     input: ArchiveWriteInput,
@@ -135,3 +173,4 @@ export interface DockerClient {
     options?: DockerRequestOptions,
   ): Promise<Uint8Array>;
 }
+import type { SandboxProvider } from 'sandbox';

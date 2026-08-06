@@ -9,10 +9,5 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts"],
-  "references": [
-    {
-      "path": "../docker/tsconfig.lib.json"
-    }
-  ]
+  "include": ["src/**/*.ts"]
 }

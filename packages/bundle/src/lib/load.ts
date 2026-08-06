@@ -6,6 +6,7 @@ import type { ToolFactory } from 'tool';
 import { parse } from 'yaml';
 import { z } from 'zod';
 
+import { SkillSchema } from './schemas/skill.js';
 import type { Bundle, BundleManifest, Skill } from './types/bundle.js';
 
 const nameSchema = z.string().trim().min(1);
@@ -33,20 +34,18 @@ const manifestSchema = z
     ),
   })
   .strict();
-const skillSchema = z
-  .object({
-    name: nameSchema,
-    description: z.string().trim().min(1),
-    allowedTools: z.preprocess(
-      (value) =>
-        typeof value === 'string'
-          ? value.trim().split(/\s+/).filter(Boolean)
-          : (value ?? []),
-      z.array(nameSchema),
-    ),
-    body: z.string().trim().min(1),
-  })
-  .strict();
+const skillSchema = SkillSchema.extend({
+  name: nameSchema,
+  description: z.string().trim().min(1),
+  allowedTools: z.preprocess(
+    (value) =>
+      typeof value === 'string'
+        ? value.trim().split(/\s+/).filter(Boolean)
+        : (value ?? []),
+    z.array(nameSchema),
+  ),
+  body: z.string().trim().min(1),
+}).strict();
 
 const compare = (left: string, right: string): number =>
   left < right ? -1 : left > right ? 1 : 0;

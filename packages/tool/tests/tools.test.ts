@@ -6,12 +6,40 @@ import type { Sandbox } from 'sandbox';
 
 import {
   ToolErrorObject,
+  ToolDefinitionSchema,
+  ToolMetadataSchema,
   createToolStorage,
   defineTool,
   type ToolCall,
 } from '../src/index.js';
 
 const sandbox = { id: 'sandbox', root: '/workspace' } as Sandbox;
+
+test('exports a JSON-Schema-compatible tool definition schema', () => {
+  const value = {
+    name: 'lookup',
+    description: 'Looks up a value.',
+    inputSchema: {
+      type: 'object',
+      properties: { query: { type: 'string' } },
+      required: ['query'],
+    },
+    strict: true,
+  };
+
+  assert.deepEqual(ToolDefinitionSchema.parse(value), value);
+  assert.equal(z.toJSONSchema(ToolDefinitionSchema).type, 'object');
+});
+
+test('exports strict-output-compatible tool metadata', () => {
+  const value = { name: 'lookup', description: 'Looks up a value.' };
+
+  assert.deepEqual(ToolMetadataSchema.parse(value), value);
+  assert.deepEqual(z.toJSONSchema(ToolMetadataSchema).required, [
+    'name',
+    'description',
+  ]);
+});
 
 test('infers typed payloads from Zod schemas at compile time', async () => {
   const expectString = (value: string): string => value;

@@ -20,7 +20,9 @@
       "options": {
         "commands": [
           "tsc -p packages/mosaic/tsconfig.spec.json",
-          "node --test packages/mosaic/dist-tests/tests/*.test.js"
+          "node --test packages/mosaic/dist-tests/tests/*.test.js",
+          "node --test packages/mosaic/dist-tests/src/lib/states/graph/__tests__/index.test.js",
+          "node --test packages/mosaic/dist-tests/src/lib/states/execution/__tests__/index.test.js"
         ],
         "parallel": false
       }

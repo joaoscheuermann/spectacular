@@ -1,9 +1,5 @@
 import { Buffer } from 'node:buffer';
-import {
-  request as httpRequest,
-  type IncomingHttpHeaders,
-  type RequestOptions,
-} from 'node:http';
+import { request as httpRequest, type RequestOptions } from 'node:http';
 import { TextDecoder } from 'node:util';
 
 import {
@@ -12,23 +8,32 @@ import {
   DockerRequestTimeoutError,
 } from './classes/errors.js';
 import type {
-  ContainerRef,
-  CreateContainerInput,
+  CreateDockerClientOptions,
   DockerClient,
   DockerConnection,
   DockerResponse,
   DockerTransport,
   DockerTransportRequest,
-  DockerVersion,
-  ExecInput,
 } from './types/docker.js';
+import {
+  containerFrom,
+  containerId,
+  containerInspectFrom,
+  createBody,
+  defaultConnection,
+  encodeBody,
+  execCreateBody,
+  imageFrom,
+  numberField,
+  parseJson,
+  pathWithQuery,
+  socketPath,
+  stringField,
+  versionFrom,
+  withDefaultTimeout,
+} from './mapping.js';
 import { demuxDockerOutput } from './utils/demux.js';
-
-export type CreateDockerClientOptions = {
-  readonly connection?: DockerConnection;
-  readonly request?: DockerTransport;
-  readonly timeoutMs?: number;
-};
+import { provisionDocker } from './provider.js';
 
 const decoder = new TextDecoder();
 
@@ -55,7 +60,14 @@ export const createDockerClient = (
     expectedStatus: number | readonly number[],
   ): Promise<Value> => parseJson((await send(input, expectedStatus)).body);
 
-  return {
+  const client: DockerClient = {
+    provision: (input) =>
+      provisionDocker(client, input, {
+        connection: options.connection ?? defaultConnection(),
+        dropbearPath:
+          options.dropbearPath ?? '/opt/doric/firecracker/dropbearmulti',
+        statePath: options.statePath ?? '/var/lib/doric/docker',
+      }),
     async ping(control = {}) {
       await send({ method: 'GET', path: '/_ping', ...control }, 200);
     },
@@ -79,6 +91,20 @@ export const createDockerClient = (
         },
         200,
       );
+    },
+
+    async inspectImage(image, control = {}) {
+      const response = await send(
+        {
+          method: 'GET',
+          path: `/images/${encodeURIComponent(image)}/json`,
+          ...control,
+        },
+        [200, 404],
+      );
+      if (response.status === 404) return undefined;
+      const raw = parseJson<Record<string, unknown>>(response.body);
+      return imageFrom(raw);
     },
 
     async createContainer(input, control = {}) {
@@ -105,6 +131,18 @@ export const createDockerClient = (
         },
         [204, 304],
       );
+    },
+
+    async inspectContainer(container, control = {}) {
+      const raw = await json<Record<string, unknown>>(
+        {
+          method: 'GET',
+          path: `/containers/${encodeURIComponent(containerId(container))}/json`,
+          ...control,
+        },
+        200,
+      );
+      return containerInspectFrom(raw);
     },
 
     async removeContainer(container, options = {}) {
@@ -169,6 +207,31 @@ export const createDockerClient = (
       };
     },
 
+    async execDetached(container, input) {
+      const created = await json<Record<string, unknown>>(
+        {
+          method: 'POST',
+          path: `/containers/${encodeURIComponent(containerId(container))}/exec`,
+          body: execCreateBody(input),
+          signal: input.signal,
+          timeoutMs: input.timeoutMs,
+        },
+        201,
+      );
+      const execId = stringField(created, 'Id');
+      await send(
+        {
+          method: 'POST',
+          path: `/exec/${encodeURIComponent(execId)}/start`,
+          body: { Detach: true, Tty: input.tty ?? false },
+          signal: input.signal,
+          timeoutMs: input.timeoutMs,
+        },
+        200,
+      );
+      return execId;
+    },
+
     async putArchive(container, input, control = {}) {
       await send(
         {
@@ -200,6 +263,8 @@ export const createDockerClient = (
       ).body;
     },
   };
+
+  return client;
 };
 
 const createNodeTransport =
@@ -221,7 +286,7 @@ const createNodeTransport =
           cleanup();
           resolve({
             status: response.statusCode ?? 0,
-            headers: headersFrom(response.headers),
+            headers: { ...response.headers },
             body: Buffer.concat(chunks),
           });
         });
@@ -326,160 +391,3 @@ const withRequestControl = async (
     }
   }
 };
-
-const createBody = (input: CreateContainerInput): Record<string, unknown> => ({
-  Image: input.image,
-  ...(input.cmd === undefined ? {} : { Cmd: [...input.cmd] }),
-  ...(input.env === undefined ? {} : { Env: [...input.env] }),
-  ...(input.workingDir === undefined ? {} : { WorkingDir: input.workingDir }),
-  ...(input.labels === undefined ? {} : { Labels: { ...input.labels } }),
-  ...(input.user === undefined ? {} : { User: input.user }),
-  ...(input.hostConfig === undefined ? {} : { HostConfig: input.hostConfig }),
-  ...(input.networkDisabled === undefined
-    ? {}
-    : { NetworkDisabled: input.networkDisabled }),
-});
-
-const execCreateBody = (input: ExecInput): Record<string, unknown> => ({
-  AttachStdout: true,
-  AttachStderr: true,
-  Tty: input.tty ?? false,
-  Cmd: [...input.cmd],
-  ...(input.env === undefined ? {} : { Env: [...input.env] }),
-  ...(input.workingDir === undefined ? {} : { WorkingDir: input.workingDir }),
-  ...(input.user === undefined ? {} : { User: input.user }),
-});
-
-const encodeBody = (
-  body: unknown,
-): {
-  readonly bytes?: Uint8Array;
-  readonly headers: Readonly<Record<string, string>>;
-} => {
-  if (body === undefined) {
-    return { headers: {} };
-  }
-
-  if (body instanceof Uint8Array) {
-    return {
-      bytes: body,
-      headers: { 'content-length': String(body.byteLength) },
-    };
-  }
-
-  const bytes = Buffer.from(JSON.stringify(body));
-
-  return {
-    bytes,
-    headers: {
-      'content-type': 'application/json',
-      'content-length': String(bytes.byteLength),
-    },
-  };
-};
-
-const parseJson = <Value>(body: Uint8Array): Value => {
-  if (body.byteLength === 0) {
-    return {} as Value;
-  }
-
-  return JSON.parse(decoder.decode(body)) as Value;
-};
-
-const versionFrom = (raw: Record<string, unknown>): DockerVersion => ({
-  version: stringValue(raw.Version),
-  apiVersion: stringValue(raw.ApiVersion),
-  minApiVersion: stringValue(raw.MinAPIVersion),
-  gitCommit: stringValue(raw.GitCommit),
-  goVersion: stringValue(raw.GoVersion),
-  os: stringValue(raw.Os),
-  arch: stringValue(raw.Arch),
-  kernelVersion: stringValue(raw.KernelVersion),
-  experimental:
-    typeof raw.Experimental === 'boolean' ? raw.Experimental : undefined,
-  raw,
-});
-
-const containerFrom = (response: Record<string, unknown>): ContainerRef => ({
-  id: stringField(response, 'Id'),
-  warnings: Array.isArray(response.Warnings)
-    ? response.Warnings.filter(
-        (warning): warning is string => typeof warning === 'string',
-      )
-    : [],
-});
-
-const stringField = (record: Record<string, unknown>, key: string): string => {
-  const value = record[key];
-
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new Error(`Docker response is missing string field: ${key}`);
-  }
-
-  return value;
-};
-
-const numberField = (
-  record: Record<string, unknown>,
-  key: string,
-): number | null => {
-  const value = record[key];
-
-  return typeof value === 'number' ? value : null;
-};
-
-const stringValue = (value: unknown): string | undefined =>
-  typeof value === 'string' ? value : undefined;
-
-const containerId = (container: ContainerRef | string): string =>
-  typeof container === 'string' ? container : container.id;
-
-const withDefaultTimeout = (
-  request: DockerTransportRequest,
-  timeoutMs: number | undefined,
-): DockerTransportRequest => ({
-  ...request,
-  timeoutMs: request.timeoutMs ?? timeoutMs,
-});
-
-const defaultConnection = (): DockerConnection =>
-  process.platform === 'win32' ? { kind: 'namedPipe' } : { kind: 'unix' };
-
-const socketPath = (connection: DockerConnection): string =>
-  connection.kind === 'unix'
-    ? (connection.socketPath ??
-      dockerHostSocketPath(process.env.DOCKER_HOST) ??
-      '/var/run/docker.sock')
-    : (connection.pipePath ?? '//./pipe/docker_engine');
-
-const dockerHostSocketPath = (
-  dockerHost: string | undefined,
-): string | undefined => {
-  if (dockerHost === undefined || dockerHost.length === 0) {
-    return undefined;
-  }
-
-  if (dockerHost.startsWith('unix://')) {
-    return dockerHost.slice('unix://'.length);
-  }
-
-  return dockerHost.startsWith('/') ? dockerHost : undefined;
-};
-
-const pathWithQuery = (request: DockerTransportRequest): string => {
-  const params = new URLSearchParams();
-
-  for (const [key, value] of Object.entries(request.query ?? {})) {
-    if (value !== undefined) {
-      params.set(key, String(value));
-    }
-  }
-
-  const query = params.toString();
-
-  return query.length === 0 ? request.path : `${request.path}?${query}`;
-};
-
-const headersFrom = (
-  headers: IncomingHttpHeaders,
-): Record<string, string | readonly string[] | undefined> => ({ ...headers });

@@ -5,7 +5,7 @@ export type SandpoolLifecycle = 'active' | 'disposing' | 'disposed';
 
 export type SandpoolOptions = {
   readonly minIdle: number;
-  readonly maxContainers: number;
+  readonly maxSandboxes: number;
   readonly create: () => Promise<SandboxSession>;
   readonly logger: Logger;
 };

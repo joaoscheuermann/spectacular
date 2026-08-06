@@ -43,6 +43,8 @@ Rules:
 15. Ensure the resulting graph is acyclic.
 16. Every goal must contain concrete completion criteria.
 17. If no hint justifies a revision, return P0 unchanged.
+18. Set skills, tools, and artifacts to empty arrays for every goal. Do not
+    select or preserve runtime values in these fields.
 
 Return only the revised plan P1 as valid JSON matching the provided plan schema.
 Do not include explanations, commentary, selected skills, or markdown.

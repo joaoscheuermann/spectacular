@@ -1,0 +1,10 @@
+.git
+.nx
+.env
+.env.*
+**/dist
+**/dist-*
+**/node_modules
+**/*.log
+models/**/artifact
+tmp

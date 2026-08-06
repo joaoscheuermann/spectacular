@@ -20,17 +20,17 @@ test('validates the logger contract synchronously', () => {
     () =>
       createSandpool({
         minIdle: 0,
-        maxContainers: 1,
+        maxSandboxes: 1,
         create,
         logger: { ...valid, debug: undefined } as unknown as Logger,
       }),
-        /logger\.debug must be a function/u,
+    /logger\.debug must be a function/u,
   );
   assert.throws(
     () =>
       createSandpool({
         minIdle: 0,
-        maxContainers: 1,
+        maxSandboxes: 1,
         create,
         logger: { ...valid, child: undefined } as unknown as Logger,
       }),
@@ -40,7 +40,7 @@ test('validates the logger contract synchronously', () => {
     () =>
       createSandpool({
         minIdle: 0,
-        maxContainers: 1,
+        maxSandboxes: 1,
         create,
         logger: {
           debug: () => undefined,
@@ -55,7 +55,7 @@ test('logs lifecycle events as safe structured debug records', async () => {
   const { logger, records } = capture();
   const pool = createSandpool({
     minIdle: 1,
-    maxContainers: 1,
+    maxSandboxes: 1,
     logger,
     create: async () => session('sandbox-safe-id'),
   });
@@ -88,10 +88,10 @@ test('logs lifecycle events as safe structured debug records', async () => {
       'sandpool disposed',
     ],
   );
-    assert.ok(records.every(({ level }) => level === 20));
+  assert.ok(records.every(({ level }) => level === 20));
   assert.ok(records.every(({ component }) => component === 'sandpool'));
   assert.ok(records.every(({ minIdle }) => minIdle === 1));
-  assert.ok(records.every(({ maxContainers }) => maxContainers === 1));
+  assert.ok(records.every(({ maxSandboxes }) => maxSandboxes === 1));
   assert.equal(
     records.find(({ msg }) => msg === 'sandbox leased')?.sandboxId,
     'sandbox-safe-id',
@@ -107,7 +107,7 @@ test('logs cancellations, failures, and retries without causes', async () => {
   let disposals = 0;
   const pool = createSandpool({
     minIdle: 1,
-    maxContainers: 1,
+    maxSandboxes: 1,
     logger,
     create: async () => {
       creations += 1;
@@ -147,13 +147,21 @@ test('logs cancellations, failures, and retries without causes', async () => {
       ?.retryDelayMs,
     250,
   );
+  const creationRecord = records.find(
+    ({ msg }) => msg === 'sandbox creation failed',
+  );
+  assert.equal(creationRecord?.reason, 'sandbox_factory_rejected');
+  assert.equal(
+    creationRecord?.hint,
+    'Check sandbox provider availability, image access, and resource support.',
+  );
 });
 
 test('logs release and pool disposal only once when calls are repeated', async () => {
   const { logger, records } = capture();
   const pool = createSandpool({
     minIdle: 0,
-    maxContainers: 1,
+    maxSandboxes: 1,
     logger,
     create: async () => session('idempotent'),
   });
@@ -211,6 +219,7 @@ const session = (
     putFile: unsupported,
     getFile: unsupported,
     diff: async () => '',
+    ssh: async () => undefined,
     dispose,
   };
 };

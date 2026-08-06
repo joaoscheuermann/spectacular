@@ -1,15 +1,21 @@
 import type { z } from 'zod';
 import type { Sandbox } from 'sandbox';
 
-import type { JsonObject, JsonValue } from './json.js';
+import type { ToolDefinitionSchema } from '../schemas/definition.js';
+import type { ToolMetadataSchema } from '../schemas/metadata.js';
+import type { JsonValue } from './json.js';
 
 export type ToolSchema = z.ZodObject;
 
+type ToolDefinitionValue = z.output<typeof ToolDefinitionSchema>;
+type ToolMetadataValue = z.output<typeof ToolMetadataSchema>;
+
 export type ToolDefinition = {
-  readonly name: string;
-  readonly description?: string;
-  readonly inputSchema: JsonObject;
-  readonly strict?: boolean;
+  readonly [Key in keyof ToolDefinitionValue]: ToolDefinitionValue[Key];
+};
+
+export type ToolMetadata = {
+  readonly [Key in keyof ToolMetadataValue]: ToolMetadataValue[Key];
 };
 
 export type ToolCallRequest = {

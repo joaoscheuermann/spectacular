@@ -9,7 +9,6 @@ import type {
   StateMachineFinishFunction,
   StateMachineHandler,
   StateMachineHandlerActions,
-  StateMachineHandlers,
   StateMachineResult,
   StateMachineRunInput,
   StateMachineTransition,
@@ -25,7 +24,7 @@ type RuntimeHandlers<
 > = Partial<
   Record<
     Handlers,
-    StateMachineHandler<Handlers, State, Context, Finished, Failed>
+    StateMachineHandler<Context, State, Handlers, Finished, Failed>
   >
 >;
 
@@ -40,9 +39,15 @@ type HandlerCall =
 export const createStateMachine =
   <Context, State extends object, Finished = void, Failed = unknown>() =>
   /** Creates a reusable definition whose run state is isolated to each call. */
-  <Handlers extends string>(
-    handlers: StateMachineHandlers<Handlers, State, Context, Finished, Failed>,
-  ): StateMachineDefinition<Handlers, State, Context, Finished, Failed> => {
+  <Handlers extends string>(handlers: {
+    readonly [Handler in Handlers]: StateMachineHandler<
+      Context,
+      State,
+      Handlers,
+      Finished,
+      Failed
+    >;
+  }): StateMachineDefinition<Handlers, State, Context, Finished, Failed> => {
     const runtimeHandlers = { ...handlers } as RuntimeHandlers<
       Handlers,
       State,
@@ -180,7 +185,7 @@ const ownHandler = <
   handlers: RuntimeHandlers<Handlers, State, Context, Finished, Failed>,
   handler: Handlers,
 ):
-  | StateMachineHandler<Handlers, State, Context, Finished, Failed>
+  | StateMachineHandler<Context, State, Handlers, Finished, Failed>
   | undefined =>
   Object.prototype.hasOwnProperty.call(handlers, handler) &&
   typeof handlers[handler] === 'function'
@@ -194,7 +199,7 @@ const callHandler = async <
   Finished,
   Failed,
 >(
-  handler: StateMachineHandler<Handlers, State, Context, Finished, Failed>,
+  handler: StateMachineHandler<Context, State, Handlers, Finished, Failed>,
   state: State,
   context: Context,
   actions: StateMachineHandlerActions<Handlers, State, Finished, Failed>,

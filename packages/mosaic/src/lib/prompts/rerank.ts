@@ -22,9 +22,9 @@ export function rerankQuery(prompt: string, node: Node) {
       'completion criteria. Prefer applicable procedural guidance over',
       'generic topical similarity.',
     ].join(' '),
-  ];
+    ].filter((section): section is string => Boolean(section))
+    .join('\n\n');
 
   return sections
-    .filter((section): section is string => Boolean(section))
-    .join('\n\n');
+    ;
 }

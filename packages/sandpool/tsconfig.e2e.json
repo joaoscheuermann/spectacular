@@ -16,9 +16,6 @@
       "path": "./tsconfig.lib.json"
     },
     {
-      "path": "../docker/tsconfig.lib.json"
-    },
-    {
       "path": "../sandbox/tsconfig.lib.json"
     }
   ]

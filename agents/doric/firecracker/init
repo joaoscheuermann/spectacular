@@ -1,0 +1,31 @@
+#!/bin/busybox sh
+set -eu
+
+export PATH=/bin:/usr/sbin
+mount -t devtmpfs devtmpfs /dev
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t ext4 -o ro /dev/vda /newroot
+mount -t ext4 /dev/vdb /state
+mkdir -p /state/upper /state/work /newroot-overlay
+mount -t overlay overlay \
+  -o lowerdir=/newroot,upperdir=/state/upper,workdir=/state/work \
+  /newroot-overlay
+
+mkdir -p /newroot-overlay/.doric/bin /newroot-overlay/usr/sbin
+cp /bin/busybox /newroot-overlay/.doric/bin/busybox
+cp /usr/sbin/dropbearmulti /newroot-overlay/.doric/bin/dropbearmulti
+ln -s busybox /newroot-overlay/.doric/bin/sh
+cp /usr/sbin/doric-guest-start /newroot-overlay/usr/sbin/doric-guest-start
+chmod 0755 \
+  /newroot-overlay/.doric/bin/busybox \
+  /newroot-overlay/.doric/bin/dropbearmulti \
+  /newroot-overlay/usr/sbin/doric-guest-start
+
+mkdir -p /newroot-overlay/dev /newroot-overlay/proc /newroot-overlay/sys /newroot-overlay/run
+mkdir -p /newroot-overlay/doric-config
+mount --bind /state/config /newroot-overlay/doric-config
+mount --move /dev /newroot-overlay/dev
+mount --move /proc /newroot-overlay/proc
+mount --move /sys /newroot-overlay/sys
+exec switch_root /newroot-overlay /usr/sbin/doric-guest-start

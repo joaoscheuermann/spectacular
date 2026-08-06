@@ -12,6 +12,7 @@ import {
   type DockerTransport,
   type DockerTransportRequest,
 } from '../src/index.js';
+import { renderDockerFirewall } from '../src/lib/host.js';
 
 const jsonResponse = (status: number, body: unknown): DockerResponse => ({
   status,
@@ -116,31 +117,37 @@ test('honors timeout and abort controls around the injected transport', async ()
   );
 });
 
-test('uses DOCKER_HOST as the default Unix socket path when set', async () => {
-  const previous = process.env.DOCKER_HOST;
-  const socketPath = `/tmp/doric-missing-${randomUUID()}.sock`;
+test(
+  'uses DOCKER_HOST as the default Unix socket path when set',
+  {
+    skip: process.platform === 'win32',
+  },
+  async () => {
+    const previous = process.env.DOCKER_HOST;
+    const socketPath = `/tmp/doric-missing-${randomUUID()}.sock`;
 
-  process.env.DOCKER_HOST = `unix://${socketPath}`;
+    process.env.DOCKER_HOST = `unix://${socketPath}`;
 
-  try {
-    await assert.rejects(
-      createDockerClient().ping(),
-      (error: unknown) =>
-        typeof error === 'object' &&
-        error !== null &&
-        'code' in error &&
-        'address' in error &&
-        error.code === 'ENOENT' &&
-        error.address === socketPath,
-    );
-  } finally {
-    if (previous === undefined) {
-      delete process.env.DOCKER_HOST;
-    } else {
-      process.env.DOCKER_HOST = previous;
+    try {
+      await assert.rejects(
+        createDockerClient().ping(),
+        (error: unknown) =>
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          'address' in error &&
+          error.code === 'ENOENT' &&
+          error.address === socketPath,
+      );
+    } finally {
+      if (previous === undefined) {
+        delete process.env.DOCKER_HOST;
+      } else {
+        process.env.DOCKER_HOST = previous;
+      }
     }
-  }
-});
+  },
+);
 
 test('creates starts and inspects execs while demuxing non TTY output', async () => {
   const requests: DockerTransportRequest[] = [];
@@ -222,6 +229,133 @@ test('uses Docker archive endpoints for upload and download', async () => {
     copyUIDGID: true,
   });
   assert.equal(Buffer.from(archive).toString('utf8'), 'archive');
+});
+
+test('provisions Sandbox runtimes with CPU memory and writable disk limits', async () => {
+  const requests: DockerTransportRequest[] = [];
+  const client = createDockerClient({
+    request: async (request) => {
+      requests.push(request);
+      if (request.path === '/containers/create') {
+        return jsonResponse(201, { Id: 'sandbox-1' });
+      }
+      return {
+        status: request.path === '/images/create' ? 200 : 204,
+        headers: {},
+        body: new Uint8Array(),
+      };
+    },
+  });
+
+  const runtime = await client.provision({
+    image: 'node:22-slim',
+    root: '/workspace',
+    resources: { cpuCount: 2, memoryMiB: 768, diskMiB: 4096 },
+    network: { mode: 'disabled', ssh: false },
+  });
+  await runtime.dispose();
+
+  const create = requests.find(({ path }) => path === '/containers/create');
+  assert.ok(create);
+  const body = create.body as Record<string, unknown>;
+  assert.deepEqual(body.HostConfig, {
+    AutoRemove: false,
+    Binds: [],
+    NetworkMode: 'none',
+    Memory: 805_306_368,
+    NanoCpus: 2_000_000_000,
+    StorageOpt: { size: '4096M' },
+  });
+  assert.equal(body.NetworkDisabled, true);
+  assert.ok(
+    requests.some(
+      ({ method, path }) =>
+        method === 'DELETE' && path === '/containers/sandbox-1',
+    ),
+  );
+});
+
+test('inspects containers and starts detached execs', async () => {
+  const requests: DockerTransportRequest[] = [];
+  const client = createDockerClient({
+    request: async (request) => {
+      requests.push(request);
+      if (request.path === '/containers/container-1/json') {
+        return jsonResponse(200, {
+          Id: 'container-1',
+          NetworkSettings: {
+            Networks: { bridge: { IPAddress: '172.17.0.2' } },
+            Ports: {
+              '22/tcp': [{ HostIp: '127.0.0.1', HostPort: '49152' }],
+            },
+          },
+        });
+      }
+      if (request.path === '/containers/container-1/exec') {
+        return jsonResponse(201, { Id: 'exec-1' });
+      }
+      return textResponse(200, '');
+    },
+  });
+
+  const inspect = await client.inspectContainer('container-1');
+  assert.equal(inspect.ipAddress, '172.17.0.2');
+  assert.deepEqual(inspect.ports['22/tcp'], [
+    { hostIp: '127.0.0.1', hostPort: 49152 },
+  ]);
+  assert.equal(
+    await client.execDetached('container-1', {
+      cmd: ['/dropbearmulti', 'dropbear', '-F'],
+      user: 'root',
+    }),
+    'exec-1',
+  );
+  assert.deepEqual(requests.at(-1)?.body, { Detach: true, Tty: false });
+});
+
+test('reports an actionable unsupported Docker disk quota failure', async () => {
+  const client = createDockerClient({
+    request: async (request) => {
+      if (request.path === '/containers/create') {
+        return textResponse(500, 'storage-opt size is not supported');
+      }
+      return {
+        status: request.path === '/images/create' ? 200 : 204,
+        headers: {},
+        body: new Uint8Array(),
+      };
+    },
+  });
+
+  await assert.rejects(
+    client.provision({
+      image: 'node:22-slim',
+      root: '/workspace',
+      resources: { cpuCount: 1, memoryMiB: 512, diskMiB: 4096 },
+      network: { mode: 'disabled', ssh: false },
+    }),
+    /cannot enforce the requested 4096 MiB writable-layer quota/u,
+  );
+});
+
+test('renders host-input and protected-destination Docker rules', () => {
+  const rules = renderDockerFirewall('doric_test', '172.17.0.2', {
+    mode: 'egress',
+    ssh: false,
+    dnsServers: ['1.1.1.1'],
+    allowPrivate: [{ cidr: '10.0.0.8/32', protocol: 'tcp', ports: [443] }],
+  });
+
+  assert.match(rules, /chain input/u);
+  assert.match(rules, /ip saddr 172\.17\.0\.2 drop/u);
+  assert.ok(
+    rules.indexOf('ip daddr 10.0.0.0/8 drop') <
+      rules.indexOf('ip daddr 1.1.1.1 udp dport 53 accept'),
+  );
+  assert.ok(
+    rules.indexOf('ip daddr 10.0.0.8/32 tcp dport { 443 } accept') <
+      rules.indexOf('ip daddr 10.0.0.0/8 drop'),
+  );
 });
 
 const frame = (channel: number, text: string): Buffer => {

@@ -10,13 +10,9 @@
     "tsBuildInfoFile": "dist-e2e/tsconfig.e2e.tsbuildinfo",
     "types": ["node"]
   },
-  "include": ["tests/**/*.e2e.ts"],
+  "include": ["src/**/*.ts", "tests/**/*.e2e.ts"],
   "references": [
-    {
-      "path": "./tsconfig.lib.json"
-    },
-    {
-      "path": "../docker/tsconfig.lib.json"
-    }
+    { "path": "../sandbox/tsconfig.lib.json" },
+    { "path": "../sandpool/tsconfig.lib.json" }
   ]
 }

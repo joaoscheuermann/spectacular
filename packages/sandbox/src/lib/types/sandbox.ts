@@ -1,17 +1,47 @@
-import type { DockerClient } from 'docker';
-
-export type SandboxNetworkPolicy =
-  | { readonly mode: 'disabled' }
-  | { readonly mode: 'internal'; readonly networkName: string }
-  | { readonly mode: 'bridge' };
-
 export type SandboxResources = {
-  readonly memoryBytes?: number;
-  readonly nanoCpus?: number;
-  readonly cpuPeriod?: number;
-  readonly cpuQuota?: number;
-  readonly pidsLimit?: number;
-  readonly user?: string;
+  readonly cpuCount: number;
+  readonly memoryMiB: number;
+  readonly diskMiB: number;
+};
+
+export type SandboxNetworkPolicy = {
+  readonly mode: 'disabled' | 'egress';
+  readonly ssh?:
+    | boolean
+    | {
+        readonly bindAddress?: string;
+        readonly advertisedHost?: string;
+        readonly port?: number;
+      };
+  readonly dnsServers?: readonly string[];
+  readonly allowPrivate?: readonly {
+    readonly cidr: string;
+    readonly protocol: 'tcp' | 'udp';
+    readonly ports: readonly number[];
+  }[];
+};
+
+export type NormalizedSandboxNetworkPolicy = Omit<
+  SandboxNetworkPolicy,
+  'ssh'
+> & {
+  readonly mode: 'disabled' | 'egress';
+  readonly ssh:
+    | false
+    | {
+        readonly bindAddress: string;
+        readonly advertisedHost?: string;
+        readonly port?: number;
+      };
+};
+
+export type SandboxSshAccess = {
+  readonly host: string;
+  readonly port: number;
+  readonly username: 'root';
+  readonly privateKey: string;
+  readonly knownHosts: string;
+  readonly hostKeyFingerprint: string;
 };
 
 export type SandboxExecInput = {
@@ -31,6 +61,29 @@ export type SandboxExecResult = {
   readonly stdoutBytes: Uint8Array;
   readonly stderrBytes: Uint8Array;
 };
+
+export type SandboxProvisionInput = {
+  readonly image: string;
+  readonly imagePullPolicy?: 'always' | 'if-not-present';
+  readonly name?: string;
+  readonly root: string;
+  readonly resources: SandboxResources;
+  readonly network: NormalizedSandboxNetworkPolicy;
+  readonly timeoutMs?: number;
+};
+
+export interface SandboxRuntime {
+  readonly id: string;
+  exec(input: SandboxExecInput): Promise<SandboxExecResult>;
+  putFile(path: string, bytes: Uint8Array): Promise<void>;
+  getFile(path: string): Promise<Uint8Array>;
+  ssh(): Promise<SandboxSshAccess | undefined>;
+  dispose(): Promise<void>;
+}
+
+export interface SandboxProvider {
+  provision(input: SandboxProvisionInput): Promise<SandboxRuntime>;
+}
 
 export type GitAuth =
   | {
@@ -53,24 +106,20 @@ export type CloneRepoInput = {
   readonly timeoutMs?: number;
 };
 
-export type ClonedRepo = {
-  readonly path: string;
-  readonly commit: string;
-};
+export type ClonedRepo = { readonly path: string; readonly commit: string };
 
 export type CreateSandboxOptions = {
-  readonly docker: DockerClient;
+  readonly provider: SandboxProvider;
   readonly image: string;
+  readonly imagePullPolicy?: 'always' | 'if-not-present';
   readonly name?: string;
   readonly root?: string;
-  readonly resources?: SandboxResources;
+  readonly resources: SandboxResources;
   readonly network?: SandboxNetworkPolicy;
   readonly timeoutMs?: number;
 };
 
-export type SandboxDiffInput = {
-  readonly cwd?: string;
-};
+export type SandboxDiffInput = { readonly cwd?: string };
 
 export interface Sandbox {
   readonly id: string;
@@ -82,6 +131,7 @@ export interface Sandbox {
   putFile(path: string, bytes: Uint8Array): Promise<void>;
   getFile(path: string): Promise<Uint8Array>;
   diff(input?: SandboxDiffInput): Promise<string>;
+  ssh(): Promise<SandboxSshAccess | undefined>;
 }
 
 export interface SandboxSession extends Sandbox {

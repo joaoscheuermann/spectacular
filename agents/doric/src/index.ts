@@ -1,16 +1,23 @@
+import { createServer } from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import express from 'express';
 import pino from 'pino';
 import pretty from 'pino-pretty';
+import { Server as SocketServer } from 'socket.io';
 
 import { loadBundles, type Skill } from 'bundle';
 import { createDockerClient } from 'docker';
+import { createFirecrackerClient } from 'firecracker';
 import { createFetchTransport, createOpenAiProvider } from 'llms';
 import mosaic from 'mosaic';
 import { createSandbox } from 'sandbox';
 import { createSandpool } from 'sandpool';
 import type { Tool } from 'tool';
 import { createVectorDatabase } from 'victor';
+
+import { createVmRegistry } from './lib/vms.js';
+import { createVmsRouter } from './routes/vms.js';
 
 async function main() {
   const logger = pino(
@@ -23,6 +30,13 @@ async function main() {
       },
     ]),
   );
+
+  const host = process.env.DORIC_HOST ?? '0.0.0.0';
+  const port = Number.parseInt(process.env.DORIC_PORT ?? '3000', 10);
+  const app = express();
+  const server = createServer(app);
+
+  new SocketServer(server);
 
   const provider = createOpenAiProvider({
     transport: createFetchTransport(),
@@ -40,14 +54,31 @@ async function main() {
 
   logger.info({ msg: 'initializing' });
 
+  const sandboxProviderName =
+    process.env.DORIC_SANDBOX_PROVIDER === 'firecracker'
+      ? 'firecracker'
+      : 'docker';
+  const sandboxProvider =
+    sandboxProviderName === 'firecracker'
+      ? createFirecrackerClient()
+      : createDockerClient();
+  const vms = createVmRegistry(sandboxProviderName, sandboxProvider);
+
+  app.use('/vms', createVmsRouter({ list: vms.list }));
+  server.listen(port, host);
+
+  logger.info({ component: 'sandbox', provider: sandboxProviderName });
+
   const pool = createSandpool({
     minIdle: 1,
-    maxContainers: 10,
+    maxSandboxes: 10,
     logger,
     create: () =>
       createSandbox({
-        docker: createDockerClient(),
+        provider: vms.provider,
         image: 'node:22-slim',
+        imagePullPolicy: 'if-not-present',
+        resources: { cpuCount: 1, memoryMiB: 512, diskMiB: 4096 },
         network: { mode: 'disabled' },
       }),
   });

@@ -13,9 +13,6 @@
   "references": [
     {
       "path": "../sandbox/tsconfig.lib.json"
-    },
-    {
-      "path": "../docker/tsconfig.lib.json"
     }
   ]
 }

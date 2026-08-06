@@ -4,7 +4,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { loadBundles } from '../src/index.js';
+import { z } from 'zod';
+
+import { SkillSchema, loadBundles } from '../src/index.js';
 
 type ToolEntry = { readonly path: string; readonly alwaysAvailable: boolean };
 type SkillEntry = { readonly path: string; readonly alwaysAvailable: boolean };
@@ -21,6 +23,18 @@ Follow this procedure.
 `;
 
 const createRoot = () => mkdtemp(join(tmpdir(), 'bundle-test-'));
+
+test('exports a JSON-Schema-compatible skill schema', () => {
+  const value = {
+    name: 'example',
+    description: 'Example skill.',
+    body: 'Follow the procedure.',
+    allowedTools: ['read'],
+  };
+
+  assert.deepEqual(SkillSchema.parse(value), value);
+  assert.equal(z.toJSONSchema(SkillSchema).type, 'object');
+});
 
 const createBundle = async (
   root: string,
@@ -98,6 +112,39 @@ test('loads executable tools, availability flags, and skill frontmatter', async 
     assert.equal(factory?.name, 'example');
     assert.equal(loaded?.skills[0]?.alwaysAvailable, false);
     assert.deepEqual(loaded?.skills[0]?.skill.allowedTools, ['example']);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('loads missing allowed-tools as a mutable empty array', async () => {
+  const root = await createRoot();
+  try {
+    const bundle = await createBundle(root, 'core', {
+      skills: [{ path: 'skills/example/SKILL.md', alwaysAvailable: false }],
+    });
+    await mkdir(join(bundle, 'skills', 'example'));
+    await writeFile(
+      join(bundle, 'skills', 'example', 'SKILL.md'),
+      `---
+name: example
+description: Example description
+---
+
+# Example
+
+Follow this procedure.
+`,
+    );
+
+    const [loaded] = await loadBundles(root);
+    const allowedTools = loaded?.skills[0]?.skill.allowedTools;
+
+    assert.ok(allowedTools);
+    assert.equal(Array.isArray(allowedTools), true);
+    assert.equal(allowedTools.length, 0);
+    allowedTools?.push('later');
+    assert.deepEqual(allowedTools, ['later']);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

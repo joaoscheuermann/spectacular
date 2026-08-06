@@ -1,35 +1,18 @@
-import { Buffer } from 'node:buffer';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type {
-  ArchiveReadInput,
-  ArchiveWriteInput,
-  ContainerRef,
-  CreateContainerInput,
-  DockerClient,
-  DockerVersion,
-  ExecInput,
-  ExecResult,
-  PullImageInput,
-  RemoveContainerOptions,
-} from 'docker';
+  SandboxExecInput,
+  SandboxExecResult,
+  SandboxProvider,
+  SandboxProvisionInput,
+  SandboxRuntime,
+  SandboxSshAccess,
+} from '../src/index.js';
+import { createSandbox, normalizeSandboxNetwork } from '../src/index.js';
 
-import { createSandbox } from '../src/index.js';
-
-type FakeDocker = DockerClient & {
-  readonly calls: string[];
-  readonly pulls: PullImageInput[];
-  readonly creates: CreateContainerInput[];
-  readonly starts: string[];
-  readonly execs: ExecInput[];
-  readonly removes: RemoveContainerOptions[];
-  readonly archives: Map<string, Uint8Array>;
-  failStart: boolean;
-  failRemove: boolean;
-};
-
-const ok = (stdout = ''): ExecResult => ({
+const resources = { cpuCount: 1, memoryMiB: 512, diskMiB: 4096 };
+const ok = (stdout = ''): SandboxExecResult => ({
   exitCode: 0,
   stdout,
   stderr: '',
@@ -37,281 +20,195 @@ const ok = (stdout = ''): ExecResult => ({
   stderrBytes: new Uint8Array(),
 });
 
-const fakeDocker = (): FakeDocker => {
-  const archives = new Map<string, Uint8Array>();
-  const docker: FakeDocker = {
-    calls: [],
-    pulls: [],
-    creates: [],
-    starts: [],
+type Fake = {
+  provider: SandboxProvider;
+  readonly provisions: SandboxProvisionInput[];
+  readonly execs: SandboxExecInput[];
+  readonly files: Map<string, Uint8Array>;
+  disposals: number;
+  access: SandboxSshAccess | undefined;
+};
+
+const fake = (): Fake => {
+  const value: Fake = {
+    provisions: [],
     execs: [],
-    removes: [],
-    archives,
-    failStart: false,
-    failRemove: false,
-
-    async ping() {
-      return undefined;
-    },
-
-    async version(): Promise<DockerVersion> {
-      return { raw: {} };
-    },
-
-    async pullImage(input: PullImageInput) {
-      docker.calls.push(`pull:${input.image}`);
-      docker.pulls.push(input);
-    },
-
-    async createContainer(input: CreateContainerInput) {
-      docker.calls.push('create');
-      docker.creates.push(input);
-      return { id: 'container-1', warnings: [] };
-    },
-
-    async startContainer(container: ContainerRef | string) {
-      docker.calls.push(`start:${id(container)}`);
-      docker.starts.push(id(container));
-
-      if (docker.failStart) {
-        throw new Error('start failed');
-      }
-    },
-
-    async removeContainer(
-      _container: ContainerRef | string,
-      options: RemoveContainerOptions = {},
-    ) {
-      docker.removes.push(options);
-
-      if (docker.failRemove) {
-        throw new Error('remove failed');
-      }
-    },
-
-    async exec(_container: ContainerRef | string, input: ExecInput) {
-      docker.execs.push(input);
-
+    files: new Map(),
+    disposals: 0,
+    access: undefined,
+    provider: undefined as never,
+  };
+  const runtime: SandboxRuntime = {
+    id: 'runtime-1',
+    async exec(input) {
+      value.execs.push(input);
       if (input.cmd.join(' ') === 'git -C /workspace/repo rev-parse HEAD') {
         return ok('abc123\n');
       }
-
       return ok();
     },
-
-    async putArchive(
-      _container: ContainerRef | string,
-      input: ArchiveWriteInput,
-    ) {
-      archives.set(input.path, input.archive);
+    async putFile(path, bytes) {
+      value.files.set(path, bytes);
     },
-
-    async getArchive(
-      _container: ContainerRef | string,
-      input: ArchiveReadInput,
-    ) {
-      const directory = input.path.replace(/\/[^/]+$/u, '');
-      const archive = archives.get(directory);
-
-      assert.ok(archive, `missing archive for ${input.path}`);
-
-      return archive;
+    async getFile(path) {
+      const bytes = value.files.get(path);
+      if (bytes === undefined) throw new Error(`missing ${path}`);
+      return bytes;
+    },
+    async ssh() {
+      return value.access;
+    },
+    async dispose() {
+      value.disposals += 1;
     },
   };
-
-  return docker;
+  value.provider = {
+    async provision(input: SandboxProvisionInput) {
+      value.provisions.push(input);
+      return runtime;
+    },
+  };
+  return value;
 };
 
-test('creates an empty disposable container with safety defaults and no clone', async () => {
-  const docker = fakeDocker();
-  const session = await createSandbox({
-    docker,
-    image: 'alpine:latest',
-    name: 'doric-context-1',
-    resources: {
-      memoryBytes: 268_435_456,
-      nanoCpus: 1_000_000_000,
-      pidsLimit: 128,
-      user: '1000:1000',
-    },
+test('normalizes omitted and SSH network policies', () => {
+  assert.deepEqual(normalizeSandboxNetwork(undefined), {
+    mode: 'disabled',
+    ssh: false,
   });
-
-  assert.equal(session.id, 'container-1');
-  assert.deepEqual(docker.calls, [
-    'pull:alpine:latest',
-    'create',
-    'start:container-1',
-  ]);
-  assert.deepEqual(docker.pulls, [{ image: 'alpine:latest' }]);
-  assert.deepEqual(docker.starts, ['container-1']);
-  assert.equal(docker.execs.length, 0);
-  assert.deepEqual(docker.creates[0], {
-    name: 'doric-context-1',
-    image: 'alpine:latest',
-    cmd: ['sh', '-lc', 'while :; do sleep 3600; done'],
-    workingDir: '/workspace',
-    user: '1000:1000',
-    labels: {
-      'doric.sandbox': 'true',
-      'doric.sandbox.root': '/workspace',
-    },
-    hostConfig: {
-      AutoRemove: false,
-      Binds: [],
-      NetworkMode: 'none',
-      Memory: 268_435_456,
-      NanoCpus: 1_000_000_000,
-      PidsLimit: 128,
-    },
-    networkDisabled: true,
-  });
-
-  await session.dispose();
-
-  assert.deepEqual(docker.removes, [{ force: true, volumes: true }]);
-});
-
-test('rejects invalid custom container names before Docker creation', async () => {
-  const docker = fakeDocker();
-
-  await assert.rejects(
-    createSandbox({ docker, image: 'alpine:latest', name: 'doric:context' }),
-    /Docker container name must match/u,
-  );
-  assert.equal(docker.creates.length, 0);
-});
-
-test('force removes the container when startup fails', async () => {
-  const docker = fakeDocker();
-
-  docker.failStart = true;
-
-  await assert.rejects(
-    createSandbox({ docker, image: 'alpine:latest' }),
-    /start failed/u,
-  );
-  assert.deepEqual(docker.removes, [
-    { force: true, volumes: true, timeoutMs: undefined },
-  ]);
-});
-
-test('clones repositories only when cloneRepo is called and limits credentials to clone and fetch commands', async () => {
-  const docker = fakeDocker();
-  const session = await createSandbox({ docker, image: 'alpine:latest' });
-
-  assert.equal(docker.execs.length, 0);
-
-  const repo = await session.cloneRepo({
-    url: 'https://example.test/repo.git',
-    branch: 'main',
-    commit: 'abc123',
-    auth: { kind: 'token', token: 'secret-token' },
-  });
-  const commands = docker.execs.map((input) => input.cmd.join(' '));
-
-  assert.deepEqual(repo, { path: '/workspace/repo', commit: 'abc123' });
-  assert.match(commands[0] ?? '', /git clone/u);
-  assert.match(commands[0] ?? '', /--branch main/u);
-  assert.match(commands[1] ?? '', /git -C \/workspace\/repo fetch/u);
-  assert.match(commands[2] ?? '', /git -C \/workspace\/repo checkout/u);
-  assert.match(commands[3] ?? '', /git -C \/workspace\/repo rev-parse HEAD/u);
-
-  const encodedCredential = Buffer.from('x-access-token:secret-token').toString(
-    'base64',
-  );
-  assert.ok(commands.every((command) => !command.includes(encodedCredential)));
-
-  const credentialExecs = docker.execs.filter((input) =>
-    input.env?.some((value) => value.includes(encodedCredential)),
-  );
-
   assert.deepEqual(
-    credentialExecs.map((input) =>
-      input.cmd.includes('clone') ? 'clone' : 'fetch',
-    ),
-    ['clone', 'fetch'],
-  );
-});
-
-test('writes and reads files through Docker archive APIs', async () => {
-  const docker = fakeDocker();
-  const session = await createSandbox({ docker, image: 'alpine:latest' });
-
-  await session.writeFile('src/hello.txt', 'hello');
-
-  assert.deepEqual(docker.execs[0]?.cmd, ['mkdir', '-p', '/workspace/src']);
-  assert.ok(docker.archives.has('/workspace/src'));
-
-  const content = await session.readFile('/workspace/src/hello.txt');
-
-  assert.equal(content, 'hello');
-});
-
-test('rejects file and clone paths outside the sandbox root', async () => {
-  const docker = fakeDocker();
-  const session = await createSandbox({ docker, image: 'alpine:latest' });
-
-  await assert.rejects(
-    session.writeFile('/etc/passwd', 'blocked'),
-    /must stay under \/workspace/u,
-  );
-  await assert.rejects(
-    session.cloneRepo({
-      url: 'https://example.test/repo.git',
-      directory: '/outside/repo',
+    normalizeSandboxNetwork({
+      mode: 'disabled',
+      ssh: true,
+      dnsServers: ['1.1.1.1'],
     }),
-    /must stay under \/workspace/u,
+    {
+      mode: 'egress',
+      ssh: {
+        bindAddress: '127.0.0.1',
+        advertisedHost: undefined,
+        port: undefined,
+      },
+      dnsServers: ['1.1.1.1'],
+    },
   );
 });
 
-test('diff runs in the cloned repo by default and accepts an explicit cwd', async () => {
-  const docker = fakeDocker();
-  const session = await createSandbox({ docker, image: 'alpine:latest' });
+test('rejects unsafe or incomplete network policies', () => {
+  assert.throws(
+    () => normalizeSandboxNetwork({ mode: 'egress' }),
+    /requires at least one DNS/u,
+  );
+  assert.throws(
+    () => normalizeSandboxNetwork({ mode: 'egress', dnsServers: ['dns.test'] }),
+    /IPv4 literal/u,
+  );
+  assert.throws(
+    () => normalizeSandboxNetwork({ mode: 'egress', dnsServers: ['::1'] }),
+    /IPv4 literal/u,
+  );
+  assert.throws(
+    () =>
+      normalizeSandboxNetwork({
+        mode: 'disabled',
+        ssh: { bindAddress: '0.0.0.0' },
+        dnsServers: ['1.1.1.1'],
+      }),
+    /requires advertisedHost/u,
+  );
+  assert.throws(
+    () =>
+      normalizeSandboxNetwork({
+        mode: 'disabled',
+        allowPrivate: [{ cidr: '10.0.0.0/33', protocol: 'tcp', ports: [443] }],
+      }),
+    /valid CIDR/u,
+  );
+  assert.throws(
+    () =>
+      normalizeSandboxNetwork({
+        mode: 'disabled',
+        allowPrivate: [{ cidr: 'fd00::/8', protocol: 'tcp', ports: [443] }],
+      }),
+    /valid CIDR/u,
+  );
+});
 
-  await session.cloneRepo({ url: 'https://example.test/repo.git' });
-  const defaultDiff = await session.diff();
-  const explicitDiff = await session.diff({ cwd: '/workspace/other' });
+test('requires positive integer resource limits before provisioning', async () => {
+  const value = fake();
+  await assert.rejects(
+    createSandbox({
+      provider: value.provider,
+      image: 'node:22-slim',
+      resources: { ...resources, diskMiB: 0 },
+    }),
+    /diskMiB must be a positive integer/u,
+  );
+  assert.equal(value.provisions.length, 0);
+});
 
-  assert.equal(defaultDiff, '');
-  assert.equal(explicitDiff, '');
-
-  assert.deepEqual(docker.execs.at(-2), {
-    cmd: ['git', 'diff'],
-    env: undefined,
-    workingDir: '/workspace/repo',
-    user: undefined,
-    timeoutMs: undefined,
-    signal: undefined,
-    tty: undefined,
+test('passes normalized inputs to the provider and wraps workspace helpers', async () => {
+  const value = fake();
+  const sandbox = await createSandbox({
+    provider: value.provider,
+    image: 'node:22-slim',
+    imagePullPolicy: 'if-not-present',
+    resources,
   });
-  assert.deepEqual(docker.execs.at(-1), {
-    cmd: ['git', 'diff'],
-    env: undefined,
-    workingDir: '/workspace/other',
-    user: undefined,
+  assert.equal(sandbox.id, 'runtime-1');
+  assert.deepEqual(value.provisions[0], {
+    image: 'node:22-slim',
+    imagePullPolicy: 'if-not-present',
+    name: undefined,
+    root: '/workspace',
+    resources,
+    network: { mode: 'disabled', ssh: false },
     timeoutMs: undefined,
-    signal: undefined,
-    tty: undefined,
+  });
+
+  await sandbox.writeFile('src/hello.txt', 'hello');
+  assert.deepEqual(value.execs[0]?.cmd, ['mkdir', '-p', '/workspace/src']);
+  assert.equal(await sandbox.readFile('/workspace/src/hello.txt'), 'hello');
+  await assert.rejects(sandbox.getFile('/etc/passwd'), /must stay under/u);
+});
+
+test('clones and diffs through provider-neutral exec', async () => {
+  const value = fake();
+  const sandbox = await createSandbox({
+    provider: value.provider,
+    image: 'node:22-slim',
+    resources,
+  });
+  assert.deepEqual(
+    await sandbox.cloneRepo({ url: 'https://example.test/repo.git' }),
+    { path: '/workspace/repo', commit: 'abc123' },
+  );
+  await sandbox.diff();
+  assert.deepEqual(value.execs.at(-1), {
+    cmd: ['git', 'diff'],
+    cwd: '/workspace/repo',
   });
 });
 
-test('allows dispose to be retried when Docker removal fails', async () => {
-  const docker = fakeDocker();
-  const session = await createSandbox({ docker, image: 'alpine:latest' });
-
-  docker.failRemove = true;
-
-  await assert.rejects(session.dispose(), /remove failed/u);
-
-  docker.failRemove = false;
-
-  await session.dispose();
-
-  assert.deepEqual(docker.removes, [
-    { force: true, volumes: true },
-    { force: true, volumes: true },
-  ]);
+test('forwards SSH and guards every operation after idempotent disposal', async () => {
+  const value = fake();
+  value.access = {
+    host: '127.0.0.1',
+    port: 2200,
+    username: 'root',
+    privateKey: 'private',
+    knownHosts: 'known',
+    hostKeyFingerprint: 'SHA256:test',
+  };
+  const sandbox = await createSandbox({
+    provider: value.provider,
+    image: 'node:22-slim',
+    resources,
+  });
+  assert.equal((await sandbox.ssh())?.port, 2200);
+  await sandbox.dispose();
+  await sandbox.dispose();
+  assert.equal(value.disposals, 1);
+  assert.throws(() => sandbox.ssh(), /has been disposed/u);
+  assert.throws(() => sandbox.exec({ cmd: ['true'] }), /has been disposed/u);
 });
-
-const id = (container: ContainerRef | string): string =>
-  typeof container === 'string' ? container : container.id;

@@ -165,6 +165,7 @@ const fakeSandbox = (behavior: SandboxExecResult | Error): FakeSandbox => {
     putFile: unsupported,
     getFile: unsupported,
     diff: unsupported,
+    ssh: async () => undefined,
     dispose: unsupported,
   };
 };

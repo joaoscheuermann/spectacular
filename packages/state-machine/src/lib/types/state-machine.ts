@@ -68,11 +68,11 @@ export type StateMachineHandlerActions<
 };
 
 export type StateMachineHandler<
-  Handlers extends string,
-  State extends object,
   Context,
-  Finished,
-  Failed,
+  State extends object,
+  Handlers extends string = string,
+  Finished = void,
+  Failed = unknown,
 > = (
   state: State,
   context: Context,
@@ -80,22 +80,6 @@ export type StateMachineHandler<
 ) =>
   | StateMachineAction<Handlers, State, Finished, Failed>
   | Promise<StateMachineAction<Handlers, State, Finished, Failed>>;
-
-export type StateMachineHandlers<
-  Handlers extends string,
-  State extends object,
-  Context,
-  Finished,
-  Failed,
-> = {
-  readonly [Handler in Handlers]: StateMachineHandler<
-    Handlers,
-    State,
-    Context,
-    Finished,
-    Failed
-  >;
-};
 
 export type StateMachineRunInput<
   Handlers extends string,

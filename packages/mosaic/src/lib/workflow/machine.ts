@@ -2,6 +2,7 @@ import { createStateMachine } from 'state-machine';
 
 import { graph } from '../states/graph/index.js';
 import { bundle } from '../states/bundle/index.js';
+import { execution } from '../states/execution/index.js';
 import { schedule } from '../states/schedule/index.js';
 import type { WorkflowContext, WorkflowState } from '../types/workflow.js';
 
@@ -11,4 +12,5 @@ export const createMachine = () =>
     graph,
     schedule,
     bundle,
+    execution,
   });

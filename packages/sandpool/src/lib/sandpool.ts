@@ -95,11 +95,11 @@ const validateOptions = (options: SandpoolOptions): void => {
   if (!Number.isInteger(options.minIdle) || options.minIdle < 0) {
     throw new RangeError('minIdle must be a non-negative integer');
   }
-  if (!Number.isInteger(options.maxContainers) || options.maxContainers <= 0) {
-    throw new RangeError('maxContainers must be a positive integer');
+  if (!Number.isInteger(options.maxSandboxes) || options.maxSandboxes <= 0) {
+    throw new RangeError('maxSandboxes must be a positive integer');
   }
-  if (options.minIdle > options.maxContainers) {
-    throw new RangeError('minIdle must not exceed maxContainers');
+  if (options.minIdle > options.maxSandboxes) {
+    throw new RangeError('minIdle must not exceed maxSandboxes');
   }
   if (typeof options.create !== 'function') {
     throw new TypeError('create must be a function');
@@ -192,7 +192,7 @@ const startRequiredCreations = (state: State): void => {
   if (state.retryTimer !== undefined) return;
 
   const known = state.records.size + state.creating;
-  const capacity = state.options.maxContainers - known;
+  const capacity = state.options.maxSandboxes - known;
   const deficit =
     state.acquisitions.length + state.options.minIdle - state.idle.length;
   const count = Math.max(0, Math.min(capacity, deficit));
@@ -226,7 +226,10 @@ const createOne = async (state: State): Promise<void> => {
   } catch (cause) {
     state.creating -= 1;
     state.lastFailure = cause;
-    log(state, 'sandbox creation failed');
+    log(state, 'sandbox creation failed', {
+      reason: 'sandbox_factory_rejected',
+      hint: 'Check sandbox provider availability, image access, and resource support.',
+    });
     scheduleCreationRetry(state);
   }
 
@@ -300,6 +303,10 @@ const guardedSession = (record: SessionRecord): PooledSandbox => {
     diff: async (input) => {
       active();
       return record.session.diff(input);
+    },
+    ssh: async () => {
+      active();
+      return record.session.ssh();
     },
   };
 };
@@ -446,7 +453,7 @@ const log = (
       total: state.records.size + state.creating,
       heated: isHeated(state),
       minIdle: state.options.minIdle,
-      maxContainers: state.options.maxContainers,
+      maxSandboxes: state.options.maxSandboxes,
       ...fields,
     },
     message,

@@ -32,13 +32,14 @@ test('binds a core tool to a lease and rejects operations after release', async 
     putFile: async () => undefined,
     getFile: async () => new Uint8Array(),
     diff: async () => '',
+    ssh: async () => undefined,
     dispose: async () => {
       disposed = true;
     },
   };
   const pool = createSandpool({
     minIdle: 0,
-    maxContainers: 1,
+    maxSandboxes: 1,
     logger: pino({ enabled: false }),
     create: async () => session,
   });

@@ -24,16 +24,16 @@ test('validates pool limits synchronously', () => {
 
   for (const minIdle of [-1, 0.5, Number.NaN]) {
     assert.throws(() =>
-      createSandpool({ minIdle, maxContainers: 1, create, logger }),
+      createSandpool({ minIdle, maxSandboxes: 1, create, logger }),
     );
   }
-  for (const maxContainers of [0, -1, 1.5, Number.POSITIVE_INFINITY]) {
+  for (const maxSandboxes of [0, -1, 1.5, Number.POSITIVE_INFINITY]) {
     assert.throws(() =>
-      createSandpool({ minIdle: 0, maxContainers, create, logger }),
+      createSandpool({ minIdle: 0, maxSandboxes, create, logger }),
     );
   }
   assert.throws(() =>
-    createSandpool({ minIdle: 2, maxContainers: 1, create, logger }),
+    createSandpool({ minIdle: 2, maxSandboxes: 1, create, logger }),
   );
 });
 
@@ -42,7 +42,7 @@ test('returns synchronously and warms the minimum idle sessions in parallel', as
   let calls = 0;
   const pool = createSandpool({
     minIdle: 2,
-    maxContainers: 2,
+    maxSandboxes: 2,
     logger,
     create: () =>
       creations[calls++]?.promise ?? Promise.reject(new Error('extra')),
@@ -72,7 +72,7 @@ test('serves acquisitions in FIFO order without exceeding capacity', async () =>
   let id = 0;
   const pool = createSandpool({
     minIdle: 0,
-    maxContainers: 1,
+    maxSandboxes: 1,
     logger,
     create: async () => fake(String(++id)).session,
   });
@@ -98,7 +98,7 @@ test('cancels queued acquisitions and heat waiters', async () => {
   const creation = deferred<SandboxSession>();
   const pool = createSandpool({
     minIdle: 1,
-    maxContainers: 1,
+    maxSandboxes: 1,
     logger,
     create: () => creation.promise,
   });
@@ -124,7 +124,7 @@ test('release is idempotent, invalidates the lease, and replaces with a new sess
   const sessions: Fake[] = [];
   const pool = createSandpool({
     minIdle: 1,
-    maxContainers: 1,
+    maxSandboxes: 1,
     logger,
     create: async () => {
       const created = fake(String(sessions.length + 1));
@@ -136,6 +136,7 @@ test('release is idempotent, invalidates the lease, and replaces with a new sess
   const first = await pool.acquire();
 
   assert.equal('dispose' in first.sandbox, false);
+  assert.equal(await first.sandbox.ssh(), undefined);
   const releaseOne = first.release();
   const releaseTwo = first.release();
   assert.equal(releaseOne, releaseTwo);
@@ -143,6 +144,7 @@ test('release is idempotent, invalidates the lease, and replaces with a new sess
     () => first.sandbox.readFile('anything'),
     /no longer active/u,
   );
+  await assert.rejects(first.sandbox.ssh(), /no longer active/u);
   await releaseOne;
   await pool.waitUntilHeated();
 
@@ -158,7 +160,7 @@ test('retries transient creation failures and preserves the last failure', async
   let attempts = 0;
   const pool = createSandpool({
     minIdle: 1,
-    maxContainers: 1,
+    maxSandboxes: 1,
     logger,
     create: async () => {
       attempts += 1;
@@ -181,7 +183,7 @@ test('counts disposal until a transient disposal failure recovers', async () => 
   });
   const pool = createSandpool({
     minIdle: 0,
-    maxContainers: 1,
+    maxSandboxes: 1,
     logger,
     create: async () => created.session,
   });
@@ -203,7 +205,7 @@ test('dispose rejects waits, invalidates leases, and waits for pending factories
   let calls = 0;
   const pool = createSandpool({
     minIdle: 1,
-    maxContainers: 2,
+    maxSandboxes: 2,
     logger,
     create: () =>
       calls++ === 0 ? Promise.resolve(first.session) : pending.promise,
@@ -246,6 +248,7 @@ const fake = (
     putFile: unsupported,
     getFile: unsupported,
     diff: async () => '',
+    ssh: async () => undefined,
     dispose: async () => {
       count += 1;
       await dispose();

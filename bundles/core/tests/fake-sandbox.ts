@@ -40,6 +40,10 @@ export const createFakeSandbox = (
   async diff() {
     throw unsupported();
   },
+
+  async ssh() {
+    return undefined;
+  },
 });
 
 const exec = async (

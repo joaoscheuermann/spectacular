@@ -1,6 +1,6 @@
 # Doric Grounding
 
-Last reviewed: 2026-08-04
+Last reviewed: 2026-08-06
 
 This is Doric's repository validity contract. Every agent working in this
 repository must read it before non-trivial planning, reviewing, artifact
@@ -62,7 +62,11 @@ inspectable `ToolFactory` that Doric binds to a sandbox in its composition
 root. Runtime TypeScript is rejected. Skill `allowed-tools` references resolve
 only within their declaring bundle. Bundle, skill, and tool-factory names are
 globally unique, and duplicates are rejected rather than aliased or
-deduplicated.
+deduplicated. `packages/bundle` publicly owns the JSON-Schema-compatible
+`SkillSchema`, and `packages/tool` publicly owns the JSON-Schema-compatible
+`ToolDefinitionSchema`, strict-output-compatible `ToolMetadataSchema`, and JSON
+value schemas used by structured consumers. Model-generated graph nodes use
+tool metadata rather than executable tools or arbitrary tool input schemas.
 
 `apps/cli` is the explicitly requested Node.js command-line host surface for
 interacting with the Doric A2A agent. The CLI is scoped to A2A message
@@ -265,10 +269,14 @@ Doric goal-workflow policy: decomposition and revision, scheduling, skill
 retrieval and reranking, and per-node skill/tool menu composition. Its public
 factory accepts injected provider, logger, model IDs, bundle skills and
 executable tools, and their vector databases; it has no session option.
+Generated graph nodes initialize their runtime-owned `skills`, `tools`, and
+`artifacts` arrays as empty; graph generation and revision cannot populate
+them.
 `agents/doric` remains the composition root that loads bundles, constructs and
 populates the vector databases, and invokes Mosaic. Mosaic runs the fixed
-`graph -> schedule -> bundle -> schedule` planning and preparation
-lifecycle over a run-local LIFO graph array. Decomposition appends a graph,
+`graph -> schedule -> bundle -> execution` lifecycle over a run-local LIFO
+graph array. The placeholder execution state performs no work and finishes the
+run. Decomposition appends a graph,
 the last graph is active, and scheduling mutates that graph when marking nodes
 ready. It succeeds for an already-completed graph but does not yet execute nodes
 or tools; otherwise it preserves the intentional missing-ready domain failure
@@ -307,12 +315,57 @@ which is used only when initially cloning a sandbox repository.
 `packages/sandpool` owns process-local `SandboxSession` capacity, FIFO leasing,
 background warming, replacement, and disposal. It accepts an injected sandbox
 factory, depends only on the public `sandbox` contract at runtime, never reuses
-released sessions, and has no Docker-specific creation policy or persistence.
-The public `Sandbox` contract contains operational methods only;
-`SandboxSession` adds lifecycle disposal. Doric creates a Docker-backed pool,
-acquires one lease per prompt, binds every bundle tool factory to that shared
-sandbox, releases the lease after success or failure, and disposes the pool on
-process shutdown.
+released sessions, and has no provider-specific creation policy or persistence.
+Its capacity option is `maxSandboxes`, and a lease guards SSH access exactly as
+it guards other operations. `packages/sandbox` owns the provider-neutral
+`SandboxProvider` and `SandboxRuntime` boundary plus workspace, Git, file, diff,
+network-policy normalization, and disposed-session behavior. Every sandbox has
+explicit CPU, memory, and writable-layer disk resources; networking is disabled
+by default, optional SSH is key-only and loopback-bound by default, and effective
+egress requires IP-literal DNS plus protected-destination filtering.
+
+`packages/docker` and `packages/firecracker` depend inward on Sandbox and expose
+providers. Docker is Doric's default; `DORIC_SANDBOX_PROVIDER=firecracker`
+selects the direct Linux x86_64 Firecracker/KVM boundary. Firecracker has no
+Docker dependency or socket access. Firecracker resolves anonymous public
+Linux/amd64 OCI images directly with skopeo and umoci, converts validated
+rootfs trees into immutable ext4 base disks, and retains them in a persistent
+manifest-and-converter-keyed 20 GiB LRU cache. Each sandbox receives a separate
+sparse ext4 writable OverlayFS disk and a jailed Firecracker 1.16.1 process,
+private `/30` TAP network, provider-only management SSH channel, and optional
+proxied user SSH access. Startup reconciliation and disposal own the jail,
+process, disks, cache-use markers, TAP, nftables tables, proxy, and generated
+keys transactionally.
+
+Docker maps CPU, memory, and writable-layer disk resources to daemon limits and
+fails with an actionable capability error when the local Linux storage driver
+cannot enforce the disk quota. Effective Docker egress requires a local Unix
+daemon, host-network-namespace access, nftables `CAP_NET_ADMIN`, and
+provider-owned rules keyed to the inspected container address. Both providers
+block new sandbox-to-host traffic and protected public-egress destinations,
+with only exact private CIDR/protocol/port exceptions. SSH is disabled by
+default, uses per-sandbox Ed25519 user and host keys, is key-only, and binds to
+loopback unless an advertised remote binding is explicit.
+
+`agents/doric/.Dockerfile` reproducibly builds the agent, pinned Firecracker and
+jailer, Linux 6.18 guest kernel, static BusyBox and Dropbear bootstrap,
+initramfs, OCI/ext4 tooling, networking tools, and OpenSSH client. Its Linux-only
+Compose profiles provide either the Docker socket plus host-network firewall
+access or KVM/TUN/cgroup/state/cache access without a Docker socket. The
+privileged Firecracker profile is a development and e2e harness, not a
+production isolation boundary. Doric constructs one selected provider for its
+pool, acquires one pool lease per prompt, binds bundle tools to it, releases it
+after success or failure, and disposes the pool on shutdown.
+
+Doric initializes an otherwise unconfigured Express application and attaches
+a Socket.IO server to the same HTTP listener. The listener binds to
+`DORIC_HOST` and `DORIC_PORT`, defaulting to `0.0.0.0:3000`; the Doric image
+exposes port 3000. Its modular Express router exposes `GET /vms`, which returns
+the IDs and selected provider names of runtimes successfully provisioned by
+this Doric process and not yet successfully disposed. The registry wraps the
+provider at the composition boundary and does not expose keys, networking, or
+provider internals. No other HTTP routes, middleware, Socket.IO events, or
+connection handlers are defined.
 
 Sandpool, each repository-owned LLM provider, and Victor require an injected
 `pino.Logger` and create their own component child logger. They emit only safe,

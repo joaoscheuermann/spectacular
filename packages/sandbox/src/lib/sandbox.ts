@@ -1,385 +1,292 @@
 import { Buffer } from 'node:buffer';
-import { TextDecoder } from 'node:util';
-
-import type {
-  ContainerRef,
-  CreateContainerInput,
-  DockerClient,
-  ExecInput,
-} from 'docker';
+import { isIP } from 'node:net';
 
 import type {
   CreateSandboxOptions,
   GitAuth,
+  NormalizedSandboxNetworkPolicy,
   SandboxDiffInput,
   SandboxExecInput,
-  SandboxExecResult,
   SandboxNetworkPolicy,
+  SandboxRuntime,
   SandboxSession,
 } from './types/sandbox.js';
 
-import { extractFirstFile, packFile } from './utils/tar.js';
-
-type SandboxState = {
-  readonly docker: DockerClient;
-  readonly container: ContainerRef;
+type State = {
+  readonly runtime: SandboxRuntime;
   readonly root: string;
   repoPath: string | undefined;
   disposed: boolean;
 };
 
-const decoder = new TextDecoder();
-const CONTAINER_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]+$/u;
+/** Validates policy and returns the effective provider-facing network policy. */
+export const normalizeSandboxNetwork = (
+  policy: SandboxNetworkPolicy | undefined,
+): NormalizedSandboxNetworkPolicy => {
+  const input = policy ?? { mode: 'disabled', ssh: false };
+  const ssh = normalizeSsh(input.ssh);
+  const mode = ssh === false ? input.mode : 'egress';
 
-/** Creates and starts an empty disposable coding sandbox container. */
+  validateDns(mode, input.dnsServers);
+  input.allowPrivate?.forEach(validatePrivateRule);
+
+  return {
+    mode,
+    ssh,
+    ...(input.dnsServers === undefined ? {} : { dnsServers: input.dnsServers }),
+    ...(input.allowPrivate === undefined
+      ? {}
+      : { allowPrivate: input.allowPrivate }),
+  };
+};
+
+/** Provisions a runtime and adds provider-neutral workspace and Git helpers. */
 export const createSandbox = async (
   options: CreateSandboxOptions,
 ): Promise<SandboxSession> => {
-  validateName(options.name);
-
-  const root = options.root ?? '/workspace';
-  await options.docker.pullImage(
-    { image: options.image },
-    { timeoutMs: options.timeoutMs },
-  );
-
-  const container = await options.docker.createContainer(
-    containerInput(options, root),
-    { timeoutMs: options.timeoutMs },
-  );
-
-  try {
-    await options.docker.startContainer(container, {
-      timeoutMs: options.timeoutMs,
-    });
-  } catch (cause) {
-    await options.docker
-      .removeContainer(container, {
-        force: true,
-        volumes: true,
-        timeoutMs: options.timeoutMs,
-      })
-      .catch(() => undefined);
-    throw cause;
-  }
-
-  return session({
-    docker: options.docker,
-    container,
+  validateResources(options.resources);
+  const root = normalizeRoot(options.root ?? '/workspace');
+  const runtime = await options.provider.provision({
+    image: options.image,
+    imagePullPolicy: options.imagePullPolicy,
+    name: options.name,
     root,
-    repoPath: undefined,
-    disposed: false,
+    resources: options.resources,
+    network: normalizeSandboxNetwork(options.network),
+    timeoutMs: options.timeoutMs,
   });
+
+  return session({ runtime, root, repoPath: undefined, disposed: false });
 };
 
-const session = (state: SandboxState): SandboxSession => ({
-  id: state.container.id,
+const session = (state: State): SandboxSession => ({
+  id: state.runtime.id,
   root: state.root,
-
   exec(input) {
-    ensureActive(state);
-
-    return state.docker.exec(state.container, dockerExec(state, input));
+    active(state);
+    return state.runtime.exec(runtimeExec(state, input));
   },
-
   async cloneRepo(input) {
-    ensureActive(state);
-
+    active(state);
     const directory = resolvePath(state.root, input.directory ?? 'repo');
-
-    await checked(
-      state,
-      {
-        cmd: gitCommand([], 'clone', [
-          ...(input.branch === undefined ? [] : ['--branch', input.branch]),
-          input.url,
-          directory,
-        ]),
-        env: gitAuthEnv(input.auth),
-        cwd: state.root,
-        timeoutMs: input.timeoutMs,
-      },
-      'git clone failed',
-    );
-
-    if (input.commit !== undefined) {
-      await checked(
-        state,
-        {
-          cmd: gitCommand(['-C', directory], 'fetch', ['origin', input.commit]),
-          env: gitAuthEnv(input.auth),
-          timeoutMs: input.timeoutMs,
-        },
-        'git fetch failed',
-      );
-      await checked(
-        state,
-        {
-          cmd: ['git', '-C', directory, 'checkout', '--detach', input.commit],
-          timeoutMs: input.timeoutMs,
-        },
-        'git checkout failed',
-      );
-    }
-
-    const resolved = await checked(
-      state,
-      {
-        cmd: ['git', '-C', directory, 'rev-parse', 'HEAD'],
-        timeoutMs: input.timeoutMs,
-      },
-      'git rev-parse failed',
-    );
-
-    state.repoPath = directory;
-
-    return {
-      path: directory,
-      commit: resolved.stdout.trim(),
-    };
-  },
-
-  async readFile(path) {
-    return decoder.decode(await getFile(state, path));
-  },
-
-  writeFile(path, content) {
-    return putFile(state, path, content);
-  },
-
-  putFile(path, content) {
-    return putFile(state, path, content);
-  },
-
-  getFile(path) {
-    return getFile(state, path);
-  },
-
-  async diff(input: SandboxDiffInput = {}) {
-    ensureActive(state);
-
-    const result = await state.docker.exec(
-      state.container,
-      dockerExec(state, {
-        cmd: ['git', 'diff'],
-        cwd: input.cwd ?? state.repoPath ?? state.root,
-      }),
-    );
-
-    return result.stdout;
-  },
-
-  async dispose() {
-    if (state.disposed) {
-      return;
-    }
-
-    await state.docker.removeContainer(state.container, {
-      force: true,
-      volumes: true,
+    await checked(state, {
+      cmd: [
+        'git',
+        'clone',
+        ...(input.branch ? ['--branch', input.branch] : []),
+        input.url,
+        directory,
+      ],
+      env: gitAuthEnv(input.auth),
+      timeoutMs: input.timeoutMs,
     });
-
+    if (input.commit !== undefined) {
+      await checked(state, {
+        cmd: ['git', '-C', directory, 'fetch', 'origin', input.commit],
+        env: gitAuthEnv(input.auth),
+        timeoutMs: input.timeoutMs,
+      });
+      await checked(state, {
+        cmd: ['git', '-C', directory, 'checkout', '--detach', input.commit],
+        timeoutMs: input.timeoutMs,
+      });
+    }
+    const revision = await checked(state, {
+      cmd: ['git', '-C', directory, 'rev-parse', 'HEAD'],
+      timeoutMs: input.timeoutMs,
+    });
+    state.repoPath = directory;
+    return { path: directory, commit: revision.stdout.trim() };
+  },
+  async readFile(path) {
+    active(state);
+    return Buffer.from(
+      await state.runtime.getFile(resolvePath(state.root, path)),
+    ).toString('utf8');
+  },
+  async writeFile(path, content) {
+    active(state);
+    await put(state, path, Buffer.from(content));
+  },
+  async putFile(path, bytes) {
+    active(state);
+    await put(state, path, bytes);
+  },
+  async getFile(path) {
+    active(state);
+    return state.runtime.getFile(resolvePath(state.root, path));
+  },
+  async diff(input: SandboxDiffInput = {}) {
+    active(state);
+    const cwd =
+      input.cwd === undefined
+        ? (state.repoPath ?? state.root)
+        : resolvePath(state.root, input.cwd);
+    return (await checked(state, { cmd: ['git', 'diff'], cwd })).stdout;
+  },
+  ssh() {
+    active(state);
+    return state.runtime.ssh();
+  },
+  async dispose() {
+    if (state.disposed) return;
+    await state.runtime.dispose();
     state.disposed = true;
   },
 });
 
-const putFile = async (
-  state: SandboxState,
+const put = async (
+  state: State,
   path: string,
-  content: string | Uint8Array,
+  bytes: Uint8Array,
 ): Promise<void> => {
-  ensureActive(state);
-
-  const absolute = resolvePath(state.root, path);
-  const target = splitPath(absolute);
-  const data =
-    typeof content === 'string' ? Buffer.from(content, 'utf8') : content;
-
-  await checked(
-    state,
-    { cmd: ['mkdir', '-p', target.directory], cwd: state.root },
-    'mkdir failed',
-  );
-  await state.docker.putArchive(state.container, {
-    path: target.directory,
-    archive: packFile(target.name, data),
-  });
-};
-
-const getFile = async (
-  state: SandboxState,
-  path: string,
-): Promise<Uint8Array> => {
-  ensureActive(state);
-
-  const archive = await state.docker.getArchive(state.container, {
-    path: resolvePath(state.root, path),
-  });
-
-  return extractFirstFile(archive).data;
-};
-
-const checked = async (
-  state: SandboxState,
-  input: SandboxExecInput,
-  message: string,
-): Promise<SandboxExecResult> => {
-  const result = await state.docker.exec(
-    state.container,
-    dockerExec(state, input),
-  );
-
-  if (result.exitCode !== 0) {
-    throw new Error(`${message}: ${result.stderr || result.stdout}`.trim());
+  const target = resolvePath(state.root, path);
+  const slash = target.lastIndexOf('/');
+  if (slash <= 0 || slash === target.length - 1) {
+    throw new Error(`Sandbox file path must include a file name: ${path}`);
   }
+  await checked(state, { cmd: ['mkdir', '-p', target.slice(0, slash)] });
+  await state.runtime.putFile(target, bytes);
+};
 
+const checked = async (state: State, input: SandboxExecInput) => {
+  const result = await state.runtime.exec(runtimeExec(state, input));
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `Sandbox command failed with exit code ${String(result.exitCode)}`,
+    );
+  }
   return result;
 };
 
-const dockerExec = (
-  state: SandboxState,
+const runtimeExec = (
+  state: State,
   input: SandboxExecInput,
-): ExecInput => ({
-  cmd: input.cmd,
-  env: input.env,
-  workingDir: input.cwd ?? state.repoPath ?? state.root,
-  user: input.user,
-  timeoutMs: input.timeoutMs,
-  signal: input.signal,
-  tty: input.tty,
+): SandboxExecInput => ({
+  ...input,
+  cwd:
+    input.cwd === undefined ? state.root : resolvePath(state.root, input.cwd),
 });
 
-const containerInput = (
-  options: CreateSandboxOptions,
-  root: string,
-): CreateContainerInput => {
-  const network = options.network ?? { mode: 'disabled' };
+const resolvePath = (root: string, path: string): string => {
+  const raw = path.startsWith('/') ? path : `${root}/${path}`;
+  const parts = raw.split('/').filter(Boolean);
+  const rootParts = root.split('/').filter(Boolean);
+  if (
+    parts.includes('..') ||
+    rootParts.some((part, index) => parts[index] !== part)
+  ) {
+    throw new Error(`Sandbox paths must stay under ${root}: ${path}`);
+  }
+  return `/${parts.join('/')}`;
+};
 
+const normalizeRoot = (root: string): string => {
+  if (!root.startsWith('/') || root.includes('..')) {
+    throw new Error(
+      `Sandbox root must be an absolute normalized path: ${root}`,
+    );
+  }
+  return root.length > 1 ? root.replace(/\/+$/u, '') : root;
+};
+
+const validateResources = (
+  resources: CreateSandboxOptions['resources'],
+): void => {
+  for (const [name, value] of Object.entries(resources)) {
+    if (!Number.isInteger(value) || value <= 0) {
+      throw new RangeError(`${name} must be a positive integer`);
+    }
+  }
+};
+
+const normalizeSsh = (
+  ssh: SandboxNetworkPolicy['ssh'],
+): NormalizedSandboxNetworkPolicy['ssh'] => {
+  if (ssh !== true && (ssh === false || ssh === undefined)) return false;
+  const config = ssh === true ? {} : ssh;
+  const bindAddress = config.bindAddress ?? '127.0.0.1';
+  if (isIP(bindAddress) === 0)
+    throw new Error('SSH bindAddress must be an IP literal');
+  if (!isLoopback(bindAddress) && !config.advertisedHost) {
+    throw new Error('A non-loopback SSH bindAddress requires advertisedHost');
+  }
+  if (
+    config.port !== undefined &&
+    (!Number.isInteger(config.port) || config.port < 1 || config.port > 65_535)
+  ) {
+    throw new RangeError('SSH port must be between 1 and 65535');
+  }
   return {
-    name: options.name,
-    image: options.image,
-    cmd: ['sh', '-lc', 'while :; do sleep 3600; done'],
-    workingDir: root,
-    user: options.resources?.user,
-    labels: {
-      'doric.sandbox': 'true',
-      'doric.sandbox.root': root,
-    },
-    hostConfig: compact({
-      AutoRemove: false,
-      Binds: [],
-      NetworkMode: networkMode(network),
-      Memory: options.resources?.memoryBytes,
-      NanoCpus: options.resources?.nanoCpus,
-      CpuPeriod: options.resources?.cpuPeriod,
-      CpuQuota: options.resources?.cpuQuota,
-      PidsLimit: options.resources?.pidsLimit,
-    }),
-    networkDisabled: network.mode === 'disabled',
+    bindAddress,
+    advertisedHost: config.advertisedHost,
+    port: config.port,
   };
 };
 
-const validateName = (name: string | undefined): void => {
-  if (name === undefined || CONTAINER_NAME_PATTERN.test(name)) {
-    return;
+const validateDns = (
+  mode: 'disabled' | 'egress',
+  servers: readonly string[] | undefined,
+): void => {
+  if (mode === 'egress' && (servers === undefined || servers.length === 0)) {
+    throw new Error(
+      'Effective egress networking requires at least one DNS server',
+    );
   }
-
-  throw new Error(
-    `Docker container name must match ${CONTAINER_NAME_PATTERN}: ${name}`,
-  );
+  servers?.forEach((server) => {
+    if (isIP(server) !== 4)
+      throw new Error(`DNS server must be an IPv4 literal: ${server}`);
+  });
 };
 
-const networkMode = (policy: SandboxNetworkPolicy): string => {
-  if (policy.mode === 'disabled') {
-    return 'none';
+const validatePrivateRule = (
+  rule: NonNullable<SandboxNetworkPolicy['allowPrivate']>[number],
+): void => {
+  const [address, prefix, extra] = rule.cidr.split('/');
+  const family = isIP(address ?? '');
+  const bits = family === 4 ? 32 : 0;
+  if (
+    extra !== undefined ||
+    bits === 0 ||
+    prefix === undefined ||
+    !/^\d+$/u.test(prefix) ||
+    Number(prefix) > bits
+  ) {
+    throw new Error(
+      `Private network exception must use a valid CIDR: ${rule.cidr}`,
+    );
   }
-
-  if (policy.mode === 'internal') {
-    return policy.networkName;
+  if (
+    rule.ports.length === 0 ||
+    rule.ports.some(
+      (port) => !Number.isInteger(port) || port < 1 || port > 65_535,
+    )
+  ) {
+    throw new Error(
+      `Private network exception has invalid ports: ${rule.cidr}`,
+    );
   }
-
-  return 'bridge';
 };
 
-const compact = (
-  values: Readonly<Record<string, unknown>>,
-): Record<string, unknown> =>
-  Object.fromEntries(
-    Object.entries(values).filter((entry) => entry[1] !== undefined),
-  );
+const isLoopback = (address: string): boolean =>
+  address === '::1' || address.startsWith('127.');
 
-const gitCommand = (
-  globalOptions: readonly string[],
-  subcommand: string,
-  suffix: readonly string[],
-): readonly string[] => {
-  return ['git', ...globalOptions, subcommand, ...suffix];
+const active = (state: State): void => {
+  if (state.disposed)
+    throw new Error(`Sandbox has been disposed: ${state.runtime.id}`);
 };
 
 const gitAuthEnv = (
   auth: GitAuth | undefined,
 ): readonly string[] | undefined => {
-  if (auth === undefined) {
-    return undefined;
-  }
-
-  return [
-    'GIT_CONFIG_COUNT=1',
-    'GIT_CONFIG_KEY_0=http.extraHeader',
-    `GIT_CONFIG_VALUE_0=${authorization(auth)}`,
-  ];
-};
-
-const authorization = (auth: GitAuth): string => {
+  if (auth === undefined) return undefined;
   const credential =
     auth.kind === 'token'
       ? `${auth.username ?? 'x-access-token'}:${auth.token}`
       : `${auth.username}:${auth.password}`;
-
-  return `Authorization: Basic ${Buffer.from(credential).toString('base64')}`;
-};
-
-const resolvePath = (root: string, path: string): string => {
-  const raw = path.startsWith('/') ? path : `${root}/${path}`;
-  const parts = raw.split('/').filter((part) => part.length > 0);
-  const rootParts = root.split('/').filter((part) => part.length > 0);
-
-  if (parts.includes('..')) {
-    throw new Error(`Sandbox paths must not contain '..': ${path}`);
-  }
-
-  if (
-    rootParts.some((part, index) => parts[index] !== part) ||
-    parts.length < rootParts.length
-  ) {
-    throw new Error(`Sandbox paths must stay under ${root}: ${path}`);
-  }
-
-  return `/${parts.join('/')}`;
-};
-
-const splitPath = (
-  path: string,
-): {
-  readonly directory: string;
-  readonly name: string;
-} => {
-  const index = path.lastIndexOf('/');
-
-  if (index <= 0 || index === path.length - 1) {
-    throw new Error(`Sandbox file path must include a file name: ${path}`);
-  }
-
-  return {
-    directory: path.slice(0, index),
-    name: path.slice(index + 1),
-  };
-};
-
-const ensureActive = (state: SandboxState): void => {
-  if (state.disposed) {
-    throw new Error(
-      `Sandbox container has been disposed: ${state.container.id}`,
-    );
-  }
+  return [
+    'GIT_CONFIG_COUNT=1',
+    'GIT_CONFIG_KEY_0=http.extraHeader',
+    `GIT_CONFIG_VALUE_0=Authorization: Basic ${Buffer.from(credential).toString('base64')}`,
+  ];
 };

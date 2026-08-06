@@ -69,6 +69,9 @@ Planning rules:
 11. Do not use information from a skill catalog. This is the initial plan P0
     and must be generated independently of available skills.
 
+12. Set skills, tools, and artifacts to empty arrays for every goal. These
+    fields are populated only at runtime.
+
 Return only valid JSON matching the provided plan schema.
 Do not include explanations, markdown, comments, skill recommendations, tool
 recommendations, or execution instructions outside the structured output.

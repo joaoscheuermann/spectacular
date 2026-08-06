@@ -139,6 +139,10 @@ const fakeSandbox = async (name: string): Promise<FakeSandbox> => {
       return '';
     },
 
+    async ssh() {
+      return undefined;
+    },
+
     async dispose() {
       await rm(root, { recursive: true, force: true });
     },

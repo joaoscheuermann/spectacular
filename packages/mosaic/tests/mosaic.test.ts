@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { Skill } from 'bundle';
-import type { Tool } from 'tool';
+import type { Tool, ToolMetadata } from 'tool';
 
 import mosaicDefault, {
   mosaic,
@@ -28,6 +28,9 @@ type TestNode = {
   readonly status: Status;
   readonly deliver: boolean;
   readonly index: number;
+  readonly skills: readonly Skill[];
+  readonly tools: readonly ToolMetadata[];
+  readonly artifacts: readonly unknown[];
 };
 
 type TestGraph = {
@@ -71,7 +74,7 @@ test('exports the same factory as named and default with an async prompt', () =>
   assert.ok(agent.prompt('request') instanceof Promise);
 });
 
-test('routes models and composes menus before preserving the missing-ready failure', async () => {
+test('revises the graph before the bundle state reports its missing active graph', async () => {
   const graph = createGraph([createNode('goal', 0)]);
   const harness = createHarness({
     graph,
@@ -83,9 +86,8 @@ test('routes models and composes menus before preserving the missing-ready failu
   );
 
   assert.ok(error instanceof Error);
-  assert.equal(error.message, 'Impossible to continue, missing ready nodes!');
+  assert.equal(error.message, 'Impossible to continue, missing active graph!');
   assert.deepEqual(harness.completionModels, [
-    'default-model',
     'default-model',
     'default-model',
     'default-model',
@@ -94,24 +96,14 @@ test('routes models and composes menus before preserving the missing-ready failu
     'goals',
     'hints',
     'revision',
-    'bundle',
   ]);
   assert.deepEqual(
     harness.searches.map(({ topK }) => topK),
-    [3, 10],
+    [10],
   );
-  assert.equal(harness.reranks.length, 1);
-  assert.equal(harness.reranks[0]?.model, 'reranker-model');
-  assert.equal(harness.reranks[0]?.topN, 10);
-  assert.deepEqual(
-    JSON.parse(logs[2] ?? '[]').map(({ name }: Skill) => name),
-    ['required-skill', 'selected-skill'],
-  );
-  assert.deepEqual(
-    JSON.parse(logs[3] ?? '[]').map(({ name }: Tool) => name),
-    ['required-tool', 'required-enabled', 'selected-tool', 'shared'],
-  );
-  assert.equal(graph.nodes[0]?.status, 'ready');
+  assert.deepEqual(harness.reranks, []);
+  assert.deepEqual(logs, []);
+  assert.equal(graph.nodes[0]?.status, 'pending');
   assert.equal(harness.embeddingCalls, 0);
 });
 
@@ -183,29 +175,30 @@ test('keeps dependent nodes blocked when the prerequisite wave is only ready', (
   );
 });
 
-test('finishes completed graphs without preparing nodes', async () => {
+test('fails at the bundle state before scheduling a completed graph', async () => {
   const graph = createGraph([createNode('done', 0, [], 'completed')]);
   const harness = createHarness({ graph, matches: [] });
 
-  const { logs, value } = await captureConsole(() =>
-    harness.agent.prompt('Already done.'),
+  const { logs, value: error } = await captureConsole(() =>
+    rejectionOf(harness.agent.prompt('Already done.')),
   );
 
-  assert.equal(value, undefined);
+  assert.ok(error instanceof Error);
+  assert.equal(error.message, 'Impossible to continue, missing active graph!');
   assert.deepEqual(harness.completionKinds, ['goals', 'revision']);
   assert.deepEqual(
     harness.searches.map(({ topK }) => topK),
-    [3],
+    [10],
   );
   assert.deepEqual(harness.reranks, []);
-  assert.deepEqual(logs, [JSON.stringify(graph)]);
+  assert.deepEqual(logs, []);
 });
 
-test('rejects with the exact provider error object', async () => {
+test('rejects with the exact hint-provider error object', async () => {
   const providerError = new Error('provider unavailable');
   const harness = createHarness({
     graph: createGraph([createNode('goal', 0)]),
-    failure: { kind: 'rerank', error: providerError },
+    failure: { kind: 'hints', error: providerError },
   });
 
   const { value: error } = await captureConsole(() =>
@@ -215,7 +208,7 @@ test('rejects with the exact provider error object', async () => {
   assert.strictEqual(error, providerError);
 });
 
-test('supports repeated and concurrent prompts on the same agent', async () => {
+test('keeps repeated and concurrent prompts isolated through the bundle failure', async () => {
   const harness = createHarness({
     graph: (message) =>
       createGraph([
@@ -229,15 +222,24 @@ test('supports repeated and concurrent prompts on the same agent', async () => {
     matches: [],
   });
 
-  const { logs } = await captureConsole(async () => {
-    await Promise.all([
-      harness.agent.prompt('First request.'),
-      harness.agent.prompt('Second request.'),
+  const { logs, value: errors } = await captureConsole(async () => {
+    const concurrent = await Promise.all([
+      rejectionOf(harness.agent.prompt('First request.')),
+      rejectionOf(harness.agent.prompt('Second request.')),
     ]);
-    await harness.agent.prompt('Third request.');
+    const third = await rejectionOf(harness.agent.prompt('Third request.'));
+
+    return [...concurrent, third];
   });
 
-  assert.equal(logs.length, 3);
+  assert.ok(
+    errors.every(
+      (error) =>
+        error instanceof Error &&
+        error.message === 'Impossible to continue, missing active graph!',
+    ),
+  );
+  assert.deepEqual(logs, []);
   assert.deepEqual(harness.completionKinds, [
     'goals',
     'goals',
@@ -248,7 +250,7 @@ test('supports repeated and concurrent prompts on the same agent', async () => {
   ]);
   assert.deepEqual(
     harness.searches.map(({ topK }) => topK),
-    [3, 3, 3],
+    [10, 10, 10],
   );
 });
 
@@ -387,6 +389,9 @@ const createNode = (
   status,
   deliver: true,
   index,
+  skills: [],
+  tools: [],
+  artifacts: [],
 });
 
 function skill(name: string, allowedTools: readonly string[] = []): Skill {

@@ -21,10 +21,10 @@
       "path": "../../packages/session/tsconfig.lib.json"
     },
     {
-      "path": "../../packages/sandbox/tsconfig.lib.json"
+      "path": "../../packages/sandpool/tsconfig.lib.json"
     },
     {
-      "path": "../../packages/sandpool/tsconfig.lib.json"
+      "path": "../../packages/sandbox/tsconfig.lib.json"
     },
     {
       "path": "../../packages/oauth/tsconfig.lib.json"
@@ -37,6 +37,9 @@
     },
     {
       "path": "../../packages/llms/tsconfig.lib.json"
+    },
+    {
+      "path": "../../packages/firecracker/tsconfig.lib.json"
     },
     {
       "path": "../../packages/docker/tsconfig.lib.json"

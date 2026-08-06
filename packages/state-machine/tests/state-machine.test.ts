@@ -6,7 +6,6 @@ import {
   createStateMachine,
   type StateMachineErrorCode,
   type StateMachineHandler,
-  type StateMachineHandlers,
 } from '../src/index.js';
 
 type Context = {
@@ -229,11 +228,9 @@ test('reuses one definition for independent concurrent runs', async () => {
 test('returns an engine error when a handler returns an invalid action', async () => {
   const definition = createStateMachine<Context, State>()({
     start: (() => undefined) as unknown as StateMachineHandler<
-      'start',
-      State,
       Context,
-      void,
-      unknown
+      State,
+      'start'
     >,
   });
 
@@ -252,12 +249,9 @@ test('returns an engine error when a handler returns an invalid action', async (
 });
 
 test('defensively returns an engine error when a handler is missing', async () => {
-  const handlers = {} as StateMachineHandlers<
+  const handlers = {} as Record<
     'start',
-    State,
-    Context,
-    void,
-    unknown
+    StateMachineHandler<Context, State, 'start'>
   >;
   const definition = createStateMachine<Context, State>()(handlers);
 

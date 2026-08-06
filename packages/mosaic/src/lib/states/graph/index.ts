@@ -1,88 +1,38 @@
-import { StrictGraphSchema } from '../../schemas/graph.js';
-import type { WorkflowHandler } from '../../types/workflow.js';
+import type { StateMachineHandler } from 'state-machine';
 
-import * as candidatesPrompts from '../../prompts/candidates.js';
-import * as hintsPrompts from '../../prompts/hints.js';
+import type { WorkflowContext, WorkflowState } from '../../types/workflow.js';
+
+import { hints } from './hints.js';
+
 import * as goals from '../../prompts/goals.js';
-import * as revisionPrompt from '../../prompts/revision.js';
-import { SkillHintExtractionSchema } from '../../schemas/hint.js';
+import * as revision from '../../prompts/revision.js';
 
-const TOP_K = 10;
+import { StrictGraphSchema } from '../../schemas/graph.js';
 
-/** Creates and logs the execution graph for a workflow run. */
-export const graph: WorkflowHandler<'graph'> = async (
-  { graphs },
-  { input, options },
-  { transition, fail },
-) => {
-  const { provider, models, skills, logger } = options;
+/** Creates the execution graph for a workflow run. */
+export const graph: StateMachineHandler<
+  WorkflowContext,
+  WorkflowState
+> = async ({ graphs }, { input, options }, { transition, fail }) => {
+  const { logger, provider, models } = options;
 
   try {
-    // Picks the latest graph
     const graph = graphs.at(-1);
 
     logger.info({
-      msg: 'graph',
-      graph: graph ?? null,
-    });
+      graph: graph ?? null
+    }, 'generating graph');
 
-    // Extract hints for each graph node if available
-    const hints = !graph
-      ? []
-      : await Promise.all(
-          graph.nodes.map(async (node) => {
-            // Find N Skills
-            const matches = await skills.embeddings.search(
-              candidatesPrompts.search(input, node),
-              TOP_K,
-            );
-
-            const promises = matches.map(async ({ data: skill }) => {
-              const { structured: result } = await provider.complete({
-                messages: [
-                  {
-                    role: 'system',
-                    content: hintsPrompts.system(),
-                  },
-                  {
-                    role: 'user',
-                    content: hintsPrompts.user(graph.nodes, node, skill),
-                  },
-                ],
-                model: options.models.default,
-                schema: SkillHintExtractionSchema,
-              });
-
-              return Boolean(result.hints.length)
-                ? { skill, hints: result.hints }
-                : null;
-            });
-
-            const results = await Promise.all(promises);
-
-            return {
-              node: node.id,
-              skills: results.filter((result) => !!result),
-            };
-          }),
-        );
-
-    logger.info({
-      msg: 'hints',
-      hints,
-    });
-
-    // Writes the plan for the agent
-    const { structured: plan } = await provider.complete({
+    const { structured: p } = await provider.complete({
       messages: [
         {
           role: 'system',
-          content: graph ? revisionPrompt.system() : goals.system(),
+          content: graph ? revision.system() : goals.system(),
         },
         {
           role: 'user',
           content: graph
-            ? revisionPrompt.user(input, graph, hints)
+            ? revision.user(input, graph, await hints(input, graph, options))
             : goals.user(input),
         },
       ],
@@ -90,14 +40,22 @@ export const graph: WorkflowHandler<'graph'> = async (
       schema: StrictGraphSchema,
     });
 
-    logger.info({
-      msg: 'plan',
-      plan,
-    });
+    logger.debug(
+      {
+        revised: graph !== undefined,
+      },
+      'graph plan completed',
+    );
 
-    return transition(graph ? 'bundle' : 'graph', {
-      graphs: [...graphs, plan],
-    });
+    // Goes to the defined state
+    return transition(
+      graph
+        ? 'schedule'
+        : 'graph',
+      {
+        graphs: [...graphs, p],
+      }
+    );
   } catch (error) {
     return fail(error);
   }
