@@ -3,7 +3,7 @@ import type { StateMachineHandlers } from 'state-machine';
 import type { Graph } from './graph.js';
 import type { MosaicOptions } from './mosaic-options.js';
 
-export type WorkflowHandlerName = 'graph' | 'schedule' | 'prepare';
+export type WorkflowHandlerName = 'graph' | 'schedule' | 'bundle';
 
 export type WorkflowContext = {
   readonly input: string;

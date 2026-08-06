@@ -31,7 +31,7 @@ export const schedule: WorkflowHandler<'schedule'> = (
     return fail(result.error);
   }
 
-  return transition('prepare', { graphs });
+  return transition('bundle', { graphs });
 };
 
 /** Selects and marks the next ready wave on the active graph. */

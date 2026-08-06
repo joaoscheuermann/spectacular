@@ -2,7 +2,7 @@ import type { WorkflowHandler } from '../../types/workflow.js';
 // import { prepareNode } from './node.js';
 
 /** Prepares every node in the selected wave sequentially. */
-export const prepare: WorkflowHandler<'prepare'> = async (
+export const bundle: WorkflowHandler<'bundle'> = async (
   { graphs },
   context,
   { transition, fail },

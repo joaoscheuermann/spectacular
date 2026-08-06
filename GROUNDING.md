@@ -267,7 +267,7 @@ factory accepts injected provider, logger, model IDs, bundle skills and
 executable tools, and their vector databases; it has no session option.
 `agents/doric` remains the composition root that loads bundles, constructs and
 populates the vector databases, and invokes Mosaic. Mosaic runs the fixed
-`graph -> schedule -> prepare -> schedule` planning and preparation
+`graph -> schedule -> bundle -> schedule` planning and preparation
 lifecycle over a run-local LIFO graph array. Decomposition appends a graph,
 the last graph is active, and scheduling mutates that graph when marking nodes
 ready. It succeeds for an already-completed graph but does not yet execute nodes

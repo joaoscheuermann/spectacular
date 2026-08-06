@@ -11,7 +11,7 @@ dependencies. It has no session option.
 
 Mosaic owns the workflow policy and uses `state-machine` only for reusable,
 run-local typed transition execution. Its fixed lifecycle is
-`graph -> schedule -> prepare -> schedule`: an already-completed graph
+`graph -> schedule -> bundle -> schedule`: an already-completed graph
 finishes successfully, while a graph that cannot produce another ready node
 preserves the intentional missing-ready domain failure. The current workflow
 stores graphs as a run-local LIFO stack, appends decomposed graphs, and mutates

@@ -95,7 +95,7 @@ export const graph: WorkflowHandler<'graph'> = async (
       plan,
     });
 
-    return transition(graph ? 'prepare' : 'graph', {
+    return transition(graph ? 'bundle' : 'graph', {
       graphs: [...graphs, plan],
     });
   } catch (error) {
