@@ -251,10 +251,14 @@ and returns original values from cosine-similarity top-K search; it has no
 persistence or provider integration.
 
 `packages/state-machine` owns reusable, process-local typed transition
-execution. A definition stores only its exhaustive handler map; each run keeps
-its context, current state, and artifacts local and resolves with a finished,
-domain-failed, or engine-error result. It owns no workflow policy, persistence,
-listeners, recovery hooks, or external side effects.
+execution. A definition stores only its exhaustive handler map and infers its
+available handler names from that map. Each run keeps its context, current
+handler, and current state local and resolves with a finished, domain-failed,
+or engine-error result. Every handler receives the same state object type but
+explicitly supplies the next state to a transition. A transition accepts only
+an available handler name and passes that handler a shallow copy of the
+supplied state object. It owns no workflow policy, persistence, listeners,
+recovery hooks, or external side effects.
 
 `packages/mosaic` depends on `packages/state-machine` but owns the incomplete
 Doric goal-workflow policy: decomposition and revision, scheduling, skill
@@ -263,10 +267,12 @@ factory accepts injected provider, logger, model IDs, bundle skills and
 executable tools, and their vector databases; it has no session option.
 `agents/doric` remains the composition root that loads bundles, constructs and
 populates the vector databases, and invokes Mosaic. Mosaic runs the fixed
-`decompose -> schedule -> prepare -> schedule` planning and preparation
-lifecycle. It succeeds for an already-completed graph but does not yet execute
-nodes or tools; otherwise it preserves the intentional missing-ready domain
-failure when progress cannot continue.
+`graph -> schedule -> prepare -> schedule` planning and preparation
+lifecycle over a run-local LIFO graph array. Decomposition appends a graph,
+the last graph is active, and scheduling mutates that graph when marking nodes
+ready. It succeeds for an already-completed graph but does not yet execute nodes
+or tools; otherwise it preserves the intentional missing-ready domain failure
+when progress cannot continue.
 
 `models/skillrouter-embedding` is the user-approved Nx/uv conversion utility
 for the pinned SkillRouter checkpoint. Only its export target may fetch
@@ -310,7 +316,7 @@ process shutdown.
 
 Sandpool, each repository-owned LLM provider, and Victor require an injected
 `pino.Logger` and create their own component child logger. They emit only safe,
-structured `info` operation logs: lifecycle and allowlisted counts/identifiers,
+structured `debug` operation logs: lifecycle and allowlisted counts/identifiers,
 never prompts, model inputs or outputs, stored values, vectors, credentials,
 URLs, headers, diagnostics, causes, or thrown values. A provider request with
 `flags.sensitiveOutput` emits no provider operational logs. Composition roots
@@ -330,6 +336,8 @@ provider error before sending HTTP because LM Studio rejects `tools` and
 The OpenAI, OpenRouter, and LM Studio OpenAI-compatible integrations support
 single-text embeddings through their OpenAI-compatible `/embeddings` endpoint
 and text-document reranking through `/rerank` below the configured base URL.
+Embedding requests may include optional positive-integer `dimensions`, which
+the compatible providers forward unchanged to the endpoint.
 Rerank requests carry a model, query, non-empty document list, and optional
 positive `topN`; successful results expose each original document index and
 finite relevance score. Codex and LM Studio native support neither embeddings

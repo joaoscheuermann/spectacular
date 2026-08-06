@@ -9,82 +9,63 @@ import {
   type StateMachineHandlers,
 } from '../src/index.js';
 
-type State = 'start' | 'middle' | 'done';
 type Context = {
   readonly runId: string;
 };
-type Artifacts = {
-  readonly start: {
-    readonly input: string;
-  };
-  readonly middle: {
-    readonly count: number;
-  };
-  readonly done: {
-    readonly output: string;
-  };
+
+type State = {
+  count: number;
 };
+
 type DomainFailure = {
   readonly code: 'cancelled';
 };
 
-test('checks exhaustive handlers and state-specific artifacts at compile time', () => {
+test('infers available handlers from the initialized object', () => {
   const definition = createStateMachine<
-    State,
     Context,
-    Artifacts,
+    State,
     string,
     DomainFailure
-  >({
-    start: (artifacts, { state, transition }) => {
-      const current: 'start' = state;
-      const input: string = artifacts.input;
-      void current;
-      void input;
-
-      // @ts-expect-error start artifacts do not expose middle's count.
-      const count: number = artifacts.count;
+  >()({
+    start: (state, context, { transition }) => {
+      const count: number = state.count;
+      const runId: string = context.runId;
       void count;
+      void runId;
 
-      // @ts-expect-error middle transitions require middle artifacts.
-      return transition('middle', { output: 'wrong' });
+      // @ts-expect-error transitions require the configured state object type.
+      void transition('done', { value: 'wrong' });
+
+      // @ts-expect-error transitions accept only initialized handler names.
+      return transition('missing', state);
     },
-    middle: (artifacts, { transition }) =>
-      transition('done', { output: String(artifacts.count) }),
-    done: (artifacts, { finish, fail }) => {
+    done: (_state, _context, { finish, fail }) => {
       // @ts-expect-error fail requires the configured domain failure.
       void fail();
 
-      return artifacts.output === ''
-        ? fail({ code: 'cancelled' })
-        : finish(artifacts.output);
+      return finish('complete');
     },
   });
 
   const assertTypes = () => {
     void definition.run({
+      initial: 'start',
+      state: { count: 0 },
       context: { runId: 'typed' },
-      state: 'start',
-      artifacts: { input: 'ok' },
     });
 
     void definition.run({
+      // @ts-expect-error initial accepts only initialized handler names.
+      initial: 'missing',
+      state: { count: 0 },
       context: { runId: 'typed' },
-      state: 'start',
-      // @ts-expect-error initial start state requires start artifacts.
-      artifacts: { count: 1 },
-    });
-
-    // @ts-expect-error every state requires a handler.
-    createStateMachine<State, Context, Artifacts, string, DomainFailure>({
-      start: (_artifacts, { finish }) => finish('start'),
-      middle: (_artifacts, { finish }) => finish('middle'),
     });
 
     const supported: StateMachineErrorCode = 'handler_failed';
     void supported;
 
-    // @ts-expect-error lifecycle errors were removed from reusable definitions.
+    // @ts-expect-error lifecycle errors are not reusable-definition errors.
     const removed: StateMachineErrorCode = 'concurrent_dispatch';
     void removed;
   };
@@ -92,89 +73,100 @@ test('checks exhaustive handlers and state-specific artifacts at compile time', 
   assert.equal(typeof assertTypes, 'function');
 });
 
-test('runs an asynchronous handler chain to completion', async () => {
+test('copies the explicitly supplied state before calling the next handler', async () => {
+  const received: State[] = [];
+  const supplied: State[] = [];
   const definition = createStateMachine<
-    State,
     Context,
-    Artifacts,
+    State,
     string,
     DomainFailure
-  >({
-    start: async (artifacts, { transition }) => {
+  >()({
+    start: async (state, _context, { transition }) => {
+      received.push(state);
       await Promise.resolve();
 
-      return transition('middle', { count: artifacts.input.length });
+      const next = { count: state.count + 1 };
+      supplied.push(next);
+      return transition('middle', next);
     },
-    middle: (artifacts, { transition }) =>
-      transition('done', { output: String(artifacts.count) }),
-    done: (artifacts, { finish }) => finish(artifacts.output),
+    middle: (state, _context, { transition }) => {
+      received.push(state);
+
+      const next = { count: state.count + 1 };
+      supplied.push(next);
+      return transition('done', next);
+    },
+    done: (state, context, { finish }) => {
+      received.push(state);
+      return finish(`${context.runId}:${state.count}`);
+    },
   });
+  const initial = { count: 0 };
   const context = { runId: 'chain' };
 
   const result = await definition.run({
+    initial: 'start',
+    state: initial,
     context,
-    state: 'start',
-    artifacts: { input: 'doric' },
   });
 
+  assert.equal(received.length, 3);
+  assert.strictEqual(received[0], initial);
+  assert.notStrictEqual(received[1], supplied[0]);
+  assert.notStrictEqual(received[2], supplied[1]);
   assert.deepEqual(result, {
     status: 'finished',
-    value: '5',
-    state: 'done',
+    value: 'chain:2',
+    handler: 'done',
+    state: { count: 2 },
     context,
   });
 });
 
-test('returns the exact domain failure passed to fail', async () => {
+test('returns the exact domain failure and current state', async () => {
   const failure: DomainFailure = { code: 'cancelled' };
   const definition = createStateMachine<
-    State,
     Context,
-    Artifacts,
+    State,
     string,
     DomainFailure
-  >({
-    start: (_artifacts, { fail }) => fail(failure),
-    middle: (_artifacts, { finish }) => finish('middle'),
-    done: (artifacts, { finish }) => finish(artifacts.output),
+  >()({
+    start: (state, _context, { fail }) => {
+      state.count += 1;
+      return fail(failure);
+    },
   });
   const context = { runId: 'failed' };
 
   const result = await definition.run({
+    initial: 'start',
+    state: { count: 0 },
     context,
-    state: 'start',
-    artifacts: { input: 'stop' },
   });
 
   assert.equal(result.status, 'failed');
 
   if (result.status === 'failed') {
     assert.equal(result.error, failure);
-    assert.equal(result.state, 'start');
+    assert.equal(result.handler, 'start');
+    assert.deepEqual(result.state, { count: 1 });
     assert.equal(result.context, context);
   }
 });
 
 test('preserves a thrown handler value as the engine error cause', async () => {
   const thrown = { reason: 'boom' };
-  const definition = createStateMachine<
-    State,
-    Context,
-    Artifacts,
-    void,
-    DomainFailure
-  >({
+  const definition = createStateMachine<Context, State>()({
     start: () => {
       throw thrown;
     },
-    middle: (_artifacts, { finish }) => finish(),
-    done: (_artifacts, { finish }) => finish(),
   });
 
   const result = await definition.run({
+    initial: 'start',
+    state: { count: 0 },
     context: { runId: 'thrown' },
-    state: 'start',
-    artifacts: { input: 'bad' },
   });
 
   assert.equal(result.status, 'error');
@@ -183,63 +175,20 @@ test('preserves a thrown handler value as the engine error cause', async () => {
     assert.ok(result.error instanceof StateMachineError);
     assert.equal(result.error.data.code, 'handler_failed');
     assert.equal(result.error.cause, thrown);
+    assert.equal(result.handler, 'start');
   }
 });
 
-test('reuses one definition for independent sequential runs', async () => {
-  const definition = createStateMachine<
-    State,
-    Context,
-    Artifacts,
-    string,
-    DomainFailure
-  >({
-    start: (artifacts, { context, finish }) =>
-      finish(`${context.runId}:${artifacts.input}`),
-    middle: (_artifacts, { finish }) => finish('middle'),
-    done: (artifacts, { finish }) => finish(artifacts.output),
-  });
-
-  const first = await definition.run({
-    context: { runId: 'first' },
-    state: 'start',
-    artifacts: { input: 'one' },
-  });
-  const second = await definition.run({
-    context: { runId: 'second' },
-    state: 'start',
-    artifacts: { input: 'two' },
-  });
-
-  assert.equal(
-    first.status === 'finished' ? first.value : undefined,
-    'first:one',
-  );
-  assert.equal(
-    second.status === 'finished' ? second.value : undefined,
-    'second:two',
-  );
-});
-
-test('isolates concurrent runs of one definition', async () => {
-  type ConcurrentArtifacts = {
-    readonly start: {
-      readonly input: string;
-      readonly gate: Promise<void>;
-    };
+test('reuses one definition for independent concurrent runs', async () => {
+  type ConcurrentState = {
+    value: string;
+    gate: Promise<void>;
   };
 
-  const definition = createStateMachine<
-    'start',
-    Context,
-    ConcurrentArtifacts,
-    string,
-    never
-  >({
-    start: async (artifacts, { context, finish }) => {
-      await artifacts.gate;
-
-      return finish(`${context.runId}:${artifacts.input}`);
+  const definition = createStateMachine<Context, ConcurrentState, string>()({
+    start: async (state, context, { finish }) => {
+      await state.gate;
+      return finish(`${context.runId}:${state.value}`);
     },
   });
   let releaseFirst: () => void = () => undefined;
@@ -252,14 +201,14 @@ test('isolates concurrent runs of one definition', async () => {
   });
 
   const first = definition.run({
+    initial: 'start',
+    state: { value: 'one', gate: firstGate },
     context: { runId: 'first' },
-    state: 'start',
-    artifacts: { input: 'one', gate: firstGate },
   });
   const second = definition.run({
+    initial: 'start',
+    state: { value: 'two', gate: secondGate },
     context: { runId: 'second' },
-    state: 'start',
-    artifacts: { input: 'two', gate: secondGate },
   });
 
   releaseSecond();
@@ -278,65 +227,50 @@ test('isolates concurrent runs of one definition', async () => {
 });
 
 test('returns an engine error when a handler returns an invalid action', async () => {
-  const definition = createStateMachine<
-    State,
-    Context,
-    Artifacts,
-    void,
-    DomainFailure
-  >({
+  const definition = createStateMachine<Context, State>()({
     start: (() => undefined) as unknown as StateMachineHandler<
-      State,
       'start',
+      State,
       Context,
-      Artifacts,
       void,
-      DomainFailure
+      unknown
     >,
-    middle: (_artifacts, { finish }) => finish(),
-    done: (_artifacts, { finish }) => finish(),
   });
 
   const result = await definition.run({
+    initial: 'start',
+    state: { count: 0 },
     context: { runId: 'invalid' },
-    state: 'start',
-    artifacts: { input: 'bad' },
   });
 
   assert.equal(result.status, 'error');
 
   if (result.status === 'error') {
     assert.equal(result.error.data.code, 'invalid_handler_return');
-    assert.equal(result.state, 'start');
+    assert.equal(result.handler, 'start');
   }
 });
 
 test('defensively returns an engine error when a handler is missing', async () => {
   const handlers = {} as StateMachineHandlers<
+    'start',
     State,
     Context,
-    Artifacts,
     void,
-    DomainFailure
+    unknown
   >;
-  const definition = createStateMachine<
-    State,
-    Context,
-    Artifacts,
-    void,
-    DomainFailure
-  >(handlers);
+  const definition = createStateMachine<Context, State>()(handlers);
 
   const result = await definition.run({
+    initial: 'start',
+    state: { count: 0 },
     context: { runId: 'missing' },
-    state: 'start',
-    artifacts: { input: 'none' },
   });
 
   assert.equal(result.status, 'error');
 
   if (result.status === 'error') {
     assert.equal(result.error.data.code, 'missing_handler');
-    assert.equal(result.state, 'start');
+    assert.equal(result.handler, 'start');
   }
 });

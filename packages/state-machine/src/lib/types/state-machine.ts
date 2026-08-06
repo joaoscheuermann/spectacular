@@ -5,22 +5,20 @@ export type StateMachineErrorCode =
   | 'invalid_handler_return'
   | 'missing_handler';
 
-export type StateMachineErrorData<States extends string = string> = {
+export type StateMachineErrorData<Handlers extends string = string> = {
   readonly code: StateMachineErrorCode;
   readonly message: string;
-  readonly state: States;
+  readonly state: Handlers;
 };
 
 export type StateMachineTransition<
-  States extends string,
-  ArtifactsByState extends Record<States, unknown>,
+  Handlers extends string,
+  State extends object,
 > = {
-  readonly [State in States]: {
-    readonly type: 'transition';
-    readonly state: State;
-    readonly artifacts: ArtifactsByState[State];
-  };
-}[States];
+  readonly type: 'transition';
+  readonly handler: Handlers;
+  readonly state: State;
+};
 
 export type StateMachineFinish<Finished> = {
   readonly type: 'finish';
@@ -33,31 +31,22 @@ export type StateMachineFail<Failed> = {
 };
 
 export type StateMachineAction<
-  States extends string,
-  ArtifactsByState extends Record<States, unknown>,
+  Handlers extends string,
+  State extends object,
   Finished,
   Failed,
 > =
-  | StateMachineTransition<States, ArtifactsByState>
+  | StateMachineTransition<Handlers, State>
   | StateMachineFinish<Finished>
   | StateMachineFail<Failed>;
 
-export type StateMachineTransitionArguments<
-  States extends string,
-  ArtifactsByState extends Record<States, unknown>,
-> = {
-  readonly [State in States]: readonly [
-    state: State,
-    artifacts: ArtifactsByState[State],
-  ];
-}[States];
-
 export type StateMachineTransitionFunction<
-  States extends string,
-  ArtifactsByState extends Record<States, unknown>,
+  Handlers extends string,
+  State extends object,
 > = (
-  ...args: StateMachineTransitionArguments<States, ArtifactsByState>
-) => StateMachineTransition<States, ArtifactsByState>;
+  handler: Handlers,
+  state: State,
+) => StateMachineTransition<Handlers, State>;
 
 export type StateMachineFinishFunction<Finished> = (
   value?: Finished,
@@ -67,114 +56,115 @@ export type StateMachineFailFunction<Failed> = (
   error: Failed,
 ) => StateMachineFail<Failed>;
 
-export type StateMachineHandlerScope<
-  States extends string,
-  State extends States,
-  Context,
-  ArtifactsByState extends Record<States, unknown>,
+export type StateMachineHandlerActions<
+  Handlers extends string,
+  State extends object,
   Finished,
   Failed,
 > = {
-  readonly context: Context;
-  readonly state: State;
-  readonly transition: StateMachineTransitionFunction<States, ArtifactsByState>;
+  readonly transition: StateMachineTransitionFunction<Handlers, State>;
   readonly finish: StateMachineFinishFunction<Finished>;
   readonly fail: StateMachineFailFunction<Failed>;
 };
 
 export type StateMachineHandler<
-  States extends string,
-  State extends States,
+  Handlers extends string,
+  State extends object,
   Context,
-  ArtifactsByState extends Record<States, unknown>,
   Finished,
   Failed,
 > = (
-  artifacts: ArtifactsByState[State],
-  scope: StateMachineHandlerScope<
-    States,
-    State,
-    Context,
-    ArtifactsByState,
-    Finished,
-    Failed
-  >,
+  state: State,
+  context: Context,
+  actions: StateMachineHandlerActions<Handlers, State, Finished, Failed>,
 ) =>
-  | StateMachineAction<States, ArtifactsByState, Finished, Failed>
-  | Promise<StateMachineAction<States, ArtifactsByState, Finished, Failed>>;
+  | StateMachineAction<Handlers, State, Finished, Failed>
+  | Promise<StateMachineAction<Handlers, State, Finished, Failed>>;
 
 export type StateMachineHandlers<
-  States extends string,
+  Handlers extends string,
+  State extends object,
   Context,
-  ArtifactsByState extends Record<States, unknown>,
   Finished,
   Failed,
 > = {
-  readonly [State in States]: StateMachineHandler<
-    States,
+  readonly [Handler in Handlers]: StateMachineHandler<
+    Handlers,
     State,
     Context,
-    ArtifactsByState,
     Finished,
     Failed
   >;
 };
 
 export type StateMachineRunInput<
-  States extends string,
+  Handlers extends string,
+  State extends object,
   Context,
-  ArtifactsByState extends Record<States, unknown>,
 > = {
-  readonly [State in States]: {
-    readonly context: Context;
-    readonly state: State;
-    readonly artifacts: ArtifactsByState[State];
-  };
-}[States];
+  readonly initial: Handlers;
+  readonly state: State;
+  readonly context: Context;
+};
+
+type StateMachineResultBase<
+  Handlers extends string,
+  State extends object,
+  Context,
+> = {
+  readonly handler: Handlers;
+  readonly state: State;
+  readonly context: Context;
+};
 
 export type StateMachineFinishedResult<
-  States extends string,
+  Handlers extends string,
+  State extends object,
   Context,
   Finished,
-> = {
+> = StateMachineResultBase<Handlers, State, Context> & {
   readonly status: 'finished';
   readonly value: Finished | undefined;
-  readonly state: States;
-  readonly context: Context;
 };
 
-export type StateMachineFailedResult<States extends string, Context, Failed> = {
+export type StateMachineFailedResult<
+  Handlers extends string,
+  State extends object,
+  Context,
+  Failed,
+> = StateMachineResultBase<Handlers, State, Context> & {
   readonly status: 'failed';
   readonly error: Failed;
-  readonly state: States;
-  readonly context: Context;
 };
 
-export type StateMachineErrorResult<States extends string, Context> = {
+export type StateMachineErrorResult<
+  Handlers extends string,
+  State extends object,
+  Context,
+> = StateMachineResultBase<Handlers, State, Context> & {
   readonly status: 'error';
-  readonly error: StateMachineError<States>;
-  readonly state: States;
-  readonly context: Context;
+  readonly error: StateMachineError<Handlers>;
 };
 
 export type StateMachineResult<
-  States extends string,
+  Handlers extends string,
+  State extends object,
   Context,
   Finished,
   Failed,
 > =
-  | StateMachineFinishedResult<States, Context, Finished>
-  | StateMachineFailedResult<States, Context, Failed>
-  | StateMachineErrorResult<States, Context>;
+  | StateMachineFinishedResult<Handlers, State, Context, Finished>
+  | StateMachineFailedResult<Handlers, State, Context, Failed>
+  | StateMachineErrorResult<Handlers, State, Context>;
 
 export type StateMachineDefinition<
-  States extends string,
+  Handlers extends string,
+  State extends object,
   Context,
-  ArtifactsByState extends Record<States, unknown>,
   Finished,
   Failed,
 > = {
   readonly run: (
-    input: StateMachineRunInput<States, Context, ArtifactsByState>,
-  ) => Promise<StateMachineResult<States, Context, Finished, Failed>>;
+    input: StateMachineRunInput<Handlers, State, Context>,
+  ) => Promise<StateMachineResult<Handlers, State, Context, Finished, Failed>>;
 };

@@ -65,6 +65,17 @@ export const requireEmbeddingInput = (
       message: 'Provider request requires input.',
     });
   }
+
+  if (
+    request.dimensions !== undefined &&
+    (!Number.isInteger(request.dimensions) || request.dimensions < 1)
+  ) {
+    throw new ProviderErrorObject({
+      provider,
+      code: 'invalid_dimensions',
+      message: 'Provider embedding dimensions must be a positive integer.',
+    });
+  }
 };
 
 export const requireRerankInput = (

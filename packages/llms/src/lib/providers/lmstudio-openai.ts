@@ -223,7 +223,13 @@ export const createLmStudioOpenAiProvider = (
       ): Promise<readonly number[]> {
         requireEmbeddingInput('lmstudio-openai', request);
         const sensitiveOutput = request.flags?.sensitiveOutput === true;
-        const body = { model: request.model, input: request.input };
+        const body = {
+          model: request.model,
+          input: request.input,
+          ...(request.dimensions === undefined
+            ? {}
+            : { dimensions: request.dimensions }),
+        };
         const response = await deps.transport.request({
           method: 'POST',
           url: `${baseUrl}/embeddings`,

@@ -7,17 +7,20 @@ const MISSING_READY_NODES = 'Impossible to continue, missing ready nodes!';
 export type ScheduleResult =
   | { readonly status: 'finished' }
   | { readonly status: 'failed'; readonly error: Error }
-  | {
-      readonly status: 'ready';
-      readonly graph: Graph;
-      readonly nodes: readonly Node[];
-    };
+  | { readonly status: 'ready'; readonly nodes: readonly Node[] };
 
-/** Advances the workflow with the next immutable ready wave. */
+/** Mutates the active graph to mark its next wave as ready. */
 export const schedule: WorkflowHandler<'schedule'> = (
-  { graph },
+  { graphs },
+  _context,
   { transition, finish, fail },
 ) => {
+  const graph = graphs.at(-1);
+
+  if (graph === undefined) {
+    return fail(new Error('Impossible to continue, missing active graph!'));
+  }
+
   const result = selectWave(graph);
 
   if (result.status === 'finished') {
@@ -28,13 +31,10 @@ export const schedule: WorkflowHandler<'schedule'> = (
     return fail(result.error);
   }
 
-  return transition('prepare', {
-    graph: result.graph,
-    nodes: result.nodes,
-  });
+  return transition('prepare', { graphs });
 };
 
-/** Selects the next ready wave without mutating the provider-produced graph. */
+/** Selects and marks the next ready wave on the active graph. */
 export const selectWave = (graph: Graph): ScheduleResult => {
   if (graph.nodes.every((node) => node.status === 'completed')) {
     return { status: 'finished' };
@@ -43,21 +43,18 @@ export const selectWave = (graph: Graph): ScheduleResult => {
   const ready = graph.nodes
     .filter((node) => isReady(node, graph.nodes))
     .sort((left, right) => right.index - left.index)
-    .slice(0, WAVE_LIMIT)
-    .map((node) => ({ ...node, status: 'ready' as const }));
+    .slice(0, WAVE_LIMIT);
 
   if (ready.length === 0) {
     return { status: 'failed', error: new Error(MISSING_READY_NODES) };
   }
 
-  const selected = new Map(ready.map((node) => [node.id, node]));
+  for (const node of ready) {
+    node.status = 'ready';
+  }
 
   return {
     status: 'ready',
-    graph: {
-      ...graph,
-      nodes: graph.nodes.map((node) => selected.get(node.id) ?? node),
-    },
     nodes: ready,
   };
 };

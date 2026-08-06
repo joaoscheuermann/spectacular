@@ -35,7 +35,7 @@ const captureLogger = (): {
   });
 
   return {
-    logger: pino({ base: null, timestamp: false }, destination),
+    logger: pino({ base: null, level: 'debug', timestamp: false }, destination),
     records,
   };
 };
@@ -295,19 +295,19 @@ test('does not retain data when its transformer or embedding fails', async () =>
   ]);
 });
 
-test('requires a logger with info and child functions synchronously', () => {
+test('requires a logger with debug and child functions synchronously', () => {
   assert.throws(
     () =>
       createVectorDatabase({
         dimensions: 2,
         embedding: async () => [1, 0],
-        logger: { info: () => undefined } as unknown as Logger,
+        logger: { debug: () => undefined } as unknown as Logger,
       }),
-    /logger: expected an object with info and child functions/,
+    /logger: expected an object with debug and child functions/,
   );
 });
 
-test('emits structured info logs for successful add and search operations', async () => {
+test('emits structured debug logs for successful add and search operations', async () => {
   const { logger, records } = captureLogger();
   const vectors = createVectorDatabase({
     dimensions: 2,
@@ -343,7 +343,7 @@ test('emits structured info logs for successful add and search operations', asyn
         component: 'victor',
         dimensions: 2,
         entryCount: undefined,
-        level: 30,
+        level: 20,
         msg: 'vector database created',
         resultCount: undefined,
         topK: undefined,
@@ -352,7 +352,7 @@ test('emits structured info logs for successful add and search operations', asyn
         component: 'victor',
         dimensions: 2,
         entryCount: 0,
-        level: 30,
+        level: 20,
         msg: 'vector database add started',
         resultCount: undefined,
         topK: undefined,
@@ -361,7 +361,7 @@ test('emits structured info logs for successful add and search operations', asyn
         component: 'victor',
         dimensions: 2,
         entryCount: 1,
-        level: 30,
+        level: 20,
         msg: 'vector database add completed',
         resultCount: undefined,
         topK: undefined,
@@ -370,7 +370,7 @@ test('emits structured info logs for successful add and search operations', asyn
         component: 'victor',
         dimensions: 2,
         entryCount: 1,
-        level: 30,
+        level: 20,
         msg: 'vector database search started',
         resultCount: undefined,
         topK: 1,
@@ -379,7 +379,7 @@ test('emits structured info logs for successful add and search operations', asyn
         component: 'victor',
         dimensions: 2,
         entryCount: 1,
-        level: 30,
+        level: 20,
         msg: 'vector database search completed',
         resultCount: 1,
         topK: 1,
@@ -436,7 +436,7 @@ test('logs failures without exposing private data or changing error identity', a
   );
   assert.equal(
     records.every(
-      ({ component, level }) => component === 'victor' && level === 30,
+      ({ component, level }) => component === 'victor' && level === 20,
     ),
     true,
   );

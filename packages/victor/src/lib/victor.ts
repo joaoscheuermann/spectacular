@@ -58,10 +58,10 @@ function validateLogger(logger: unknown): asserts logger is Logger {
   if (
     typeof logger !== 'object' ||
     logger === null ||
-    typeof (logger as { info?: unknown }).info !== 'function' ||
+    typeof (logger as { debug?: unknown }).debug !== 'function' ||
     typeof (logger as { child?: unknown }).child !== 'function'
   ) {
-    throw invalid('logger: expected an object with info and child functions');
+    throw invalid('logger: expected an object with debug and child functions');
   }
 }
 
@@ -133,11 +133,11 @@ export const createVectorDatabase = <Data = unknown>(
   const embed = async (data: string): Promise<Entry<Data>['vector']> =>
     validateVector(await embedding(data), dimensions);
 
-  logger.info({ dimensions }, 'vector database created');
+  logger.debug({ dimensions }, 'vector database created');
 
   return {
     async add(data: Data, transform: (data: Data) => string): Promise<void> {
-      logger.info(
+      logger.debug(
         { dimensions, entryCount: entries.length },
         'vector database add started',
       );
@@ -161,12 +161,12 @@ export const createVectorDatabase = <Data = unknown>(
         }
 
         entries.push({ data, vector, magnitude });
-        logger.info(
+        logger.debug(
           { dimensions, entryCount: entries.length },
           'vector database add completed',
         );
       } catch (error) {
-        logger.info(
+        logger.debug(
           { dimensions, entryCount: entries.length },
           'vector database add failed',
         );
@@ -181,7 +181,7 @@ export const createVectorDatabase = <Data = unknown>(
       const safeTopK = Number.isFinite(topK) ? topK : undefined;
       const fields = { dimensions, entryCount: entries.length, topK: safeTopK };
 
-      logger.info(fields, 'vector database search started');
+      logger.debug(fields, 'vector database search started');
 
       try {
         if (!Number.isSafeInteger(topK) || topK < 0) {
@@ -189,7 +189,7 @@ export const createVectorDatabase = <Data = unknown>(
         }
 
         if (topK === 0 || entries.length === 0) {
-          logger.info(
+          logger.debug(
             { ...fields, resultCount: 0 },
             'vector database search completed',
           );
@@ -218,13 +218,13 @@ export const createVectorDatabase = <Data = unknown>(
           .slice(0, topK)
           .map(({ data, score }) => ({ data, score }));
 
-        logger.info(
+        logger.debug(
           { ...fields, resultCount: results.length },
           'vector database search completed',
         );
         return results;
       } catch (error) {
-        logger.info(fields, 'vector database search failed');
+        logger.debug(fields, 'vector database search failed');
         throw error;
       }
     },

@@ -189,6 +189,7 @@ export type ProviderRequest<
 export type ProviderEmbeddingRequest = {
   readonly model: string;
   readonly input: string;
+  readonly dimensions?: number;
   readonly flags?: ProviderCallFlags;
   readonly signal?: AbortSignal;
 };

@@ -21,7 +21,7 @@ export async function decompose(
   prompt: string,
   { provider, logger, vectors, model }: DecomposeContext,
 ) {
-  logger.info({ msg: 'starting decomposition', step: 'P0' });
+  logger.debug({ msg: 'starting decomposition', step: 'P0' });
 
   // Initial decomposition
   const p0Graph = await goals(model, prompt, { provider });

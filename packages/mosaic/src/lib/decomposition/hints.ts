@@ -25,13 +25,13 @@ export default async function hints(
 
     if (!node) throw new Error('Goal not found!');
 
-    logger.info({
+    logger.debug({
       msg: 'extracting hints for goal',
       goal: node.goal,
     });
 
     return bundle.skills.map(async (skill) => {
-      logger.info({
+      logger.debug({
         msg: 'extracting hints from skill',
         goal: node.goal,
         skill: skill.name,

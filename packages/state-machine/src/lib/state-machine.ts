@@ -8,111 +8,68 @@ import type {
   StateMachineFailFunction,
   StateMachineFinishFunction,
   StateMachineHandler,
+  StateMachineHandlerActions,
   StateMachineHandlers,
-  StateMachineHandlerScope,
   StateMachineResult,
   StateMachineRunInput,
   StateMachineTransition,
-  StateMachineTransitionArguments,
   StateMachineTransitionFunction,
 } from './types/state-machine.js';
 
-type RuntimeHandler<
-  States extends string,
-  Context,
-  ArtifactsByState extends Record<States, unknown>,
-  Finished,
-  Failed,
-> = StateMachineHandler<
-  States,
-  States,
-  Context,
-  ArtifactsByState,
-  Finished,
-  Failed
->;
-
 type RuntimeHandlers<
-  States extends string,
+  Handlers extends string,
+  State extends object,
   Context,
-  ArtifactsByState extends Record<States, unknown>,
   Finished,
   Failed,
 > = Partial<
   Record<
-    States,
-    RuntimeHandler<States, Context, ArtifactsByState, Finished, Failed>
+    Handlers,
+    StateMachineHandler<Handlers, State, Context, Finished, Failed>
   >
 >;
-
-type Actions<
-  States extends string,
-  ArtifactsByState extends Record<States, unknown>,
-  Finished,
-  Failed,
-> = {
-  readonly transition: StateMachineTransitionFunction<States, ArtifactsByState>;
-  readonly finish: StateMachineFinishFunction<Finished>;
-  readonly fail: StateMachineFailFunction<Failed>;
-};
 
 type HandlerCall =
   | { readonly type: 'returned'; readonly action: unknown }
   | { readonly type: 'threw'; readonly cause: unknown };
 
-/** Creates a reusable definition whose run state is isolated to each call. */
-export const createStateMachine = <
-  States extends string,
-  Context,
-  ArtifactsByState extends Record<States, unknown>,
-  Finished = void,
-  Failed = never,
->(
-  handlers: StateMachineHandlers<
-    States,
-    Context,
-    ArtifactsByState,
-    Finished,
-    Failed
-  >,
-): StateMachineDefinition<
-  States,
-  Context,
-  ArtifactsByState,
-  Finished,
-  Failed
-> => {
-  const runtimeHandlers = { ...handlers } as RuntimeHandlers<
-    States,
-    Context,
-    ArtifactsByState,
-    Finished,
-    Failed
-  >;
-  const actions = createActions<States, ArtifactsByState, Finished, Failed>();
-
-  return {
-    run: (input) => execute(input, runtimeHandlers, actions),
-  };
-};
-
-const createActions = <
-  States extends string,
-  ArtifactsByState extends Record<States, unknown>,
-  Finished,
-  Failed,
->(): Actions<States, ArtifactsByState, Finished, Failed> => {
-  const transition: StateMachineTransitionFunction<States, ArtifactsByState> = (
-    ...args: StateMachineTransitionArguments<States, ArtifactsByState>
-  ) => {
-    const [state, artifacts] = args;
+/**
+ * Configures the context and state object types, then infers available handler
+ * names from the handler map passed to the returned initializer.
+ */
+export const createStateMachine =
+  <Context, State extends object, Finished = void, Failed = unknown>() =>
+  /** Creates a reusable definition whose run state is isolated to each call. */
+  <Handlers extends string>(
+    handlers: StateMachineHandlers<Handlers, State, Context, Finished, Failed>,
+  ): StateMachineDefinition<Handlers, State, Context, Finished, Failed> => {
+    const runtimeHandlers = { ...handlers } as RuntimeHandlers<
+      Handlers,
+      State,
+      Context,
+      Finished,
+      Failed
+    >;
 
     return {
-      type: 'transition',
-      state,
-      artifacts,
-    } as StateMachineTransition<States, ArtifactsByState>;
+      run: (input) => execute(input, runtimeHandlers),
+    };
   };
+
+const createActions = <
+  Handlers extends string,
+  State extends object,
+  Finished,
+  Failed,
+>(): StateMachineHandlerActions<Handlers, State, Finished, Failed> => {
+  const transition: StateMachineTransitionFunction<Handlers, State> = (
+    handler,
+    state,
+  ) => ({
+    type: 'transition',
+    handler,
+    state: copy(state),
+  });
   const finish: StateMachineFinishFunction<Finished> = (value) => ({
     type: 'finish',
     value,
@@ -126,60 +83,57 @@ const createActions = <
 };
 
 const execute = async <
-  States extends string,
+  Handlers extends string,
+  State extends object,
   Context,
-  ArtifactsByState extends Record<States, unknown>,
   Finished,
   Failed,
 >(
-  input: StateMachineRunInput<States, Context, ArtifactsByState>,
-  handlers: RuntimeHandlers<
-    States,
-    Context,
-    ArtifactsByState,
-    Finished,
-    Failed
-  >,
-  actions: Actions<States, ArtifactsByState, Finished, Failed>,
-): Promise<StateMachineResult<States, Context, Finished, Failed>> => {
+  input: StateMachineRunInput<Handlers, State, Context>,
+  handlers: RuntimeHandlers<Handlers, State, Context, Finished, Failed>,
+): Promise<StateMachineResult<Handlers, State, Context, Finished, Failed>> => {
   let step = initialStep(input);
 
   while (true) {
-    const state = step.state;
-    const handler = ownHandler(handlers, state);
+    const { handler, state } = step;
+    const current = ownHandler(handlers, handler);
 
-    if (handler === undefined) {
+    if (current === undefined) {
       return engineError(
         issue(
           'missing_handler',
-          `No state handler defined for: ${state}`,
-          state,
+          `No state handler defined for: ${handler}`,
+          handler,
         ),
+        state,
         input.context,
       );
     }
 
-    const call = await callHandler(handler, step.artifacts, {
-      context: input.context,
+    const call = await callHandler(
+      current,
       state,
-      ...actions,
-    });
+      input.context,
+      createActions(),
+    );
 
     if (call.type === 'threw') {
       return engineError(
-        issue('handler_failed', `State handler failed: ${state}`, state),
+        issue('handler_failed', `State handler failed: ${handler}`, handler),
+        state,
         input.context,
         { cause: call.cause },
       );
     }
 
-    if (!isAction<States, ArtifactsByState, Finished, Failed>(call.action)) {
+    if (!isAction<Handlers, State, Finished, Failed>(call.action)) {
       return engineError(
         issue(
           'invalid_handler_return',
-          `State handler returned an invalid action: ${state}`,
-          state,
+          `State handler returned an invalid action: ${handler}`,
+          handler,
         ),
+        state,
         input.context,
       );
     }
@@ -188,6 +142,7 @@ const execute = async <
       return {
         status: 'finished',
         value: call.action.value,
+        handler,
         state,
         context: input.context,
       };
@@ -197,6 +152,7 @@ const execute = async <
       return {
         status: 'failed',
         error: call.action.error,
+        handler,
         state,
         context: input.context,
       };
@@ -206,94 +162,79 @@ const execute = async <
   }
 };
 
-const initialStep = <
-  States extends string,
-  Context,
-  ArtifactsByState extends Record<States, unknown>,
->(
-  input: StateMachineRunInput<States, Context, ArtifactsByState>,
-): StateMachineTransition<States, ArtifactsByState> =>
-  ({
-    type: 'transition',
-    state: input.state,
-    artifacts: input.artifacts,
-  }) as StateMachineTransition<States, ArtifactsByState>;
+const initialStep = <Handlers extends string, State extends object, Context>(
+  input: StateMachineRunInput<Handlers, State, Context>,
+): StateMachineTransition<Handlers, State> => ({
+  type: 'transition',
+  handler: input.initial,
+  state: input.state,
+});
 
 const ownHandler = <
-  States extends string,
+  Handlers extends string,
+  State extends object,
   Context,
-  ArtifactsByState extends Record<States, unknown>,
   Finished,
   Failed,
 >(
-  handlers: RuntimeHandlers<
-    States,
-    Context,
-    ArtifactsByState,
-    Finished,
-    Failed
-  >,
-  state: States,
+  handlers: RuntimeHandlers<Handlers, State, Context, Finished, Failed>,
+  handler: Handlers,
 ):
-  | RuntimeHandler<States, Context, ArtifactsByState, Finished, Failed>
+  | StateMachineHandler<Handlers, State, Context, Finished, Failed>
   | undefined =>
-  Object.prototype.hasOwnProperty.call(handlers, state) &&
-  typeof handlers[state] === 'function'
-    ? handlers[state]
+  Object.prototype.hasOwnProperty.call(handlers, handler) &&
+  typeof handlers[handler] === 'function'
+    ? handlers[handler]
     : undefined;
 
 const callHandler = async <
-  States extends string,
+  Handlers extends string,
+  State extends object,
   Context,
-  ArtifactsByState extends Record<States, unknown>,
   Finished,
   Failed,
 >(
-  handler: RuntimeHandler<States, Context, ArtifactsByState, Finished, Failed>,
-  artifacts: ArtifactsByState[States],
-  scope: StateMachineHandlerScope<
-    States,
-    States,
-    Context,
-    ArtifactsByState,
-    Finished,
-    Failed
-  >,
+  handler: StateMachineHandler<Handlers, State, Context, Finished, Failed>,
+  state: State,
+  context: Context,
+  actions: StateMachineHandlerActions<Handlers, State, Finished, Failed>,
 ): Promise<HandlerCall> => {
   try {
-    return { type: 'returned', action: await handler(artifacts, scope) };
+    return {
+      type: 'returned',
+      action: await handler(state, context, actions),
+    };
   } catch (cause) {
     return { type: 'threw', cause };
   }
 };
 
-const issue = <States extends string>(
+const issue = <Handlers extends string>(
   code: StateMachineErrorCode,
   message: string,
-  state: States,
-): StateMachineErrorData<States> => ({ code, message, state });
+  state: Handlers,
+): StateMachineErrorData<Handlers> => ({ code, message, state });
 
-const engineError = <States extends string, Context>(
-  data: StateMachineErrorData<States>,
+const engineError = <Handlers extends string, State extends object, Context>(
+  data: StateMachineErrorData<Handlers>,
+  state: State,
   context: Context,
   options?: ErrorOptions,
-): StateMachineErrorResult<States, Context> => ({
+): StateMachineErrorResult<Handlers, State, Context> => ({
   status: 'error',
   error: new StateMachineError(data, options),
-  state: data.state,
+  handler: data.state,
+  state,
   context,
 });
 
-const isTransition = <
-  States extends string,
-  ArtifactsByState extends Record<States, unknown>,
->(
+const isTransition = <Handlers extends string, State extends object>(
   value: unknown,
-): value is StateMachineTransition<States, ArtifactsByState> =>
+): value is StateMachineTransition<Handlers, State> =>
   isRecord(value) &&
   value.type === 'transition' &&
-  typeof value.state === 'string' &&
-  'artifacts' in value;
+  typeof value.handler === 'string' &&
+  isObject(value.state);
 
 const isFinish = <Finished>(
   value: unknown,
@@ -310,14 +251,22 @@ const isFail = <Failed>(
 } => isRecord(value) && value.type === 'fail' && 'error' in value;
 
 const isAction = <
-  States extends string,
-  ArtifactsByState extends Record<States, unknown>,
+  Handlers extends string,
+  State extends object,
   Finished,
   Failed,
 >(
   value: unknown,
-): value is StateMachineAction<States, ArtifactsByState, Finished, Failed> =>
-  isTransition(value) || isFinish<Finished>(value) || isFail<Failed>(value);
+): value is StateMachineAction<Handlers, State, Finished, Failed> =>
+  isTransition<Handlers, State>(value) ||
+  isFinish<Finished>(value) ||
+  isFail<Failed>(value);
+
+const copy = <State extends object>(state: State): State =>
+  ({ ...state }) as State;
+
+const isObject = (value: unknown): value is object =>
+  typeof value === 'object' && value !== null;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
+  isObject(value);

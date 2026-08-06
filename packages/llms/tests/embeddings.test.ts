@@ -72,6 +72,7 @@ for (const fixture of compatibleProviders()) {
     const embedding = await fixture.provider.embedding({
       model: 'text-embedding-3-small',
       input: 'A short document.',
+      dimensions: 1024,
       signal: controller.signal,
       flags: { sensitiveOutput: true },
     });
@@ -87,6 +88,7 @@ for (const fixture of compatibleProviders()) {
     assert.deepEqual(JSON.parse(request?.body ?? '{}'), {
       model: 'text-embedding-3-small',
       input: 'A short document.',
+      dimensions: 1024,
     });
     assert.equal(request?.signal, controller.signal);
   });
@@ -132,6 +134,26 @@ test('rejects OpenAI embedding requests without a model or input before networki
       error instanceof ProviderErrorObject &&
       error.data.code === 'missing_input',
   );
+  assert.equal(transport.requests.length, 0);
+});
+
+test('rejects invalid embedding dimensions before networking', async () => {
+  const transport = fakeTransport({});
+  const provider = createOpenAiProvider({ transport, apiKey: 'openai-key' });
+
+  for (const dimensions of [0, 1.5, Number.NaN]) {
+    await assert.rejects(
+      provider.embedding({
+        model: 'text-embedding-3-small',
+        input: 'A short document.',
+        dimensions,
+      }),
+      (error: unknown) =>
+        error instanceof ProviderErrorObject &&
+        error.data.code === 'invalid_dimensions',
+    );
+  }
+
   assert.equal(transport.requests.length, 0);
 });
 

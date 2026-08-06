@@ -18,7 +18,7 @@ type LogRecord = Readonly<Record<string, unknown>> & {
   readonly msg: string;
 };
 
-test('emits uniform info events with safe metadata for all operations', async () => {
+test('emits uniform debug events with safe metadata for all operations', async () => {
   const captured = captureLogger();
   const transport = fakeTransport({
     responses: [
@@ -91,7 +91,7 @@ test('emits uniform info events with safe metadata for all operations', async ()
       'llm model validation completed',
     ],
   );
-  assert.ok(captured.records.every(({ level }) => level === 30));
+    assert.ok(captured.records.every(({ level }) => level === 20));
   assert.ok(
     captured.records.every(
       ({ component, provider }) =>
@@ -317,7 +317,7 @@ test('validates logger methods synchronously for every provider factory', () => 
       createOpenAiProvider({
         transport,
         logger: {
-          info() {},
+          debug() {},
           child: () => null,
         } as never,
       }),
@@ -359,7 +359,7 @@ const captureLogger = (): {
 } => {
   const records: LogRecord[] = [];
   const logger = pino(
-    { level: 'info' },
+    { level: 'debug' },
     {
       write(chunk: string) {
         for (const line of chunk.split('\n').filter(Boolean)) {

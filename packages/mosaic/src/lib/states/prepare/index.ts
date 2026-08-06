@@ -1,17 +1,28 @@
 import type { WorkflowHandler } from '../../types/workflow.js';
-import { prepareNode } from './node.js';
+// import { prepareNode } from './node.js';
 
 /** Prepares every node in the selected wave sequentially. */
 export const prepare: WorkflowHandler<'prepare'> = async (
-  { graph, nodes },
-  { context, transition, fail },
+  { graphs },
+  context,
+  { transition, fail },
 ) => {
   try {
-    for (const node of nodes) {
-      await prepareNode(node, context);
-    }
+    return fail(new Error('Impossible to continue, missing active graph!'))
 
-    return transition('schedule', { graph });
+    // const graph = graphs.at(-1);
+
+    // if (graph === undefined) {
+    //   return fail(new Error('Impossible to continue, missing active graph!'));
+    // }
+
+    // const nodes = graph.nodes.filter(({ status }) => status === 'ready');
+
+    // for (const node of nodes) {
+    //   await prepareNode(node, context);
+    // }
+
+    // return transition('schedule', { graphs });
   } catch (error) {
     return fail(error);
   }

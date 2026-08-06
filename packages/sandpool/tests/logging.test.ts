@@ -22,9 +22,9 @@ test('validates the logger contract synchronously', () => {
         minIdle: 0,
         maxContainers: 1,
         create,
-        logger: { ...valid, info: undefined } as unknown as Logger,
+        logger: { ...valid, debug: undefined } as unknown as Logger,
       }),
-    /logger\.info must be a function/u,
+        /logger\.debug must be a function/u,
   );
   assert.throws(
     () =>
@@ -43,15 +43,15 @@ test('validates the logger contract synchronously', () => {
         maxContainers: 1,
         create,
         logger: {
-          info: () => undefined,
+          debug: () => undefined,
           child: () => undefined,
         } as unknown as Logger,
       }),
-    /logger\.child must return a logger with an info method/u,
+    /logger\.child must return a logger with a debug method/u,
   );
 });
 
-test('logs lifecycle events as safe structured info records', async () => {
+test('logs lifecycle events as safe structured debug records', async () => {
   const { logger, records } = capture();
   const pool = createSandpool({
     minIdle: 1,
@@ -88,7 +88,7 @@ test('logs lifecycle events as safe structured info records', async () => {
       'sandpool disposed',
     ],
   );
-  assert.ok(records.every(({ level }) => level === 30));
+    assert.ok(records.every(({ level }) => level === 20));
   assert.ok(records.every(({ component }) => component === 'sandpool'));
   assert.ok(records.every(({ minIdle }) => minIdle === 1));
   assert.ok(records.every(({ maxContainers }) => maxContainers === 1));
@@ -187,7 +187,10 @@ const capture = (): {
       callback();
     },
   });
-  const logger = pino({ base: undefined, timestamp: false }, output);
+  const logger = pino(
+    { base: undefined, level: 'debug', timestamp: false },
+    output,
+  );
   return { logger, records };
 };
 

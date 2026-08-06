@@ -38,7 +38,7 @@ export const withProviderLogging = (
     provider: provider.metadata.id,
   });
   assertLogger(log);
-  log.info('llm provider initialized');
+  log.debug('llm provider initialized');
 
   async function complete<Schema extends StructuredOutputSchema>(
     request: ProviderRequest<StructuredOutputValue<Schema>, Schema> & {
@@ -141,14 +141,14 @@ const loggedPromise = async <Result>(
   execute: () => Promise<Result>,
   completedFields: (result: Result) => Fields,
 ): Promise<Result> => {
-  info(logger, operation, 'started', startedFields, sensitive);
+  debug(logger, operation, 'started', startedFields, sensitive);
 
   try {
     const result = await execute();
-    info(logger, operation, 'completed', completedFields(result), sensitive);
+    debug(logger, operation, 'completed', completedFields(result), sensitive);
     return result;
   } catch (error) {
-    info(
+    debug(
       logger,
       operation,
       cancelled(error, signal) ? 'cancelled' : 'failed',
@@ -166,17 +166,17 @@ async function* loggedStream<Output>(
 ): AsyncIterable<ProviderStreamEvent<Output>> {
   const sensitive = request.flags?.sensitiveOutput === true;
   let terminal = false;
-  info(logger, 'stream', 'started', requestFields(request), sensitive);
+  debug(logger, 'stream', 'started', requestFields(request), sensitive);
 
   try {
     for await (const event of source) {
       if (!terminal && event.type === 'error') {
         terminal = true;
-        info(logger, 'stream', 'failed', {}, sensitive);
+        debug(logger, 'stream', 'failed', {}, sensitive);
       } else if (!terminal && event.type === 'response.finished') {
         terminal = true;
         const status = terminalFromFinish(event.finish);
-        info(logger, 'stream', status, finishFields(event.finish), sensitive);
+        debug(logger, 'stream', status, finishFields(event.finish), sensitive);
       }
 
       yield event;
@@ -184,12 +184,12 @@ async function* loggedStream<Output>(
 
     if (!terminal) {
       terminal = true;
-      info(logger, 'stream', 'completed', {}, sensitive);
+      debug(logger, 'stream', 'completed', {}, sensitive);
     }
   } catch (error) {
     if (!terminal) {
       terminal = true;
-      info(
+      debug(
         logger,
         'stream',
         cancelled(error, request.signal) ? 'cancelled' : 'failed',
@@ -200,12 +200,12 @@ async function* loggedStream<Output>(
     throw error;
   } finally {
     if (!terminal) {
-      info(logger, 'stream', 'cancelled', {}, sensitive);
+      debug(logger, 'stream', 'cancelled', {}, sensitive);
     }
   }
 }
 
-const info = (
+const debug = (
   logger: Logger,
   operation: Operation,
   status: 'started' | Terminal,
@@ -213,7 +213,7 @@ const info = (
   sensitive: boolean,
 ): void => {
   if (!sensitive) {
-    logger.info(fields, `llm ${operationNames[operation]} ${status}`);
+    logger.debug(fields, `llm ${operationNames[operation]} ${status}`);
   }
 };
 
@@ -262,7 +262,7 @@ const assertLogger = (logger: Logger): void => {
   if (
     logger === null ||
     typeof logger !== 'object' ||
-    typeof logger.info !== 'function' ||
+    typeof logger.debug !== 'function' ||
     typeof logger.child !== 'function'
   ) {
     throw new TypeError('LLM provider requires a Pino-compatible logger.');

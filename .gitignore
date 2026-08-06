@@ -6,6 +6,7 @@ dist-tests
 tmp
 out-tsc
 .doric
+*.log
 /.env
 
 # dependencies

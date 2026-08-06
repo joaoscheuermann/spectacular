@@ -13,7 +13,16 @@ import type { Tool } from 'tool';
 import { createVectorDatabase } from 'victor';
 
 async function main() {
-  const logger = pino(pretty());
+  const logger = pino(
+    { level: 'debug' },
+    pino.multistream([
+      { level: 'info', stream: pretty() },
+      {
+        level: 'debug',
+        stream: pino.destination(process.env.DORIC_LOG_FILE ?? 'doric.log'),
+      },
+    ]),
+  );
 
   const provider = createOpenAiProvider({
     transport: createFetchTransport(),
@@ -25,8 +34,9 @@ async function main() {
   const models = {
     default: 'openai/gpt-5.6-luna',
     reranker: 'voyageai/rerank-2.5-lite',
-    embedder: 'perplexity/pplx-embed-v1-4b',
+    embedder: 'voyageai/voyage-4-large',
   } as const;
+  const embeddingDimensions = 2048;
 
   logger.info({ msg: 'initializing' });
 
@@ -49,6 +59,9 @@ async function main() {
 
     const lease = await pool.acquire();
 
+    logger.info({ msg: 'heating sandpool' });
+    await pool.waitUntilHeated();
+
     try {
       const bundleTools = bundles.flatMap((bundle) => bundle.tools);
       const bundleSkills = bundles.flatMap((bundle) => bundle.skills);
@@ -60,17 +73,25 @@ async function main() {
       }));
 
       const skillEmbeddings = createVectorDatabase<Skill>({
-        dimensions: 2560,
+        dimensions: embeddingDimensions,
         logger,
         embedding: async (input) =>
-          provider.embedding({ model: models.embedder, input }),
+          provider.embedding({
+            model: models.embedder,
+            input,
+            dimensions: embeddingDimensions,
+          }),
       });
 
       const toolEmbeddings = createVectorDatabase<Tool>({
-        dimensions: 2560,
+        dimensions: embeddingDimensions,
         logger,
         embedding: async (input) =>
-          provider.embedding({ model: models.embedder, input }),
+          provider.embedding({
+            model: models.embedder,
+            input,
+            dimensions: embeddingDimensions,
+          }),
       });
 
       logger.info({ msg: 'loaded bundles' });

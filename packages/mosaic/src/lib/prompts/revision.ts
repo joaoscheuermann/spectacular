@@ -53,14 +53,29 @@ Hints are found in <hints>{{ ... }}</hints>
 `;
 }
 
-export function user(prompt: string, plan: Graph, hints: Set<SkillExtraction>) {
+export function user(
+  prompt: string,
+  plan: Graph,
+  hints:
+    | Set<SkillExtraction>
+    | Array<{
+        node: string;
+        skills: Array<Omit<SkillExtraction, 'goal'>>;
+      }>,
+) {
+  const extractions =
+    hints instanceof Set
+      ? Array.from(hints)
+      : hints.flatMap(({ node, skills }) =>
+          skills.map((extraction) => ({ ...extraction, goal: node })),
+        );
+
   return `
 <request>
 ${prompt}
 </request>
 
 <plan>
-  <revision>${plan.revision}</revision>
   <nodes>
     ${plan.nodes
       .map(
@@ -84,7 +99,7 @@ ${prompt}
 </plan>
 
 <hints>
-${Array.from(hints)
+${extractions
   .map(
     (extraction) => `
       <extraction>

@@ -8,9 +8,9 @@ export function mosaic(options: MosaicOptions): MosaicAgent {
   return {
     async prompt(input: string): Promise<void> {
       const result = await machine.run({
+        initial: 'graph',
+        state: { graphs: [] },
         context: { input, options },
-        state: 'decompose',
-        artifacts: undefined,
       });
 
       if (result.status === 'finished') {

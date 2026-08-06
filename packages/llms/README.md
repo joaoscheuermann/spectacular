@@ -56,6 +56,20 @@ for await (const event of provider.stream({
 `*-fast` OpenAI model aliases are sent to the Responses API without the
 suffix and with `service_tier: "priority"`.
 
+## Embeddings
+
+OpenAI, OpenRouter, and LM Studio OpenAI-compatible providers accept an
+optional positive-integer `dimensions` value for models that support a
+configurable embedding size.
+
+```ts
+const embedding = await provider.embedding({
+  model: 'voyageai/voyage-4-large',
+  input: 'A document to embed.',
+  dimensions: 1024,
+});
+```
+
 ## Reranking
 
 OpenAI, OpenRouter, and LM Studio OpenAI-compatible providers expose a common

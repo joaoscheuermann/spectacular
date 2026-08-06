@@ -66,12 +66,6 @@ export const GraphSchema = z.object({
       'The goal nodes in the plan. IDs must be unique, dependencies must reference ' +
         'existing nodes and form a DAG, and at least one terminal node must be deliverable.',
     ),
-
-  revision: z
-    .string()
-    .describe(
-      "The identifier of the current plan revision. Use 'P0' for the initial plan.",
-    ),
 });
 
 /**

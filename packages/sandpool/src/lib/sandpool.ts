@@ -54,9 +54,9 @@ const MAX_BACKOFF_MS = 5_000;
 export const createSandpool = (options: SandpoolOptions): Sandpool => {
   validateOptions(options);
   const logger = options.logger.child({ component: 'sandpool' });
-  if (typeof logger?.info !== 'function') {
+  if (typeof logger?.debug !== 'function') {
     throw new TypeError(
-      'logger.child must return a logger with an info method',
+      'logger.child must return a logger with a debug method',
     );
   }
 
@@ -104,8 +104,8 @@ const validateOptions = (options: SandpoolOptions): void => {
   if (typeof options.create !== 'function') {
     throw new TypeError('create must be a function');
   }
-  if (typeof options.logger?.info !== 'function') {
-    throw new TypeError('logger.info must be a function');
+  if (typeof options.logger?.debug !== 'function') {
+    throw new TypeError('logger.debug must be a function');
   }
   if (typeof options.logger.child !== 'function') {
     throw new TypeError('logger.child must be a function');
@@ -435,7 +435,7 @@ const log = (
   fields: Readonly<Record<string, unknown>> = {},
 ): void => {
   const phases = [...state.records].map(({ phase }) => phase);
-  state.logger.info(
+  state.logger.debug(
     {
       lifecycle: state.lifecycle,
       idle: state.idle.length,

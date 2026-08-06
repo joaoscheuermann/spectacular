@@ -9,7 +9,7 @@ import mosaicDefault, {
   type MosaicAgent,
   type MosaicOptions,
 } from '../src/index.js';
-import { selectWave } from '../src/lib/states/schedule/index.js';
+import { schedule, selectWave } from '../src/lib/states/schedule/index.js';
 
 type Status =
   | 'pending'
@@ -31,7 +31,6 @@ type TestNode = {
 };
 
 type TestGraph = {
-  readonly revision: string;
   readonly nodes: readonly TestNode[];
 };
 
@@ -112,11 +111,11 @@ test('routes models and composes menus before preserving the missing-ready failu
     JSON.parse(logs[3] ?? '[]').map(({ name }: Tool) => name),
     ['required-tool', 'required-enabled', 'selected-tool', 'shared'],
   );
-  assert.equal(graph.nodes[0]?.status, 'pending');
+  assert.equal(graph.nodes[0]?.status, 'ready');
   assert.equal(harness.embeddingCalls, 0);
 });
 
-test('selects at most five ready nodes in descending index order without mutating the source graph', () => {
+test('marks at most five nodes ready in descending index order', () => {
   const graph = createGraph(
     Array.from({ length: 6 }, (_, index) => createNode(`goal-${index}`, index)),
   );
@@ -130,13 +129,33 @@ test('selects at most five ready nodes in descending index order without mutatin
     ['goal-5', 'goal-4', 'goal-3', 'goal-2', 'goal-1'],
   );
   assert.deepEqual(
-    result.graph.nodes.map(({ status }) => status),
+    graph.nodes.map(({ status }) => status),
     ['pending', 'ready', 'ready', 'ready', 'ready', 'ready'],
   );
-  assert.deepEqual(
-    graph.nodes.map(({ status }) => status),
-    ['pending', 'pending', 'pending', 'pending', 'pending', 'pending'],
+});
+
+test('schedules the last graph in the workflow state', async () => {
+  const older = createGraph([createNode('older', 0)]);
+  const active = createGraph([createNode('active', 0)]);
+  const graphs = [older, active];
+
+  const action = await schedule(
+    { graphs } as never,
+    {} as never,
+    {
+      transition: (handler: string, state: object) => ({
+        type: 'transition',
+        handler,
+        state,
+      }),
+      finish: () => ({ type: 'finish', value: undefined }),
+      fail: (error: unknown) => ({ type: 'fail', error }),
+    } as never,
   );
+
+  assert.equal(action.type, 'transition');
+  assert.equal(older.nodes[0]?.status, 'pending');
+  assert.equal(active.nodes[0]?.status, 'ready');
 });
 
 test('keeps dependent nodes blocked when the prerequisite wave is only ready', () => {
@@ -154,7 +173,7 @@ test('keeps dependent nodes blocked when the prerequisite wave is only ready', (
     ['prerequisite'],
   );
 
-  const second = selectWave(first.graph);
+  const second = selectWave(graph as never);
 
   assert.equal(second.status, 'failed');
   if (second.status !== 'failed') return;
@@ -313,7 +332,7 @@ function createHarness(options: HarnessOptions) {
       },
     );
   const mosaicOptions: MosaicOptions = {
-    logger: { info: () => undefined } as never,
+    logger: { debug: () => undefined } as never,
     provider: provider as never,
     models: {
       default: 'default-model',
@@ -352,7 +371,6 @@ const completionKind = (system: string): CompletionKind => {
 };
 
 const createGraph = (nodes: readonly TestNode[]): TestGraph => ({
-  revision: 'P1',
   nodes,
 });
 
