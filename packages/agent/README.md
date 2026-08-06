@@ -57,6 +57,13 @@ tool registration, message storage, model selection, and per-call cancellation.
 The system prompt is included in provider requests but is not persisted into
 external message storage.
 
+When a run requests structured output without executable tools, the schema is
+passed directly to the provider. When executable tools are also present, the
+agent instead adds one strict terminal tool derived from the schema. Ordinary
+tool calls continue the loop; the terminal call is validated locally, converted
+to the final structured response, and is never executed. This avoids combining
+provider-native structured output with function tools in one request.
+
 ## Streaming Usage
 
 ```ts
@@ -83,7 +90,8 @@ for await (const event of agent.stream('Find the current project status.')) {
 
 Streaming passes through provider events and adds agent lifecycle and tool
 events. Tool calls are executed sequentially in provider order, stored as tool
-messages, and the provider loop continues until a response has no tool calls.
+messages, and the provider loop continues until a response has no tool calls or
+submits a validated terminal structured output.
 
 ## Building
 

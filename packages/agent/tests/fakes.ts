@@ -65,6 +65,8 @@ export const createProvider = (options: {
       },
       capabilities: {
         streaming: true,
+        embeddings: false,
+        reranking: false,
         tools: true,
         reasoning: true,
         modelListing: true,
@@ -91,9 +93,11 @@ export const createProvider = (options: {
           ProviderStreamEvent<Output>
         >;
       },
+      embedding: async () => [],
+      rerank: async () => [],
       models: async () => [{ id: 'fake-model' }],
-      validateModel: async (model) => ({ id: model }),
-    },
+      validateModel: async (model: string) => ({ id: model }),
+    } as unknown as LlmProvider,
   };
 };
 

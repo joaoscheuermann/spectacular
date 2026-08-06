@@ -1,6 +1,7 @@
 export * from './lib/classes/provider-error.js';
 export * from './lib/http.js';
 export * from './lib/providers/codex.js';
+export { structuredJsonSchema } from './lib/providers/common.js';
 export * from './lib/providers/lmstudio-openai.js';
 export * from './lib/providers/lmstudio.js';
 export {

@@ -276,11 +276,32 @@ them.
 populates the vector databases, and invokes Mosaic. Mosaic runs the fixed
 `graph -> schedule -> bundle -> execution -> schedule` lifecycle over a
 run-local LIFO graph array. Execution creates one agent per ready node with
-isolated in-memory message storage, a system prompt composed from that node's
-selected skills and tools, and executable tools resolved from the catalog. It
-executes each graph-approved wave concurrently, marks successful nodes
-completed, marks failed nodes failed, and emits safe logs with node IDs and
-selected skill/tool names only. Decomposition appends a graph,
+isolated in-memory message storage and executable tools resolved from the
+catalog. Each node makes one `agent.complete` call with tools and a node-bound
+strict outcome schema. When executable tools are present, the agent exposes
+that outcome schema as its reserved terminal tool rather than combining the
+tools with provider-native structured output. Its collision-safe Markdown
+execution context contains the original request, current goal and ordered
+`doneWhen` criteria, only
+transitive-ancestor artifacts, selected skill bodies in bundle order, and tool
+names and descriptions without duplicating tool schemas. The outcome evaluates
+every criterion and terminates as `completed`, `needs_revision`, `blocked`, or
+`failed`; observation references must be unique IDs of tool calls observed in
+that node's isolated history, and revision requests must target the current
+node and an observed trigger. Completed nodes store their Markdown result as a
+`text/markdown` artifact, append additional artifacts, and return a fully
+completed wave to scheduling. Other terminal outcomes preserve their status
+and fail the wave without implementing localized graph revision. Provider,
+tool, schema, and observation-validation failures mark the node failed.
+Execution emits safe logs with node IDs, terminal statuses, and selected skill
+and tool names only, never prompts, outcomes, reasons, or tool payloads.
+This behavior implements MOSAIC Core Profile 0.1 sections 4.7-4.9 and the
+`NodeContext`, `Observation`, and `NodeOutcome` contracts in Appendix A, table
+A.2. The paper defines the semantic lifecycle but leaves tool-calling protocol
+and dispatch mechanics open; concurrent ready waves, `Promise.allSettled`, one
+isolated agent per node, terminal structured-output tools, explicit criterion
+proof entries, and `text/markdown` artifact promotion are Doric runtime choices.
+Decomposition appends a graph,
 the last graph is active, and scheduling mutates that graph when marking nodes
 ready. It succeeds for an already-completed graph and otherwise preserves the
 intentional missing-ready domain failure when progress cannot continue.
@@ -426,6 +447,18 @@ response has been parsed and validated by that schema. Refusals, tool calls,
 missing or invalid JSON, and schema-validation failures reject with
 `invalid_structured_output`; successful structured completions always include
 the validated `structured` value.
+The agent runtime does not send a provider request that combines executable
+tools with a native structured-output schema. When an agent run requests both,
+it appends one collision-free strict terminal tool derived from the output
+schema, adds a deterministic system instruction naming that tool, and omits the
+native schema from provider requests in that run. Ordinary tool calls continue
+through the existing loop. The terminal tool call must be the only call in its
+response; the agent parses and validates its JSON arguments with the original
+schema, converts it to a tool-free structured finish, and never executes it or
+stores a tool result for it. Missing, malformed, mixed, or schema-invalid
+terminal output fails with `invalid_structured_output`. Runs with a schema and
+no executable tools retain provider-native structured output unchanged. This
+terminal behavior applies equally to complete and stream agent runs.
 OpenAI, Codex, and OpenRouter send resolved effort through `reasoning.effort`;
 LM Studio OpenAI compatibility sends `reasoning_effort`; LM Studio native sends
 its native `reasoning` value with `none` mapped to `off`, `minimal` to `low`,

@@ -107,6 +107,7 @@ export type AgentEvent<Output = JsonValue> =
 
 export type AgentErrorCode =
   | 'concurrent_run'
+  | 'invalid_structured_output'
   | 'missing_provider_finish'
   | 'tool_result_serialization_failed';
 

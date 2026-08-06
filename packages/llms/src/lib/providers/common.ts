@@ -316,6 +316,7 @@ const isRerankResult = (
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value);
 
+/** Converts a supported structured-output schema to a JSON Schema object. */
 export const structuredJsonSchema = (
   provider: ProviderId,
   schema: StructuredOutputSchema | undefined,

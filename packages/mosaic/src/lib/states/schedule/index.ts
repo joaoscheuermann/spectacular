@@ -6,14 +6,14 @@ import type { WorkflowContext, WorkflowState } from '../../types/workflow.js';
 const WAVE_LIMIT = 5;
 const MISSING_READY_NODES = 'Impossible to continue, missing ready nodes!';
 
-  /**
-   * Mutates the active graph to mark its next wave as ready.
-   * Search for all nodes that are currently pending but can become ready
-   * @param param0
-   * @param _context
-   * @param param2
-   * @returns
-   */
+/**
+ * Mutates the active graph to mark its next wave as ready.
+ * Search for all nodes that are currently pending but can become ready
+ * @param param0
+ * @param _context
+ * @param param2
+ * @returns
+ */
 export const schedule: StateMachineHandler<WorkflowContext, WorkflowState> = (
   { graphs },
   _context,
@@ -23,6 +23,14 @@ export const schedule: StateMachineHandler<WorkflowContext, WorkflowState> = (
 
   if (graph === undefined) {
     return fail(new Error('Impossible to continue, missing active graph!'));
+  }
+
+  /**
+   * If a single node returned "needs_revision", we should review the graph with the encountered
+   * information
+   */
+  if (graph.nodes.find((node) => node.status === 'needs_revision')) {
+    return transition('graph', { graphs });
   }
 
   // All nodes are done, so we mark the graph as finished and finishes the run
