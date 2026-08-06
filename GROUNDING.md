@@ -337,10 +337,13 @@ proxied user SSH access. Startup reconciliation and disposal own the jail,
 process, disks, cache-use markers, TAP, nftables tables, proxy, and generated
 keys transactionally.
 
-Docker maps CPU, memory, and writable-layer disk resources to daemon limits and
-fails with an actionable capability error when the local Linux storage driver
-cannot enforce the disk quota. Effective Docker egress requires a local Unix
-daemon, host-network-namespace access, nftables `CAP_NET_ADMIN`, and
+Docker maps CPU, memory, and writable-layer disk resources to daemon limits.
+It retries once without the writable-layer disk daemon limit only when the
+local storage driver explicitly rejects that option, so that fallback leaves
+the Docker writable layer unmetered; CPU and memory limits remain enforced.
+Use a quota-capable Docker host when disk isolation is required. Effective
+Docker egress requires a local Unix daemon, host-network-namespace access,
+nftables `CAP_NET_ADMIN`, and
 provider-owned rules keyed to the inspected container address. Both providers
 block new sandbox-to-host traffic and protected public-egress destinations,
 with only exact private CIDR/protocol/port exceptions. SSH is disabled by

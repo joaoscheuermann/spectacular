@@ -313,11 +313,16 @@ test('inspects containers and starts detached execs', async () => {
   assert.deepEqual(requests.at(-1)?.body, { Detach: true, Tty: false });
 });
 
-test('reports an actionable unsupported Docker disk quota failure', async () => {
+test('retries without a disk quota when Docker does not support one', async () => {
+  const requests: DockerTransportRequest[] = [];
   const client = createDockerClient({
     request: async (request) => {
+      requests.push(request);
       if (request.path === '/containers/create') {
-        return textResponse(500, 'storage-opt size is not supported');
+        return requests.filter(({ path }) => path === '/containers/create')
+          .length === 1
+          ? textResponse(500, 'storage-opt size is not supported')
+          : jsonResponse(201, { Id: 'sandbox-1' });
       }
       return {
         status: request.path === '/images/create' ? 200 : 204,
@@ -327,15 +332,31 @@ test('reports an actionable unsupported Docker disk quota failure', async () => 
     },
   });
 
-  await assert.rejects(
-    client.provision({
-      image: 'node:22-slim',
-      root: '/workspace',
-      resources: { cpuCount: 1, memoryMiB: 512, diskMiB: 4096 },
-      network: { mode: 'disabled', ssh: false },
-    }),
-    /cannot enforce the requested 4096 MiB writable-layer quota/u,
-  );
+  const runtime = await client.provision({
+    image: 'node:22-slim',
+    root: '/workspace',
+    resources: { cpuCount: 1, memoryMiB: 512, diskMiB: 4096 },
+    network: { mode: 'disabled', ssh: false },
+  });
+  await runtime.dispose();
+
+  const creates = requests.filter(({ path }) => path === '/containers/create');
+  assert.equal(creates.length, 2);
+  assert.deepEqual((creates[0]?.body as { HostConfig: unknown }).HostConfig, {
+    AutoRemove: false,
+    Binds: [],
+    NetworkMode: 'none',
+    Memory: 536_870_912,
+    NanoCpus: 1_000_000_000,
+    StorageOpt: { size: '4096M' },
+  });
+  assert.deepEqual((creates[1]?.body as { HostConfig: unknown }).HostConfig, {
+    AutoRemove: false,
+    Binds: [],
+    NetworkMode: 'none',
+    Memory: 536_870_912,
+    NanoCpus: 1_000_000_000,
+  });
 });
 
 test('renders host-input and protected-destination Docker rules', () => {

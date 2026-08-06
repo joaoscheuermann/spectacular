@@ -7,7 +7,7 @@ import {
   type DockerHostConfig,
   type DockerHostResources,
 } from './host.js';
-import type { DockerClient } from './types/docker.js';
+import type { ContainerRef, DockerClient } from './types/docker.js';
 import { extractFirstFile, packFile } from './utils/tar.js';
 
 /** Provisions a Docker-backed implementation of the common sandbox runtime. */
@@ -21,8 +21,8 @@ export const provisionDocker = async (
   await ensureImage(client, input);
 
   const ssh = input.network.ssh;
-  const container = await client
-    .createContainer(
+  const create = (diskQuota: boolean): Promise<ContainerRef> =>
+    client.createContainer(
       {
         image: input.image,
         name: input.name,
@@ -38,7 +38,9 @@ export const provisionDocker = async (
           NetworkMode: input.network.mode === 'disabled' ? 'none' : 'bridge',
           Memory: input.resources.memoryMiB * 1024 * 1024,
           NanoCpus: input.resources.cpuCount * 1_000_000_000,
-          StorageOpt: { size: `${input.resources.diskMiB}M` },
+          ...(diskQuota
+            ? { StorageOpt: { size: `${input.resources.diskMiB}M` } }
+            : {}),
           ...(input.network.dnsServers === undefined
             ? {}
             : { Dns: [...input.network.dnsServers] }),
@@ -59,10 +61,19 @@ export const provisionDocker = async (
         exposedPorts: ssh === false ? undefined : ['22/tcp'],
       },
       { timeoutMs: input.timeoutMs },
-    )
-    .catch((cause) => {
+    );
+
+  let container: ContainerRef;
+  try {
+    container = await create(true);
+  } catch (cause) {
+    if (!unsupportedDiskQuota(cause)) {
       throw diskQuotaError(cause, input.resources.diskMiB);
+    }
+    container = await create(false).catch((retryCause) => {
+      throw diskQuotaError(retryCause, input.resources.diskMiB);
     });
+  }
 
   try {
     await client.startContainer(container, { timeoutMs: input.timeoutMs });
@@ -159,16 +170,20 @@ const validateName = (name: string | undefined): void => {
 };
 
 const diskQuotaError = (cause: unknown, diskMiB: number): unknown => {
-  const message =
-    cause instanceof DockerHttpError
-      ? `${cause.message} ${cause.body}`
-      : cause instanceof Error
-        ? cause.message
-        : '';
-  return /storage-opt|quota|size/u.test(message.toLowerCase())
+  return unsupportedDiskQuota(cause)
     ? new Error(
         `Docker cannot enforce the requested ${diskMiB} MiB writable-layer quota; use a quota-capable local Linux storage driver`,
         { cause },
       )
     : cause;
 };
+
+const unsupportedDiskQuota = (cause: unknown): boolean =>
+  /storage-opt|quota|size/u.test(errorMessage(cause).toLowerCase());
+
+const errorMessage = (cause: unknown): string =>
+  cause instanceof DockerHttpError
+    ? `${cause.message} ${cause.body}`
+    : cause instanceof Error
+      ? cause.message
+      : '';
