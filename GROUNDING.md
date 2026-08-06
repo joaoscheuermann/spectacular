@@ -274,13 +274,16 @@ Generated graph nodes initialize their runtime-owned `skills`, `tools`, and
 them.
 `agents/doric` remains the composition root that loads bundles, constructs and
 populates the vector databases, and invokes Mosaic. Mosaic runs the fixed
-`graph -> schedule -> bundle -> execution` lifecycle over a run-local LIFO
-graph array. The placeholder execution state performs no work and finishes the
-run. Decomposition appends a graph,
+`graph -> schedule -> bundle -> execution -> schedule` lifecycle over a
+run-local LIFO graph array. Execution creates one agent per ready node with
+isolated in-memory message storage, a system prompt composed from that node's
+selected skills and tools, and executable tools resolved from the catalog. It
+executes each graph-approved wave concurrently, marks successful nodes
+completed, marks failed nodes failed, and emits safe logs with node IDs and
+selected skill/tool names only. Decomposition appends a graph,
 the last graph is active, and scheduling mutates that graph when marking nodes
-ready. It succeeds for an already-completed graph but does not yet execute nodes
-or tools; otherwise it preserves the intentional missing-ready domain failure
-when progress cannot continue.
+ready. It succeeds for an already-completed graph and otherwise preserves the
+intentional missing-ready domain failure when progress cannot continue.
 
 `models/skillrouter-embedding` is the user-approved Nx/uv conversion utility
 for the pinned SkillRouter checkpoint. Only its export target may fetch

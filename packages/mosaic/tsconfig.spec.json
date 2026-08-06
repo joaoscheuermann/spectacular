@@ -12,8 +12,10 @@
   },
   "include": ["src/**/*.ts", "tests/**/*.ts"],
   "references": [
+    { "path": "../agent/tsconfig.lib.json" },
     { "path": "../bundle/tsconfig.lib.json" },
     { "path": "../llms/tsconfig.lib.json" },
+    { "path": "../messages/tsconfig.lib.json" },
     { "path": "../tool/tsconfig.lib.json" },
     { "path": "../victor/tsconfig.lib.json" }
   ]

@@ -12,6 +12,9 @@
   "include": ["src/**/*.ts"],
   "references": [
     {
+      "path": "../agent/tsconfig.lib.json"
+    },
+    {
       "path": "../victor/tsconfig.lib.json"
     },
     {
@@ -25,6 +28,9 @@
     },
     {
       "path": "../bundle/tsconfig.lib.json"
+    },
+    {
+      "path": "../messages/tsconfig.lib.json"
     }
   ]
 }
