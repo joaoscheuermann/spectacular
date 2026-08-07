@@ -109,12 +109,12 @@ Reject designs that blur these boundaries.
 
 Examples:
 
-| Requirement | Correct representation | Incorrect representation |
-|---|---|---|
-| Replace exact text in a file | `edit` tool | A tool that decides how to refactor an application |
-| Teach safe exact replacement and verification | `exact-text-editing` skill using `edit` | A skill named only `use-edit` |
-| Summarize a financial report | A financial-analysis or evidence-grounding skill | `summarize_financial_report` tool containing model reasoning |
-| Persist generated content | `write` tool, optionally guided by a file-writing skill | A workflow-specific tool that writes one particular document type |
+| Requirement                                   | Correct representation                                  | Incorrect representation                                          |
+| --------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------- |
+| Replace exact text in a file                  | `edit` tool                                             | A tool that decides how to refactor an application                |
+| Teach safe exact replacement and verification | `exact-text-editing` skill using `edit`                 | A skill named only `use-edit`                                     |
+| Summarize a financial report                  | A financial-analysis or evidence-grounding skill        | `summarize_financial_report` tool containing model reasoning      |
+| Persist generated content                     | `write` tool, optionally guided by a file-writing skill | A workflow-specific tool that writes one particular document type |
 
 ### 4. Author the tool descriptor when an operation is missing
 
@@ -266,7 +266,7 @@ Manifest rules:
 4. Do not register missing files.
 5. Preserve a deterministic order, preferably canonical-name order, unless the repository defines another convention.
 6. Set a tool's `alwaysAvailable` to `true` only when it belongs to the bundle's base tool set and should remain visible even with an empty skill bundle.
-7. Set a skill's `alwaysAvailable` to `true` only for a small, universal behavior that should guide every objective. Most domain and procedure skills must be `false`.
+7. Set a skill's `alwaysAvailable` to `true` only for a small, universal behavior that should guide every objective. The runtime injects it outside the routed skill bundle, so it does not appear in `node.skills` or count toward the selection limit. Every tool it names in `allowed-tools` must also be an always-available base tool. Most domain and procedure skills must be `false`.
 8. A non-base tool intended for a procedure must be named in the corresponding skill's `allowed-tools`.
 9. Do not make every skill or every specialized tool always available merely to avoid routing decisions.
 

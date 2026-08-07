@@ -1,52 +1,42 @@
-import { z } from 'zod';
+import * as z from 'zod';
 
-export const BundleCandidateDecisionSchema = z
-  .object({
-    name: z.string().trim().min(1),
+/** Creates the node-bound structured contract for one skill selection. */
+export const createBundleSelectionSchema = (
+  goalId: string,
+  candidates: readonly string[],
+  maxSkills: number,
+) => {
+  const names = candidates as [string, ...string[]];
 
-    decision: z.enum([
-      'select',
-      'reject:irrelevant',
-      'reject:unnecessary',
-      'reject:redundant',
-      'reject:conflicting',
-      'reject:limit',
-    ]),
+  return z
+    .object({
+      goalId: z.literal(goalId),
+      skills: z
+        .array(
+          z
+            .object({
+              skill: z.enum(names),
+              rationale: z.string().trim().min(1).max(500),
+            })
+            .strict(),
+        )
+        .max(maxSkills)
+        .superRefine((skills, ctx) => {
+          const seen = new Set<string>();
 
-    contributesTo: z
-      .array(z.string())
-      .describe(
-        'Completion criteria from doneWhen that the skill helps satisfy.',
-      ),
+          skills.forEach(({ skill }, index) => {
+            if (!seen.has(skill)) {
+              seen.add(skill);
+              return;
+            }
 
-    redundantWith: z
-      .array(z.string())
-      .describe(
-        'Selected candidate skills that already provide substantially the same behavior.',
-      ),
-
-    conflictsWith: z
-      .array(z.string())
-      .describe(
-        'Selected candidate skills whose instructions are incompatible with this skill.',
-      ),
-
-    rationale: z.string().trim().min(1).max(500),
-  })
-  .strict();
-
-export const BundleSchema = z
-  .object({
-    goal: z.string(),
-
-    skills: z
-      .array(z.string())
-      .describe(
-        'Selected skills in the same relative order as the reranked candidates.',
-      ),
-
-    decisions: z.array(BundleCandidateDecisionSchema),
-
-    rationale: z.string().trim().min(1).max(1000),
-  })
-  .strict();
+            ctx.addIssue({
+              code: 'custom',
+              message: `Duplicate selected skill: ${skill}`,
+              path: [index, 'skill'],
+            });
+          });
+        }),
+    })
+    .strict();
+};

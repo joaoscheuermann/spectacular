@@ -5,6 +5,7 @@ import { createToolStorage, type Tool } from 'tool';
 
 import * as executionPrompt from '../../prompts/execution.js';
 import { createNodeOutcomeSchema } from '../../schemas/outcome.js';
+import { resolveSkills } from '../bundle/menus.js';
 import type { Graph, Node } from '../../types/graph.js';
 import type { WorkflowContext, WorkflowState } from '../../types/workflow.js';
 
@@ -70,6 +71,7 @@ const execute = async (
   try {
     /** Resolve graph-approved tool metadata to executable catalog entries. */
     const tools = executors(node, options.tools.required, options.tools.menu);
+    const skills = resolveSkills(node.skills, options.skills.menu);
 
     /**
      * Keep the observation ledger local to this node. Appendix A, table A.2
@@ -82,14 +84,14 @@ const execute = async (
       provider: options.provider,
       tools: createToolStorage(tools),
       messages,
-      system: executionPrompt.system(),
+      system: executionPrompt.system(options.skills.required),
       model: options.models.default,
     });
 
     options.logger.info(
       {
         nodeId: node.id,
-        skills: node.skills.map(({ name }) => name),
+        skills: node.skills.map(({ skill }) => skill),
         tools: tools.map(({ name }) => name),
       },
       'executing node',
@@ -103,9 +105,11 @@ const execute = async (
      * mechanism, not a tool or protocol mandated by the paper.
      */
     const { structured: outcome } = await agent.complete(
-      executionPrompt.user(input, node, graph, tools),
+      executionPrompt.user({ request: input, node, graph, skills, tools }),
       { schema: createNodeOutcomeSchema(node) },
     );
+
+    console.log(outcome)
 
     if (outcome === undefined) {
       throw new Error(`Node ${node.id} returned no structured outcome.`);

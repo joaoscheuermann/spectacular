@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import type { Skill } from 'bundle';
 import type { LlmProvider, ProviderFinished, ProviderRequest } from 'llms';
 import { z } from 'zod';
 import type { Tool } from 'tool';
@@ -11,6 +12,18 @@ import type {
   WorkflowContext,
   WorkflowState,
 } from '../src/lib/types/workflow.js';
+
+test('finishes without executing workflow work when no graph exists', async () => {
+  const action = await execution(
+    { graphs: [] },
+    {} as never,
+    {
+      finish: () => ({ type: 'finish' as const, value: undefined }),
+    } as never,
+  );
+
+  assert.deepEqual(action, { type: 'finish', value: undefined });
+});
 
 test('completes a node stores result artifacts and schedules the next wave', async () => {
   const node = createNode('current');
@@ -83,6 +96,36 @@ test('accepts only tool call IDs observed in the isolated message storage', asyn
   assert.equal(provider.requests[0]?.schema, undefined);
   assert.equal(provider.requests[1]?.schema, undefined);
   assert.equal(provider.requests[0]?.tools?.length, 2);
+});
+
+test('resolves selected skill references without treating rationales as instructions', async () => {
+  const node = createNode('current');
+  node.skills = [{ skill: 'selected', rationale: 'private rationale' }];
+  const graph: Graph = { nodes: [node] };
+  const provider = createProvider([finish(completed())]);
+  const harness = createHarness(
+    graph,
+    provider,
+    [],
+    [skill('selected')],
+    [skill('universal')],
+  );
+
+  const action = await execution(
+    { graphs: [graph] },
+    harness.context,
+    handlers(),
+  );
+
+  assert.equal(action.type, 'transition');
+  const system = provider.requests[0]?.messages[0]?.content ?? '';
+  const user = provider.requests[0]?.messages[1]?.content ?? '';
+  assert.equal(typeof system, 'string');
+  assert.equal(typeof user, 'string');
+  if (typeof system !== 'string' || typeof user !== 'string') return;
+  assert.match(system, /universal body/u);
+  assert.match(user, /selected body/u);
+  assert.doesNotMatch(user, /private rationale/u);
 });
 
 test('rejects invented observation references and marks the node failed', async () => {
@@ -272,6 +315,8 @@ function createHarness(
   graph: Graph,
   fake: ReturnType<typeof createProvider>,
   tools: readonly Tool[] = [],
+  skills: readonly Skill[] = [],
+  requiredSkills: readonly Skill[] = [],
 ) {
   const logs: unknown[] = [];
   const context: WorkflowContext = {
@@ -287,9 +332,10 @@ function createHarness(
         reranker: 'reranker-model',
         embedder: 'embedder-model',
       },
+      routing: { maxCandidates: 5, maxSkills: 5 },
       skills: {
-        required: [],
-        menu: [],
+        required: requiredSkills,
+        menu: [...requiredSkills, ...skills],
         embeddings: {} as never,
       },
       tools: {
@@ -302,6 +348,15 @@ function createHarness(
 
   void graph;
   return { context, logs };
+}
+
+function skill(name: string): Skill {
+  return {
+    name,
+    description: `${name} description`,
+    body: `${name} body`,
+    allowedTools: [],
+  };
 }
 
 function handlers() {

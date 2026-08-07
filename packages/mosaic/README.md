@@ -6,8 +6,11 @@ Goal-oriented planning and preparation workflow extracted from the Doric host.
 import mosaic, { mosaic as createMosaic } from 'mosaic';
 ```
 
-The factory receives provider, logger, model, skill, tool, and vector database
-dependencies. It has no session option.
+The factory receives provider, logger, default/reranker/embedder model IDs,
+skill and tool catalogs, both vector databases, and explicit
+`routing.maxCandidates` and `routing.maxSkills` limits. It has no session
+option. The embedder configuration and tool vectors remain part of the public
+composition contract even though bundle routing queries only skill vectors.
 
 ## Lifecycle
 
@@ -20,12 +23,52 @@ workflow stores graphs as a run-local LIFO stack, appends decomposed graphs,
 and mutates the active graph at the end of the stack when scheduling nodes.
 Each handler passes the graph stack explicitly to the next transition.
 
+## Bundle routing
+
+The bundle state builds one collision-safe Markdown context from the original
+request, current node, ordered completion criteria, and transitive-ancestor
+artifacts. It retrieves at most `maxCandidates` routable skills, reranks their
+complete canonical bodies, and validates at most `maxSkills` selections. Empty
+selection is a normal result and skips reranking and model selection when no
+candidates exist or `maxSkills` is zero.
+
+Reranker responses must cover every candidate exactly once. Mosaic sorts them
+locally by descending relevance score and canonical skill name for ties. The
+model chooses a set, while Mosaic reconstructs the authoritative order from
+that sorted list.
+
+Nodes store no duplicated skill definitions. Their runtime-owned `skills`
+array contains ordered references:
+
+```ts
+interface NodeSkillSelection {
+  readonly skill: string;
+  readonly rationale: string;
+}
+```
+
+This Doric profile refines the paper's bundle-level selection rationale into a
+rationale attached to each selected skill. An empty array is the canonical
+representation of selecting no skill.
+
+The runtime resolves each name against the canonical catalog when composing
+tools and execution context. Base tools appear first, followed by tools declared
+by selected skills in bundle order; the first occurrence of a name wins.
+
+Always-available skills form Doric's derived universal profile. They are
+excluded from hints, vector routing, `node.skills`, and `maxSkills`, then
+injected into every execution system prompt in manifest order. They may refer
+only to base tools and cannot expand the node tool menu. `tools.embeddings`
+remains available to other Mosaic policies but is not a tool router for this
+state.
+
 ## Execution
 
 Execution creates one `agent` per ready node with isolated in-memory message
 storage and executable tools resolved by name from the Mosaic tool catalog.
-Each node makes one `agent.complete` call with the provider's tool definitions
-and a node-bound structured outcome schema. Its collision-safe Markdown input
+Each node resolves its selected skill names, then makes one `agent.complete`
+call with the provider's tool definitions and a node-bound structured outcome
+schema. Its collision-safe Markdown input
 contains the original request, current goal and ordered completion criteria,
 artifacts from transitive ancestor nodes only, ordered selected skill bodies,
 and the available tool names and descriptions; tool schemas are not duplicated
@@ -55,6 +98,9 @@ short excerpts identify the contract behind the execution code:
 
 | Runtime concept                | Paper definition                                                     | Short excerpt                                                                                                                                     |
 | ------------------------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ordered skill bundle           | [Section 3.5, p. 10](docs/MOSAIC_arquitetura_core.html#10)           | Selected skills are unique, bounded, observably ordered, and may be empty.                                                                        |
+| Contextual skill routing       | [Section 4.5, p. 14](docs/MOSAIC_arquitetura_core.html#14)           | Retrieval and reranking use the objective, criteria, original request, and relevant prior outputs.                                                |
+| Exact tool menu                | [Section 4.6, p. 15](docs/MOSAIC_arquitetura_core.html#15)           | Available tools are the base set plus tools declared by selected skills, without a separate tool router.                                          |
 | Projected node context         | [Section 4.7, p. 15](docs/MOSAIC_arquitetura_core.html#15)           | "O executor recebe somente o contexto necessário para o objetivo atual."                                                                          |
 | Model/tool loop                | [Section 4.8, p. 16](docs/MOSAIC_arquitetura_core.html#16)           | "O modelo pode concluir diretamente ou chamar tools. Uma observação volta ao mesmo nó."                                                           |
 | Node lifecycle                 | [Section 4.9, pp. 16-17](docs/MOSAIC_arquitetura_core.html#16)       | "O scheduler o coloca em running. A satisfação de doneWhen leva a completed."                                                                     |

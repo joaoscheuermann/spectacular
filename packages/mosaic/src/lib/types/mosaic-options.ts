@@ -12,6 +12,10 @@ export interface MosaicOptions {
     readonly reranker: string;
     readonly embedder: string;
   };
+  readonly routing: {
+    readonly maxCandidates: number;
+    readonly maxSkills: number;
+  };
   readonly skills: {
     readonly required: readonly Skill[];
     readonly menu: readonly Skill[];

@@ -9,7 +9,9 @@ import * as executionPrompt from '../src/lib/prompts/execution.js';
 import type { Graph, Node } from '../src/lib/types/graph.js';
 
 test('defines precedence tools criteria and all terminal statuses', () => {
-  const prompt = executionPrompt.system();
+  const prompt = executionPrompt.system([
+    skill('universal', 'universal behavior'),
+  ]);
 
   assert.match(prompt, /# Instruction precedence/u);
   assert.match(prompt, /# Tool use/u);
@@ -18,6 +20,7 @@ test('defines precedence tools criteria and all terminal statuses', () => {
     assert.match(prompt, new RegExp(`- ${status}:`, 'u'));
   }
   assert.match(prompt, /structured-output mechanism supplied by/u);
+  assert.match(prompt, /universal behavior/u);
 });
 
 test('projects only transitive ancestor artifacts and preserves skill order', () => {
@@ -38,15 +41,19 @@ test('projects only transitive ancestor artifacts and preserves skill order', ()
   );
   const current = createNode('current', 3, ['direct'], 'ready');
   current.skills = [
-    skill('first', 'first body'),
-    skill('second', 'second body'),
+    { skill: 'first', rationale: 'First is needed.' },
+    { skill: 'second', rationale: 'Second is needed.' },
   ];
   current.tools = [{ name: 'lookup', description: 'Lookup evidence.' }];
   const graph: Graph = { nodes: [root, unrelated, direct, current] };
 
-  const prompt = executionPrompt.user('Original request.', current, graph, [
-    tool('lookup'),
-  ]);
+  const prompt = executionPrompt.user({
+    request: 'Original request.',
+    node: current,
+    graph,
+    skills: [skill('first', 'first body'), skill('second', 'second body')],
+    tools: [tool('lookup')],
+  });
 
   assert.match(prompt, /root artifact/u);
   assert.match(prompt, /direct artifact/u);
@@ -61,10 +68,16 @@ test('uses collision-safe fences for arbitrary dynamic content', () => {
   const current = createNode('current', 0, [], 'ready');
   current.goal = hostile;
   current.doneWhen = [hostile];
-  current.skills = [skill(hostile, hostile)];
+  current.skills = [{ skill: hostile, rationale: 'Needed.' }];
   const graph: Graph = { nodes: [current] };
 
-  const prompt = executionPrompt.user(hostile, current, graph, [tool(hostile)]);
+  const prompt = executionPrompt.user({
+    request: hostile,
+    node: current,
+    graph,
+    skills: [skill(hostile, hostile)],
+    tools: [tool(hostile)],
+  });
   const occurrences = prompt.split(hostile).length - 1;
 
   assert.equal(occurrences, 8);

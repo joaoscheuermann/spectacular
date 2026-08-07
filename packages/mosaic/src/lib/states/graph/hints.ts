@@ -23,6 +23,12 @@ export async function hints(
   options: MosaicOptions,
 ): Promise<HintGroup[]> {
   const { provider, skills, models } = options;
+  const required = new Set(skills.required.map(({ name }) => name));
+  const catalog = new Map(
+    skills.menu
+      .filter(({ name }) => !required.has(name))
+      .map((skill) => [skill.name, skill]),
+  );
 
   return Promise.all(
     graph.nodes.map(async (node) => {
@@ -30,8 +36,15 @@ export async function hints(
         candidatesPrompts.search(input, node),
         TOP_K,
       );
+      const seen = new Set<string>();
+      const candidates = matches.flatMap(({ data }) => {
+        const skill = catalog.get(data.name);
+        if (skill === undefined || seen.has(skill.name)) return [];
+        seen.add(skill.name);
+        return [skill];
+      });
 
-      const promises = matches.map(async ({ data: skill }) => {
+      const promises = candidates.map(async (skill) => {
         const { structured } = await provider.complete({
           messages: [
             {

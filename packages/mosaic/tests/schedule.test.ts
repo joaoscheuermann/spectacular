@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import type { Graph, Node } from '../../../types/graph.js';
-import type { WorkflowState } from '../../../types/workflow.js';
-import { schedule } from '../index.js';
+import { schedule } from '../src/lib/states/schedule/index.js';
+import type { Graph, Node } from '../src/lib/types/graph.js';
+import type { WorkflowState } from '../src/lib/types/workflow.js';
 
 test('fails when the workflow has no active graph', async () => {
   const action = await schedule({ graphs: [] }, {} as never, handlers());
@@ -86,8 +86,8 @@ test('fails when pending nodes cannot become ready', async () => {
   assert.equal(dependent.status, 'pending');
 });
 
-function handlers() {
-  return {
+const handlers = () =>
+  ({
     transition: (handler: string, state: WorkflowState) => ({
       type: 'transition' as const,
       handler,
@@ -95,29 +95,24 @@ function handlers() {
     }),
     finish: () => ({ type: 'finish' as const, value: undefined }),
     fail: (error: unknown) => ({ type: 'fail' as const, error }),
-  } as never;
-}
+  }) as never;
 
-function createGraph(nodes: Node[]): Graph {
-  return { nodes };
-}
+const createGraph = (nodes: Node[]): Graph => ({ nodes });
 
-function createNode(
+const createNode = (
   id: string,
   index: number,
   dependsOn: string[] = [],
   status: Node['status'] = 'pending',
-): Node {
-  return {
-    id,
-    goal: `Goal ${id}`,
-    doneWhen: [`${id} is complete.`],
-    dependsOn,
-    status,
-    deliver: true,
-    index,
-    skills: [],
-    tools: [],
-    artifacts: [],
-  };
-}
+): Node => ({
+  id,
+  goal: `Goal ${id}`,
+  doneWhen: [`${id} is complete.`],
+  dependsOn,
+  status,
+  deliver: true,
+  index,
+  skills: [],
+  tools: [],
+  artifacts: [],
+});

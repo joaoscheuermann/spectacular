@@ -1,6 +1,6 @@
 # Doric Grounding
 
-Last reviewed: 2026-08-06
+Last reviewed: 2026-08-07
 
 This is Doric's repository validity contract. Every agent working in this
 repository must read it before non-trivial planning, reviewing, artifact
@@ -267,15 +267,31 @@ recovery hooks, or external side effects.
 `packages/mosaic` depends on `packages/state-machine` but owns the incomplete
 Doric goal-workflow policy: decomposition and revision, scheduling, skill
 retrieval and reranking, and per-node skill/tool menu composition. Its public
-factory accepts injected provider, logger, model IDs, bundle skills and
-executable tools, and their vector databases; it has no session option.
-Generated graph nodes initialize their runtime-owned `skills`, `tools`, and
-`artifacts` arrays as empty; graph generation and revision cannot populate
-them.
+factory accepts injected provider, logger, default, reranker, and embedder model
+IDs, explicit candidate and selected-skill limits, bundle skills and executable
+tools, and both vector databases; it has no session option. Tool embeddings
+remain part of this composition contract but the bundle state does not query
+them or run an independent tool router. Generated graph nodes initialize their
+runtime-owned `skills`, `tools`, and `artifacts` arrays as empty; graph
+generation and revision cannot populate them. A routed node skill stores only
+its canonical name and a non-empty per-skill rationale. Full skill definitions
+remain in the catalog and are resolved by name when composing tools and the
+execution prompt.
 `agents/doric` remains the composition root that loads bundles, constructs and
 populates the vector databases, and invokes Mosaic. Mosaic runs the fixed
 `graph -> schedule -> bundle -> execution -> schedule` lifecycle over a
-run-local LIFO graph array. Execution creates one agent per ready node with
+run-local LIFO graph array. Bundle routing uses the original request, current
+goal and completion criteria, and only transitive-ancestor artifacts. It
+retrieves a bounded routable-skill candidate set, reranks complete skill bodies,
+validates a node-bound structured selection, and locally normalizes the result
+by descending relevance score with canonical-name tie-breaking. The selected
+array is unique, bounded, may be empty, and remains observable in that order on
+the node. The exact node tool menu is the stable union of base tools and tools
+declared by selected skills, with duplicate names removed by first occurrence.
+Always-available skills are excluded from hints and routing, do not count toward
+the selected-skill limit, and are injected as universal execution instructions;
+they may reference only base tools and do not expand the node tool menu.
+Execution creates one agent per ready node with
 isolated in-memory message storage and executable tools resolved from the
 catalog. Each node makes one `agent.complete` call with tools and a node-bound
 strict outcome schema. When executable tools are present, the agent exposes

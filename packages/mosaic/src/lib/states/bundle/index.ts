@@ -1,202 +1,313 @@
+import type { Skill } from 'bundle';
 import type { StateMachineHandler } from 'state-machine';
+
+import * as bundlePrompt from '../../prompts/bundle.js';
+import { createBundleSelectionSchema } from '../../schemas/bundle.js';
+import type { Graph, Node } from '../../types/graph.js';
+import type { NodeSkillSelection } from '../../types/node-skill-selection.js';
 import type { WorkflowContext, WorkflowState } from '../../types/workflow.js';
+import { composeTools, metadata, resolveSkills } from './menus.js';
 
-import { BundleSchema } from '../../schemas/bundle.js';
+/** Provider ranking entry. The index points back to the retrieved candidate. */
+type Ranking = {
+  readonly index: number;
+  readonly relevanceScore: number;
+};
 
-const RETRIEVAL_LIMIT = 5;
+/** Inputs shared by every stage that prepares one ready node. */
+type Preparation = {
+  readonly input: string;
+  readonly node: Node;
+  readonly graph: Graph;
+  readonly options: WorkflowContext['options'];
+};
 
-/**
- * Prepares every node in the selected wave sequentially.
- *
- * This step generates the bundles for each node with a combination of the best skills to achieve the goal.
- */
+/** Preparation inputs after vector retrieval produced canonical candidates. */
+type CandidateSelection = Preparation & {
+  readonly candidates: readonly Skill[];
+};
+
+/** Preparation inputs after the candidates received an authoritative order. */
+type RankedSelection = Preparation & {
+  readonly reranked: readonly Skill[];
+};
+
+/** Selects ordered skill references and derives the exact tool menu for a wave. */
 export const bundle: StateMachineHandler<
   WorkflowContext,
   WorkflowState
 > = async ({ graphs }, { input, options }, { transition, fail }) => {
   try {
-    const { logger, skills, tools, provider, models } = options;
-
-    logger.info({}, 'generating bundles');
-
+    // Mosaic keeps graph revisions as a stack; only the newest graph is active.
     const graph = graphs.at(-1);
-
-    if (graph === undefined)
+    if (graph === undefined) {
       return fail(new Error('Impossible to continue, missing active graph!'));
-
-    // Retrieve only the ready nodes
-    const nodes = graph.nodes.filter(({ status }) => status === 'ready');
-
-    /**
-     * Here, we are generating a bundle of tools and skills for each ready node,
-     * this bundle contains the best skill and tools to achieve the current goal.
-     */
-    for (const node of nodes) {
-      /**
-       * We perform the same matching as when generating the graph, but this time,
-       * we have the correct context and decomposition for the graph. We expect better
-       * results here.
-       *
-       * @TODO: We should include previous artifacts from other nodes when available
-       */
-      const matches = await skills.embeddings.search(
-        [
-          `Original Request:\n${input}`,
-          `Current Goal::\n${node.goal}`,
-          `Completion Criteria:\n${markdownNumberedList(node.doneWhen)}`,
-        ].join('\n\n'),
-        RETRIEVAL_LIMIT,
-      );
-
-      const candidates = matches.map(({ data }) => data);
-
-      /**
-       * The agent reranks the options, so we have the best matches for the current goal (node).
-       * This step can limit the ammount of valid options we should return for the next evaluation stage.
-       *
-       * @TODO: We should include previous artifacts from other nodes when available
-       */
-      const ranking = await provider.rerank({
-        model: models.reranker,
-        query: [
-          `Original request:\n${input.trim()}`,
-          `Current objective:\n${node.goal.trim()}`,
-          [
-            'Completion criteria:',
-            ...node.doneWhen.map((criterion) => `- ${criterion.trim()}`),
-          ].join('\n'),
-
-          // node.stateSummary?.trim()
-          //   ? `Relevant prior results:\n${node.stateSummary.trim()}`
-          //   : undefined,
-
-          [
-            'Ranking instruction:',
-            'Rank each skill according to how directly and specifically its',
-            'instructions help complete the current objective and satisfy its',
-            'completion criteria. Prefer applicable procedural guidance over',
-            'generic topical similarity.',
-          ].join(' '),
-        ]
-          .filter((section): section is string => Boolean(section))
-          .join('\n\n'),
-        documents: candidates.map((skill) =>
-          [
-            `Skill name: ${skill.name}`,
-            `Description:\n${skill.description.trim()}`,
-            `Canonical body:\n${skill.body.trim()}`,
-          ].join('\n\n'),
-        ),
-        topN: RETRIEVAL_LIMIT,
-      });
-
-      // Match the available skills with the reranked skills
-      const reranked = ranking.map(({ index }) => candidates[index]);
-
-      logger.info(
-        {
-          skills: reranked.map(
-            (skill) => `${skill.name}: ${skill.description}`,
-          ),
-        },
-        'relevant skills',
-      );
-
-      const { structured: selected } = await provider.complete({
-        model: models.default,
-        messages: [
-          {
-            role: 'system',
-            content: [
-              'You are the bundle selector for one objective in a goal-oriented plan.',
-              '',
-              'Select the smallest ordered set of skills whose combined instructions are',
-              'sufficient to help complete the current objective.',
-              '',
-              'A skill may be selected only when:',
-              '',
-              '1. its body directly applies to the current objective;',
-              '2. it adds behavior needed to satisfy at least one doneWhen criterion;',
-              '3. that behavior is not already substantially covered by a previously',
-              '   selected skill;',
-              '4. it does not conflict with previously selected skills.',
-              '',
-              'Rules:',
-              '',
-              '- Evaluate skills by their behavioral instructions, not merely by topic,',
-              '  name, description, rerank score, or allowed tools.',
-              '- Preserve the relative order produced by the reranker.',
-              '- Select at most K_max skills.',
-              '- Prefer the smallest sufficient bundle.',
-              '- Reject skills that are irrelevant, unnecessary, redundant, conflicting,',
-              '  or beyond the bundle limit.',
-              '- A relevant skill may still be rejected when it adds no distinct behavior.',
-              '- The bundle may be empty.',
-              '- Do not create, remove, split, or modify plan objectives.',
-              '- Return only the requested structured output.',
-            ].join('\n'),
-          },
-          {
-            role: 'user',
-            content: [
-              `<prompt>${input}</prompt>`,
-              '',
-              '<node>',
-              `  <id>${node.id}</id>`,
-              `  <goal>${node.goal}</goal>`,
-              '  <doneWhen>',
-              ...node.doneWhen.map(
-                (criterion) => `    <criterion>${criterion}</criterion>`,
-              ),
-              '  </doneWhen>',
-              '</node>',
-              '',
-              '<skills>',
-              ...reranked.flatMap((skill) => [
-                '  <skill>',
-                `    <name>${skill.name}</name>`,
-                `    <description>${skill.description}</description>`,
-                `    <body>${skill.body}</body>`,
-                '  </skill>',
-              ]),
-              '</skills>',
-            ].join('\n'),
-          },
-        ],
-        schema: BundleSchema,
-      });
-
-      const bundleSkills = [
-        ...skills.required,
-        ...selected.skills
-          .map((name) => reranked.find((skill) => skill.name === name))
-          .filter((skill) => skill !== undefined),
-      ];
-
-      const bundleTools = [
-        ...tools.required,
-        ...bundleSkills
-          .map((skill) => skill?.allowedTools ?? [])
-          .flat()
-          .map((name) => tools.menu.find((tool) => tool.name === name))
-          .filter((tool) => tool !== undefined),
-      ].map(({ name, description }) => ({
-        name,
-        description: description ?? '',
-      }));
-
-      console.log(bundleTools);
-      console.log(bundleSkills);
-
-      node.tools = bundleTools;
-      node.skills = bundleSkills;
     }
 
+    options.logger.info({}, 'generating bundles');
+
+    // Scheduling marks the exact wave to prepare with the `ready` status.
+    const nodes = graph.nodes.filter(({ status }) => status === 'ready');
+
+    // Prepare nodes sequentially so provider calls and node mutations stay ordered.
+    for (const node of nodes) {
+      await prepare({ input, node, graph, options });
+    }
+
+    // Every ready node now has its selected skill references and exact tool menu.
     return transition('execution', { graphs });
   } catch (error) {
+    // Provider, catalog, and validation failures become workflow domain failures.
     return fail(error);
   }
 };
 
-const markdownNumberedList = (items: Array<string>) =>
-  items.map((item, index) => `${index + 1}. ${item}`).join(' \n');
+/** Runs retrieval, optional model selection, and menu assignment for one node. */
+const prepare = async ({
+  input,
+  node,
+  graph,
+  options,
+}: Preparation): Promise<void> => {
+  const { skills, tools, routing, logger } = options;
+
+  // Stage 1: retrieve a bounded set of routable canonical skill definitions.
+  const candidates = await retrieve({ input, node, graph, options });
+
+  // Stage 2: an empty catalog or a zero limit produces a valid empty bundle.
+  const selected =
+    candidates.length === 0 || routing.maxSkills === 0
+      ? []
+      : await select({ input, node, graph, options, candidates });
+
+  // Stage 3: persist lightweight references and derive tools from the catalog.
+  assign({
+    node,
+    selected,
+    skillMenu: skills.menu,
+    requiredTools: tools.required,
+    toolMenu: tools.menu,
+  });
+
+  // Log only stable identifiers; bodies, rationales, and artifacts stay private.
+  logSelection(logger, node);
+};
+
+/** Builds the routing context and resolves vector matches to the current catalog. */
+const retrieve = async ({
+  input,
+  node,
+  graph,
+  options,
+}: Preparation): Promise<Skill[]> => {
+  const { skills, routing } = options;
+
+  // The same request, node, criteria, and ancestor artifacts feed every route stage.
+  const context = bundlePrompt.routingContext(input, node, graph);
+
+  // Universal skills apply outside B(g), so they cannot become routed candidates.
+  const required = new Set(skills.required.map(({ name }) => name));
+
+  // Catalog lookup replaces stale indexed objects with the current definitions.
+  const catalog = new Map(
+    skills.menu
+      .filter(({ name }) => !required.has(name))
+      .map((skill) => [skill.name, skill]),
+  );
+
+  // Vector retrieval limits recall independently from the final bundle limit.
+  const matches = await skills.embeddings.search(
+    context,
+    routing.maxCandidates,
+  );
+  return currentCandidates(matches, catalog);
+};
+
+/** Applies the two model-assisted stages: deterministic reranking then selection. */
+const select = async (
+  input: CandidateSelection,
+): Promise<NodeSkillSelection[]> => {
+  const reranked = await rerank(input);
+  return choose({ ...input, reranked });
+};
+
+/** Reranks complete candidate bodies and normalizes the provider response locally. */
+const rerank = async ({
+  input,
+  node,
+  graph,
+  options,
+  candidates,
+}: CandidateSelection): Promise<Skill[]> => {
+  const { provider, models } = options;
+
+  // The reranker sees the full routing context and complete canonical skill bodies.
+  const ranking = await provider.rerank({
+    model: models.reranker,
+    query: bundlePrompt.rerankQuery(input, node, graph),
+    documents: candidates.map(bundlePrompt.candidateDocument),
+    topN: candidates.length,
+    flags: { sensitiveOutput: true },
+  });
+
+  // Provider order is not trusted; validation and sorting happen in this process.
+  return orderCandidates(candidates, ranking);
+};
+
+/** Asks the selector for a bounded set of names with one rationale per skill. */
+const choose = async ({
+  input,
+  node,
+  graph,
+  options,
+  reranked,
+}: RankedSelection): Promise<NodeSkillSelection[]> => {
+  const { provider, models, routing } = options;
+
+  // The node-bound schema rejects wrong goals, unknown names, duplicates, and overflow.
+  const schema = createBundleSelectionSchema(
+    node.id,
+    reranked.map(({ name }) => name),
+    routing.maxSkills,
+  );
+
+  // Candidate bodies and prior artifacts make this a sensitive structured call.
+  const { structured } = await provider.complete({
+    model: models.default,
+    messages: [
+      { role: 'system', content: bundlePrompt.system(routing.maxSkills) },
+      {
+        role: 'user',
+        content: bundlePrompt.user({
+          request: input,
+          node,
+          graph,
+          skills: reranked,
+        }),
+      },
+    ],
+    schema,
+    flags: { sensitiveOutput: true },
+  });
+
+  // Model output is a set; reranker order remains the observable bundle order.
+  return normalize(reranked, structured.skills);
+};
+
+/** Drops universal, stale, and duplicate vector matches while preserving recall order. */
+const currentCandidates = (
+  matches: readonly { readonly data: Skill }[],
+  catalog: ReadonlyMap<string, Skill>,
+): Skill[] => {
+  const seen = new Set<string>();
+
+  return matches.flatMap(({ data }) => {
+    const skill = catalog.get(data.name);
+    if (skill === undefined || seen.has(skill.name)) return [];
+    seen.add(skill.name);
+    return [skill];
+  });
+};
+
+/** Validates the ranking and sorts by score, then canonical name for stable ties. */
+const orderCandidates = (
+  candidates: readonly Skill[],
+  ranking: readonly Ranking[],
+): Skill[] => {
+  validateRanking(ranking, candidates.length);
+
+  return [...ranking]
+    .sort((left, right) => {
+      const score = right.relevanceScore - left.relevanceScore;
+      if (score !== 0) return score;
+      return compare(
+        candidates[left.index]!.name,
+        candidates[right.index]!.name,
+      );
+    })
+    .map(({ index }) => candidates[index]!);
+};
+
+/** Enforces the one-result-per-candidate contract before any index is dereferenced. */
+const validateRanking = (
+  ranking: readonly Ranking[],
+  candidateCount: number,
+): void => {
+  if (ranking.length !== candidateCount) {
+    throw new Error('Reranker returned an incomplete candidate ranking.');
+  }
+
+  const indices = new Set<number>();
+  for (const result of ranking) {
+    const validIndex =
+      Number.isSafeInteger(result.index) &&
+      result.index >= 0 &&
+      result.index < candidateCount;
+
+    if (!validIndex || indices.has(result.index)) {
+      throw new Error('Reranker returned an invalid candidate index.');
+    }
+
+    if (!Number.isFinite(result.relevanceScore)) {
+      throw new Error('Reranker returned an invalid relevance score.');
+    }
+
+    indices.add(result.index);
+  }
+};
+
+/** Attaches rationales to the authoritative reranked order selected by the model. */
+const normalize = (
+  reranked: readonly Skill[],
+  selected: readonly NodeSkillSelection[],
+): NodeSkillSelection[] => {
+  const byName = new Map(selected.map((item) => [item.skill, item]));
+  return reranked.flatMap(({ name }) => byName.get(name) ?? []);
+};
+
+/** Inputs required to materialize the selected bundle on its graph node. */
+type Assignment = {
+  readonly node: Node;
+  readonly selected: readonly NodeSkillSelection[];
+  readonly skillMenu: readonly Skill[];
+  readonly requiredTools: WorkflowContext['options']['tools']['required'];
+  readonly toolMenu: WorkflowContext['options']['tools']['menu'];
+};
+
+/** Resolves definitions transiently, derives tools, and stores only compact state. */
+const assign = ({
+  node,
+  selected,
+  skillMenu,
+  requiredTools,
+  toolMenu,
+}: Assignment): void => {
+  // Full definitions live in the catalog; node.skills retains only name and rationale.
+  const skills = resolveSkills(selected, skillMenu);
+
+  // Tool visibility is exactly base tools plus allowed tools in selected-skill order.
+  const tools = composeTools(skills, requiredTools, toolMenu);
+
+  // Metadata is sufficient for graph state; executable tools remain in the catalog.
+  node.skills = [...selected];
+  node.tools = metadata(tools);
+};
+
+/** Emits the safe, identifier-only summary of the completed bundle stage. */
+const logSelection = (
+  logger: WorkflowContext['options']['logger'],
+  node: Node,
+): void => {
+  logger.debug(
+    {
+      nodeId: node.id,
+      skills: node.skills.map(({ skill }) => skill),
+      tools: node.tools.map(({ name }) => name),
+    },
+    'bundle selected',
+  );
+};
+
+/** Locale-independent code-point comparison used for deterministic tie-breaking. */
+const compare = (left: string, right: string): number =>
+  left < right ? -1 : left > right ? 1 : 0;

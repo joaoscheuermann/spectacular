@@ -98,6 +98,14 @@ async function main() {
       const bundleSkills = bundles.flatMap((bundle) => bundle.skills);
 
       const skills = bundleSkills.map(({ skill }) => skill);
+      const requiredSkillNames = new Set(
+        bundleSkills
+          .filter(({ alwaysAvailable }) => alwaysAvailable)
+          .map(({ skill }) => skill.name),
+      );
+      const routableSkills = skills.filter(
+        ({ name }) => !requiredSkillNames.has(name),
+      );
       const tools = bundleTools.map(({ factory, alwaysAvailable }) => ({
         tool: factory(lease.sandbox),
         alwaysAvailable,
@@ -127,7 +135,7 @@ async function main() {
 
       logger.info({ msg: 'loaded bundles' });
 
-      for (const skill of skills) {
+      for (const skill of routableSkills) {
         await skillEmbeddings.add(
           skill,
           ({ name, description, allowedTools, body }) =>
@@ -195,6 +203,10 @@ async function main() {
         logger,
         provider,
         models,
+        routing: {
+          maxCandidates: 5,
+          maxSkills: 5,
+        },
         skills: {
           required: bundleSkills
             .filter(({ alwaysAvailable }) => alwaysAvailable)
