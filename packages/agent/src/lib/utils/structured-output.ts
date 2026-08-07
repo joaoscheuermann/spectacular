@@ -9,11 +9,23 @@ import { AgentErrorObject } from '../classes/agent-error.js';
 
 const baseName = 'submit_structured_output';
 const description = 'Submit the final structured output and end the agent run.';
+const invalidSubmissionLimit = 4;
+const validationIssueLimit = 10;
 
 export type StructuredOutputTool = {
   readonly name: string;
   readonly definition: ToolDefinition;
   readonly schema: StructuredOutputSchema;
+};
+
+export type StructuredOutputSubmission<Output> =
+  | { readonly type: 'continue' }
+  | { readonly type: 'finished'; readonly finish: ProviderFinished<Output> }
+  | { readonly type: 'invalid'; readonly error: AgentErrorObject };
+
+export type StructuredOutputRepair = {
+  readonly invalidSubmissions: number;
+  readonly correction: string;
 };
 
 /**
@@ -54,19 +66,23 @@ export const structuredOutputInstruction = (name: string): string =>
     'Do not return the final output as ordinary text.',
   ].join(' ');
 
-/** Converts the reserved terminal tool call into a validated provider finish. */
+/** Classifies a terminal submission without executing or persisting invalid calls. */
 export const parseStructuredOutputTool = <Output>(
   finish: ProviderFinished<unknown>,
   tool: StructuredOutputTool,
-): ProviderFinished<Output> | undefined => {
+): StructuredOutputSubmission<Output> => {
   /** Ordinary tool calls are not terminal and continue through the agent loop. */
   const terminal = finish.toolCalls.filter(({ name }) => name === tool.name);
 
-  if (terminal.length === 0) return undefined;
+  if (terminal.length === 0) {
+    return finish.toolCalls.length === 0
+      ? invalidSubmission('Agent run ended without terminal structured output.')
+      : { type: 'continue' };
+  }
 
   /** A mixed response is ambiguous: no executable call may accompany completion. */
   if (terminal.length !== 1 || finish.toolCalls.length !== 1) {
-    throw invalidOutput(
+    return invalidSubmission(
       'Agent terminal structured output must be the only tool call.',
     );
   }
@@ -77,7 +93,7 @@ export const parseStructuredOutputTool = <Output>(
   try {
     value = JSON.parse(terminal[0].arguments) as unknown;
   } catch {
-    throw invalidOutput(
+    return invalidSubmission(
       'Agent terminal structured output arguments must be valid JSON.',
     );
   }
@@ -89,8 +105,9 @@ export const parseStructuredOutputTool = <Output>(
   const parsed = tool.schema.safeParse(value);
 
   if (!parsed.success) {
-    throw invalidOutput(
+    return invalidSubmission(
       'Agent terminal structured output failed schema validation.',
+      validationDiagnostic(parsed.error.issues),
     );
   }
 
@@ -99,16 +116,32 @@ export const parseStructuredOutputTool = <Output>(
    * returned by provider-native structured output.
    */
   return {
-    ...finish,
-    text: terminal[0].arguments,
-    finishReason: 'stop',
-    toolCalls: [],
-    structured: parsed.data as Output,
+    type: 'finished',
+    finish: {
+      ...finish,
+      text: terminal[0].arguments,
+      finishReason: 'stop',
+      toolCalls: [],
+      structured: parsed.data as Output,
+    },
   };
 };
 
-export const missingStructuredOutput = (): AgentErrorObject =>
-  invalidOutput('Agent run ended without terminal structured output.');
+/** Applies the fixed cumulative budget and prepares one transient correction. */
+export const nextStructuredOutputRepair = (
+  tool: StructuredOutputTool,
+  error: AgentErrorObject,
+  invalidSubmissions: number,
+): StructuredOutputRepair => {
+  const nextInvalidSubmissions = invalidSubmissions + 1;
+
+  if (nextInvalidSubmissions >= invalidSubmissionLimit) throw error;
+
+  return {
+    invalidSubmissions: nextInvalidSubmissions,
+    correction: structuredOutputCorrection(tool.name, error),
+  };
+};
 
 const availableName = (names: ReadonlySet<string>): string => {
   if (!names.has(baseName)) return baseName;
@@ -120,5 +153,47 @@ const availableName = (names: ReadonlySet<string>): string => {
   return `${baseName}_${suffix}`;
 };
 
-const invalidOutput = (message: string): AgentErrorObject =>
-  new AgentErrorObject({ code: 'invalid_structured_output', message });
+const structuredOutputCorrection = (
+  name: string,
+  error: AgentErrorObject,
+): string =>
+  [
+    '# Structured output correction',
+    '',
+    `The previous response was rejected: ${error.data.message}`,
+    '',
+    `Submit the corrected final output by calling \`${name}\` exactly once. That call must be the only tool call in its response.`,
+    ...(error.data.diagnostic === undefined
+      ? []
+      : ['', `Validation issues: ${error.data.diagnostic}`]),
+  ].join('\n');
+
+const validationDiagnostic = (
+  issues: readonly {
+    readonly path: readonly PropertyKey[];
+    readonly message: string;
+  }[],
+): string =>
+  issues
+    .slice(0, validationIssueLimit)
+    .map((issue) => {
+      const path = issue.path.map(String).join('.');
+      const message = issue.message.replace(/\s+/g, ' ').trim();
+
+      return path === '' ? message : `${path}: ${message}`;
+    })
+    .join('; ');
+
+const invalidSubmission = <Output>(
+  message: string,
+  diagnostic?: string,
+): StructuredOutputSubmission<Output> => ({
+  type: 'invalid',
+  error: new AgentErrorObject({
+    code: 'invalid_structured_output',
+    message,
+    ...(diagnostic === undefined || diagnostic.length === 0
+      ? {}
+      : { diagnostic }),
+  }),
+});

@@ -15,7 +15,7 @@ import type {
 import { serializeToolResult } from './utils/serialize.js';
 import {
   createStructuredOutputTool,
-  missingStructuredOutput,
+  nextStructuredOutputRepair,
   parseStructuredOutputTool,
   structuredOutputInstruction,
   type StructuredOutputTool,
@@ -44,6 +44,7 @@ export const createAgent = (options: AgentOptions): Agent => {
   const buildRequest = <Output = JsonValue>(
     runOptions: AgentRunOptions<Output>,
     outputTool?: StructuredOutputTool,
+    correction?: string,
   ): ProviderRequest<Output> => {
     /** Executable definitions come from the caller-owned tool storage. */
     const definitions = options.tools.definitions();
@@ -64,6 +65,9 @@ export const createAgent = (options: AgentOptions): Agent => {
               content: structuredOutputInstruction(outputTool.name),
             },
           ]),
+      ...(correction === undefined
+        ? []
+        : [{ role: 'system' as const, content: correction }]),
     ];
     /** The terminal output definition is visible to the model but not executable. */
     const tools =
@@ -150,32 +154,44 @@ export const createAgent = (options: AgentOptions): Agent => {
 
         /** This value remains stable across every provider turn in the run. */
         const terminal = outputTool(runOptions);
+        let invalidSubmissions = 0;
+        let correction: string | undefined;
 
         while (true) {
           /** Ask the provider for either executable calls or the terminal result. */
-          const finish = await options.provider.complete(
-            buildRequest(runOptions, terminal),
-          );
+          const request = buildRequest(runOptions, terminal, correction);
+          correction = undefined;
+          const finish = await options.provider.complete(request);
 
           /** Intercept and validate the reserved terminal call before normal tools. */
-          const structured =
-            terminal === undefined
-              ? undefined
-              : parseStructuredOutputTool<Output>(finish, terminal);
+          if (terminal !== undefined) {
+            const submission = parseStructuredOutputTool<Output>(
+              finish,
+              terminal,
+            );
 
-          if (structured !== undefined) {
-            /** Store the normalized tool-free finish as the final assistant message. */
-            storeAssistant(structured);
-            return responseFromFinish(structured);
+            if (submission.type === 'invalid') {
+              const repair = nextStructuredOutputRepair(
+                terminal,
+                submission.error,
+                invalidSubmissions,
+              );
+              invalidSubmissions = repair.invalidSubmissions;
+              correction = repair.correction;
+              continue;
+            }
+
+            if (submission.type === 'finished') {
+              /** Store the normalized tool-free finish as the final assistant message. */
+              storeAssistant(submission.finish);
+              return responseFromFinish(submission.finish);
+            }
           }
 
           /** Ordinary assistant turns remain available to later tool iterations. */
           storeAssistant(finish);
 
           if (finish.toolCalls.length === 0) {
-            /** A tool-enabled structured run may end only through its terminal tool. */
-            if (terminal !== undefined) throw missingStructuredOutput();
-
             return responseFromFinish(finish);
           }
 
@@ -197,6 +213,8 @@ export const createAgent = (options: AgentOptions): Agent => {
         /** Streaming uses the same message and terminal-tool contract as complete. */
         options.messages.push({ role: 'user', content: input });
         const terminal = outputTool(runOptions);
+        let invalidSubmissions = 0;
+        let correction: string | undefined;
         yield {
           type: 'agent.started',
           model: options.model,
@@ -205,32 +223,49 @@ export const createAgent = (options: AgentOptions): Agent => {
 
         while (true) {
           let finish: ProviderFinished<Output> | undefined;
+          let rejected = false;
+          const request = buildRequest(runOptions, terminal, correction);
+          correction = undefined;
 
-          for await (const event of options.provider.stream(
-            buildRequest(runOptions, terminal),
-          )) {
+          for await (const event of options.provider.stream(request)) {
+            if (rejected) continue;
+
             if (event.type === 'response.finished') {
               /** Normalize a terminal call before exposing the finished event. */
-              const structured =
-                terminal === undefined
-                  ? undefined
-                  : parseStructuredOutputTool<Output>(event.finish, terminal);
+              if (terminal !== undefined) {
+                const submission = parseStructuredOutputTool<Output>(
+                  event.finish,
+                  terminal,
+                );
 
-              if (
-                terminal !== undefined &&
-                structured === undefined &&
-                event.finish.toolCalls.length === 0
-              ) {
-                throw missingStructuredOutput();
+                if (submission.type === 'invalid') {
+                  const repair = nextStructuredOutputRepair(
+                    terminal,
+                    submission.error,
+                    invalidSubmissions,
+                  );
+                  invalidSubmissions = repair.invalidSubmissions;
+                  correction = repair.correction;
+                  rejected = true;
+                  continue;
+                }
+
+                finish =
+                  submission.type === 'finished'
+                    ? submission.finish
+                    : event.finish;
+              } else {
+                finish = event.finish;
               }
 
-              finish = structured ?? event.finish;
               yield { ...event, finish };
               continue;
             }
 
             yield event;
           }
+
+          if (rejected) continue;
 
           if (finish === undefined) {
             throw new AgentErrorObject({

@@ -64,6 +64,18 @@ tool calls continue the loop; the terminal call is validated locally, converted
 to the final structured response, and is never executed. This avoids combining
 provider-native structured output with function tools in one request.
 
+An invalid terminal submission is discarded without storage or tool execution.
+The agent may request three corrected submissions after the initial failure,
+using a transient system correction that names the terminal tool and reports
+bounded schema issues without copying the rejected arguments. Missing,
+malformed, schema-invalid, duplicate, and mixed terminal calls share this fixed
+budget. Ordinary tool turns neither consume nor reset it. The fourth invalid
+submission throws the latest `invalid_structured_output` error.
+
+`complete` and `stream` use the same repair behavior. Streaming preserves
+provider deltas already emitted for a rejected response but suppresses its
+`response.finished` event and adds no repair-specific public event.
+
 ## Streaming Usage
 
 ```ts
