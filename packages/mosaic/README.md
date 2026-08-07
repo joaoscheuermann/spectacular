@@ -19,9 +19,10 @@ vectors.
 
 Mosaic owns the workflow policy and uses `state-machine` only for reusable,
 run-local typed transition execution. Its fixed transitions are
-`plan(P0) -> plan(P1) -> schedule -> bundle -> execution -> schedule` and
+`plan(P0) -> plan(P1) -> schedule -> bundle -> execution -> schedule -> delivery -> finish(FinalDelivery)` and
 `schedule -> revision -> schedule`. The `plan` state cannot be re-entered
-after P1. An already-completed graph finishes successfully, while a graph that
+after P1. An already-completed graph transitions to deterministic delivery,
+while a graph that
 cannot produce another ready node preserves the intentional missing-ready
 domain failure. The current workflow stores graphs as a run-local LIFO stack,
 appends planned and revised graphs, and mutates the active graph at the end of
@@ -139,6 +140,38 @@ tool, schema, and observation-validation failures retain failure precedence.
 Execution logs node IDs, terminal statuses, and selected skill and tool names,
 never goals, prompts, decisions, outcomes, reasons, tool payloads, or error
 details.
+
+## Final delivery
+
+`MosaicAgent.prompt(input)` resolves to a `FinalDelivery`; callers that ignore
+the awaited value remain valid. Delivery is the workflow's only successful
+finish path and makes no model, provider, skill, or tool calls. It validates
+that every active-graph node is completed, orders the complete graph
+topologically with original node-array position as the tie-breaker, and selects
+only `deliver: true` nodes. Each selected node must begin with a non-empty
+`text/markdown` artifact.
+
+```ts
+interface FinalDelivery {
+  readonly markdown: string;
+  readonly parts: readonly FinalDeliveryPart[];
+}
+
+interface FinalDeliveryPart {
+  readonly id: string;
+  readonly goal: string;
+  readonly markdown: string;
+  readonly artifacts: readonly DeliveryArtifact[];
+  readonly observations: readonly Observation[];
+}
+```
+
+Part Markdown is retained verbatim and `markdown` joins it using exactly
+`\n\n`. The primary Markdown artifact is not duplicated in `artifacts`.
+Artifacts and observations are copies; observations intentionally expose the
+complete ordered runtime ledger, including call IDs, tool inputs, and outputs.
+The strict `FinalDeliverySchema` is exported from `mosaic`. Doric prints only
+the assembled Markdown, with one terminal newline when needed.
 
 ## Correspondence with the MOSAIC paper
 

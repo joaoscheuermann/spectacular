@@ -285,7 +285,7 @@ remain in the catalog and are resolved by name when composing tools and the
 execution prompt.
 `agents/doric` remains the composition root that loads bundles, constructs and
 populates the vector databases, and invokes Mosaic. Mosaic runs the fixed
-`plan(P0) -> plan(P1) -> schedule -> bundle -> execution -> schedule`
+`plan(P0) -> plan(P1) -> schedule -> bundle -> execution -> schedule -> delivery -> finish(FinalDelivery)`
 lifecycle, with `schedule -> revision -> schedule` for localized runtime
 requests, over a run-local LIFO graph array where `graphs[n]` is plan revision
 `n`. The `plan` state rejects every re-entry after P1. P0 is
@@ -327,7 +327,13 @@ revision prompts. Missing, duplicate, or uncorrelated call/result data is a
 runtime failure. A completed decision is valid with zero, one, or multiple
 observations. Completed nodes store their Markdown result as a `text/markdown`
 artifact, append additional artifacts, and return a fully completed wave to
-scheduling. A `needs_revision` decision requires at least one observation,
+scheduling. A completed active graph transitions only to `delivery`, which
+performs stable topological assembly using original node-array position as its
+tie-breaker, selects terminal deliverables, and finishes with `FinalDelivery`.
+Delivery does not make provider, model, skill, or tool calls. Its public parts
+preserve Markdown exactly, expose copied additional artifacts and complete
+runtime observations (including call IDs and inputs/outputs), and join part
+Markdown only with `\n\n`. A `needs_revision` decision requires at least one observation,
 must target the current node, and does not promote partial results: execution
 stores its semantic request and every observation produced by the node, then
 returns normally to scheduling. Blocked, failed, provider, tool, schema, and

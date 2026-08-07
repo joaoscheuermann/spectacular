@@ -16,7 +16,7 @@ test('fails when the workflow has no active graph', async () => {
   );
 });
 
-test('finishes when every node in the active graph is completed', async () => {
+test('routes every completed graph through delivery', async () => {
   const graph = createGraph([
     createNode('first', 0, [], 'completed'),
     createNode('second', 1, [], 'completed'),
@@ -24,7 +24,11 @@ test('finishes when every node in the active graph is completed', async () => {
 
   const action = await schedule(state([graph]), {} as never, handlers());
 
-  assert.deepEqual(action, { type: 'finish', value: undefined });
+  assert.deepEqual(action, {
+    type: 'transition',
+    handler: 'delivery',
+    state: state([graph]),
+  });
 });
 
 test('schedules only the last graph in the workflow', async () => {

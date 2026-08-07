@@ -1,16 +1,14 @@
-import type { StateMachineHandler } from 'state-machine';
-
 import * as goalsPrompt from '../../prompts/goals.js';
 import * as revisionPrompt from '../../prompts/revision.js';
 import { materializeGraph, PlannedGraphSchema } from '../../schemas/graph.js';
-import type { WorkflowContext, WorkflowState } from '../../types/workflow.js';
+import type { WorkflowHandler } from '../../types/workflow.js';
 import { hints } from './hints.js';
 
 /**
  * Implements the two planning passes from MOSAIC 0.2, sections 4.3-4.4
  * (pp. 12-13): catalog-independent P0 followed by exactly one body-aware P1.
  */
-export const plan: StateMachineHandler<WorkflowContext, WorkflowState> = async (
+export const plan: WorkflowHandler = async (
   state,
   { input, options },
   { transition, fail },

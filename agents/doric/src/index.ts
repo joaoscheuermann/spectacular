@@ -17,6 +17,7 @@ import type { Tool } from 'tool';
 import { createVectorDatabase } from 'victor';
 
 import { createVmRegistry } from './lib/vms.js';
+import { writeDelivery } from './lib/delivery-writer.js';
 import { createVmsRouter } from './routes/vms.js';
 
 async function main() {
@@ -226,7 +227,7 @@ async function main() {
         },
       });
 
-      await agent.prompt(prompt);
+      writeDelivery(await agent.prompt(prompt), process.stdout);
     } finally {
       await lease.release();
     }

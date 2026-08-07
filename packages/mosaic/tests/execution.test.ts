@@ -13,16 +13,21 @@ import type {
   WorkflowState,
 } from '../src/lib/types/workflow.js';
 
-test('finishes without executing workflow work when no graph exists', async () => {
+test('fails without executing workflow work when no graph exists', async () => {
   const action = await execution(
     state([]),
     {} as never,
     {
-      finish: () => ({ type: 'finish' as const, value: undefined }),
+      fail: (error: unknown) => ({ type: 'fail' as const, error }),
     } as never,
   );
 
-  assert.deepEqual(action, { type: 'finish', value: undefined });
+  assert.equal(action.type, 'fail');
+  if (action.type !== 'fail') return;
+  assert.equal(
+    (action.error as Error).message,
+    'Impossible to continue, missing active graph!',
+  );
 });
 
 test('completes a node stores result artifacts and schedules the next wave', async () => {

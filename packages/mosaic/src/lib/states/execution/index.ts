@@ -1,6 +1,5 @@
 import { createAgent } from 'agent';
 import { createMessageStorage } from 'messages';
-import type { StateMachineHandler } from 'state-machine';
 import { createToolStorage, type Tool } from 'tool';
 
 import * as executionPrompt from '../../prompts/execution.js';
@@ -11,7 +10,7 @@ import {
 import { resolveSkills } from '../bundle/menus.js';
 import type { Graph, Node } from '../../types/graph.js';
 import type { Observation } from '../../types/revision.js';
-import type { WorkflowContext, WorkflowState } from '../../types/workflow.js';
+import type { WorkflowContext, WorkflowHandler } from '../../types/workflow.js';
 import { materializeObservations } from './observations.js';
 
 type RuntimeOutcome = NodeDecision & {
@@ -24,16 +23,19 @@ type RuntimeOutcome = NodeDecision & {
  * says: "O scheduler o coloca em running." Doric groups ready nodes into a
  * concurrent wave; that batching policy is a local MOSAIC 0.2 runtime choice.
  */
-export const execution: StateMachineHandler<
-  WorkflowContext,
-  WorkflowState
-> = async (state, { input, options }, { transition, finish, fail }) => {
+export const execution: WorkflowHandler = async (
+  state,
+  { input, options },
+  { transition, fail },
+) => {
   try {
     const { graphs } = state;
     /** Mosaic stores graphs as a LIFO stack, so the last graph is active. */
     const graph = graphs.at(-1);
 
-    if (graph === undefined) return finish();
+    if (graph === undefined) {
+      return fail(new Error('Impossible to continue, missing active graph!'));
+    }
 
     /** Scheduling marks the nodes that form this execution wave as ready. */
     const nodes = graph.nodes

@@ -1,4 +1,5 @@
 import type { MosaicAgent } from './types/mosaic-agent.js';
+import type { FinalDelivery } from './types/delivery.js';
 import type { MosaicOptions } from './types/mosaic-options.js';
 import { validateOptions } from './options.js';
 import { createMachine } from './workflow/machine.js';
@@ -8,7 +9,7 @@ export function mosaic(options: MosaicOptions): MosaicAgent {
   const machine = createMachine();
 
   return {
-    async prompt(input: string): Promise<void> {
+    async prompt(input: string): Promise<FinalDelivery> {
       const result = await machine.run({
         initial: 'plan',
         state: { graphs: [] },
@@ -16,7 +17,8 @@ export function mosaic(options: MosaicOptions): MosaicAgent {
       });
 
       if (result.status === 'finished') {
-        return;
+        if (result.value !== undefined) return result.value;
+        throw new Error('Workflow finished without a final delivery.');
       }
 
       throw result.error;

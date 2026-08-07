@@ -1,7 +1,5 @@
-import type { StateMachineHandler } from 'state-machine';
-
 import type { Node } from '../../types/graph.js';
-import type { WorkflowContext, WorkflowState } from '../../types/workflow.js';
+import type { WorkflowHandler } from '../../types/workflow.js';
 
 const WAVE_LIMIT = 5;
 const MISSING_READY_NODES = 'Impossible to continue, missing ready nodes!';
@@ -10,10 +8,10 @@ const MISSING_READY_NODES = 'Impossible to continue, missing ready nodes!';
  * Projects the lifecycle in MOSAIC 0.2 section 4.9 (pp. 16-17) onto a bounded
  * execution wave, or delegates outstanding structural evidence to revision.
  */
-export const schedule: StateMachineHandler<WorkflowContext, WorkflowState> = (
+export const schedule: WorkflowHandler = (
   state,
   _context,
-  { transition, finish, fail },
+  { transition, fail },
 ) => {
   const { graphs } = state;
 
@@ -44,9 +42,9 @@ export const schedule: StateMachineHandler<WorkflowContext, WorkflowState> = (
     return transition('revision', state);
   }
 
-  // A fully completed graph needs no final model synthesis; terminal artifacts stand.
+  // Final assembly is deterministic and performs no further cognitive work.
   if (graph.nodes.every((node) => node.status === 'completed')) {
-    return finish();
+    return transition('delivery', state);
   }
 
   /**

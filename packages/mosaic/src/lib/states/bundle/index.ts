@@ -1,11 +1,9 @@
 import type { Skill } from 'bundle';
-import type { StateMachineHandler } from 'state-machine';
-
 import * as bundlePrompt from '../../prompts/bundle.js';
 import { createBundleSelectionSchema } from '../../schemas/bundle.js';
 import type { Graph, Node } from '../../types/graph.js';
 import type { NodeSkillSelection } from '../../types/node-skill-selection.js';
-import type { WorkflowContext, WorkflowState } from '../../types/workflow.js';
+import type { WorkflowContext, WorkflowHandler } from '../../types/workflow.js';
 import { composeTools, metadata, resolveSkills } from './menus.js';
 
 /** Provider ranking entry. The index points back to the retrieved candidate. */
@@ -33,10 +31,11 @@ type RankedSelection = Preparation & {
 };
 
 /** Selects ordered skill references and derives the exact tool menu for a wave. */
-export const bundle: StateMachineHandler<
-  WorkflowContext,
-  WorkflowState
-> = async (state, { input, options }, { transition, fail }) => {
+export const bundle: WorkflowHandler = async (
+  state,
+  { input, options },
+  { transition, fail },
+) => {
   try {
     const { graphs } = state;
     // Mosaic keeps graph revisions as a stack; only the newest graph is active.

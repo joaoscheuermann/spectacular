@@ -1,9 +1,7 @@
-import type { StateMachineHandler } from 'state-machine';
-
 import * as revisionPrompt from '../../prompts/revision.js';
 import { GraphSchema, PlannedGraphSchema } from '../../schemas/graph.js';
 import { RevisionRequestSchema } from '../../schemas/revision.js';
-import type { WorkflowContext, WorkflowState } from '../../types/workflow.js';
+import type { WorkflowHandler } from '../../types/workflow.js';
 import {
   applyLocalizedRevision,
   localizedRevisionCount,
@@ -15,10 +13,11 @@ import {
  * Implements localized structural repair from MOSAIC 0.2 section 4.9 and
  * Appendix A.2, consuming one node-owned request and its complete evidence set.
  */
-export const revision: StateMachineHandler<
-  WorkflowContext,
-  WorkflowState
-> = async (state, { input, options }, { transition, fail }) => {
+export const revision: WorkflowHandler = async (
+  state,
+  { input, options },
+  { transition, fail },
+) => {
   try {
     // Revisions operate on the latest graph snapshot without mutating its history.
     const active = state.graphs.at(-1);

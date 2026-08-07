@@ -42,7 +42,10 @@
       "dependsOn": ["^build"],
       "outputs": ["{projectRoot}/dist-tests"],
       "options": {
-        "commands": ["tsc -p agents/doric/tsconfig.spec.json"],
+        "commands": [
+          "tsc -p agents/doric/tsconfig.spec.json",
+          "node --test agents/doric/dist-tests/tests/*.test.js"
+        ],
         "parallel": false
       }
     }
