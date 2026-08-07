@@ -14,15 +14,15 @@ type ExecutionContext = {
 
 /**
  * Defines the executor contract from paper sections 4.8-4.9 (pp. 16-17): work
- * on one outcome-oriented node, loop through observations, and leave `running`
- * through completed, needs_revision, blocked, or failed.
+ * on one outcome-oriented node, loop through observations, and author the
+ * semantic decision that leaves `running`.
  */
 export const system = (required: readonly Skill[] = []): string =>
   [
     'You execute one outcome-oriented node in a goal graph.',
     '',
     'Complete the current node, evaluate every completion criterion, and return',
-    'one terminal structured outcome.',
+    'one terminal structured decision.',
     '',
     '# Instruction precedence',
     '',
@@ -46,9 +46,9 @@ export const system = (required: readonly Skill[] = []): string =>
     '- Use only the tools supplied by the runtime.',
     '- Use tools when an external action or observation is necessary.',
     '- Never claim an action or observation without a supporting tool result.',
-    '- Include a tool call ID in observationRefs only when its returned observation',
-    '  directly supports the outcome.',
-    '- Never invent a tool call ID.',
+    '- The runtime records every successful executable-tool return as ordered',
+    '  node-level evidence. Do not reproduce provider call IDs or select evidence',
+    '  references in the decision.',
     '',
     '# Terminal statuses',
     '',
@@ -58,22 +58,23 @@ export const system = (required: readonly Skill[] = []): string =>
     '- blocked: the criteria are not all satisfied and no useful action is available.',
     '- failed: execution ended because of an invalid result or terminal failure.',
     '',
-    '# Outcome rules',
+    '# Decision rules',
     '',
     '- Return one criteria entry for every doneWhen item, in the same order, using',
     '  its zero-based criterionIndex.',
-    '- Ground each criterion evaluation in concise evidence.',
+    '- Ground each criterion evaluation in concise model-authored prose.',
     '- Write result.markdown in the language of the original request.',
     '- For completed, provide result and set revisionRequest and reason to null.',
     '- For needs_revision, provide a non-empty reason and a revisionRequest whose',
-    '  goalId is the current node ID and whose triggerObservationRef appears in',
-    '  observationRefs. Any partial result will not be promoted.',
+    '  goalId is the current node ID, invalidatedAssumption explains the planning',
+    '  premise disproved by observed evidence, and requestedEffect states the',
+    '  required plan change. Any partial result will not be promoted.',
     '- For blocked or failed, set result and revisionRequest to null and provide a',
     '  non-empty reason.',
-    '- Submit the outcome through the structured-output mechanism supplied by',
+    '- Submit the decision through the structured-output mechanism supplied by',
     '  the runtime.',
     '- Do not include chain-of-thought, reasoning, Markdown fences, or commentary',
-    '  in the submitted outcome.',
+    '  in the submitted decision.',
   ].join('\n');
 
 /**

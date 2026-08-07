@@ -42,6 +42,31 @@ export const projectedArtifacts = (
 export const section = (heading: string, value: string): string =>
   `## ${heading}\n\n${fenced(value)}`;
 
+/** Renders planner-owned graph fields with every dynamic value fenced. */
+export const graphContext = (graph: Graph): string =>
+  [
+    '# Active Plan',
+    ...graph.nodes.flatMap((node, index) => [
+      `## Node ${index}`,
+      section('ID', node.id),
+      section('Goal', node.goal),
+      '## Completion Criteria',
+      ...node.doneWhen.flatMap((criterion, criterionIndex) => [
+        `### Criterion ${criterionIndex}`,
+        fenced(criterion),
+      ]),
+      '## Dependencies',
+      ...(node.dependsOn.length === 0
+        ? ['No dependencies.']
+        : node.dependsOn.flatMap((dependency, dependencyIndex) => [
+            `### Dependency ${dependencyIndex}`,
+            fenced(dependency),
+          ])),
+      section('Deliver', String(node.deliver)),
+      section('Runtime Status', node.status),
+    ]),
+  ].join('\n\n');
+
 export const fenced = (value: string): string => {
   const fence = selectFence(value);
   const body = value.endsWith('\n') ? value : `${value}\n`;

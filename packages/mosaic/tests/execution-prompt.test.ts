@@ -21,6 +21,7 @@ test('defines precedence tools criteria and all terminal statuses', () => {
   }
   assert.match(prompt, /structured-output mechanism supplied by/u);
   assert.match(prompt, /universal behavior/u);
+  assert.doesNotMatch(prompt, /observationRefs|triggerObservationRef|callId/u);
 });
 
 test('projects only transitive ancestor artifacts and preserves skill order', () => {
@@ -104,6 +105,8 @@ function createNode(
     tools: [],
     artifacts:
       artifact === undefined ? [] : [{ mime: 'text/plain', data: artifact }],
+    observations: [],
+    revisionRequest: null,
   };
 }
 

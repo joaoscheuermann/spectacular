@@ -16,6 +16,9 @@ export interface MosaicOptions {
     readonly maxCandidates: number;
     readonly maxSkills: number;
   };
+  readonly revision: {
+    readonly max: number;
+  };
   readonly skills: {
     readonly required: readonly Skill[];
     readonly menu: readonly Skill[];

@@ -1,0 +1,126 @@
+import { GraphSchema, type PlannedGraph } from '../../schemas/graph.js';
+import type { Graph, Node } from '../../types/graph.js';
+
+const BASE_GRAPH_COUNT = 2;
+
+/** Returns successful localized revisions already represented by graph snapshots. */
+export const localizedRevisionCount = (graphs: readonly Graph[]): number =>
+  // P0 and P1 are planning passes; only later snapshots consume R_max.
+  Math.max(0, graphs.length - BASE_GRAPH_COUNT);
+
+/** Returns IDs present in history but absent from the active graph, in stable order. */
+export const retiredNodeIds = (graphs: readonly Graph[]): string[] => {
+  // Without an active snapshot there is no meaningful retirement comparison.
+  const active = graphs.at(-1);
+  if (active === undefined) return [];
+
+  // Any historical ID absent from the active graph is retired exactly once.
+  const activeIds = new Set(active.nodes.map(({ id }) => id));
+  const seen = new Set<string>();
+
+  return graphs.slice(0, -1).flatMap((graph) =>
+    graph.nodes.flatMap(({ id }) => {
+      if (activeIds.has(id) || seen.has(id)) return [];
+      seen.add(id);
+      return [id];
+    }),
+  );
+};
+
+/** Selects outstanding revision work in the same deterministic order as a wave. */
+export const revisionNodes = (graph: Graph): Node[] =>
+  // Match scheduling's stable wave order when several nodes request revision.
+  graph.nodes
+    .filter(
+      (node) =>
+        node.status === 'needs_revision' && node.revisionRequest !== null,
+    )
+    .sort((left, right) => right.index - left.index);
+
+/** Applies planner fields while enforcing localized runtime-state preservation. */
+export const applyLocalizedRevision = (
+  active: Graph,
+  plan: PlannedGraph,
+  target: Node,
+  retiredIds: ReadonlySet<string>,
+): Graph => {
+  // A planner response can only revise the node whose decision supplied evidence.
+  if (target.status !== 'needs_revision' || target.revisionRequest === null) {
+    throw new Error('Localized revision target is not awaiting revision.');
+  }
+
+  // Reusing a removed ID would make graph history semantically ambiguous.
+  const reused = plan.nodes.find(({ id }) => retiredIds.has(id));
+  if (reused !== undefined) {
+    throw new Error(`Localized revision reused retired node ID ${reused.id}.`);
+  }
+
+  // Completed and other started nodes outside the target are immutable history.
+  const protectedNodes = active.nodes.filter(
+    (node) => node.id !== target.id && node.status !== 'pending',
+  );
+
+  // Protected nodes must retain both their identity and their array position.
+  for (const node of protectedNodes) {
+    const index = active.nodes.indexOf(node);
+    const planned = plan.nodes[index];
+    if (planned === undefined || !samePlan(node, planned)) {
+      throw new Error(`Localized revision changed protected node ${node.id}.`);
+    }
+  }
+
+  /**
+   * Clone protected runtime state exactly. Every other planned node is part of
+   * the revisable region and restarts pending with no promoted partial result,
+   * routing selection, observation ledger, or consumed revision request.
+   */
+  const nodes = plan.nodes.map((planned, index) => {
+    const protectedNode = protectedNodes.find(({ id }) => id === planned.id);
+    if (protectedNode !== undefined) return cloneNode(protectedNode);
+
+    return {
+      ...planned,
+      status: 'pending' as const,
+      index,
+      skills: [],
+      tools: [],
+      artifacts: [],
+      observations: [],
+      revisionRequest: null,
+    };
+  });
+
+  // Full graph validation rechecks references, acyclicity, and deliverable rules.
+  return GraphSchema.parse({ nodes });
+};
+
+/** Compares only planner-owned fields when checking a protected node. */
+const samePlan = (
+  node: Node,
+  planned: PlannedGraph['nodes'][number],
+): boolean =>
+  node.id === planned.id &&
+  node.goal === planned.goal &&
+  node.deliver === planned.deliver &&
+  sameItems(node.doneWhen, planned.doneWhen) &&
+  sameItems(node.dependsOn, planned.dependsOn);
+
+const sameItems = (
+  left: readonly string[],
+  right: readonly string[],
+): boolean =>
+  left.length === right.length &&
+  left.every((item, index) => item === right[index]);
+
+/** Copies every nested runtime collection so snapshots remain independent. */
+const cloneNode = (node: Node): Node => ({
+  ...node,
+  doneWhen: [...node.doneWhen],
+  dependsOn: [...node.dependsOn],
+  skills: node.skills.map((selection) => ({ ...selection })),
+  tools: node.tools.map((tool) => ({ ...tool })),
+  artifacts: node.artifacts.map((artifact) => ({ ...artifact })),
+  observations: node.observations.map((observation) => ({ ...observation })),
+  revisionRequest:
+    node.revisionRequest === null ? null : { ...node.revisionRequest },
+});

@@ -266,6 +266,7 @@ const createHarness = (input: HarnessInput) => {
       embedder: 'embedder-model',
     },
     routing: { maxCandidates: 5, maxSkills: input.maxSkills ?? 5 },
+    revision: { max: 3 },
     skills: {
       required: input.requiredSkills ?? [],
       menu: skillMenu,
@@ -288,11 +289,11 @@ const createHarness = (input: HarnessInput) => {
 };
 
 const run = (graph: Graph, options: MosaicOptions) =>
-  bundle(
-    { graphs: [graph] },
-    { input: 'Original request.', options },
-    handlers(),
-  );
+  bundle(state([graph]), { input: 'Original request.', options }, handlers());
+
+const state = (graphs: Graph[]): WorkflowState => ({
+  graphs,
+});
 
 const handlers = () =>
   ({
@@ -321,6 +322,8 @@ const node = (
   tools: [],
   artifacts:
     artifact === undefined ? [] : [{ mime: 'text/plain', data: artifact }],
+  observations: [],
+  revisionRequest: null,
 });
 
 const skill = (name: string, allowedTools: readonly string[] = []): Skill => ({

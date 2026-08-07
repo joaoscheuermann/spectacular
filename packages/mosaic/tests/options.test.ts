@@ -30,6 +30,27 @@ test('rejects invalid routing limits duplicate catalogs and invalid required too
   assert.throws(() => mosaic(nonBase), /non-base tool special/u);
 });
 
+test('requires an explicit non-negative integer localized revision limit', () => {
+  for (const value of [-1, 0.5, Number.NaN]) {
+    const options = validOptions();
+    options.revision = { max: value };
+    assert.throws(
+      () => mosaic(options),
+      /revision\.max must be an integer >= 0/u,
+    );
+  }
+
+  const zero = validOptions();
+  zero.revision = { max: 0 };
+  assert.doesNotThrow(() => mosaic(zero));
+
+  const missing = validOptions() as unknown as {
+    revision?: { max: number };
+  };
+  delete missing.revision;
+  assert.throws(() => mosaic(missing as MosaicOptions), /revision|max/u);
+});
+
 const validOptions = (): MutableOptions => ({
   logger: {} as never,
   provider: {} as never,
@@ -39,6 +60,7 @@ const validOptions = (): MutableOptions => ({
     embedder: 'embedder-model',
   },
   routing: { maxCandidates: 5, maxSkills: 5 },
+  revision: { max: 3 },
   skills: { required: [], menu: [], embeddings: {} as never },
   tools: { required: [], menu: [], embeddings: {} as never },
 });

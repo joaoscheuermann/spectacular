@@ -5,13 +5,14 @@ import type { MosaicOptions } from './types/mosaic-options.js';
 
 /** Validates Mosaic's catalog and routing invariants before a workflow starts. */
 export const validateOptions = (options: MosaicOptions): void => {
-  const { models, routing, skills, tools } = options;
+  const { models, routing, revision, skills, tools } = options;
 
   requireModel('default', models.default);
   requireModel('reranker', models.reranker);
   requireModel('embedder', models.embedder);
   requireInteger('routing.maxCandidates', routing.maxCandidates, 1);
   requireInteger('routing.maxSkills', routing.maxSkills, 0);
+  requireInteger('revision.max', revision?.max, 0);
 
   if (routing.maxSkills > routing.maxCandidates) {
     throw new TypeError(
@@ -75,8 +76,13 @@ const requireModel = (name: string, value: string): void => {
   throw new TypeError(`Mosaic models.${name} must be a non-empty string.`);
 };
 
-const requireInteger = (name: string, value: number, minimum: number): void => {
-  if (Number.isSafeInteger(value) && value >= minimum) return;
+const requireInteger = (
+  name: string,
+  value: number | undefined,
+  minimum: number,
+): void => {
+  if (value !== undefined && Number.isSafeInteger(value) && value >= minimum)
+    return;
   throw new TypeError(`Mosaic ${name} must be an integer >= ${minimum}.`);
 };
 

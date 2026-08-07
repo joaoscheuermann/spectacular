@@ -15,7 +15,7 @@ import type {
 
 test('finishes without executing workflow work when no graph exists', async () => {
   const action = await execution(
-    { graphs: [] },
+    state([]),
     {} as never,
     {
       finish: () => ({ type: 'finish' as const, value: undefined }),
@@ -40,16 +40,12 @@ test('completes a node stores result artifacts and schedules the next wave', asy
   ]);
   const harness = createHarness(graph, provider);
 
-  const action = await execution(
-    { graphs: [graph] },
-    harness.context,
-    handlers(),
-  );
+  const action = await execution(state([graph]), harness.context, handlers());
 
   assert.deepEqual(action, {
     type: 'transition',
     handler: 'schedule',
-    state: { graphs: [graph] },
+    state: state([graph]),
   });
   assert.equal(node.status, 'completed');
   assert.deepEqual(node.artifacts, [
@@ -63,12 +59,12 @@ test('completes a node stores result artifacts and schedules the next wave', asy
   assert.equal(provider.requests[0]?.messages[1]?.role, 'user');
 });
 
-test('accepts only tool call IDs observed in the isolated message storage', async () => {
+test('automatically records one returned tool observation for a completed node', async () => {
   const node = createNode('current', ['lookup']);
   const graph: Graph = { nodes: [node] };
   const provider = createProvider([
     toolFinish('call-1', 'lookup'),
-    terminalFinish(completed({ observationRefs: ['call-1'] })),
+    terminalFinish(completed()),
   ]);
   const calls: unknown[] = [];
   const harness = createHarness(graph, provider, [
@@ -78,11 +74,7 @@ test('accepts only tool call IDs observed in the isolated message storage', asyn
     }),
   ]);
 
-  const action = await execution(
-    { graphs: [graph] },
-    harness.context,
-    handlers(),
-  );
+  const action = await execution(state([graph]), harness.context, handlers());
 
   assert.equal(
     action.type,
@@ -96,6 +88,60 @@ test('accepts only tool call IDs observed in the isolated message storage', asyn
   assert.equal(provider.requests[0]?.schema, undefined);
   assert.equal(provider.requests[1]?.schema, undefined);
   assert.equal(provider.requests[0]?.tools?.length, 2);
+  if (action.type !== 'transition') return;
+  assert.deepEqual(node.observations, [
+    {
+      goalId: 'current',
+      toolName: 'lookup',
+      callId: 'call-1',
+      input: '{"query":"evidence"}',
+      output: '{"found":true}',
+    },
+  ]);
+});
+
+test('automatically records every returned observation in tool-result order', async () => {
+  const node = createNode('current', ['first', 'second']);
+  const graph: Graph = { nodes: [node] };
+  const provider = createProvider([
+    toolCallsFinish([
+      { id: 'call-first', name: 'first', query: 'alpha' },
+      { id: 'call-second', name: 'second', query: 'beta' },
+    ]),
+    terminalFinish(completed()),
+  ]);
+  const harness = createHarness(graph, provider, [
+    tool('first', async ({ query }) => ({ value: `${String(query)} result` })),
+    tool('second', async ({ query }) => ({ value: `${String(query)} result` })),
+  ]);
+
+  const action = await execution(state([graph]), harness.context, handlers());
+
+  assert.equal(action.type, 'transition');
+  if (action.type !== 'transition') return;
+  assert.equal(node.status, 'completed');
+  assert.deepEqual(
+    node.observations.map(({ toolName, callId, input, output }) => ({
+      toolName,
+      callId,
+      input,
+      output,
+    })),
+    [
+      {
+        toolName: 'first',
+        callId: 'call-first',
+        input: '{"query":"alpha"}',
+        output: '{"value":"alpha result"}',
+      },
+      {
+        toolName: 'second',
+        callId: 'call-second',
+        input: '{"query":"beta"}',
+        output: '{"value":"beta result"}',
+      },
+    ],
+  );
 });
 
 test('resolves selected skill references without treating rationales as instructions', async () => {
@@ -111,11 +157,7 @@ test('resolves selected skill references without treating rationales as instruct
     [skill('universal')],
   );
 
-  const action = await execution(
-    { graphs: [graph] },
-    harness.context,
-    handlers(),
-  );
+  const action = await execution(state([graph]), harness.context, handlers());
 
   assert.equal(action.type, 'transition');
   const system = provider.requests[0]?.messages[0]?.content ?? '';
@@ -128,29 +170,6 @@ test('resolves selected skill references without treating rationales as instruct
   assert.doesNotMatch(user, /private rationale/u);
 });
 
-test('rejects invented observation references and marks the node failed', async () => {
-  const node = createNode('current');
-  const graph: Graph = { nodes: [node] };
-  const provider = createProvider([
-    finish(completed({ observationRefs: ['invented-call'] })),
-  ]);
-  const harness = createHarness(graph, provider);
-
-  const action = await execution(
-    { graphs: [graph] },
-    harness.context,
-    handlers(),
-  );
-
-  assert.equal(action.type, 'fail');
-  if (action.type !== 'fail') return;
-  assert.equal(node.status, 'failed');
-  assert.equal(
-    (action.error as Error).message,
-    'Node current returned an unknown observation reference.',
-  );
-});
-
 test('preserves each non-completed status and fails with only node ID and status', async () => {
   for (const status of ['blocked', 'failed'] as const) {
     const node = createNode(`node-${status}`);
@@ -160,11 +179,7 @@ test('preserves each non-completed status and fails with only node ID and status
     ]);
     const harness = createHarness(graph, provider);
 
-    const action = await execution(
-      { graphs: [graph] },
-      harness.context,
-      handlers(),
-    );
+    const action = await execution(state([graph]), harness.context, handlers());
 
     assert.equal(action.type, 'fail');
     if (action.type !== 'fail') continue;
@@ -178,43 +193,77 @@ test('preserves each non-completed status and fails with only node ID and status
   }
 });
 
-test('preserves needs_revision after validating its trigger observation', async () => {
-  const node = createNode('current', ['lookup']);
+test('stores needs_revision with every node observation and does not promote a partial result', async () => {
+  const node = createNode('current', ['first', 'middle', 'last']);
   const graph: Graph = { nodes: [node] };
   const provider = createProvider([
-    toolFinish('call-revision', 'lookup'),
+    toolCallsFinish([
+      { id: 'call-first', name: 'first', query: 'first' },
+      { id: 'call-middle', name: 'middle', query: 'invalidating' },
+      { id: 'call-last', name: 'last', query: 'last' },
+    ]),
     terminalFinish({
       ...nonCompleted('needs_revision', 'Revision required.'),
       result: { markdown: 'Unpromoted partial result.', artifacts: [] },
-      observationRefs: ['call-revision'],
       revisionRequest: {
         goalId: 'current',
-        triggerObservationRef: 'call-revision',
         invalidatedAssumption: 'The resource exists.',
         requestedEffect: 'Replace the resource-dependent goal.',
       },
     }),
   ]);
-  const harness = createHarness(graph, provider, [tool('lookup')]);
+  const harness = createHarness(graph, provider, [
+    tool('first', async () => ({ stage: 'context' })),
+    tool('middle', async () => ({ exists: false })),
+    tool('last', async () => ({ stage: 'confirmation' })),
+  ]);
 
-  const action = await execution(
-    { graphs: [graph] },
-    harness.context,
-    handlers(),
+  const action = await execution(state([graph]), harness.context, handlers());
+
+  assert.equal(action.type, 'transition');
+  if (action.type !== 'transition') return;
+  assert.equal(action.handler, 'schedule');
+  assert.equal(node.status, 'needs_revision');
+  assert.deepEqual(node.artifacts, []);
+  assert.deepEqual(
+    node.observations.map(({ toolName, output }) => ({
+      toolName,
+      output,
+    })),
+    [
+      { toolName: 'first', output: '{"stage":"context"}' },
+      { toolName: 'middle', output: '{"exists":false}' },
+      { toolName: 'last', output: '{"stage":"confirmation"}' },
+    ],
   );
+  assert.equal(node.revisionRequest?.goalId, 'current');
+  assert.equal(node.observations.length, 3);
+});
+
+test('fails needs_revision when the node produced no observation', async () => {
+  const node = createNode('current');
+  const graph: Graph = { nodes: [node] };
+  const provider = createProvider([
+    finish({
+      ...nonCompleted('needs_revision', 'Revision required.'),
+      revisionRequest: {
+        goalId: 'current',
+        invalidatedAssumption: 'The plan assumption is invalid.',
+        requestedEffect: 'Revise the plan.',
+      },
+    }),
+  ]);
+  const harness = createHarness(graph, provider);
+
+  const action = await execution(state([graph]), harness.context, handlers());
 
   assert.equal(action.type, 'fail');
   if (action.type !== 'fail') return;
-  assert.equal(
-    node.status,
-    'needs_revision',
-    action.type === 'fail' ? String(action.error) : undefined,
-  );
+  assert.equal(node.status, 'failed');
   assert.equal(
     (action.error as Error).message,
-    'Node current ended with status needs_revision.',
+    'Node current requested revision without an observation.',
   );
-  assert.deepEqual(node.artifacts, []);
 });
 
 test('marks provider schema and tool failures as failed and propagates them', async () => {
@@ -225,7 +274,7 @@ test('marks provider schema and tool failures as failed and propagates them', as
   const providerHarness = createHarness(providerGraph, provider);
 
   const providerAction = await execution(
-    { graphs: [providerGraph] },
+    state([providerGraph]),
     providerHarness.context,
     handlers(),
   );
@@ -246,7 +295,7 @@ test('marks provider schema and tool failures as failed and propagates them', as
   ]);
 
   const toolAction = await execution(
-    { graphs: [toolGraph] },
+    state([toolGraph]),
     toolHarness.context,
     handlers(),
   );
@@ -268,11 +317,7 @@ test('waits for the whole concurrent wave before reporting a node outcome failur
   });
   const harness = createHarness(graph, provider);
 
-  const action = await execution(
-    { graphs: [graph] },
-    harness.context,
-    handlers(),
-  );
+  const action = await execution(state([graph]), harness.context, handlers());
 
   assert.equal(action.type, 'fail');
   assert.equal(completedNode.status, 'completed');
@@ -333,6 +378,7 @@ function createHarness(
         embedder: 'embedder-model',
       },
       routing: { maxCandidates: 5, maxSkills: 5 },
+      revision: { max: 3 },
       skills: {
         required: requiredSkills,
         menu: [...requiredSkills, ...skills],
@@ -359,6 +405,10 @@ function skill(name: string): Skill {
   };
 }
 
+function state(graphs: Graph[]): WorkflowState {
+  return { graphs };
+}
+
 function handlers() {
   return {
     transition: (handler: string, state: WorkflowState) => ({
@@ -383,6 +433,8 @@ function createNode(id: string, toolNames: readonly string[] = []): Node {
     skills: [],
     tools: toolNames.map((name) => ({ name, description: `${name} tool` })),
     artifacts: [],
+    observations: [],
+    revisionRequest: null,
   };
 }
 
@@ -393,7 +445,6 @@ function completed(overrides: Record<string, unknown> = {}) {
       { criterionIndex: 0, satisfied: true, evidence: 'Criterion met.' },
     ],
     result: { markdown: 'Completed.', artifacts: [] },
-    observationRefs: [],
     revisionRequest: null,
     reason: null,
     ...overrides,
@@ -410,7 +461,6 @@ function nonCompleted(
       { criterionIndex: 0, satisfied: false, evidence: 'Criterion unmet.' },
     ],
     result: null,
-    observationRefs: [],
     revisionRequest: null,
     reason,
   };
@@ -426,10 +476,24 @@ function finish(structured: unknown): ProviderFinished<unknown> {
 }
 
 function toolFinish(id: string, name: string): ProviderFinished<unknown> {
+  return toolCallsFinish([{ id, name, query: 'evidence' }]);
+}
+
+function toolCallsFinish(
+  calls: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly query: string;
+  }[],
+): ProviderFinished<unknown> {
   return {
     text: '',
     finishReason: 'tool_calls',
-    toolCalls: [{ id, name, arguments: JSON.stringify({ query: 'evidence' }) }],
+    toolCalls: calls.map(({ id, name, query }) => ({
+      id,
+      name,
+      arguments: JSON.stringify({ query }),
+    })),
   };
 }
 

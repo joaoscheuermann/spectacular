@@ -6,7 +6,7 @@ import type { Graph, Node } from '../src/lib/types/graph.js';
 import type { WorkflowState } from '../src/lib/types/workflow.js';
 
 test('fails when the workflow has no active graph', async () => {
-  const action = await schedule({ graphs: [] }, {} as never, handlers());
+  const action = await schedule(state([]), {} as never, handlers());
 
   assert.equal(action.type, 'fail');
   if (action.type !== 'fail') return;
@@ -22,7 +22,7 @@ test('finishes when every node in the active graph is completed', async () => {
     createNode('second', 1, [], 'completed'),
   ]);
 
-  const action = await schedule({ graphs: [graph] }, {} as never, handlers());
+  const action = await schedule(state([graph]), {} as never, handlers());
 
   assert.deepEqual(action, { type: 'finish', value: undefined });
 });
@@ -32,12 +32,13 @@ test('schedules only the last graph in the workflow', async () => {
   const active = createGraph([createNode('active', 0)]);
   const graphs = [older, active];
 
-  const action = await schedule({ graphs }, {} as never, handlers());
+  const workflow = state(graphs);
+  const action = await schedule(workflow, {} as never, handlers());
 
   assert.deepEqual(action, {
     type: 'transition',
     handler: 'bundle',
-    state: { graphs },
+    state: workflow,
   });
   assert.equal(older.nodes[0]?.status, 'pending');
   assert.equal(active.nodes[0]?.status, 'ready');
@@ -48,11 +49,53 @@ test('marks a dependent node ready when all its dependencies are completed', asy
   const dependent = createNode('dependent', 1, ['completed']);
   const graph = createGraph([completed, dependent]);
 
-  const action = await schedule({ graphs: [graph] }, {} as never, handlers());
+  const action = await schedule(state([graph]), {} as never, handlers());
 
   assert.equal(action.type, 'transition');
   assert.equal(completed.status, 'completed');
   assert.equal(dependent.status, 'ready');
+});
+
+test('routes a node-owned localized revision to revision before scheduling work', async () => {
+  const target = createNode('target', 0, [], 'needs_revision');
+  const graph = createGraph([target]);
+  const workflow = state([graph]);
+  const observation = {
+    goalId: 'target',
+    toolName: 'lookup',
+    callId: 'call-target',
+    input: '{}',
+    output: '{}',
+  };
+  target.observations = [observation];
+  target.revisionRequest = {
+    goalId: 'target',
+    invalidatedAssumption: 'Original structure.',
+    requestedEffect: 'Revise it.',
+  };
+
+  const action = await schedule(workflow, {} as never, handlers());
+
+  assert.deepEqual(action, {
+    type: 'transition',
+    handler: 'revision',
+    state: workflow,
+  });
+});
+
+test('fails safely when needs_revision has no runtime request', async () => {
+  const target = createNode('target', 0, [], 'needs_revision');
+  const workflow = state([createGraph([target])]);
+
+  const action = await schedule(workflow, {} as never, handlers());
+
+  assert.equal(action.type, 'fail');
+  if (action.type !== 'fail') return;
+  assert.equal(
+    (action.error as Error).message,
+    'Revision node is missing its runtime request.',
+  );
+  assert.equal(target.status, 'needs_revision');
 });
 
 test('marks at most five eligible nodes ready in descending index order', async () => {
@@ -61,7 +104,7 @@ test('marks at most five eligible nodes ready in descending index order', async 
   );
   const graph = createGraph(nodes);
 
-  const action = await schedule({ graphs: [graph] }, {} as never, handlers());
+  const action = await schedule(state([graph]), {} as never, handlers());
 
   assert.equal(action.type, 'transition');
   assert.deepEqual(
@@ -75,7 +118,7 @@ test('fails when pending nodes cannot become ready', async () => {
   const dependent = createNode('dependent', 1, ['prerequisite']);
   const graph = createGraph([prerequisite, dependent]);
 
-  const action = await schedule({ graphs: [graph] }, {} as never, handlers());
+  const action = await schedule(state([graph]), {} as never, handlers());
 
   assert.equal(action.type, 'fail');
   if (action.type !== 'fail') return;
@@ -97,6 +140,10 @@ const handlers = () =>
     fail: (error: unknown) => ({ type: 'fail' as const, error }),
   }) as never;
 
+const state = (graphs: Graph[]): WorkflowState => ({
+  graphs,
+});
+
 const createGraph = (nodes: Node[]): Graph => ({ nodes });
 
 const createNode = (
@@ -115,4 +162,6 @@ const createNode = (
   skills: [],
   tools: [],
   artifacts: [],
+  observations: [],
+  revisionRequest: null,
 });

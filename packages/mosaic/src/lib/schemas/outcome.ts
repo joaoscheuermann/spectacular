@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import type { Node } from '../types/graph.js';
+import { RevisionRequestSchema } from './revision.js';
 
 /**
  * Records one ordered evaluation from `doneWhen`. Section 4.8 and Appendix A,
@@ -57,33 +58,16 @@ const ResultSchema = z
   .strict();
 
 /**
- * Mirrors PlanRevisionRequest from Appendix A, table A.2: goal, triggering
- * observation, invalidated assumption, and requested effect.
+ * Defines the semantic decision authored by an executing model. MOSAIC 0.2
+ * keeps observations runtime-owned and outside this model-facing contract.
  */
-const RevisionRequestSchema = z
-  .object({
-    goalId: z.string(),
-    triggerObservationRef: z.string(),
-    invalidatedAssumption: z.string().trim().min(1),
-    requestedEffect: z.string().trim().min(1),
-  })
-  .strict();
-
-/**
- * Defines the terminal results emitted by an executing node. Section 4.9
- * (pp. 16-17) defines completed, needs_revision, blocked, and failed as exits
- * from running; pending, ready, and running remain scheduler-owned states.
- */
-const OutcomeSchema = z
+const DecisionSchema = z
   .object({
     status: z.enum(['completed', 'needs_revision', 'blocked', 'failed']),
     criteria: z
       .array(CriterionSchema)
       .describe('One evaluation per doneWhen criterion in its original order.'),
     result: ResultSchema.nullable(),
-    observationRefs: z
-      .array(z.string())
-      .describe('Unique IDs of tool calls used as evidence.'),
     revisionRequest: RevisionRequestSchema.nullable(),
     reason: z
       .string()
@@ -94,25 +78,23 @@ const OutcomeSchema = z
   })
   .strict();
 
-/**
- * Creates the node-bound form of the paper's NodeOutcome contract (Appendix A,
- * table A.2), augmented with Doric's explicit per-criterion proof entries.
- */
-export const createNodeOutcomeSchema = (node: Node) =>
-  OutcomeSchema.extend({
-    criteria: OutcomeSchema.shape.criteria.length(node.doneWhen.length),
+export type NodeDecision = z.output<typeof DecisionSchema>;
+
+/** Creates the node-bound semantic decision schema used for model output. */
+export const createNodeDecisionSchema = (node: Node) =>
+  DecisionSchema.extend({
+    criteria: DecisionSchema.shape.criteria.length(node.doneWhen.length),
   }).superRefine((outcome, context) => {
     validateCriteria(node, outcome, context);
-    validateObservationRefs(outcome, context);
     validateStatus(node, outcome, context);
   });
 
-type Outcome = z.output<typeof OutcomeSchema>;
+type Decision = z.output<typeof DecisionSchema>;
 type RefinementContext = z.RefinementCtx;
 
 const validateCriteria = (
   node: Node,
-  outcome: Outcome,
+  outcome: Decision,
   context: RefinementContext,
 ): void => {
   /** The model must evaluate every criterion exactly once and in source order. */
@@ -135,25 +117,9 @@ const validateCriteria = (
   });
 };
 
-const validateObservationRefs = (
-  outcome: Outcome,
-  context: RefinementContext,
-): void => {
-  /** Duplicate IDs cannot provide independent evidence and are rejected. */
-  if (
-    new Set(outcome.observationRefs).size !== outcome.observationRefs.length
-  ) {
-    context.addIssue({
-      code: 'custom',
-      path: ['observationRefs'],
-      message: 'Observation references must be unique.',
-    });
-  }
-};
-
 const validateStatus = (
   node: Node,
-  outcome: Outcome,
+  outcome: Decision,
   context: RefinementContext,
 ): void => {
   /** Each terminal status owns a distinct result/revision/reason combination. */
@@ -193,7 +159,7 @@ const validateStatus = (
 };
 
 const validateCompleted = (
-  outcome: Outcome,
+  outcome: Decision,
   context: RefinementContext,
 ): void => {
   /** Completion is the only status that promotes a fully satisfied result. */
@@ -232,13 +198,10 @@ const validateCompleted = (
 
 const validateRevision = (
   node: Node,
-  outcome: Outcome,
+  outcome: Decision,
   context: RefinementContext,
 ): void => {
-  /**
-   * Revision remains local and cites an observed trigger, matching Appendix A,
-   * table A.2 and the localized-revision rules in section 4.9.
-   */
+  /** The runtime associates the request with every observation from this node. */
   const request = outcome.revisionRequest;
 
   if (request === null) {
@@ -255,14 +218,6 @@ const validateRevision = (
       code: 'custom',
       path: ['revisionRequest', 'goalId'],
       message: `Revision goalId must be ${node.id}.`,
-    });
-  }
-
-  if (!outcome.observationRefs.includes(request.triggerObservationRef)) {
-    context.addIssue({
-      code: 'custom',
-      path: ['revisionRequest', 'triggerObservationRef'],
-      message: 'Revision trigger must reference an included observation.',
     });
   }
 };

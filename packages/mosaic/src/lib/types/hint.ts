@@ -5,7 +5,7 @@ import { SkillHintSchema } from '../schemas/hint.js';
 export type SkillHint = z.infer<typeof SkillHintSchema>;
 
 export interface SkillExtraction {
-  goal: string;
+  readonly goalId: string;
   skill: Skill;
-  hints: Array<SkillHint>;
+  hints: SkillHint[];
 }

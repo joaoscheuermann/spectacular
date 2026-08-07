@@ -36,8 +36,9 @@ type RankedSelection = Preparation & {
 export const bundle: StateMachineHandler<
   WorkflowContext,
   WorkflowState
-> = async ({ graphs }, { input, options }, { transition, fail }) => {
+> = async (state, { input, options }, { transition, fail }) => {
   try {
+    const { graphs } = state;
     // Mosaic keeps graph revisions as a stack; only the newest graph is active.
     const graph = graphs.at(-1);
     if (graph === undefined) {
@@ -55,7 +56,7 @@ export const bundle: StateMachineHandler<
     }
 
     // Every ready node now has its selected skill references and exact tool menu.
-    return transition('execution', { graphs });
+    return transition('execution', state);
   } catch (error) {
     // Provider, catalog, and validation failures become workflow domain failures.
     return fail(error);
@@ -288,7 +289,7 @@ const assign = ({
   // Tool visibility is exactly base tools plus allowed tools in selected-skill order.
   const tools = composeTools(skills, requiredTools, toolMenu);
 
-  // Metadata is sufficient for graph state; executable tools remain in the catalog.
+  // Metadata is sufficient for the graph snapshot; executable tools remain in the catalog.
   node.skills = [...selected];
   node.tools = metadata(tools);
 };

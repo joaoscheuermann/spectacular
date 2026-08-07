@@ -265,22 +265,33 @@ supplied state object. It owns no workflow policy, persistence, listeners,
 recovery hooks, or external side effects.
 
 `packages/mosaic` depends on `packages/state-machine` but owns the incomplete
-Doric goal-workflow policy: decomposition and revision, scheduling, skill
+Doric goal-workflow policy: planning and revision, scheduling, skill
 retrieval and reranking, and per-node skill/tool menu composition. Its public
 factory accepts injected provider, logger, default, reranker, and embedder model
-IDs, explicit candidate and selected-skill limits, bundle skills and executable
-tools, and both vector databases; it has no session option. Tool embeddings
+IDs, explicit candidate and selected-skill limits, a required non-negative
+integer localized-revision limit, bundle skills and executable tools, and both
+vector databases; it has no session option. Doric configures three localized
+revisions. Tool embeddings
 remain part of this composition contract but the bundle state does not query
-them or run an independent tool router. Generated graph nodes initialize their
-runtime-owned `skills`, `tools`, and `artifacts` arrays as empty; graph
-generation and revision cannot populate them. A routed node skill stores only
+them or run an independent tool router. Model graph output owns only `id`,
+`goal`, `doneWhen`, `dependsOn`, and `deliver`; Mosaic deterministically assigns
+array-order indices, pending status, and empty runtime-owned `skills`, `tools`,
+`artifacts`, and `observations` arrays plus a null `revisionRequest`. Plans
+require non-empty nodes, IDs, goals, and criteria;
+unique existing dependencies; acyclicity; and at least one terminal deliverable,
+while every deliverable must be terminal. A routed node skill stores only
 its canonical name and a non-empty per-skill rationale. Full skill definitions
 remain in the catalog and are resolved by name when composing tools and the
 execution prompt.
 `agents/doric` remains the composition root that loads bundles, constructs and
 populates the vector databases, and invokes Mosaic. Mosaic runs the fixed
-`graph -> schedule -> bundle -> execution -> schedule` lifecycle over a
-run-local LIFO graph array. Bundle routing uses the original request, current
+`plan(P0) -> plan(P1) -> schedule -> bundle -> execution -> schedule`
+lifecycle, with `schedule -> revision -> schedule` for localized runtime
+requests, over a run-local LIFO graph array where `graphs[n]` is plan revision
+`n`. The `plan` state rejects every re-entry after P1. P0 is
+catalog-independent and P1 is exactly one body-aware revision. Candidate limits
+apply as both hint and retrieval bounds, including a defensive post-filter hint
+bound over canonical, unique, non-required skills. Bundle routing uses the original request, current
 goal and completion criteria, and only transitive-ancestor artifacts. It
 retrieves a bounded routable-skill candidate set, reranks complete skill bodies,
 validates a node-bound structured selection, and locally normalizes the result
@@ -291,36 +302,64 @@ declared by selected skills, with duplicate names removed by first occurrence.
 Always-available skills are excluded from hints and routing, do not count toward
 the selected-skill limit, and are injected as universal execution instructions;
 they may reference only base tools and do not expand the node tool menu.
-Execution creates one agent per ready node with
-isolated in-memory message storage and executable tools resolved from the
-catalog. Each node makes one `agent.complete` call with tools and a node-bound
-strict outcome schema. When executable tools are present, the agent exposes
-that outcome schema as its reserved terminal tool rather than combining the
-tools with provider-native structured output. Its collision-safe Markdown
-execution context contains the original request, current goal and ordered
-`doneWhen` criteria, only
+Execution creates one agent per ready node with isolated in-memory message
+storage and executable tools resolved from the catalog. Each node makes one
+`agent.complete` call with tools and a node-bound strict semantic-decision
+schema. The model-facing decision owns only `status`, ordered criterion
+evaluations, `result`, `revisionRequest`, and `reason`; criterion `evidence` is
+model-authored prose, and the revision request owns only `goalId`,
+`invalidatedAssumption`, and `requestedEffect`. Unknown legacy reference fields
+are rejected. When executable tools are present, the agent exposes that
+decision schema as its reserved terminal tool rather than combining the tools
+with provider-native structured output. The terminal structured-output tool is
+never an observation. Its collision-safe Markdown execution context contains
+the original request, current goal and ordered `doneWhen` criteria, only
 transitive-ancestor artifacts, selected skill bodies in bundle order, and tool
-names and descriptions without duplicating tool schemas. The outcome evaluates
-every criterion and terminates as `completed`, `needs_revision`, `blocked`, or
-`failed`; observation references must be unique IDs of tool calls observed in
-that node's isolated history, and revision requests must target the current
-node and an observed trigger. Completed nodes store their Markdown result as a
-`text/markdown` artifact, append additional artifacts, and return a fully
-completed wave to scheduling. Other terminal outcomes preserve their status
-and fail the wave without implementing localized graph revision. Provider,
-tool, schema, and observation-validation failures mark the node failed.
-Execution emits safe logs with node IDs, terminal statuses, and selected skill
-and tool names only, never prompts, outcomes, reasons, or tool payloads.
-This behavior implements MOSAIC Core Profile 0.1 sections 4.7-4.9 and the
-`NodeContext`, `Observation`, and `NodeOutcome` contracts in Appendix A, table
-A.2. The paper defines the semantic lifecycle but leaves tool-calling protocol
-and dispatch mechanics open; concurrent ready waves, `Promise.allSettled`, one
-isolated agent per node, terminal structured-output tools, explicit criterion
-proof entries, and `text/markdown` artifact promotion are Doric runtime choices.
-Decomposition appends a graph,
-the last graph is active, and scheduling mutates that graph when marking nodes
-ready. It succeeds for an already-completed graph and otherwise preserves the
-intentional missing-ready domain failure when progress cannot continue.
+names and descriptions without duplicating tool schemas.
+
+After the model decision terminates as `completed`, `needs_revision`,
+`blocked`, or `failed`, the runtime correlates every successfully returned
+executable-tool call from the node's isolated history. It creates one ordered
+`Observation` per tool result and materializes the internal node outcome from
+the decision and the complete observation sequence. `callId` exists only in an
+`Observation` for runtime correlation and is not exposed in execution or
+revision prompts. Missing, duplicate, or uncorrelated call/result data is a
+runtime failure. A completed decision is valid with zero, one, or multiple
+observations. Completed nodes store their Markdown result as a `text/markdown`
+artifact, append additional artifacts, and return a fully completed wave to
+scheduling. A `needs_revision` decision requires at least one observation,
+must target the current node, and does not promote partial results: execution
+stores its semantic request and every observation produced by the node, then
+returns normally to scheduling. Blocked, failed, provider, tool, schema, and
+observation-validation failures retain failure precedence and mark unfinished
+nodes failed. Execution emits safe logs with node IDs, terminal statuses, and
+selected skill and tool names only, never prompts, decisions, outcomes,
+reasons, tool payloads, or error details.
+The run-local state contains only the ordered graph snapshots. Each node owns
+its observations and optional revision request. Outstanding revision work is
+selected from node outcomes in deterministic node-wave order; within each node,
+observations retain tool-result order. The localized planner receives every
+queued observation as fenced tool name, input, and output evidence and never
+receives `callId`. The successful local revision count is derived from graph
+history, and retired IDs are the IDs found in older snapshots but absent from
+the active graph. Each localized pass is owned by the dedicated `revision`
+state, skips catalog hints, preserves completed and other non-pending nodes
+exactly, permits changes only to the target and pending nodes, clears routing,
+observations, the consumed request, and partial results from a retained target,
+and prevents retired ID reuse. Only successfully appended localized graphs
+count against the configured limit; exhaustion blocks the target without a
+provider call. This behavior implements
+MOSAIC 0.2 sections 4.7-4.9 and the `NodeContext`, `NodeDecision`,
+`Observation`, runtime `NodeOutcome`, and `RevisionRequest` contracts in
+Appendix A. The paper defines the semantic lifecycle but leaves tool-calling
+protocol and dispatch mechanics open; concurrent ready waves,
+`Promise.allSettled`, one isolated agent per node, terminal structured-output
+tools, explicit criterion proof entries, and `text/markdown` artifact promotion
+are Doric runtime choices.
+Planning and revision append a graph, the last graph is active, and
+scheduling mutates that graph when marking nodes ready. It succeeds for an
+already-completed graph and otherwise preserves the intentional missing-ready
+domain failure when progress cannot continue.
 
 `models/skillrouter-embedding` is the user-approved Nx/uv conversion utility
 for the pinned SkillRouter checkpoint. Only its export target may fetch
@@ -471,10 +510,22 @@ native schema from provider requests in that run. Ordinary tool calls continue
 through the existing loop. The terminal tool call must be the only call in its
 response; the agent parses and validates its JSON arguments with the original
 schema, converts it to a tool-free structured finish, and never executes it or
-stores a tool result for it. Missing, malformed, mixed, or schema-invalid
-terminal output fails with `invalid_structured_output`. Runs with a schema and
-no executable tools retain provider-native structured output unchanged. This
-terminal behavior applies equally to complete and stream agent runs.
+stores a tool result for it. Missing, malformed, schema-invalid, duplicate, or
+mixed terminal submissions are repairable. The agent discards each invalid
+response without persisting it or executing any included call, then may make
+three correction attempts after the initial invalid submission. Each next
+request receives one transient system correction naming the terminal tool,
+explaining the failure, and including at most ten normalized Zod issue paths
+and messages when available; rejected arguments are never copied into the
+correction. The retry budget is cumulative across the run, and ordinary tool
+turns neither consume nor reset it. The fourth invalid submission throws the
+latest `invalid_structured_output` `AgentErrorObject`, whose existing
+`diagnostic` field contains the same safe validation details when available.
+Runs with a schema and no executable tools retain provider-native structured
+output unchanged. This terminal behavior applies equally to complete and
+stream agent runs. Streaming preserves already-emitted provider deltas,
+suppresses an invalid `response.finished`, and adds no repair-specific public
+event.
 OpenAI, Codex, and OpenRouter send resolved effort through `reasoning.effort`;
 LM Studio OpenAI compatibility sends `reasoning_effort`; LM Studio native sends
 its native `reasoning` value with `none` mapped to `off`, `minimal` to `low`,

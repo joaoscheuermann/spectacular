@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createNodeOutcomeSchema } from '../src/lib/schemas/outcome.js';
+import { createNodeDecisionSchema } from '../src/lib/schemas/outcome.js';
 import type { Node } from '../src/lib/types/graph.js';
 
 const node = createNode();
 
 test('accepts a completed outcome with every criterion and a result', () => {
-  const parsed = createNodeOutcomeSchema(node).safeParse(completed());
+  const parsed = createNodeDecisionSchema(node).safeParse(completed());
 
   assert.equal(parsed.success, true);
 });
@@ -18,11 +18,11 @@ test('rejects completed outcomes with an unsatisfied criterion or no result', ()
   const missingResult = { ...completed(), result: null };
 
   assert.equal(
-    createNodeOutcomeSchema(node).safeParse(unsatisfied).success,
+    createNodeDecisionSchema(node).safeParse(unsatisfied).success,
     false,
   );
   assert.equal(
-    createNodeOutcomeSchema(node).safeParse(missingResult).success,
+    createNodeDecisionSchema(node).safeParse(missingResult).success,
     false,
   );
 });
@@ -31,21 +31,19 @@ test('requires null revision and reason fields for completed outcomes', () => {
   const withReason = { ...completed(), reason: 'Unexpected reason.' };
   const withRevision = {
     ...completed(),
-    observationRefs: ['call-1'],
     revisionRequest: {
       goalId: node.id,
-      triggerObservationRef: 'call-1',
       invalidatedAssumption: 'An assumption.',
       requestedEffect: 'A plan effect.',
     },
   };
 
   assert.equal(
-    createNodeOutcomeSchema(node).safeParse(withReason).success,
+    createNodeDecisionSchema(node).safeParse(withReason).success,
     false,
   );
   assert.equal(
-    createNodeOutcomeSchema(node).safeParse(withRevision).success,
+    createNodeDecisionSchema(node).safeParse(withRevision).success,
     false,
   );
 });
@@ -56,50 +54,43 @@ test('requires exactly one ordered evaluation per doneWhen criterion', () => {
   const reordered = completed();
   reordered.criteria.reverse();
 
-  assert.equal(createNodeOutcomeSchema(node).safeParse(missing).success, false);
   assert.equal(
-    createNodeOutcomeSchema(node).safeParse(reordered).success,
+    createNodeDecisionSchema(node).safeParse(missing).success,
+    false,
+  );
+  assert.equal(
+    createNodeDecisionSchema(node).safeParse(reordered).success,
     false,
   );
 });
 
-test('accepts needs_revision only with a node-local observed trigger and reason', () => {
+test('accepts needs_revision only with a node-local semantic request and reason', () => {
   const request = {
     goalId: node.id,
-    triggerObservationRef: 'call-1',
     invalidatedAssumption: 'The target exists.',
     requestedEffect: 'Replace the target-dependent goal.',
   };
   const valid = nonCompleted('needs_revision', {
-    observationRefs: ['call-1'],
     revisionRequest: request,
   });
   const wrongGoal = {
     ...valid,
     revisionRequest: { ...request, goalId: 'another-node' },
   };
-  const missingTrigger = {
-    ...valid,
-    observationRefs: [],
-  };
   const missingRequest = { ...valid, revisionRequest: null };
   const missingReason = { ...valid, reason: null };
 
-  assert.equal(createNodeOutcomeSchema(node).safeParse(valid).success, true);
+  assert.equal(createNodeDecisionSchema(node).safeParse(valid).success, true);
   assert.equal(
-    createNodeOutcomeSchema(node).safeParse(wrongGoal).success,
+    createNodeDecisionSchema(node).safeParse(wrongGoal).success,
     false,
   );
   assert.equal(
-    createNodeOutcomeSchema(node).safeParse(missingTrigger).success,
+    createNodeDecisionSchema(node).safeParse(missingRequest).success,
     false,
   );
   assert.equal(
-    createNodeOutcomeSchema(node).safeParse(missingRequest).success,
-    false,
-  );
-  assert.equal(
-    createNodeOutcomeSchema(node).safeParse(missingReason).success,
+    createNodeDecisionSchema(node).safeParse(missingReason).success,
     false,
   );
 });
@@ -113,40 +104,51 @@ test('accepts blocked and failed only without a promoted result and with a reaso
       ...valid,
       revisionRequest: {
         goalId: node.id,
-        triggerObservationRef: 'call-1',
         invalidatedAssumption: 'An assumption.',
         requestedEffect: 'A plan effect.',
       },
     };
 
-    assert.equal(createNodeOutcomeSchema(node).safeParse(valid).success, true);
+    assert.equal(createNodeDecisionSchema(node).safeParse(valid).success, true);
     assert.equal(
-      createNodeOutcomeSchema(node).safeParse(withResult).success,
+      createNodeDecisionSchema(node).safeParse(withResult).success,
       false,
     );
     assert.equal(
-      createNodeOutcomeSchema(node).safeParse(withoutReason).success,
+      createNodeDecisionSchema(node).safeParse(withoutReason).success,
       false,
     );
     assert.equal(
-      createNodeOutcomeSchema(node).safeParse(withRevision).success,
+      createNodeDecisionSchema(node).safeParse(withRevision).success,
       false,
     );
   }
 });
 
-test('rejects duplicate observation references and unknown fields', () => {
-  const duplicate = {
+test('rejects legacy observation reference fields and other unknown fields', () => {
+  const legacyOutcome = {
     ...completed(),
-    observationRefs: ['call-1', 'call-1'],
+    observationRefs: ['call-1'],
   };
+  const legacyRevision = nonCompleted('needs_revision', {
+    revisionRequest: {
+      goalId: node.id,
+      triggerObservationRef: 'call-1',
+      invalidatedAssumption: 'An assumption.',
+      requestedEffect: 'A plan effect.',
+    },
+  });
   const extra = { ...completed(), commentary: 'outside the contract' };
 
   assert.equal(
-    createNodeOutcomeSchema(node).safeParse(duplicate).success,
+    createNodeDecisionSchema(node).safeParse(legacyOutcome).success,
     false,
   );
-  assert.equal(createNodeOutcomeSchema(node).safeParse(extra).success, false);
+  assert.equal(
+    createNodeDecisionSchema(node).safeParse(legacyRevision).success,
+    false,
+  );
+  assert.equal(createNodeDecisionSchema(node).safeParse(extra).success, false);
 });
 
 function completed() {
@@ -160,7 +162,6 @@ function completed() {
       markdown: 'Completed result.',
       artifacts: [{ mime: 'text/plain', data: 'artifact' }],
     },
-    observationRefs: [] as string[],
     revisionRequest: null,
     reason: null,
   };
@@ -192,5 +193,7 @@ function createNode(): Node {
     skills: [],
     tools: [],
     artifacts: [],
+    observations: [],
+    revisionRequest: null,
   };
 }

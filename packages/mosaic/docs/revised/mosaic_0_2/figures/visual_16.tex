@@ -1,0 +1,45 @@
+\begin{table}[H]
+\centering
+\caption*{\textbf{Quadro 7 - Elementos removidos da especificação mínima}}
+\scriptsize
+\renewcommand{\arraystretch}{1.12}
+\begin{tabularx}{\linewidth}{|p{0.34\linewidth}|Y|}
+\hline
+\textbf{Elemento removido} & \textbf{Razão} \\
+\hline
+Compilador por LLM com muitos campos inferidos &
+\texttt{name}, \texttt{description} e body já sustentam indexação e reranking. \\
+\hline
+Tool router independente &
+\(T_{\mathrm{base}}\) e a união de \texttt{allowed-tools} resolvem o menu mínimo. \\
+\hline
+Camada de capabilities e providers &
+Nomes diretos de tools bastam enquanto não houver implementações equivalentes. \\
+\hline
+Resolvedor de \texttt{scripts/}, \texttt{references/} e \texttt{assets/} &
+O conceito é expresso carregando apenas \texttt{SKILL.md}. \\
+\hline
+Otimizador formal de bundles &
+Seleção ordenada, limite e critérios qualitativos são suficientes. \\
+\hline
+Linguagem formal de precedência &
+A ordem estável do reranking é a convenção da MOSAIC 0.2. \\
+\hline
+Verificador separado &
+\texttt{doneWhen} pode ser avaliado pelo executor na especificação mínima. \\
+\hline
+Protocolo completo de erros &
+Status de nó, limites e pedido semântico de revisão descrevem o fluxo central. \\
+\hline
+IDs do provedor em saídas do modelo &
+Correlação pertence ao runtime; o modelo não deve copiar referências opacas. \\
+\hline
+Segurança, autorização e prompt injection &
+A especificação assume catálogo, tools e runtime confiáveis em modo YOLO. \\
+\hline
+Scheduler distribuído e paralelismo formal &
+Um DAG expressa a ordem necessária sem infraestrutura adicional. \\
+\hline
+\end{tabularx}
+\par\smallskip\raggedright\small Fonte: elaboração própria (2026).
+\end{table}

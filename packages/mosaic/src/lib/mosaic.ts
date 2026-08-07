@@ -10,7 +10,7 @@ export function mosaic(options: MosaicOptions): MosaicAgent {
   return {
     async prompt(input: string): Promise<void> {
       const result = await machine.run({
-        initial: 'graph',
+        initial: 'plan',
         state: { graphs: [] },
         context: { input, options },
       });

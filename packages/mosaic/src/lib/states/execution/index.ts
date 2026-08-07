@@ -1,33 +1,44 @@
 import { createAgent } from 'agent';
-import { createMessageStorage, type MessageStorage } from 'messages';
+import { createMessageStorage } from 'messages';
 import type { StateMachineHandler } from 'state-machine';
 import { createToolStorage, type Tool } from 'tool';
 
 import * as executionPrompt from '../../prompts/execution.js';
-import { createNodeOutcomeSchema } from '../../schemas/outcome.js';
+import {
+  createNodeDecisionSchema,
+  type NodeDecision,
+} from '../../schemas/outcome.js';
 import { resolveSkills } from '../bundle/menus.js';
 import type { Graph, Node } from '../../types/graph.js';
+import type { Observation } from '../../types/revision.js';
 import type { WorkflowContext, WorkflowState } from '../../types/workflow.js';
+import { materializeObservations } from './observations.js';
+
+type RuntimeOutcome = NodeDecision & {
+  readonly observations: readonly Observation[];
+};
 
 /**
  * Implements the node executor and lifecycle from the MOSAIC paper, sections
  * 4.8-4.9 (pp. 16-17) and Algorithm 1 (pp. 18-19). In particular, section 4.9
  * says: "O scheduler o coloca em running." Doric groups ready nodes into a
- * concurrent wave; that batching policy is a local runtime choice, not a Core
- * Profile requirement.
+ * concurrent wave; that batching policy is a local MOSAIC 0.2 runtime choice.
  */
 export const execution: StateMachineHandler<
   WorkflowContext,
   WorkflowState
-> = async ({ graphs }, { input, options }, { transition, finish, fail }) => {
+> = async (state, { input, options }, { transition, finish, fail }) => {
   try {
+    const { graphs } = state;
     /** Mosaic stores graphs as a LIFO stack, so the last graph is active. */
     const graph = graphs.at(-1);
 
     if (graph === undefined) return finish();
 
     /** Scheduling marks the nodes that form this execution wave as ready. */
-    const nodes = graph.nodes.filter(({ status }) => status === 'ready');
+    const nodes = graph.nodes
+      .filter(({ status }) => status === 'ready')
+      .sort((left, right) => right.index - left.index);
 
     if (nodes.length === 0)
       return fail(new Error('Impossible to continue, missing ready nodes!'));
@@ -42,18 +53,17 @@ export const execution: StateMachineHandler<
       nodes.map((node) => execute(input, node, graph, options)),
     );
 
-    /** A fulfilled result has value `undefined` because `execute` returns void. */
     const failure = results.find(
       (result): result is PromiseRejectedResult => result.status === 'rejected',
     );
+
+    if (failure !== undefined) return fail(failure.reason);
 
     /**
      * Return to scheduling so downstream dependencies can become ready. This
      * realizes section 4.9: pending becomes ready after dependencies complete.
      */
-    return failure === undefined
-      ? transition('schedule', { graphs })
-      : fail(failure.reason);
+    return transition('schedule', state);
   } catch (e) {
     return fail(e);
   }
@@ -64,7 +74,7 @@ const execute = async (
   node: Node,
   graph: Graph,
   options: WorkflowContext['options'],
-) => {
+): Promise<void> => {
   /** The runtime owns node status after scheduling hands the node to execution. */
   node.status = 'running';
 
@@ -104,27 +114,52 @@ const execute = async (
      * `agent` exposes the outcome as a terminal tool; this is Doric's transport
      * mechanism, not a tool or protocol mandated by the paper.
      */
-    const { structured: outcome } = await agent.complete(
+    const { structured: decision } = await agent.complete(
       executionPrompt.user({ request: input, node, graph, skills, tools }),
-      { schema: createNodeOutcomeSchema(node) },
+      { schema: createNodeDecisionSchema(node) },
     );
 
-    console.log(outcome)
-
-    if (outcome === undefined) {
-      throw new Error(`Node ${node.id} returned no structured outcome.`);
+    if (decision === undefined) {
+      throw new Error(`Node ${node.id} returned no structured decision.`);
     }
 
     /**
-     * Accept evidence references only for calls observed by this node. This
-     * enforces Appendix A, table A.2's traceable Observation/NodeOutcome link.
+     * MOSAIC 0.2 materializes the runtime outcome by attaching every correlated
+     * executable-tool observation. The terminal structured-output tool is
+     * normalized away by `agent` and therefore never enters this ledger.
      */
-    validateObservations(node, outcome.observationRefs, messages);
+    const outcome: RuntimeOutcome = {
+      ...decision,
+      observations: materializeObservations(node.id, messages.list()),
+    };
 
-    /** Non-completed terminal outcomes preserve their status and fail the wave. */
-    if (outcome.status !== 'completed') {
+    if (outcome.status === 'needs_revision') {
+      const request = outcome.revisionRequest;
+      if (request === null) {
+        throw new Error(`Node ${node.id} returned no revision request.`);
+      }
+      if (outcome.observations.length === 0) {
+        throw new Error(
+          `Node ${node.id} requested revision without an observation.`,
+        );
+      }
+
+      node.observations = [...outcome.observations];
+      node.revisionRequest = { ...request };
       node.status = outcome.status;
+      options.logger.info(
+        { nodeId: node.id, status: outcome.status },
+        'node execution did not complete',
+      );
 
+      return;
+    }
+
+    /** Blocked and failed remain terminal wave failures. */
+    if (outcome.status !== 'completed') {
+      node.observations = [...outcome.observations];
+      node.revisionRequest = null;
+      node.status = outcome.status;
       options.logger.info(
         { nodeId: node.id, status: outcome.status },
         'node execution did not complete',
@@ -142,7 +177,7 @@ const execute = async (
      * Promote a completed result into the graph: Markdown is the primary
      * artifact and model-declared artifacts retain their original order.
      * Result promotion follows table A.2; `text/markdown` is Doric's concrete
-     * artifact representation and is not prescribed by the Core Profile.
+     * artifact representation and is not prescribed by MOSAIC 0.2.
      */
     node.artifacts = [
       ...node.artifacts,
@@ -151,11 +186,13 @@ const execute = async (
     ];
 
     /** Completion makes the node eligible to satisfy downstream dependencies. */
+    node.observations = [...outcome.observations];
+    node.revisionRequest = null;
     node.status = outcome.status;
 
     options.logger.info({ nodeId: node.id }, 'node execution completed');
 
-    return outcome;
+    return;
   } catch (error) {
     /** Preserve explicit terminal statuses; only an unfinished run becomes failed. */
     if (node.status === 'running') {
@@ -168,30 +205,6 @@ const execute = async (
 
     throw error;
   }
-};
-
-const validateObservations = (
-  node: Node,
-  refs: readonly string[],
-  messages: MessageStorage,
-): void => {
-  /**
-   * Tool result messages are the authoritative observation ledger for a node.
-   * The paper's table A.2 requires callId correlation and preserved ordering.
-   */
-  const observed = new Set(
-    messages
-      .list()
-      .filter(
-        (message) =>
-          message.role === 'tool' && message.toolCallId !== undefined,
-      )
-      .map(({ toolCallId }) => toolCallId),
-  );
-
-  if (refs.every((ref) => observed.has(ref))) return;
-
-  throw new Error(`Node ${node.id} returned an unknown observation reference.`);
 };
 
 const executors = (

@@ -7,72 +7,88 @@ const WAVE_LIMIT = 5;
 const MISSING_READY_NODES = 'Impossible to continue, missing ready nodes!';
 
 /**
- * Mutates the active graph to mark its next wave as ready.
- * Search for all nodes that are currently pending but can become ready
- * @param param0
- * @param _context
- * @param param2
- * @returns
+ * Projects the lifecycle in MOSAIC 0.2 section 4.9 (pp. 16-17) onto a bounded
+ * execution wave, or delegates outstanding structural evidence to revision.
  */
 export const schedule: StateMachineHandler<WorkflowContext, WorkflowState> = (
-  { graphs },
+  state,
   _context,
   { transition, finish, fail },
 ) => {
+  const { graphs } = state;
+
+  // Planning and revision append snapshots; scheduling always acts on the newest.
   const graph = graphs.at(-1);
 
+  // Every schedulable run must have completed at least the initial planning pass.
   if (graph === undefined) {
     return fail(new Error('Impossible to continue, missing active graph!'));
   }
 
   /**
-   * If a single node returned "needs_revision", we should review the graph with the encountered
-   * information
+   * Revision has precedence over new work so no node executes against a graph
+   * whose structure has already been invalidated by runtime evidence.
    */
-  if (graph.nodes.find((node) => node.status === 'needs_revision')) {
-    return transition('graph', { graphs });
+  if (graph.nodes.some((node) => node.status === 'needs_revision')) {
+    // A semantic revision status without its runtime-owned request is invalid state.
+    if (
+      graph.nodes.some(
+        (node) =>
+          node.status === 'needs_revision' && node.revisionRequest === null,
+      )
+    ) {
+      return fail(new Error('Revision node is missing its runtime request.'));
+    }
+
+    // The revision state consumes requests deterministically and appends a new graph.
+    return transition('revision', state);
   }
 
-  // All nodes are done, so we mark the graph as finished and finishes the run
+  // A fully completed graph needs no final model synthesis; terminal artifacts stand.
   if (graph.nodes.every((node) => node.status === 'completed')) {
     return finish();
   }
 
   /**
-   * Pick wave for the current turn, we evaluate if a node is ready and then limit the size of the wave
+   * Select pending goals whose dependencies are complete. Reverse index order is
+   * Doric's stable wave order; the fixed cap is a local dispatch policy rather
+   * than a concurrency value prescribed by Algorithm 1.
    */
   const wave = graph.nodes
     .filter((node) => nodeIsReady(node, graph.nodes))
     .sort((left, right) => right.index - left.index)
     .slice(0, WAVE_LIMIT);
 
+  // Remaining nonterminal work without an eligible node cannot make DAG progress.
   if (!wave.length) {
     return fail(new Error(MISSING_READY_NODES));
   }
 
+  // Scheduling owns pending -> ready; execution owns every later status change.
   for (const node of wave) {
     node.status = 'ready';
   }
 
-  return transition('bundle', { graphs });
+  // Bundle routing and tool-menu composition are performed only for this wave.
+  return transition('bundle', state);
 };
 
 /**
- * Filters the nodes to check if it can be set as ready
- * A node is ready when all it's dependencies are completed or it doesnt have any dependencies
- * @param node
- * @param nodes
- * @returns
+ * Applies the readiness rule from section 4.9: a pending node is eligible when
+ * it has no dependencies or every referenced dependency has completed.
  */
 const nodeIsReady = (node: Node, nodes: readonly Node[]): boolean => {
+  // Nodes already admitted to a wave or in a terminal state cannot be rescheduled.
   if (node.status !== 'pending') {
     return false;
   }
 
+  // Root goals are immediately eligible while still pending.
   if (node.dependsOn.length === 0) {
     return true;
   }
 
+  // Graph validation guarantees references exist; completion unlocks the node.
   return nodes
     .filter((candidate) => node.dependsOn.includes(candidate.id))
     .every((dependency) => dependency.status === 'completed');

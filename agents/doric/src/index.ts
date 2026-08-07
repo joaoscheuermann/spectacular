@@ -207,6 +207,9 @@ async function main() {
           maxCandidates: 5,
           maxSkills: 5,
         },
+        revision: {
+          max: 3,
+        },
         skills: {
           required: bundleSkills
             .filter(({ alwaysAvailable }) => alwaysAvailable)

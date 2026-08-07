@@ -1,0 +1,42 @@
+\begin{figure}[H]
+\centering
+\caption*{\textbf{Figura 6 - Loop de execução e materialização do resultado do nó}}
+\resizebox{0.98\linewidth}{!}{%
+\begin{tikzpicture}[node distance=7mm and 13mm]
+\node[mosaicbox, text width=5.3cm] (context)
+  {Contexto do nó\\pedido, objetivo, \texttt{doneWhen}, estado projetado,
+  skills e schemas de tools};
+\node[mosaicbox, below=of context, text width=3.4cm] (model) {Modelo executor};
+\node[mosaicdecision, below=of model, text width=2.8cm] (choice)
+  {Precisa de operação externa?};
+\node[mosaicbox, below left=of choice, text width=3.3cm] (call)
+  {Chamada de tool executável};
+\node[mosaicbox, below=of call, text width=3.6cm] (observation)
+  {Runtime cria \texttt{Observation}\\nome, entrada, saída e ordem};
+\node[mosaicbox, below right=of choice, text width=3.8cm] (decision)
+  {Modelo produz decisão semântica\\status, critérios, resultado,
+  revisão e razão};
+\node[mosaicbox, below=18mm of decision, text width=4.6cm] (outcome)
+  {Runtime materializa \texttt{NodeOutcome}\\decisão + todas as observações correlacionadas};
+\node[mosaicbox, below left=of outcome, text width=3.4cm] (completed)
+  {\texttt{completed}\\promove resultado};
+\node[mosaicbox, below=of outcome, text width=3.8cm] (revision)
+  {\texttt{needs\_revision}\\exige \(\geq 1\) observação e associa o conjunto completo};
+\node[mosaicbox, below right=of outcome, text width=3.4cm] (stopped)
+  {\texttt{blocked} ou \texttt{failed}};
+
+\draw[mosaicarrow] (context) -- (model);
+\draw[mosaicarrow] (model) -- (choice);
+\draw[mosaicarrow] (choice) -- node[above left, font=\scriptsize] {sim} (call);
+\draw[mosaicarrow] (call) -- (observation);
+\draw[mosaicarrow] (observation.west) .. controls +(-2.4,0) and +(-2.4,0) ..
+  node[left, font=\scriptsize] {nova evidência} (model.west);
+\draw[mosaicarrow] (choice) -- node[above right, font=\scriptsize] {não / terminal} (decision);
+\draw[mosaicarrow] (decision) -- (outcome);
+\draw[mosaicdash] (observation) -| (outcome);
+\draw[mosaicarrow] (outcome) -- (completed);
+\draw[mosaicarrow] (outcome) -- (revision);
+\draw[mosaicarrow] (outcome) -- (stopped);
+\end{tikzpicture}}
+\par\smallskip\raggedright\small Fonte: elaboração própria (2026).
+\end{figure}

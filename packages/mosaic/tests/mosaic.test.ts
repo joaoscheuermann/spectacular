@@ -28,6 +28,7 @@ test('propagates the exact provider failure from graph generation', async () => 
       embedder: 'embedder-model',
     },
     routing: { maxCandidates: 5, maxSkills: 5 },
+    revision: { max: 3 },
     skills: { required: [], menu: [], embeddings: {} as never },
     tools: { required: [], menu: [], embeddings: {} as never },
   };
