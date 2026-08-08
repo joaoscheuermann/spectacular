@@ -51,6 +51,34 @@ const treeSchema = zod
     exclude: zod.array(zod.string()).optional(),
   })
   .strict();
+const findOutput = zod
+  .object({
+    results: zod.array(zod.string()),
+    total: zod.number(),
+    truncated: zod.boolean(),
+    error: zod.string().optional(),
+  })
+  .strict();
+const grepOutput = zod
+  .object({
+    matches: zod.array(
+      zod
+        .object({
+          file: zod.string(),
+          line: zod.number(),
+          text: zod.string(),
+          context_before: zod.array(zod.string()),
+          context_after: zod.array(zod.string()),
+        })
+        .strict(),
+    ),
+    total: zod.number(),
+    truncated: zod.boolean(),
+    lines_truncated: zod.boolean(),
+    error: zod.string().optional(),
+  })
+  .strict();
+const treeOutput = zod.string();
 
 const DEFAULT_FIND_LIMIT = 1000;
 const DEFAULT_GREP_LIMIT = 100;
@@ -71,9 +99,12 @@ const createSafeFindTool = (options: Options) => {
     name: 'find',
     description:
       'Search non-guidance files by glob pattern. Guidance markdown, docs, README files, AGENTS.md, GROUNDING.md, and .agents are excluded.',
-    schema: findSchema,
-    execute: (sandbox, input): Promise<FindOutput> =>
-      find({ ...options, sandbox }, input),
+    input: findSchema,
+    output: findOutput,
+    execute: async (sandbox, input) => {
+      const result = await find({ ...options, sandbox }, input);
+      return { ...result, results: [...result.results] };
+    },
   });
 
   return factory(options.sandbox);
@@ -84,9 +115,19 @@ const createSafeGrepTool = (options: Options) => {
     name: 'grep',
     description:
       'Search non-guidance file contents. Requires a non-markdown file path or clearly non-markdown glob.',
-    schema: grepSchema,
-    execute: (sandbox, input): Promise<GrepOutput> =>
-      grep({ ...options, sandbox }, input),
+    input: grepSchema,
+    output: grepOutput,
+    execute: async (sandbox, input) => {
+      const result = await grep({ ...options, sandbox }, input);
+      return {
+        ...result,
+        matches: result.matches.map((match) => ({
+          ...match,
+          context_before: [...match.context_before],
+          context_after: [...match.context_after],
+        })),
+      };
+    },
   });
 
   return factory(options.sandbox);
@@ -97,7 +138,8 @@ const createSafeTreeTool = (options: Options) => {
     name: 'tree',
     description:
       'Display directory structure without repository guidance markdown, docs, README files, AGENTS.md, GROUNDING.md, or .agents.',
-    schema: treeSchema,
+    input: treeSchema,
+    output: treeOutput,
     execute: (sandbox, input): Promise<string> =>
       tree({ ...options, sandbox }, input),
   });

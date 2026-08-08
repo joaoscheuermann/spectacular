@@ -10,44 +10,62 @@ import type {
   ToolCallRequest,
   ToolDefinition,
   ToolFactory,
+  ToolInput,
   ToolIssue,
-  ToolSchema,
+  ToolOutput,
   ToolStorage,
   ToolTurn,
 } from './types/tool.js';
 import { asJsonObject, excerpt, isJsonValue } from './utils/json.js';
 
 /** Defines an inspectable tool factory that binds execution to a sandbox. */
-export const defineTool = <Schema extends ToolSchema, Result = unknown>(
-  options: DefineToolOptions<Schema, Result>,
-): ToolFactory<Schema, Result> => {
-  if (!(options.schema instanceof z.ZodObject)) {
+export const defineTool = <Input extends ToolInput, Output extends ToolOutput>(
+  options: DefineToolOptions<Input, Output>,
+): ToolFactory<Input, Output> => {
+  if (!(options.input instanceof z.ZodObject)) {
     throw new ToolErrorObject({
       code: 'invalid_schema',
       toolName: options.name,
-      message: `Tool schema must be a Zod object: ${options.name}`,
+      message: `Tool input must be a Zod object: ${options.name}`,
     });
   }
 
   const definition: ToolDefinition = {
     name: options.name,
     description: options.description,
-    inputSchema: jsonSchema(options.name, options.schema),
+    inputSchema: jsonSchema(options.name, options.input, true),
+    outputSchema: jsonSchema(options.name, options.output, false),
     strict: options.strict ?? true,
   };
 
-  const factory = ((sandbox: Sandbox): Tool<Schema, Result> => ({
+  const factory = ((sandbox: Sandbox): Tool<Input, Output> => ({
     name: options.name,
     description: options.description,
-    schema: options.schema,
+    input: options.input,
+    output: options.output,
     definition,
-    execute: (payload) => options.execute(sandbox, payload),
-  })) as ToolFactory<Schema, Result>;
+    execute: async (payload) => {
+      const result = await options.execute(sandbox, payload);
+      const parsed = options.output.safeParse(result);
+
+      if (parsed.success) {
+        return parsed.data;
+      }
+
+      throw new ToolErrorObject({
+        code: 'invalid_output',
+        toolName: options.name,
+        message: `Tool handler returned invalid output: ${options.name}`,
+        issues: parsed.error.issues.map(issueFromZod),
+      });
+    },
+  })) as ToolFactory<Input, Output>;
 
   Object.defineProperties(factory, {
     name: { value: options.name },
     description: { value: options.description },
-    schema: { value: options.schema },
+    input: { value: options.input },
+    output: { value: options.output },
     definition: { value: definition },
   });
 
@@ -99,6 +117,13 @@ export const createToolStorage = (tools: readonly Tool[]): ToolStorage => {
       try {
         return await tool.execute(payload);
       } catch (cause) {
+        if (
+          cause instanceof ToolErrorObject &&
+          cause.data.code === 'invalid_output'
+        ) {
+          throw cause;
+        }
+
         throw new ToolErrorObject(
           {
             code: 'handler_failed',
@@ -113,7 +138,11 @@ export const createToolStorage = (tools: readonly Tool[]): ToolStorage => {
   };
 };
 
-const jsonSchema = (name: string, schema: ToolSchema): JsonObject => {
+const jsonSchema = (
+  name: string,
+  schema: ToolOutput,
+  requireObject: boolean,
+): JsonObject => {
   let value: unknown;
 
   try {
@@ -134,11 +163,13 @@ const jsonSchema = (name: string, schema: ToolSchema): JsonObject => {
 
   const json = asJsonObject(value);
 
-  if (json?.type !== 'object') {
+  if (json === undefined || (requireObject && json.type !== 'object')) {
     throw new ToolErrorObject({
       code: 'invalid_schema',
       toolName: name,
-      message: `Tool schema must produce an object JSON Schema: ${name}`,
+      message: requireObject
+        ? `Tool input must produce an object JSON Schema: ${name}`
+        : `Tool output must produce a JSON Schema object: ${name}`,
     });
   }
 
@@ -176,11 +207,11 @@ const parseCall = (call: ToolCallRequest): ToolCall => {
 const normalizeCall = (call: ToolCall | ToolCallRequest): ToolCall =>
   'payload' in call ? call : parseCall(call);
 
-const validatePayload = <Schema extends ToolSchema>(
-  tool: Tool<Schema>,
+const validatePayload = <Input extends ToolInput>(
+  tool: Tool<Input>,
   call: ToolCall,
-): z.output<Schema> => {
-  const parsed = tool.schema.safeParse(call.payload);
+): z.output<Input> => {
+  const parsed = tool.input.safeParse(call.payload);
 
   if (parsed.success) {
     return parsed.data;

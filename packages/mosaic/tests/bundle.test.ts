@@ -330,12 +330,19 @@ const skill = (name: string, allowedTools: readonly string[] = []): Skill => ({
   description: `${name} description`,
   body: `${name} body`,
   allowedTools: [...allowedTools],
+  indexText: `${name} | ${name} description | ${allowedTools.join(',')} | ${name} body`,
 });
 
 const tool = (name: string): Tool => ({
   name,
   description: `${name} tool`,
-  schema: {} as Tool['schema'],
-  definition: { name, description: `${name} tool`, inputSchema: {} },
+  input: {} as Tool['input'],
+  output: {} as Tool['output'],
+  definition: {
+    name,
+    description: `${name} tool`,
+    inputSchema: {},
+    outputSchema: {},
+  },
   execute: async () => undefined,
 });

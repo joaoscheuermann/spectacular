@@ -34,18 +34,21 @@ const manifestSchema = z
     ),
   })
   .strict();
-const skillSchema = SkillSchema.extend({
-  name: nameSchema,
-  description: z.string().trim().min(1),
-  allowedTools: z.preprocess(
-    (value) =>
-      typeof value === 'string'
-        ? value.trim().split(/\s+/).filter(Boolean)
-        : (value ?? []),
-    z.array(nameSchema),
-  ),
-  body: z.string().trim().min(1),
-}).strict();
+const skillMetadataSchema = z
+  .object({
+    name: nameSchema,
+    description: z.string().trim().min(1),
+    allowedTools: z.preprocess(
+      (value) =>
+        typeof value === 'string'
+          ? value.trim().split(/\s+/).filter(Boolean)
+          : (value ?? []),
+      z.array(nameSchema),
+    ),
+    body: z.string().trim().min(1),
+    indexText: z.string().optional(),
+  })
+  .strict();
 
 const compare = (left: string, right: string): number =>
   left < right ? -1 : left > right ? 1 : 0;
@@ -117,7 +120,9 @@ const loadSkill = async (
       string,
       unknown
     >;
-    return skillSchema.parse({ ...fields, allowedTools, body });
+    return SkillSchema.parse(
+      skillMetadataSchema.parse({ ...fields, allowedTools, body }),
+    );
   } catch (cause) {
     throw withCause(`Invalid ${context}.`, cause);
   }
@@ -132,8 +137,12 @@ const isToolFactory = (value: unknown): value is ToolFactory => {
     typeof candidate.definition === 'object' &&
     candidate.definition !== null &&
     candidate.definition.name === candidate.name &&
-    typeof candidate.schema === 'object' &&
-    candidate.schema !== null
+    typeof candidate.input === 'object' &&
+    candidate.input !== null &&
+    typeof candidate.output === 'object' &&
+    candidate.output !== null &&
+    typeof candidate.definition.outputSchema === 'object' &&
+    candidate.definition.outputSchema !== null
   );
 };
 

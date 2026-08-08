@@ -26,6 +26,7 @@ const answerSchema = z.object({ answer: z.string() });
 const lookupDefinition = {
   name: 'lookup',
   inputSchema: { type: 'object' as const },
+  outputSchema: {},
 };
 
 type Mode = 'complete' | 'stream';
@@ -271,6 +272,7 @@ test('ordinary tool turns consume transient corrections without changing the ret
       ...sequence.map((name) => ({
         name,
         inputSchema: { type: 'object' as const },
+        outputSchema: {},
       })),
     ],
   });

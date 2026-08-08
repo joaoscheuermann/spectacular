@@ -21,7 +21,9 @@ test('maps OpenRouter chat completions DTO with messages tools and reasoning', (
         },
         { role: 'tool', toolCallId: 'call_1', content: 'Result' },
       ],
-      tools: [{ name: 'lookup', inputSchema: { type: 'object' } }],
+      tools: [
+        { name: 'lookup', inputSchema: { type: 'object' }, outputSchema: {} },
+      ],
       temperature: 0.1,
       maxOutputTokens: 32,
       flags: { reasoning: { effort: 'medium' } },

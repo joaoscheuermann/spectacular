@@ -92,11 +92,13 @@ const node = (id: string, index: number, toolName: string): Node => ({
 });
 
 const tool = (name: string): Tool => {
-  const schema = z.object({ query: z.string() });
+  const input = z.object({ query: z.string() });
+  const output = z.unknown();
   return {
     name,
     description: `${name} tool`,
-    schema,
+    input,
+    output,
     definition: {
       name,
       description: `${name} tool`,
@@ -106,6 +108,7 @@ const tool = (name: string): Tool => {
         required: ['query'],
         additionalProperties: false,
       },
+      outputSchema: {},
       strict: true,
     },
     execute: async () => ({ found: true }),

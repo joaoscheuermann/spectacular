@@ -24,6 +24,7 @@ test('exports a JSON-Schema-compatible tool definition schema', () => {
       properties: { query: { type: 'string' } },
       required: ['query'],
     },
+    outputSchema: { type: 'string' },
     strict: true,
   };
 
@@ -46,7 +47,11 @@ test('infers typed payloads from Zod schemas at compile time', async () => {
   const expectNumber = (value: number): number => value;
   const factory = defineTool({
     name: 'lookup',
-    schema: z.object({
+    input: z.object({
+      query: z.string(),
+      limit: z.number().optional(),
+    }),
+    output: z.object({
       query: z.string(),
       limit: z.number().optional(),
     }),
@@ -76,7 +81,8 @@ test('exposes metadata before binding and binds the supplied sandbox', async () 
   const factory = defineTool({
     name: 'search',
     description: 'Search indexed context.',
-    schema: z.object({ query: z.string(), limit: z.number().int().min(1) }),
+    input: z.object({ query: z.string(), limit: z.number().int().min(1) }),
+    output: z.string(),
     execute: (received, { query, limit }) => {
       assert.equal(received, sandbox);
       return `${query}:${limit}`;
@@ -85,7 +91,10 @@ test('exposes metadata before binding and binds the supplied sandbox', async () 
 
   assert.equal(factory.name, 'search');
   assert.equal(factory.description, 'Search indexed context.');
-  assert.equal(factory.schema instanceof z.ZodObject, true);
+  assert.equal(factory.input instanceof z.ZodObject, true);
+  assert.equal(factory.output instanceof z.ZodString, true);
+  assert.equal('schema' in factory, false);
+  assert.equal('outputSchema' in factory, false);
   assert.equal(factory.definition.name, 'search');
   assert.equal(factory.definition.description, 'Search indexed context.');
   assert.equal(factory.definition.strict, true);
@@ -95,13 +104,15 @@ test('exposes metadata before binding and binds the supplied sandbox', async () 
     query: { type: 'string' },
     limit: { type: 'integer', minimum: 1, maximum: Number.MAX_SAFE_INTEGER },
   });
+  assert.equal(factory.definition.outputSchema.type, 'string');
   assert.equal(await factory(sandbox).execute({ query: 'x', limit: 2 }), 'x:2');
 });
 
 test('allows non-strict definitions when requested', () => {
   const tool = defineTool({
     name: 'draft',
-    schema: z.object({ value: z.string() }),
+    input: z.object({ value: z.string() }),
+    output: z.string(),
     strict: false,
     execute: (_sandbox, { value }) => value,
   });
@@ -114,7 +125,8 @@ test('rejects non-object and unrepresentable schemas', () => {
     () =>
       defineTool({
         name: 'bad',
-        schema: z.string() as unknown as z.ZodObject,
+        input: z.string() as unknown as z.ZodObject,
+        output: z.unknown(),
         execute: () => undefined,
       }),
     (error: unknown) =>
@@ -125,8 +137,21 @@ test('rejects non-object and unrepresentable schemas', () => {
     () =>
       defineTool({
         name: 'bad-date',
-        schema: z.object({ at: z.date() }),
+        input: z.object({ at: z.date() }),
+        output: z.unknown(),
         execute: () => undefined,
+      }),
+    (error: unknown) =>
+      error instanceof ToolErrorObject && error.data.code === 'invalid_schema',
+  );
+
+  assert.throws(
+    () =>
+      defineTool({
+        name: 'bad-output',
+        input: z.object({}),
+        output: z.date(),
+        execute: () => new Date(),
       }),
     (error: unknown) =>
       error instanceof ToolErrorObject && error.data.code === 'invalid_schema',
@@ -136,12 +161,14 @@ test('rejects non-object and unrepresentable schemas', () => {
 test('preserves definition order and rejects duplicate names', () => {
   const first = defineTool({
     name: 'first',
-    schema: z.object({}),
+    input: z.object({}),
+    output: z.string(),
     execute: () => 'first',
   });
   const second = defineTool({
     name: 'second',
-    schema: z.object({}),
+    input: z.object({}),
+    output: z.string(),
     execute: () => 'second',
   });
 
@@ -181,7 +208,8 @@ test('validates payloads before execution and supports async handlers', async ()
   const storage = createToolStorage([
     defineTool({
       name: 'add',
-      schema: z.object({ left: z.number(), right: z.number() }),
+      input: z.object({ left: z.number(), right: z.number() }),
+      output: z.number(),
       async execute(_sandbox, { left, right }) {
         return left + right;
       },
@@ -214,7 +242,8 @@ test('throws typed errors for unknown tools invalid JSON and handler failures', 
   const storage = createToolStorage([
     defineTool({
       name: 'explode',
-      schema: z.object({ value: z.string() }),
+      input: z.object({ value: z.string() }),
+      output: z.string(),
       execute() {
         throw new Error('boom');
       },
@@ -250,4 +279,30 @@ test('throws typed errors for unknown tools invalid JSON and handler failures', 
     (error: unknown) =>
       error instanceof ToolErrorObject && error.data.code === 'handler_failed',
   );
+});
+
+test('validates handler output without exposing the rejected value', async () => {
+  const tool = defineTool({
+    name: 'lookup',
+    input: z.object({ query: z.string() }),
+    output: z.object({ results: z.array(z.string()) }).strict(),
+    execute: () => ({ results: [42] }) as unknown as { results: string[] },
+  })(sandbox);
+
+  await assert.rejects(tool.execute({ query: 'doric' }), (error: unknown) => {
+    assert.ok(error instanceof ToolErrorObject);
+    assert.deepEqual(error.data, {
+      code: 'invalid_output',
+      message: 'Tool handler returned invalid output: lookup',
+      toolName: 'lookup',
+      issues: [
+        {
+          path: 'results.0',
+          message: 'Invalid input: expected string, received number',
+        },
+      ],
+    });
+    assert.equal(error.cause, undefined);
+    return true;
+  });
 });

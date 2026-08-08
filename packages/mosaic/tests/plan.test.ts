@@ -387,5 +387,6 @@ function createSkill(name: string): Skill {
     description: `${name} description`,
     body: `${name} body`,
     allowedTools: [],
+    indexText: `${name} | ${name} description |  | ${name} body`,
   };
 }

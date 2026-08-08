@@ -32,8 +32,47 @@ test('exports a JSON-Schema-compatible skill schema', () => {
     allowedTools: ['read'],
   };
 
-  assert.deepEqual(SkillSchema.parse(value), value);
+  assert.deepEqual(SkillSchema.parse(value), {
+    ...value,
+    indexText: 'example | Example skill. | read | Follow the procedure.',
+  });
   assert.equal(z.toJSONSchema(SkillSchema).type, 'object');
+  assert.deepEqual(z.toJSONSchema(SkillSchema, { io: 'input' }).required, [
+    'name',
+    'description',
+    'body',
+    'allowedTools',
+  ]);
+});
+
+test('normalizes canonical skill records and ignores supplied index text', () => {
+  assert.deepEqual(
+    SkillSchema.parse({
+      name: '  example  ',
+      description: '  Example skill.  ',
+      body: '  Follow the procedure.  ',
+      allowedTools: [' read ', 'write', 'read'],
+      indexText: 'untrusted',
+    }),
+    {
+      name: 'example',
+      description: 'Example skill.',
+      body: 'Follow the procedure.',
+      allowedTools: ['read', 'write'],
+      indexText:
+        'example | Example skill. | read,write | Follow the procedure.',
+    },
+  );
+
+  assert.throws(() =>
+    SkillSchema.parse({
+      name: 'example',
+      description: 'Example skill.',
+      body: 'Follow the procedure.',
+      allowedTools: [],
+      extra: true,
+    }),
+  );
 });
 
 const createBundle = async (
@@ -65,14 +104,15 @@ const createBundle = async (
 const writeTool = async (bundle: string, file: string, name: string) =>
   writeFile(
     join(bundle, 'tools', file),
-    `const definition = { name: ${JSON.stringify(name)}, inputSchema: {} };
+    `const definition = { name: ${JSON.stringify(name)}, inputSchema: {}, outputSchema: {} };
     const factory = () => ({
-      name: ${JSON.stringify(name)}, schema: {}, definition,
+      name: ${JSON.stringify(name)}, input: {}, output: {}, definition,
       execute: async (payload) => payload
     });
     Object.defineProperties(factory, {
       name: { value: ${JSON.stringify(name)} },
-      schema: { value: {} },
+      input: { value: {} },
+      output: { value: {} },
       definition: { value: definition }
     });
     export default factory;`,
@@ -117,7 +157,7 @@ test('loads executable tools, availability flags, and skill frontmatter', async 
   }
 });
 
-test('loads missing allowed-tools as a mutable empty array', async () => {
+test('loads missing allowed-tools as an empty array', async () => {
   const root = await createRoot();
   try {
     const bundle = await createBundle(root, 'core', {
@@ -143,8 +183,42 @@ Follow this procedure.
     assert.ok(allowedTools);
     assert.equal(Array.isArray(allowedTools), true);
     assert.equal(allowedTools.length, 0);
-    allowedTools?.push('later');
-    assert.deepEqual(allowedTools, ['later']);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('loads the same canonical skill record exposed by SkillSchema', async () => {
+  const root = await createRoot();
+  try {
+    const bundle = await createBundle(root, 'core', {
+      tools: [{ path: 'tools/read.js', alwaysAvailable: false }],
+      skills: [{ path: 'skills/example/SKILL.md', alwaysAvailable: false }],
+    });
+    await writeTool(bundle, 'read.js', 'read');
+    await mkdir(join(bundle, 'skills', 'example'));
+    await writeFile(
+      join(bundle, 'skills', 'example', 'SKILL.md'),
+      `---
+name: "  example  "
+description: "  Example description  "
+allowed-tools: [" read ", read]
+indexText: untrusted
+---
+
+  Follow this procedure.${'  '}
+`,
+    );
+
+    const [loaded] = await loadBundles(root);
+    assert.deepEqual(loaded?.skills[0]?.skill, {
+      name: 'example',
+      description: 'Example description',
+      body: 'Follow this procedure.',
+      allowedTools: ['read'],
+      indexText:
+        'example | Example description | read | Follow this procedure.',
+    });
   } finally {
     await rm(root, { recursive: true, force: true });
   }

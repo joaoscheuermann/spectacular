@@ -20,6 +20,7 @@ test('maps OpenAI Responses DTO with instructions tools reasoning and fast servi
           name: 'search',
           description: 'Search docs',
           inputSchema: { type: 'object', properties: {} },
+          outputSchema: {},
           strict: true,
         },
       ],
@@ -185,6 +186,7 @@ test('maps strict OpenAI tool schemas with optional properties to required param
           name: 'find',
           description: 'Find files',
           inputSchema,
+          outputSchema: {},
           strict: true,
         },
       ],
@@ -393,7 +395,8 @@ test('accepts tool definitions from shared tool storage', () => {
     defineTool({
       name: 'lookup',
       description: 'Lookup context',
-      schema: z.object({ query: z.string() }),
+      input: z.object({ query: z.string() }),
+      output: z.string(),
       execute: (_sandbox, { query }) => query,
     })(undefined as never),
   ]);

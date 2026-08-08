@@ -11,6 +11,7 @@ const baseName = 'submit_structured_output';
 const description = 'Submit the final structured output and end the agent run.';
 const invalidSubmissionLimit = 4;
 const validationIssueLimit = 10;
+const terminalOutputSchema = { not: {} } as const;
 
 export type StructuredOutputTool = {
   readonly name: string;
@@ -54,7 +55,13 @@ export const createStructuredOutputTool = (
   return {
     name,
     schema,
-    definition: { name, description, inputSchema, strict: true },
+    definition: {
+      name,
+      description,
+      inputSchema,
+      outputSchema: terminalOutputSchema,
+      strict: true,
+    },
   };
 };
 

@@ -9,9 +9,10 @@ import { createToolStorage, defineTool } from 'tool';
 const lookup = defineTool({
   name: 'lookup',
   description: 'Lookup indexed context.',
-  schema: z.object({ query: z.string() }),
+  input: z.object({ query: z.string() }).strict(),
+  output: z.object({ result: z.string() }).strict(),
   async execute(sandbox, { query }) {
-    return `result for ${query}`;
+    return { result: `result for ${query}` };
   },
 });
 const tools = createToolStorage([lookup(sandbox)]);
@@ -36,10 +37,12 @@ for (const call of tools.calls(turn)) {
 }
 ```
 
-`defineTool` creates an inspectable factory with a neutral JSON Schema
-definition. Calling the factory binds its execution to a sandbox. Provider
-adapters remain responsible for converting the definition into their native
-wire shape.
+`defineTool` creates an inspectable factory with Zod `input` and `output`
+schemas and a neutral definition containing materialized `inputSchema` and
+`outputSchema`. Calling the factory binds its execution to a sandbox. Inputs
+are validated before the handler runs, and handler results are validated
+before execution resolves. Provider adapters remain responsible for converting
+only supported definition fields into their native wire shape.
 
 `createToolStorage` preserves registration order, rejects duplicate names,
 parses provider tool-call arguments, validates payloads before execution, and
@@ -47,8 +50,8 @@ throws `ToolErrorObject` for structured failures.
 
 ## Building
 
-Run `nx build tools` to build the library.
+Run `nx build tool` to build the library.
 
 ## Testing
 
-Run `nx test tools` to compile and run the package tests.
+Run `nx test tool` to compile and run the package tests.

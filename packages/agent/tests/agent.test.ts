@@ -28,7 +28,9 @@ test('complete stores user and final assistant messages and includes system in p
     complete: () => finish,
   });
   const tools = createTools({
-    definitions: [{ name: 'lookup', inputSchema: { type: 'object' } }],
+    definitions: [
+      { name: 'lookup', inputSchema: { type: 'object' }, outputSchema: {} },
+    ],
   });
   const messages = createMessageStorage();
   const agent = createAgent({
@@ -60,7 +62,9 @@ test('complete stores user and final assistant messages and includes system in p
       { role: 'system', content: 'Follow instructions.' },
       { role: 'user', content: 'Hello.' },
     ],
-    tools: [{ name: 'lookup', inputSchema: { type: 'object' } }],
+    tools: [
+      { name: 'lookup', inputSchema: { type: 'object' }, outputSchema: {} },
+    ],
     effort: 'high',
     temperature: 0.2,
     maxOutputTokens: 128,
@@ -169,11 +173,13 @@ test('complete uses a terminal tool for structured output after executable tools
       {
         name: 'lookup',
         inputSchema: { type: 'object' },
+        outputSchema: {},
         strict: true,
       },
       {
         name: 'submit_structured_output',
         inputSchema: { type: 'object' },
+        outputSchema: { not: {} },
       },
     ],
     results: { lookup: { found: true } },
@@ -225,7 +231,9 @@ test('complete rejects terminal tool arguments that fail the output schema', asy
   const agent = createAgent({
     provider: fake.provider,
     tools: createTools({
-      definitions: [{ name: 'lookup', inputSchema: { type: 'object' } }],
+      definitions: [
+        { name: 'lookup', inputSchema: { type: 'object' }, outputSchema: {} },
+      ],
     }).storage,
     messages: createMessageStorage(),
     system: '',
@@ -246,7 +254,9 @@ test('complete rejects a text finish when a terminal structured output is requir
       complete: () => completeFinish('Unstructured answer.'),
     }).provider,
     tools: createTools({
-      definitions: [{ name: 'lookup', inputSchema: { type: 'object' } }],
+      definitions: [
+        { name: 'lookup', inputSchema: { type: 'object' }, outputSchema: {} },
+      ],
     }).storage,
     messages: createMessageStorage(),
     system: '',
@@ -280,7 +290,9 @@ test('complete rejects terminal structured output mixed with executable calls', 
     },
   });
   const tools = createTools({
-    definitions: [{ name: 'lookup', inputSchema: { type: 'object' } }],
+    definitions: [
+      { name: 'lookup', inputSchema: { type: 'object' }, outputSchema: {} },
+    ],
   });
   const agent = createAgent({
     provider: fake.provider,
@@ -411,7 +423,9 @@ test('stream uses a terminal tool for structured output after executable tools',
     },
   });
   const tools = createTools({
-    definitions: [{ name: 'lookup', inputSchema: { type: 'object' } }],
+    definitions: [
+      { name: 'lookup', inputSchema: { type: 'object' }, outputSchema: {} },
+    ],
     results: { lookup: 'evidence' },
   });
   const agent = createAgent({

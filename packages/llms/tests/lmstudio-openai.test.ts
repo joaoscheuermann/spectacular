@@ -165,6 +165,7 @@ test('rejects LM Studio OpenAI-compatible structured requests with tools before 
         {
           name: 'lookup',
           inputSchema: lookupInputSchema,
+          outputSchema: {},
         },
       ],
       schema: z.object({ answer: z.string() }),
@@ -211,6 +212,7 @@ test('sends LM Studio OpenAI-compatible tool requests without structured output'
         name: 'lookup',
         description: 'Find an item.',
         inputSchema: lookupInputSchema,
+        outputSchema: {},
       },
     ],
   });
@@ -404,7 +406,9 @@ test('rejects LM Studio OpenAI-compatible structured streams with tools before s
   const stream = provider.stream({
     model: 'local-model',
     messages: [{ role: 'user', content: 'Hi' }],
-    tools: [{ name: 'lookup', inputSchema: { type: 'object' } }],
+    tools: [
+      { name: 'lookup', inputSchema: { type: 'object' }, outputSchema: {} },
+    ],
     schema: z.object({ answer: z.string() }),
   });
 

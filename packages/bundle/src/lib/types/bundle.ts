@@ -1,7 +1,5 @@
 import type { ToolFactory } from 'tool';
-import type { z } from 'zod';
-
-import type { SkillSchema } from '../schemas/skill.js';
+import type { SkillRecord } from '../schemas/skill.js';
 
 export type BundleManifestTool = {
   readonly path: string;
@@ -25,9 +23,8 @@ export type BundleTool = {
   readonly alwaysAvailable: boolean;
 };
 
-type SkillValue = z.output<typeof SkillSchema>;
-
-export type Skill = SkillValue;
+/** Alias preserved for current catalog consumers. */
+export type Skill = SkillRecord;
 
 export type BundleSkill = {
   readonly skill: Skill;

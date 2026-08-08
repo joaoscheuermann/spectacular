@@ -7,25 +7,31 @@ import { z } from 'zod';
 const description =
   "Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Automatically creates parent directories.";
 
-export const schema = z
+export const input = z
   .object({
     path: z.string(),
     content: z.string(),
   })
   .strict();
 
-export type WriteOutput = {
-  readonly success: boolean;
-  readonly bytes_written: number;
-  readonly diff?: string;
-  readonly error?: string;
-};
+export const output = z
+  .object({
+    success: z.boolean(),
+    bytes_written: z.number(),
+    diff: z.string().optional(),
+    error: z.string().optional(),
+  })
+  .strict();
+
+export type WriteOutput = z.output<typeof output>;
+type Input = z.output<typeof input>;
 
 /** Creates the provider-neutral file write tool. */
 const factory = defineTool({
   name: 'write',
   description,
-  schema,
+  input,
+  output,
   execute: (sandbox, input): Promise<WriteOutput> =>
     execute(sandbox.root, sandbox, input),
 });
@@ -35,7 +41,7 @@ export default factory;
 const execute = async (
   workspaceRoot: string,
   sandbox: Sandbox,
-  input: z.output<typeof schema>,
+  input: Input,
 ): Promise<WriteOutput> => {
   if (input.path === '') {
     return writeError('Path must not be empty');

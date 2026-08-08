@@ -7,5 +7,6 @@ export const ToolDefinitionSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
   inputSchema: JsonObjectSchema,
+  outputSchema: JsonObjectSchema,
   strict: z.boolean().optional(),
 });

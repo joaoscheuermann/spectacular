@@ -158,13 +158,7 @@ async function main() {
 
       logger.info({ msg: 'indexing skills' });
 
-      const skillText = ({
-        name,
-        description,
-        allowedTools,
-        body,
-      }: Skill): string =>
-        `${name} | ${description} | ${allowedTools.join(',')} | ${body}`;
+      const skillText = (skill: Skill): string => skill.indexText;
 
       for (const skill of routableSkills) {
         logger.info({ msg: 'indexing skill', skill: skill.name });

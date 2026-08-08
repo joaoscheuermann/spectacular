@@ -11,7 +11,7 @@ const MAX_LINE_LENGTH = 500;
 const description =
   'Search file contents for a pattern. Returns matching lines with file paths and line numbers. Respects .gitignore. Output is truncated to 100 matches or 50KB (whichever is hit first). Long lines are truncated to 500 chars.';
 
-export const schema = z
+export const input = z
   .object({
     pattern: z.string(),
     path: z.string().optional(),
@@ -23,21 +23,29 @@ export const schema = z
   })
   .strict();
 
-export type GrepMatch = {
-  readonly file: string;
-  readonly line: number;
-  readonly text: string;
-  readonly context_before: readonly string[];
-  readonly context_after: readonly string[];
-};
+const match = z
+  .object({
+    file: z.string(),
+    line: z.number(),
+    text: z.string(),
+    context_before: z.array(z.string()),
+    context_after: z.array(z.string()),
+  })
+  .strict();
 
-export type GrepOutput = {
-  readonly matches: readonly GrepMatch[];
-  readonly total: number;
-  readonly truncated: boolean;
-  readonly lines_truncated: boolean;
-  readonly error?: string;
-};
+export const output = z
+  .object({
+    matches: z.array(match),
+    total: z.number(),
+    truncated: z.boolean(),
+    lines_truncated: z.boolean(),
+    error: z.string().optional(),
+  })
+  .strict();
+
+export type GrepMatch = z.output<typeof match>;
+export type GrepOutput = z.output<typeof output>;
+type Input = z.output<typeof input>;
 
 type IgnorePattern = {
   readonly base: string;
@@ -51,7 +59,8 @@ type PathKind = 'directory' | 'file' | 'missing' | 'other';
 const factory = defineTool({
   name: 'grep',
   description,
-  schema,
+  input,
+  output,
   execute: (sandbox, input): Promise<GrepOutput> =>
     execute(sandbox.root, sandbox, input),
 });
@@ -61,7 +70,7 @@ export default factory;
 const execute = async (
   workspaceRoot: string,
   sandbox: Sandbox,
-  input: z.output<typeof schema>,
+  input: Input,
 ): Promise<GrepOutput> => {
   const searchDir = input.path ?? '.';
   const searchPath = resolvePath(workspaceRoot, searchDir);
@@ -160,8 +169,8 @@ const collect = async (
         file: relative,
         line: index + 1,
         text: matched,
-        context_before: before,
-        context_after: after,
+        context_before: [...before],
+        context_after: [...after],
       });
     }
 
@@ -223,7 +232,7 @@ const listFiles = async (
   return lines(result.stdout).map(normalizePath).sort();
 };
 
-const compileSearch = (input: z.output<typeof schema>): RegExp | string => {
+const compileSearch = (input: Input): RegExp | string => {
   const pattern =
     input.literal === true ? escapeRegExp(input.pattern) : input.pattern;
   try {

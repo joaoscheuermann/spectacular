@@ -24,19 +24,24 @@ const entry = z
     'newText is required',
   );
 
-export const schema = z
+export const input = z
   .object({
     path: z.string(),
     edits: z.array(entry),
   })
   .strict();
 
-export type EditOutput = {
-  readonly success: boolean;
-  readonly diff: string;
-  readonly first_changed_line?: number;
-  readonly error?: string;
-};
+export const output = z
+  .object({
+    success: z.boolean(),
+    diff: z.string(),
+    first_changed_line: z.number().optional(),
+    error: z.string().optional(),
+  })
+  .strict();
+
+export type EditOutput = z.output<typeof output>;
+type Input = z.output<typeof input>;
 
 type NormalizedEdit = {
   readonly oldText: string;
@@ -58,7 +63,8 @@ type ReadResult =
 const factory = defineTool({
   name: 'edit',
   description,
-  schema,
+  input,
+  output,
   execute: (sandbox, input): Promise<EditOutput> =>
     execute(sandbox.root, sandbox, input),
 });
@@ -68,7 +74,7 @@ export default factory;
 const execute = async (
   workspaceRoot: string,
   sandbox: Sandbox,
-  input: z.output<typeof schema>,
+  input: Input,
 ): Promise<EditOutput> => {
   const filePath = resolvePath(workspaceRoot, input.path);
   const readResult = await readTarget(sandbox, filePath, input.path);

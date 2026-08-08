@@ -63,9 +63,16 @@ root. Runtime TypeScript is rejected. Skill `allowed-tools` references resolve
 only within their declaring bundle. Bundle, skill, and tool-factory names are
 globally unique, and duplicates are rejected rather than aliased or
 deduplicated. `packages/bundle` publicly owns the JSON-Schema-compatible
-`SkillSchema`, and `packages/tool` publicly owns the JSON-Schema-compatible
-`ToolDefinitionSchema`, strict-output-compatible `ToolMetadataSchema`, and JSON
-value schemas used by structured consumers. Model-generated graph nodes use
+`SkillSchema`, whose input is normalized into a canonical `SkillRecord` with
+trimmed fields, stable unique `allowedTools`, and a recalculated `indexText`.
+Doric indexes that canonical text directly. `packages/tool` publicly owns the
+JSON-Schema-compatible `ToolDefinitionSchema`, whose runtime descriptors carry
+both `inputSchema` and `outputSchema`, plus strict-output-compatible
+`ToolMetadataSchema` and JSON value schemas used by structured consumers.
+Executable tool factories expose Zod `input` and `output` schemas; handler
+results are output-validated before execution resolves, with sanitized
+`invalid_output` failures. Providers transmit only their supported tool fields
+and use `inputSchema` as function parameters. Model-generated graph nodes use
 tool metadata rather than executable tools or arbitrary tool input schemas.
 
 `apps/cli` is the explicitly requested Node.js command-line host surface for

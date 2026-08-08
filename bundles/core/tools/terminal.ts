@@ -18,7 +18,7 @@ const DIAGNOSTIC_CONTEXT_RADIUS = 2;
 const description =
   'Executes shell commands inside the injected sandbox session. Returns compact stdout/stderr summaries, diagnostics, exit_code, duration, and a raw_output_ref when trace storage is enabled.';
 
-export const schema = z
+export const input = z
   .object({
     command: z.string(),
     working_directory: z.string().optional(),
@@ -26,46 +26,55 @@ export const schema = z
   })
   .strict();
 
-export type CompactStream = {
-  readonly bytes: number;
-  readonly lines: number;
-  readonly head: readonly string[];
-  readonly tail: readonly string[];
-  readonly omitted_lines: number;
-  readonly omitted_bytes: number;
-  readonly truncated: boolean;
-};
+const compactStreamSchema = z
+  .object({
+    bytes: z.number(),
+    lines: z.number(),
+    head: z.array(z.string()),
+    tail: z.array(z.string()),
+    omitted_lines: z.number(),
+    omitted_bytes: z.number(),
+    truncated: z.boolean(),
+  })
+  .strict();
+const diagnosticContext = z
+  .object({ line: z.number(), text: z.string() })
+  .strict();
+const terminalDiagnostic = z
+  .object({
+    kind: z.string(),
+    stream: z.enum(['stdout', 'stderr']),
+    line: z.number(),
+    text: z.string(),
+    context: z.array(diagnosticContext),
+    repeat_count: z.number().optional(),
+  })
+  .strict();
 
-export type TerminalOutput = {
-  readonly schema: 'terminal.compact.v1';
-  readonly trace_id: string | null;
-  readonly command: string;
-  readonly working_directory: string;
-  readonly exit_code: number;
-  readonly duration_ms: number;
-  readonly success: boolean;
-  readonly stdout: CompactStream;
-  readonly stderr: CompactStream;
-  readonly diagnostics: readonly TerminalDiagnostic[];
-  readonly truncation: {
-    readonly truncated: boolean;
-    readonly message: string;
-  };
-  readonly raw_output_ref: string | null;
-  readonly trace_error?: string;
-};
+export const output = z
+  .object({
+    schema: z.literal('terminal.compact.v1'),
+    trace_id: z.string().nullable(),
+    command: z.string(),
+    working_directory: z.string(),
+    exit_code: z.number(),
+    duration_ms: z.number(),
+    success: z.boolean(),
+    stdout: compactStreamSchema,
+    stderr: compactStreamSchema,
+    diagnostics: z.array(terminalDiagnostic),
+    truncation: z
+      .object({ truncated: z.boolean(), message: z.string() })
+      .strict(),
+    raw_output_ref: z.string().nullable(),
+    trace_error: z.string().optional(),
+  })
+  .strict();
 
-export type TerminalDiagnostic = {
-  readonly kind: string;
-  readonly stream: 'stdout' | 'stderr';
-  readonly line: number;
-  readonly text: string;
-  readonly context: readonly {
-    readonly line: number;
-    readonly text: string;
-  }[];
-  readonly repeat_count?: number;
-};
+export type CompactStream = z.output<typeof compactStreamSchema>;
+export type TerminalDiagnostic = z.output<typeof terminalDiagnostic>;
+export type TerminalOutput = z.output<typeof output>;
+type Input = z.output<typeof input>;
 
 type Options = {
   readonly traceDir?: string;
@@ -83,11 +92,12 @@ type Execution = {
 /** Creates the provider-neutral sandbox terminal tool. */
 export const createTool = (
   options: Options = {},
-): ToolFactory<typeof schema, TerminalOutput> =>
+): ToolFactory<typeof input, typeof output> =>
   defineTool({
     name: 'terminal',
     description,
-    schema,
+    input,
+    output,
     execute: (sandbox, input): Promise<TerminalOutput> =>
       execute(sandbox.root, sandbox, options.traceDir, input),
   });
@@ -98,7 +108,7 @@ const execute = async (
   workspaceRoot: string,
   sandbox: Sandbox,
   traceDir: string | undefined,
-  input: z.output<typeof schema>,
+  input: Input,
 ): Promise<TerminalOutput> => {
   const workingDirectory = resolvePath(
     workspaceRoot,
@@ -193,7 +203,7 @@ const compact = (
     success: execution.exitCode === 0,
     stdout,
     stderr,
-    diagnostics: reduceDiagnostics(execution),
+    diagnostics: [...reduceDiagnostics(execution)],
     truncation: {
       truncated,
       message: truncated

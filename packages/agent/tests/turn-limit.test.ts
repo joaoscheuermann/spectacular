@@ -124,7 +124,11 @@ test('stream exhaustion preserves earlier events without emitting agent.finished
 
 test('structured-output repair attempts consume the same turn limit', async () => {
   const schema = z.object({ answer: z.string() });
-  const lookup = { name: 'lookup', inputSchema: { type: 'object' as const } };
+  const lookup = {
+    name: 'lookup',
+    inputSchema: { type: 'object' as const },
+    outputSchema: {},
+  };
   const provider = createProvider({
     complete: () => completeFinish('Not structured.'),
   });

@@ -12,7 +12,7 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 20_000;
 const description =
   'Search the web, open HTTP(S) pages as extracted text, or find literal text in a page.';
 
-export const schema = z
+export const input = z
   .object({
     action: z.enum(['search', 'open_page', 'find_in_page']),
     query: z.string().optional(),
@@ -24,33 +24,32 @@ export const schema = z
   })
   .strict();
 
-export type WebSearchResult = {
-  readonly title: string;
-  readonly url: string;
-  readonly snippet: string;
-};
+const searchResult = z
+  .object({ title: z.string(), url: z.string(), snippet: z.string() })
+  .strict();
+const page = z
+  .object({ url: z.string(), title: z.string(), text: z.string() })
+  .strict();
+const findMatch = z.object({ line: z.number(), text: z.string() }).strict();
 
-export type WebPageOutput = {
-  readonly url: string;
-  readonly title: string;
-  readonly text: string;
-};
+export const output = z
+  .object({
+    action: z.string(),
+    detail: z.string(),
+    results: z.array(searchResult),
+    page: page.optional(),
+    matches: z.array(findMatch),
+    total: z.number(),
+    truncated: z.boolean(),
+    error: z.string().optional(),
+  })
+  .strict();
 
-export type WebFindMatch = {
-  readonly line: number;
-  readonly text: string;
-};
-
-export type WebOutput = {
-  readonly action: string;
-  readonly detail: string;
-  readonly results: readonly WebSearchResult[];
-  readonly page?: WebPageOutput;
-  readonly matches: readonly WebFindMatch[];
-  readonly total: number;
-  readonly truncated: boolean;
-  readonly error?: string;
-};
+export type WebSearchResult = z.output<typeof searchResult>;
+export type WebPageOutput = z.output<typeof page>;
+export type WebFindMatch = z.output<typeof findMatch>;
+export type WebOutput = z.output<typeof output>;
+type Input = z.output<typeof input>;
 
 type FetchResponse = {
   readonly ok: boolean;
@@ -79,11 +78,12 @@ type Options = {
 /** Creates the provider-neutral web tool. */
 export const createTool = (
   options: Options = {},
-): ToolFactory<typeof schema, WebOutput> =>
+): ToolFactory<typeof input, typeof output> =>
   defineTool({
     name: 'web',
     description,
-    schema,
+    input,
+    output,
     execute: (_sandbox, input): Promise<WebOutput> =>
       execute(input, options.fetch ?? fetch, requestTimeout(options)),
   });
@@ -91,7 +91,7 @@ export const createTool = (
 export default createTool();
 
 const execute = async (
-  input: z.output<typeof schema>,
+  input: Input,
   fetcher: FetchLike,
   timeoutMs: number,
 ): Promise<WebOutput> => {
@@ -106,7 +106,7 @@ const execute = async (
 };
 
 const search = async (
-  input: z.output<typeof schema>,
+  input: Input,
   fetcher: FetchLike,
   timeoutMs: number,
 ): Promise<WebOutput> => {
@@ -136,7 +136,7 @@ const search = async (
 };
 
 const openPage = async (
-  input: z.output<typeof schema>,
+  input: Input,
   fetcher: FetchLike,
   timeoutMs: number,
 ): Promise<WebOutput> => {
@@ -172,7 +172,7 @@ const openPage = async (
 };
 
 const findInPage = async (
-  input: z.output<typeof schema>,
+  input: Input,
   fetcher: FetchLike,
   timeoutMs: number,
 ): Promise<WebOutput> => {
@@ -202,7 +202,7 @@ const findInPage = async (
     action: 'find_in_page',
     detail: `'${pattern}' in ${url}`,
     results: [],
-    matches,
+    matches: [...matches],
     total,
     truncated,
   };

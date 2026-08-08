@@ -28,7 +28,8 @@ const provider = createOpenAiProvider({
 const lookup = defineTool({
   name: 'lookup',
   description: 'Lookup indexed project context.',
-  schema: z.object({ query: z.string() }),
+  input: z.object({ query: z.string() }).strict(),
+  output: z.object({ result: z.string() }).strict(),
   async execute(sandbox, { query }) {
     return { result: `context for ${query}` };
   },

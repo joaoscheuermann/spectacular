@@ -9,12 +9,16 @@ const HIDDEN_EXCEPTIONS = new Set(['.agents']);
 const description =
   'Display directory structure as an ASCII tree. Directories are listed first, then files, both sorted alphabetically. Respects .gitignore and excludes hidden files except .agents.';
 
-export const schema = z
+export const input = z
   .object({
     path: z.string().optional(),
     exclude: z.array(z.string()).optional(),
   })
   .strict();
+
+export const output = z.string();
+export type TreeOutput = z.output<typeof output>;
+type Input = z.output<typeof input>;
 
 type Entry = {
   readonly path: string;
@@ -33,8 +37,9 @@ type PathKind = 'directory' | 'file' | 'missing' | 'other';
 const factory = defineTool({
   name: 'tree',
   description,
-  schema,
-  execute: (sandbox, input): Promise<string> =>
+  input,
+  output,
+  execute: (sandbox, input): Promise<TreeOutput> =>
     execute(sandbox.root, sandbox, input),
 });
 
@@ -43,8 +48,8 @@ export default factory;
 const execute = async (
   workspaceRoot: string,
   sandbox: Sandbox,
-  input: z.output<typeof schema>,
-): Promise<string> => {
+  input: Input,
+): Promise<TreeOutput> => {
   const rawPath = input.path ?? '';
   const displayPath = rawPath === '' ? '.' : rawPath;
   const root = resolvePath(workspaceRoot, displayPath);

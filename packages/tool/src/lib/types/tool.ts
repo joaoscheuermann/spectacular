@@ -5,7 +5,8 @@ import type { ToolDefinitionSchema } from '../schemas/definition.js';
 import type { ToolMetadataSchema } from '../schemas/metadata.js';
 import type { JsonValue } from './json.js';
 
-export type ToolSchema = z.ZodObject;
+export type ToolInput = z.ZodObject;
+export type ToolOutput = z.ZodType;
 
 type ToolDefinitionValue = z.output<typeof ToolDefinitionSchema>;
 type ToolMetadataValue = z.output<typeof ToolMetadataSchema>;
@@ -36,39 +37,51 @@ export type ToolTurn = {
   readonly toolCalls?: readonly ToolCallRequest[];
 };
 
-export type ToolHandler<Schema extends ToolSchema, Result = unknown> = (
-  payload: z.output<Schema>,
-) => Result | Promise<Result>;
+export type ToolHandler<Input extends ToolInput, Output extends ToolOutput> = (
+  payload: z.output<Input>,
+) => Promise<z.output<Output>>;
 
-export type Tool<Schema extends ToolSchema = ToolSchema, Result = unknown> = {
+export type Tool<
+  Input extends ToolInput = ToolInput,
+  Output extends ToolOutput = ToolOutput,
+> = {
   readonly name: string;
   readonly description?: string;
-  readonly schema: Schema;
+  readonly input: Input;
+  readonly output: Output;
   readonly definition: ToolDefinition;
-  readonly execute: ToolHandler<Schema, Result>;
+  readonly execute: ToolHandler<Input, Output>;
 };
 
-export type ToolFactoryHandler<Schema extends ToolSchema, Result = unknown> = (
+export type ToolFactoryHandler<
+  Input extends ToolInput,
+  Output extends ToolOutput,
+> = (
   sandbox: Sandbox,
-  payload: z.output<Schema>,
-) => Result | Promise<Result>;
+  payload: z.output<Input>,
+) => z.input<Output> | Promise<z.input<Output>>;
 
-export type DefineToolOptions<Schema extends ToolSchema, Result = unknown> = {
+export type DefineToolOptions<
+  Input extends ToolInput,
+  Output extends ToolOutput,
+> = {
   readonly name: string;
   readonly description?: string;
-  readonly schema: Schema;
-  readonly execute: ToolFactoryHandler<Schema, Result>;
+  readonly input: Input;
+  readonly output: Output;
+  readonly execute: ToolFactoryHandler<Input, Output>;
   readonly strict?: boolean;
 };
 
 export type ToolFactory<
-  Schema extends ToolSchema = ToolSchema,
-  Result = unknown,
+  Input extends ToolInput = ToolInput,
+  Output extends ToolOutput = ToolOutput,
 > = {
-  (sandbox: Sandbox): Tool<Schema, Result>;
+  (sandbox: Sandbox): Tool<Input, Output>;
   readonly name: string;
   readonly description?: string;
-  readonly schema: Schema;
+  readonly input: Input;
+  readonly output: Output;
   readonly definition: ToolDefinition;
 };
 
@@ -83,6 +96,7 @@ export type ToolErrorCode =
   | 'duplicate_tool'
   | 'handler_failed'
   | 'invalid_json'
+  | 'invalid_output'
   | 'invalid_payload'
   | 'invalid_schema'
   | 'unknown_tool';

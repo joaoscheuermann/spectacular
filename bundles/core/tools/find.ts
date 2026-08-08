@@ -10,7 +10,7 @@ const MAX_OUTPUT_BYTES = 50 * 1024;
 const description =
   'Search for files by glob pattern. Returns matching file paths relative to the search directory. Respects .gitignore. Output is truncated to 1000 results or 50KB (whichever is hit first).';
 
-export const schema = z
+export const input = z
   .object({
     pattern: z.string(),
     path: z.string().optional(),
@@ -18,12 +18,17 @@ export const schema = z
   })
   .strict();
 
-export type FindOutput = {
-  readonly results: readonly string[];
-  readonly total: number;
-  readonly truncated: boolean;
-  readonly error?: string;
-};
+export const output = z
+  .object({
+    results: z.array(z.string()),
+    total: z.number(),
+    truncated: z.boolean(),
+    error: z.string().optional(),
+  })
+  .strict();
+
+export type FindOutput = z.output<typeof output>;
+type Input = z.output<typeof input>;
 
 type IgnorePattern = {
   readonly base: string;
@@ -37,7 +42,8 @@ type PathKind = 'directory' | 'file' | 'missing' | 'other';
 const factory = defineTool({
   name: 'find',
   description,
-  schema,
+  input,
+  output,
   execute: (sandbox, input): Promise<FindOutput> =>
     execute(sandbox.root, sandbox, input),
 });
@@ -47,7 +53,7 @@ export default factory;
 const execute = async (
   workspaceRoot: string,
   sandbox: Sandbox,
-  input: z.output<typeof schema>,
+  input: Input,
 ): Promise<FindOutput> => {
   const searchDir = input.path ?? '.';
   const searchPath = resolvePath(workspaceRoot, searchDir);

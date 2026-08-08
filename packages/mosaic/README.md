@@ -98,6 +98,11 @@ The runtime resolves each name against the canonical catalog when composing
 tools and execution context. Base tools appear first, followed by tools declared
 by selected skills in bundle order; the first occurrence of a name wins.
 
+Bundle skills are canonical `SkillRecord` values. The bundle boundary trims
+required text, removes duplicate `allowedTools` while preserving first
+occurrence, and always recalculates `indexText` from the normalized record.
+Doric uses that same `indexText` directly for lexical and vector indexing.
+
 Always-available skills form Doric's derived universal profile. They are
 excluded from hints, retrieval, `node.skills`, and `maxSkills`, then
 injected into every execution system prompt in manifest order. They may refer

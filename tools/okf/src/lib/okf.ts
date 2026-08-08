@@ -6,11 +6,7 @@ import { defineTool } from 'tool';
 import * as YAML from 'yaml';
 import { z } from 'zod';
 
-import type {
-  OkfSearchOutput,
-  OkfSearchResult,
-  OkfToolOptions,
-} from './types/okf.js';
+import type { OkfToolOptions } from './types/okf.js';
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
@@ -35,7 +31,7 @@ const parseYaml = yaml.parse ?? yaml.default?.parse;
 const description =
   'Search Open Knowledge Format concepts under .agents/bundles. Returns bounded, deterministically ranked concept metadata and Markdown content without reading outside the bundle root.';
 
-export const schema = z
+export const input = z
   .object({
     query: z.string().trim().min(1).max(500),
     bundle: z.string().trim().min(1).max(255).optional(),
@@ -43,7 +39,36 @@ export const schema = z
   })
   .strict();
 
-type Input = z.output<typeof schema>;
+const searchResult = z
+  .object({
+    bundle: z.string(),
+    conceptId: z.string(),
+    path: z.string(),
+    type: z.string(),
+    title: z.string(),
+    description: z.string().optional(),
+    resource: z.string().optional(),
+    tags: z.array(z.string()),
+    timestamp: z.string().optional(),
+    content: z.string(),
+    contentTruncated: z.boolean(),
+    score: z.number(),
+  })
+  .strict();
+
+export const output = z
+  .object({
+    results: z.array(searchResult),
+    total: z.number(),
+    truncated: z.boolean(),
+    skipped: z.number(),
+    error: z.string().optional(),
+  })
+  .strict();
+
+export type OkfSearchResult = z.output<typeof searchResult>;
+export type OkfSearchOutput = z.output<typeof output>;
+type Input = z.output<typeof input>;
 type Options = OkfToolOptions & { readonly sandbox: Sandbox };
 
 type Concept = Omit<OkfSearchResult, 'contentTruncated' | 'score'> & {
@@ -64,7 +89,8 @@ export const createTool = (options: OkfToolOptions) =>
   defineTool({
     name: 'okf_search',
     description,
-    schema,
+    input,
+    output,
     execute: (sandbox, input): Promise<OkfSearchOutput> =>
       execute({ ...options, sandbox }, input),
   });
@@ -195,7 +221,7 @@ const loadConcept = async (
       title: field(metadata.value, 'title') ?? path.basename(conceptId),
       description: field(metadata.value, 'description'),
       resource: field(metadata.value, 'resource'),
-      tags,
+      tags: [...tags],
       timestamp: field(metadata.value, 'timestamp'),
       content: content.slice(0, MAX_SEARCH_CHARS),
       sourceTruncated: content.length > MAX_SEARCH_CHARS,

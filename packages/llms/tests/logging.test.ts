@@ -56,7 +56,9 @@ test('emits uniform debug events with safe metadata for all operations', async (
   await provider.complete({
     model: 'gpt-test',
     messages: [{ role: 'user', content: 'PRIVATE_PROMPT' }],
-    tools: [{ name: 'lookup', inputSchema: { type: 'object' } }],
+    tools: [
+      { name: 'lookup', inputSchema: { type: 'object' }, outputSchema: {} },
+    ],
   });
   await collect(
     provider.stream({
@@ -91,7 +93,7 @@ test('emits uniform debug events with safe metadata for all operations', async (
       'llm model validation completed',
     ],
   );
-    assert.ok(captured.records.every(({ level }) => level === 20));
+  assert.ok(captured.records.every(({ level }) => level === 20));
   assert.ok(
     captured.records.every(
       ({ component, provider }) =>

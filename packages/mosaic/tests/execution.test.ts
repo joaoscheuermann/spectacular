@@ -465,6 +465,7 @@ function skill(name: string): Skill {
     description: `${name} description`,
     body: `${name} body`,
     allowedTools: [],
+    indexText: `${name} | ${name} description |  | ${name} body`,
   };
 }
 
@@ -587,12 +588,14 @@ function tool(
   name: string,
   execute: Tool['execute'] = async () => ({ found: true }),
 ): Tool {
-  const schema = z.object({ query: z.string() });
+  const input = z.object({ query: z.string() });
+  const output = z.unknown();
 
   return {
     name,
     description: `${name} tool`,
-    schema,
+    input,
+    output,
     definition: {
       name,
       description: `${name} tool`,
@@ -602,6 +605,7 @@ function tool(
         required: ['query'],
         additionalProperties: false,
       },
+      outputSchema: {},
       strict: true,
     },
     execute,

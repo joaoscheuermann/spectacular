@@ -5,8 +5,8 @@ Last reviewed: 2026-08-08
 This document tracks differences between the current Doric implementation and
 the broader MOSAIC 0.2 algorithm and normative contracts. The fourteen
 mandatory conformance requirements in Appendix B are substantially covered;
-the remaining work concerns richer catalog, routing, plan, and artifact
-contracts from Appendix A.
+the remaining open work concerns richer routing, plan, and artifact contracts
+from Appendix A. Catalog gaps 1 and 3 were closed on 2026-08-08.
 
 The comparison uses the revised [MOSAIC 0.2 paper](revised/mosaic_0_2/mosaic_0_2.pdf),
 especially sections 4.8-4.10, Algorithm 1, and Appendices A and B.
@@ -25,12 +25,6 @@ This list excludes:
 
 ## Medium priority
 
-1. **Add output schemas to runtime tool descriptors.**
-   Appendix A requires each `ToolDescriptor` to expose both `inputSchema` and
-   `outputSchema`. The current public tool definition contains only an input
-   schema, and tool handlers return an unconstrained value. This gap concerns
-   executable runtime tools, not test or validation tooling.
-
 2. **Materialize the normative routing contracts.**
    The paper defines `SkillCandidate` with canonical name, score, rank, and
    rationale, and `OrderedBundle` with goal ID, ordered skills, and a selection
@@ -38,13 +32,6 @@ This list excludes:
    data and stores only selected skill names with per-skill rationales. Runtime
    behavior is deterministic, but the complete intermediate contracts are not
    available for inspection or downstream policy.
-
-3. **Complete canonical skill-record normalization at the public boundary.**
-   The bundle loader validates non-empty skill fields, but the public
-   `SkillSchema` remains permissive, has no explicit `indexText`, and does not
-   normalize duplicate `allowedTools`. Doric derives index text when populating
-   embeddings, so the behavior exists implicitly rather than as the normative
-   `SkillRecord` contract described in Appendix A.
 
 ## Low priority
 
@@ -67,7 +54,15 @@ This list excludes:
 
 ## Suggested implementation order
 
-1. Add tool output schemas and strengthen catalog contracts.
-2. Materialize routing contracts and explicit plan revisions.
-3. Split retrieval limits and introduce explicit artifact references only when
+1. Materialize routing contracts and explicit plan revisions.
+2. Split retrieval limits and introduce explicit artifact references only when
    their additional policy value is needed.
+
+## Closed
+
+- **Gap 1 — Runtime tool output schemas.** Executable factories expose Zod `input`
+  and `output` schemas, descriptors materialize both JSON Schemas, and handler
+  results are validated before execution resolves.
+- **Gap 3 — Canonical skill-record normalization.** `SkillSchema` produces the same
+  normalized `SkillRecord` consumed by the loader and Doric indexes its
+  recalculated `indexText` directly.
