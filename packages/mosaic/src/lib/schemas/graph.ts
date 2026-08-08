@@ -1,9 +1,13 @@
 import * as z from 'zod';
 import { ToolMetadataSchema } from 'tool';
 
-import type { NodeSkillSelection } from '../types/node-skill-selection.js';
 import { validateGraphSchema } from './graph-validations.js';
 import { NodeOutcomeSchema } from './outcome.js';
+import {
+  OrderedBundleSchema,
+  SkillCandidateSchema,
+  validateRoutingTrace,
+} from './routing.js';
 import { RuntimeTerminationSchema } from './termination.js';
 
 const NonEmptyStringSchema = z.string().trim().min(1);
@@ -54,13 +58,6 @@ export const NodeArtifactsSchema = z
   })
   .strict();
 
-export const NodeSkillSelectionSchema = z
-  .object({
-    skill: NonEmptyStringSchema,
-    rationale: NonEmptyStringSchema.max(500),
-  })
-  .strict() satisfies z.ZodType<NodeSkillSelection>;
-
 export const NodeSchema = PlannedNodeSchema.extend({
   status: z.enum([
     'pending',
@@ -72,7 +69,8 @@ export const NodeSchema = PlannedNodeSchema.extend({
     'failed',
   ]),
   index: z.number().int().nonnegative(),
-  skills: z.array(NodeSkillSelectionSchema),
+  candidates: z.array(SkillCandidateSchema),
+  bundle: OrderedBundleSchema.nullable(),
   tools: z.array(ToolMetadataSchema),
   artifacts: z.array(NodeArtifactsSchema),
   outcome: NodeOutcomeSchema.nullable(),
@@ -83,6 +81,7 @@ export const GraphSchema = withGraphValidation(
   z.object({ nodes: z.array(NodeSchema).min(1) }).strict(),
 ).superRefine((graph, context) => {
   graph.nodes.forEach((node, index) => {
+    validateRoutingTrace(node, context, ['nodes', index]);
     validateRuntimeState(node, index, context);
     validateRuntimeOwnership(node, graph.nodes, index, context);
   });
@@ -105,7 +104,7 @@ export const StrictGraphSchema = GraphSchema.superRefine((graph, context) => {
         message: `Generated node index must be ${index}.`,
       });
     }
-    for (const field of ['skills', 'tools', 'artifacts'] as const) {
+    for (const field of ['candidates', 'tools', 'artifacts'] as const) {
       if (node[field].length === 0) continue;
       context.addIssue({
         code: 'custom',
@@ -113,11 +112,16 @@ export const StrictGraphSchema = GraphSchema.superRefine((graph, context) => {
         message: `Generated node ${field} must be empty.`,
       });
     }
-    if (node.outcome !== null || node.termination !== null) {
+    if (
+      node.bundle !== null ||
+      node.outcome !== null ||
+      node.termination !== null
+    ) {
       context.addIssue({
         code: 'custom',
         path: ['nodes', index],
-        message: 'Generated node outcome and termination must be null.',
+        message:
+          'Generated node bundle, outcome, and termination must be null.',
       });
     }
   });
@@ -132,7 +136,8 @@ export const materializeGraph = (plan: PlannedGraph) =>
       ...node,
       status: 'pending' as const,
       index,
-      skills: [],
+      candidates: [],
+      bundle: null,
       tools: [],
       artifacts: [],
       outcome: null,

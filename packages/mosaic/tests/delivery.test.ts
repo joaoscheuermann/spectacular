@@ -9,6 +9,19 @@ test('assembles one terminal deliverable with additional artifacts and observati
   const node = completed('final', 0, [], true, '## Result', [
     { mime: 'text/plain', data: 'extra' },
   ]);
+  node.candidates = [
+    {
+      skillName: 'selected',
+      score: 0.75,
+      rank: 1,
+      rationale: 'Selected behavior is required.',
+    },
+  ];
+  node.bundle = {
+    goalId: 'final',
+    skills: ['selected'],
+    selectionRationale: 'The selected skill is sufficient.',
+  };
   node.outcome = completedOutcome('final', '## Result', [observation('final')]);
 
   const action = await delivery(
@@ -33,6 +46,10 @@ test('assembles one terminal deliverable with additional artifacts and observati
       },
     ],
   });
+  assert.deepEqual(action.value.nodes[0]?.candidates, node.candidates);
+  assert.deepEqual(action.value.nodes[0]?.bundle, node.bundle);
+  assert.notStrictEqual(action.value.nodes[0]?.candidates, node.candidates);
+  assert.notStrictEqual(action.value.nodes[0]?.bundle, node.bundle);
 });
 
 test('orders deliverables by stable topological order and preserves Markdown', async () => {
@@ -101,6 +118,8 @@ test('returns blocked without partial delivery and keeps topological node order'
         goal: 'Goal root',
         doneWhen: ['root is complete.'],
         status: 'completed',
+        candidates: [],
+        bundle: null,
         outcome: completedOutcome('root', 'private'),
         termination: null,
       },
@@ -109,6 +128,8 @@ test('returns blocked without partial delivery and keeps topological node order'
         goal: 'Goal blocked',
         doneWhen: ['blocked is complete.'],
         status: 'blocked',
+        candidates: [],
+        bundle: null,
         outcome: terminalOutcome('blocked', 'blocked'),
         termination: null,
       },
@@ -247,7 +268,8 @@ const completed = (
   deliver,
   status: 'completed',
   index,
-  skills: [],
+  candidates: [],
+  bundle: null,
   tools: [],
   artifacts: [
     primary ?? { mime: 'text/markdown', data: markdown },
@@ -270,7 +292,8 @@ const terminal = (
   deliver: true,
   status,
   index,
-  skills: [],
+  candidates: [],
+  bundle: null,
   tools: [],
   artifacts: [],
   outcome: terminalOutcome(id, status),

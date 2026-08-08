@@ -84,7 +84,12 @@ const node = (id: string, index: number, toolName: string): Node => ({
   status: 'ready',
   deliver: true,
   index,
-  skills: [],
+  candidates: [],
+  bundle: {
+    goalId: id,
+    skills: [],
+    selectionRationale: 'No skills are needed.',
+  },
   tools: [{ name: toolName, description: `${toolName} tool` }],
   artifacts: [],
   outcome: null,

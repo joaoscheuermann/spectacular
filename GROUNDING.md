@@ -288,14 +288,18 @@ revisions. The tool retriever remains part of this composition contract, but
 the bundle state does not query it or run an independent tool router. Model
 graph output owns only `id`,
 `goal`, `doneWhen`, `dependsOn`, and `deliver`; Mosaic deterministically assigns
-array-order indices, pending status, empty runtime-owned `skills`, `tools`, and
-`artifacts` arrays, plus null `outcome` and `termination` fields. Plans
+array-order indices, pending status, empty runtime-owned `candidates`, `tools`,
+and `artifacts` arrays, plus null `bundle`, `outcome`, and `termination` fields. Plans
 require non-empty nodes, IDs, goals, and criteria;
 unique existing dependencies; acyclicity; and at least one terminal deliverable,
-while every deliverable must be terminal. A routed node skill stores only
-its canonical name and a non-empty per-skill rationale. Full skill definitions
-remain in the catalog and are resolved by name when composing tools and the
-execution prompt.
+while every deliverable must be terminal. A routed node stores a complete
+`SkillCandidate` trace with canonical name, exact finite reranker score,
+contiguous one-based rank, and non-empty selector rationale for every accepted
+or rejected candidate. Its non-null `OrderedBundle` stores the matching goal
+ID, unique selected names in candidate order, and a non-empty global rationale.
+`bundle: null` means the node has never passed routing; routed empty bundles are
+non-null. Full skill definitions remain in the catalog and are resolved only
+from bundle names when composing tools and the execution prompt.
 `agents/doric` remains the composition root that loads bundles, constructs and
 populates lexical and vector indexes for routable skills and executable tools,
 wraps each pair in hybrid search, and invokes Mosaic. Mosaic runs the fixed
@@ -308,10 +312,14 @@ apply as both hint and retrieval bounds, including a defensive post-filter hint
 bound over canonical, unique, non-required skills. Bundle routing uses the original request, current
 goal and completion criteria, and only transitive-ancestor artifacts. It
 retrieves a bounded routable-skill candidate set, reranks complete skill bodies,
-validates a node-bound structured selection, and locally normalizes the result
-by descending relevance score with canonical-name tie-breaking. The selected
-array is unique, bounded, may be empty, and remains observable in that order on
-the node. The exact node tool menu is the stable union of base tools and tools
+validates one node-bound structured evaluation for every candidate plus a
+global selection rationale, and locally normalizes the result by descending
+relevance score with canonical-name tie-breaking. The exact provider scores are
+preserved. The selected bundle is unique, bounded, may be empty, and remains
+observable in that order on the node and its public result. No additional model
+call is made. No-candidate routing and a zero selected-skill limit materialize
+deterministic empty traces; the zero limit bypasses retrieval, reranking, and
+selection. The exact node tool menu is the stable union of base tools and tools
 declared by selected skills, with duplicate names removed by first occurrence.
 Always-available skills are excluded from hints and routing, do not count toward
 the selected-skill limit, and are injected as universal execution instructions;
@@ -363,7 +371,8 @@ failures retain their original identity and reject the workflow. Execution
 emits safe logs with node IDs, terminal statuses, and selected skill and tool names only, never prompts, decisions, outcomes,
 reasons, tool payloads, or error details.
 The run-local state contains only the ordered graph snapshots. Each node owns a
-complete `NodeOutcome | null` and `RuntimeTermination | null`. Outstanding
+complete candidate trace, `OrderedBundle | null`, `NodeOutcome | null`, and
+`RuntimeTermination | null`. Outstanding
 revision work is selected from node outcomes in deterministic node-wave order;
 within each node, observations retain tool-result order. The localized planner receives every
 queued observation as fenced tool name, input, and output evidence and never

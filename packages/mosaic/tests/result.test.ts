@@ -147,6 +147,41 @@ test('allows delivery only on completed workflow results', () => {
   );
 });
 
+test('validates the complete routing trace exposed on node results', () => {
+  const routed = {
+    ...node('completed', completedOutcome(), null),
+    candidates: [
+      candidate('alpha', 3, 1),
+      candidate('beta', 2, 2),
+      candidate('gamma', 2, 3),
+    ],
+    bundle: {
+      goalId: 'node',
+      skills: ['alpha', 'gamma'],
+      selectionRationale: 'Alpha and gamma are sufficient.',
+    },
+  };
+
+  assert.equal(WorkflowNodeResultSchema.safeParse(routed).success, true);
+  for (const invalid of [
+    { ...routed, candidates: [candidate('alpha', Number.NaN, 1)] },
+    {
+      ...routed,
+      candidates: [candidate('alpha', 3, 2), candidate('beta', 2, 1)],
+    },
+    {
+      ...routed,
+      candidates: [candidate('alpha', 3, 1), candidate('alpha', 2, 2)],
+    },
+    { ...routed, bundle: { ...routed.bundle, goalId: 'other' } },
+    { ...routed, bundle: { ...routed.bundle, skills: ['gamma', 'alpha'] } },
+    { ...routed, bundle: { ...routed.bundle, skills: ['unknown'] } },
+    { ...routed, bundle: null },
+  ]) {
+    assert.equal(WorkflowNodeResultSchema.safeParse(invalid).success, false);
+  }
+});
+
 const node = (
   status: 'completed' | 'blocked' | 'failed',
   outcome: unknown,
@@ -156,6 +191,8 @@ const node = (
   goal: 'Produce the result.',
   doneWhen: ['The result exists.'],
   status,
+  candidates: [],
+  bundle: null,
   outcome,
   termination,
 });
@@ -166,6 +203,13 @@ const observation = () => ({
   callId: 'call-1',
   input: '{"query":"value"}',
   output: '{"found":true}',
+});
+
+const candidate = (skillName: string, score: number, rank: number) => ({
+  skillName,
+  score,
+  rank,
+  rationale: `${skillName} assessment.`,
 });
 
 const criteria = (satisfied: boolean) => [

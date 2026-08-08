@@ -3,8 +3,11 @@ import type * as z from 'zod';
 import { NodeSchema, GraphSchema } from '../schemas/graph.js';
 import type { NodeOutcome } from '../schemas/outcome.js';
 import type { RuntimeTermination } from '../schemas/termination.js';
+import type { OrderedBundle, SkillCandidate } from './routing.js';
 
 export interface NodeRuntimeState {
+  readonly candidates: readonly SkillCandidate[];
+  readonly bundle: OrderedBundle | null;
   readonly outcome: NodeOutcome | null;
   readonly termination: RuntimeTermination | null;
 }

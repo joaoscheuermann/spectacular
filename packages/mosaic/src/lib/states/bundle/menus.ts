@@ -1,17 +1,15 @@
 import type { Skill } from 'bundle';
 import type { Tool, ToolMetadata } from 'tool';
 
-import type { NodeSkillSelection } from '../../types/node-skill-selection.js';
-
 /** Resolves ordered node references against the canonical skill catalog. */
 export const resolveSkills = (
-  selected: readonly NodeSkillSelection[],
+  selected: readonly string[],
   menu: readonly Skill[],
 ): Skill[] => {
   // Node snapshots keep compact names; execution bodies remain catalog-owned.
   const catalog = new Map(menu.map((skill) => [skill.name, skill]));
 
-  return selected.map(({ skill: name }) => {
+  return selected.map((name) => {
     // Missing definitions invalidate the bundle instead of silently dropping it.
     const skill = catalog.get(name);
     if (skill !== undefined) return skill;

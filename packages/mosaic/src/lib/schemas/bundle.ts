@@ -11,32 +11,50 @@ export const createBundleSelectionSchema = (
   return z
     .object({
       goalId: z.literal(goalId),
-      skills: z
+      evaluations: z
         .array(
           z
             .object({
-              skill: z.enum(names),
+              skillName: z.enum(names),
+              selected: z.boolean(),
               rationale: z.string().trim().min(1).max(500),
             })
             .strict(),
         )
-        .max(maxSkills)
-        .superRefine((skills, ctx) => {
+        .length(candidates.length)
+        .superRefine((evaluations, ctx) => {
           const seen = new Set<string>();
 
-          skills.forEach(({ skill }, index) => {
-            if (!seen.has(skill)) {
-              seen.add(skill);
+          evaluations.forEach(({ skillName }, index) => {
+            if (!seen.has(skillName)) {
+              seen.add(skillName);
               return;
             }
 
             ctx.addIssue({
               code: 'custom',
-              message: `Duplicate selected skill: ${skill}`,
-              path: [index, 'skill'],
+              message: `Duplicate candidate evaluation: ${skillName}`,
+              path: [index, 'skillName'],
             });
           });
+
+          if (seen.size !== candidates.length) {
+            ctx.addIssue({
+              code: 'custom',
+              message: 'Every candidate must be evaluated exactly once.',
+            });
+          }
+
+          if (
+            evaluations.filter(({ selected }) => selected).length > maxSkills
+          ) {
+            ctx.addIssue({
+              code: 'custom',
+              message: `At most ${maxSkills} candidates may be selected.`,
+            });
+          }
         }),
+      selectionRationale: z.string().trim().min(1).max(500),
     })
     .strict();
 };

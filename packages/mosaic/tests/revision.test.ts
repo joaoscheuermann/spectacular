@@ -18,11 +18,13 @@ import type { WorkflowState } from '../src/lib/types/workflow.js';
 test('preserves completed nodes and resets retained target runtime state', async () => {
   const completed = node('completed', 0, 'completed', false);
   completed.artifacts = [{ mime: 'text/plain', data: 'preserved result' }];
-  completed.skills = [{ skill: 'selected', rationale: 'Preserve me.' }];
+  completed.candidates = [candidate('selected', 'Preserve me.')];
+  completed.bundle = bundle('completed', ['selected'], 'Preserve me.');
   completed.tools = [{ name: 'lookup', description: 'Preserve me.' }];
   const target = node('target', 1, 'needs_revision', true, ['completed']);
   target.artifacts = [{ mime: 'text/plain', data: 'partial' }];
-  target.skills = [{ skill: 'selected', rationale: 'Clear me.' }];
+  target.candidates = [candidate('selected', 'Clear me.')];
+  target.bundle = bundle('target', ['selected'], 'Clear me.');
   target.tools = [{ name: 'lookup', description: 'Clear me.' }];
   const pending = node('pending', 2, 'pending', true, ['completed']);
   const active: Graph = { nodes: [completed, target, pending] };
@@ -58,7 +60,10 @@ test('preserves completed nodes and resets retained target runtime state', async
   assert.ok(revised);
   assert.deepEqual(revised.nodes[0], completed);
   assert.notStrictEqual(revised.nodes[0], completed);
-  assert.deepEqual(revised.nodes[1]?.skills, []);
+  assert.notStrictEqual(revised.nodes[0]?.candidates, completed.candidates);
+  assert.notStrictEqual(revised.nodes[0]?.bundle, completed.bundle);
+  assert.deepEqual(revised.nodes[1]?.candidates, []);
+  assert.equal(revised.nodes[1]?.bundle, null);
   assert.deepEqual(revised.nodes[1]?.tools, []);
   assert.deepEqual(revised.nodes[1]?.artifacts, []);
   assert.equal(revised.nodes[1]?.outcome, null);
@@ -367,7 +372,8 @@ const node = (
   ...nodePlan(id, deliver, dependsOn),
   status,
   index,
-  skills: [],
+  candidates: [],
+  bundle: null,
   tools: [],
   artifacts: [],
   outcome: status === 'completed' ? completedOutcome(id) : null,
@@ -384,6 +390,19 @@ const completedOutcome = (id: string) => ({
   reason: null,
   observations: [],
 });
+
+const candidate = (skillName: string, rationale: string) => ({
+  skillName,
+  score: 1,
+  rank: 1,
+  rationale,
+});
+
+const bundle = (
+  goalId: string,
+  skills: readonly string[],
+  selectionRationale: string,
+) => ({ goalId, skills: [...skills], selectionRationale });
 
 const nodePlan = (
   id: string,

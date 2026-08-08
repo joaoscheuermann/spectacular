@@ -207,14 +207,32 @@ test('blocks on turn exhaustion after retaining ordered observations without art
 
 test('resolves selected skill references without treating rationales as instructions', async () => {
   const node = createNode('current');
-  node.skills = [{ skill: 'selected', rationale: 'private rationale' }];
+  node.candidates = [
+    {
+      skillName: 'selected',
+      score: 1,
+      rank: 1,
+      rationale: 'private rationale',
+    },
+    {
+      skillName: 'rejected',
+      score: 0.5,
+      rank: 2,
+      rationale: 'private rejected rationale',
+    },
+  ];
+  node.bundle = {
+    goalId: 'current',
+    skills: ['selected'],
+    selectionRationale: 'private global rationale',
+  };
   const graph: Graph = { nodes: [node] };
   const provider = createProvider([finish(completed())]);
   const harness = createHarness(
     graph,
     provider,
     [],
-    [skill('selected')],
+    [skill('selected'), skill('rejected')],
     [skill('universal')],
   );
 
@@ -228,7 +246,10 @@ test('resolves selected skill references without treating rationales as instruct
   if (typeof system !== 'string' || typeof user !== 'string') return;
   assert.match(system, /universal body/u);
   assert.match(user, /selected body/u);
-  assert.doesNotMatch(user, /private rationale/u);
+  assert.doesNotMatch(
+    user,
+    /rejected body|private rationale|private rejected rationale|private global rationale/u,
+  );
 });
 
 test('preserves each semantic terminal status and resolves the wave', async () => {
@@ -494,7 +515,12 @@ function createNode(id: string, toolNames: readonly string[] = []): Node {
     status: 'ready',
     deliver: true,
     index: 0,
-    skills: [],
+    candidates: [],
+    bundle: {
+      goalId: id,
+      skills: [],
+      selectionRationale: 'No skills are needed.',
+    },
     tools: toolNames.map((name) => ({ name, description: `${name} tool` })),
     artifacts: [],
     outcome: null,

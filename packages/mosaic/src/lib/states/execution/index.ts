@@ -80,7 +80,10 @@ const execute = async (
   try {
     /** Resolve graph-approved tool metadata to executable catalog entries. */
     const tools = executors(node, options.tools.required, options.tools.menu);
-    const skills = resolveSkills(node.skills, options.skills.menu);
+    if (node.bundle === null) {
+      throw new Error(`Node ${node.id} has not been routed.`);
+    }
+    const skills = resolveSkills(node.bundle.skills, options.skills.menu);
 
     /**
      * Keep the observation ledger local to this node. Appendix A, table A.2
@@ -98,7 +101,7 @@ const execute = async (
     options.logger.info(
       {
         nodeId: node.id,
-        skills: node.skills.map(({ skill }) => skill),
+        skills: node.bundle.skills,
         tools: tools.map(({ name }) => name),
       },
       'executing node',

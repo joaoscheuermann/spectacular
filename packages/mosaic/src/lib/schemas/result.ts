@@ -3,6 +3,11 @@ import * as z from 'zod';
 import { FinalDeliverySchema } from './delivery.js';
 import { NodeOutcomeSchema } from './outcome.js';
 import { RuntimeTerminationSchema } from './termination.js';
+import {
+  OrderedBundleSchema,
+  SkillCandidateSchema,
+  validateRoutingTrace,
+} from './routing.js';
 
 export const WorkflowNodeResultSchema = z
   .object({
@@ -10,11 +15,14 @@ export const WorkflowNodeResultSchema = z
     goal: z.string().trim().min(1),
     doneWhen: z.array(z.string().trim().min(1)).min(1),
     status: z.enum(['completed', 'blocked', 'failed']),
+    candidates: z.array(SkillCandidateSchema),
+    bundle: OrderedBundleSchema.nullable(),
     outcome: NodeOutcomeSchema.nullable(),
     termination: RuntimeTerminationSchema.nullable(),
   })
   .strict()
   .superRefine((node, context) => {
+    validateRoutingTrace(node, context);
     validateNodeResult(node, context);
   });
 

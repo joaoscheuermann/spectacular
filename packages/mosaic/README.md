@@ -42,8 +42,8 @@ The planner's structured output owns only `id`, `goal`, `doneWhen`,
 `dependsOn`, and `deliver`. Mosaic rejects empty values, empty criteria,
 duplicate or missing dependencies, cycles, non-terminal deliveries, unknown
 fields, and graphs without a terminal deliverable. It then assigns `pending`,
-the array-order `index`, empty `skills`, `tools`, and `artifacts`, plus null
-`outcome` and `termination` fields itself.
+the array-order `index`, empty `candidates`, `tools`, and `artifacts`, plus null
+`bundle`, `outcome`, and `termination` fields itself.
 
 P0 never reads the catalog. P1 retrieves candidates independently for each
 goal, excludes required and stale skills, deduplicates canonical names, and
@@ -72,31 +72,47 @@ The bundle state builds one collision-safe Markdown context from the original
 request, current node, ordered completion criteria, and transitive-ancestor
 artifacts. It retrieves at most `maxCandidates` routable skills, reranks their
 complete canonical bodies, and validates at most `maxSkills` selections. Empty
-selection is a normal result and skips reranking and model selection when no
-candidates exist or `maxSkills` is zero.
+selection is a normal result. When no candidates exist, Mosaic materializes a
+deterministic empty bundle without reranking or selection. When `maxSkills` is
+zero, it also skips retrieval and materializes a distinct deterministic trace.
 
 Reranker responses must cover every candidate exactly once. Mosaic sorts them
-locally by descending relevance score and canonical skill name for ties. The
-model chooses a set, while Mosaic reconstructs the authoritative order from
-that sorted list.
+locally by descending relevance score and canonical skill name for ties while
+preserving each exact finite provider score. The selector evaluates every
+candidate exactly once, including rejected candidates, and supplies one global
+selection rationale. Mosaic reconstructs the selected bundle in authoritative
+reranker order.
 
-Nodes store no duplicated skill definitions. Their runtime-owned `skills`
-array contains ordered references:
+Nodes store no duplicated skill definitions. Their runtime-owned routing trace
+uses the exported strict contracts:
 
 ```ts
-interface NodeSkillSelection {
-  readonly skill: string;
+interface SkillCandidate {
+  readonly skillName: string;
+  readonly score: number;
+  readonly rank: number;
   readonly rationale: string;
+}
+
+interface OrderedBundle {
+  readonly goalId: string;
+  readonly skills: readonly string[];
+  readonly selectionRationale: string;
 }
 ```
 
-This Doric profile refines the paper's bundle-level selection rationale into a
-rationale attached to each selected skill. An empty array is the canonical
-representation of selecting no skill.
+Candidate ranks are contiguous and one-based. Names are unique, rationales are
+trimmed non-empty text of at most 500 characters, and bundle skills are a
+unique ordered subset of candidate names. `bundle: null` means exclusively that
+the node has never passed routing; a routed empty bundle is a non-null object
+whose `skills` array is empty. The same trace is copied into
+`WorkflowNodeResult`.
 
-The runtime resolves each name against the canonical catalog when composing
-tools and execution context. Base tools appear first, followed by tools declared
-by selected skills in bundle order; the first occurrence of a name wins.
+The runtime resolves names exclusively from `bundle.skills` against the
+canonical catalog when composing tools and execution context. Candidate and
+selection rationales remain inspectable diagnostics and are never execution
+instructions. Base tools appear first, followed by tools declared by bundle
+skills in order; the first occurrence of a name wins.
 
 Bundle skills are canonical `SkillRecord` values. The bundle boundary trims
 required text, removes duplicate `allowedTools` while preserving first
@@ -104,7 +120,7 @@ occurrence, and always recalculates `indexText` from the normalized record.
 Doric uses that same `indexText` directly for lexical and vector indexing.
 
 Always-available skills form Doric's derived universal profile. They are
-excluded from hints, retrieval, `node.skills`, and `maxSkills`, then
+excluded from hints, routing candidates, `bundle.skills`, and `maxSkills`, then
 injected into every execution system prompt in manifest order. They may refer
 only to base tools and cannot expand the node tool menu. `tools.retriever`
 remains available to other Mosaic policies but is not a tool router for this
@@ -195,8 +211,9 @@ retained verbatim and `markdown` joins it using exactly `\n\n`. The primary
 Markdown artifact is not duplicated in `artifacts`.
 Artifacts and observations are copies; observations intentionally expose the
 complete ordered runtime ledger, including call IDs, tool inputs, and outputs.
-The strict outcome, termination, node-result, workflow-result, and delivery
-schemas are exported from `mosaic`. Doric prints only completed Markdown, with
+The strict candidate, ordered-bundle, outcome, termination, node-result,
+workflow-result, and delivery schemas are exported from `mosaic`. Doric prints
+only completed Markdown, with
 one terminal newline when needed; blocked and failed results emit only a safe
 status-and-node-ID log.
 
@@ -219,7 +236,7 @@ The supplied MOSAIC 0.1 editions remain unchanged under `docs/original/`.
 | Decision and evidence    | Sections 4.8-4.9: the model authors the semantic decision; the runtime creates ordered observations and materializes the node outcome.              |
 | Localized revision       | Section 4.9: every observation from the requesting node is associated automatically and rendered without provider call IDs.                         |
 | Scheduler/executor order | Algorithm 1: ready nodes execute in waves, observations are appended in deterministic node and result order, and revisions preserve completed work. |
-| Normative contracts      | Appendix A: `NodeDecision`, `Observation`, runtime `NodeOutcome`, and `RevisionRequest` are separate contracts.                                     |
+| Normative contracts      | Appendix A: `SkillCandidate`, `OrderedBundle`, `NodeDecision`, `Observation`, runtime `NodeOutcome`, and `RevisionRequest` are separate contracts.  |
 | Final assembly           | Section 4.10: final assembly does not call the model or apply skills again.                                                                         |
 
 The paper specifies semantic contracts, not provider transport or dispatch

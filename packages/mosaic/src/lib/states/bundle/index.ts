@@ -1,8 +1,12 @@
 import type { Skill } from 'bundle';
 import * as bundlePrompt from '../../prompts/bundle.js';
 import { createBundleSelectionSchema } from '../../schemas/bundle.js';
+import {
+  OrderedBundleSchema,
+  SkillCandidateSchema,
+} from '../../schemas/routing.js';
 import type { Graph, Node } from '../../types/graph.js';
-import type { NodeSkillSelection } from '../../types/node-skill-selection.js';
+import type { OrderedBundle, SkillCandidate } from '../../types/routing.js';
 import type { WorkflowContext, WorkflowHandler } from '../../types/workflow.js';
 import { composeTools, metadata, resolveSkills } from './menus.js';
 
@@ -27,8 +31,23 @@ type CandidateSelection = Preparation & {
 
 /** Preparation inputs after the candidates received an authoritative order. */
 type RankedSelection = Preparation & {
-  readonly reranked: readonly Skill[];
+  readonly reranked: readonly RankedCandidate[];
 };
+
+type RankedCandidate = {
+  readonly skill: Skill;
+  readonly score: number;
+  readonly rank: number;
+};
+
+type RoutingTrace = {
+  readonly candidates: readonly SkillCandidate[];
+  readonly bundle: OrderedBundle;
+};
+
+const NO_CANDIDATES_RATIONALE = 'No routable skill candidates were available.';
+const ROUTING_DISABLED_RATIONALE =
+  'Skill routing is disabled because maxSkills is zero.';
 
 /** Selects ordered skill references and derives the exact tool menu for a wave. */
 export const bundle: WorkflowHandler = async (
@@ -71,19 +90,16 @@ const prepare = async ({
 }: Preparation): Promise<void> => {
   const { skills, tools, routing, logger } = options;
 
-  // Stage 1: retrieve a bounded set of routable canonical skill definitions.
-  const candidates = await retrieve({ input, node, graph, options });
+  // A zero selection limit bypasses every retrieval and model-assisted stage.
+  const trace =
+    routing.maxSkills === 0
+      ? emptyTrace(node.id, ROUTING_DISABLED_RATIONALE)
+      : await route({ input, node, graph, options });
 
-  // Stage 2: an empty catalog or a zero limit produces a valid empty bundle.
-  const selected =
-    candidates.length === 0 || routing.maxSkills === 0
-      ? []
-      : await select({ input, node, graph, options, candidates });
-
-  // Stage 3: persist lightweight references and derive tools from the catalog.
+  // Persist the diagnostic trace and derive execution state from the bundle only.
   assign({
     node,
-    selected,
+    trace,
     skillMenu: skills.menu,
     requiredTools: tools.required,
     toolMenu: tools.menu,
@@ -91,6 +107,15 @@ const prepare = async ({
 
   // Log only stable identifiers; bodies, rationales, and artifacts stay private.
   logSelection(logger, node);
+};
+
+/** Retrieves candidates and materializes either a deterministic or selected trace. */
+const route = async (input: Preparation): Promise<RoutingTrace> => {
+  const candidates = await retrieve(input);
+  if (candidates.length === 0) {
+    return emptyTrace(input.node.id, NO_CANDIDATES_RATIONALE);
+  }
+  return select({ ...input, candidates });
 };
 
 /** Builds the routing context and resolves vector matches to the current catalog. */
@@ -121,9 +146,7 @@ const retrieve = async ({
 };
 
 /** Applies the two model-assisted stages: deterministic reranking then selection. */
-const select = async (
-  input: CandidateSelection,
-): Promise<NodeSkillSelection[]> => {
+const select = async (input: CandidateSelection): Promise<RoutingTrace> => {
   const reranked = await rerank(input);
   return choose({ ...input, reranked });
 };
@@ -135,7 +158,7 @@ const rerank = async ({
   graph,
   options,
   candidates,
-}: CandidateSelection): Promise<Skill[]> => {
+}: CandidateSelection): Promise<RankedCandidate[]> => {
   const { provider, models } = options;
 
   // The reranker sees the full routing context and complete canonical skill bodies.
@@ -158,13 +181,13 @@ const choose = async ({
   graph,
   options,
   reranked,
-}: RankedSelection): Promise<NodeSkillSelection[]> => {
+}: RankedSelection): Promise<RoutingTrace> => {
   const { provider, models, routing } = options;
 
   // The node-bound schema rejects wrong goals, unknown names, duplicates, and overflow.
   const schema = createBundleSelectionSchema(
     node.id,
-    reranked.map(({ name }) => name),
+    reranked.map(({ skill }) => skill.name),
     routing.maxSkills,
   );
 
@@ -179,7 +202,7 @@ const choose = async ({
           request: input,
           node,
           graph,
-          skills: reranked,
+          skills: reranked.map(({ skill }) => skill),
         }),
       },
     ],
@@ -187,8 +210,34 @@ const choose = async ({
     flags: { sensitiveOutput: true },
   });
 
-  // Model output is a set; reranker order remains the observable bundle order.
-  return normalize(reranked, structured.skills);
+  const evaluations = new Map(
+    structured.evaluations.map((evaluation) => [
+      evaluation.skillName,
+      evaluation,
+    ]),
+  );
+  const candidates = SkillCandidateSchema.array().parse(
+    reranked.map(({ skill, score, rank }) => ({
+      skillName: skill.name,
+      score,
+      rank,
+      rationale: evaluations.get(skill.name)!.rationale,
+    })),
+  );
+  const selected = new Set(
+    structured.evaluations
+      .filter(({ selected }) => selected)
+      .map(({ skillName }) => skillName),
+  );
+  const bundle = OrderedBundleSchema.parse({
+    goalId: node.id,
+    skills: candidates.flatMap(({ skillName }) =>
+      selected.has(skillName) ? [skillName] : [],
+    ),
+    selectionRationale: structured.selectionRationale,
+  });
+
+  return { candidates, bundle };
 };
 
 /** Drops universal, stale, and duplicate vector matches while preserving recall order. */
@@ -210,7 +259,7 @@ const currentCandidates = (
 const orderCandidates = (
   candidates: readonly Skill[],
   ranking: readonly Ranking[],
-): Skill[] => {
+): RankedCandidate[] => {
   validateRanking(ranking, candidates.length);
 
   return [...ranking]
@@ -222,7 +271,11 @@ const orderCandidates = (
         candidates[right.index]!.name,
       );
     })
-    .map(({ index }) => candidates[index]!);
+    .map(({ index, relevanceScore }, position) => ({
+      skill: candidates[index]!,
+      score: relevanceScore,
+      rank: position + 1,
+    }));
 };
 
 /** Enforces the one-result-per-candidate contract before any index is dereferenced. */
@@ -253,19 +306,10 @@ const validateRanking = (
   }
 };
 
-/** Attaches rationales to the authoritative reranked order selected by the model. */
-const normalize = (
-  reranked: readonly Skill[],
-  selected: readonly NodeSkillSelection[],
-): NodeSkillSelection[] => {
-  const byName = new Map(selected.map((item) => [item.skill, item]));
-  return reranked.flatMap(({ name }) => byName.get(name) ?? []);
-};
-
 /** Inputs required to materialize the selected bundle on its graph node. */
 type Assignment = {
   readonly node: Node;
-  readonly selected: readonly NodeSkillSelection[];
+  readonly trace: RoutingTrace;
   readonly skillMenu: readonly Skill[];
   readonly requiredTools: WorkflowContext['options']['tools']['required'];
   readonly toolMenu: WorkflowContext['options']['tools']['menu'];
@@ -274,21 +318,33 @@ type Assignment = {
 /** Resolves definitions transiently, derives tools, and stores only compact state. */
 const assign = ({
   node,
-  selected,
+  trace,
   skillMenu,
   requiredTools,
   toolMenu,
 }: Assignment): void => {
-  // Full definitions live in the catalog; node.skills retains only name and rationale.
-  const skills = resolveSkills(selected, skillMenu);
+  // Full definitions live in the catalog and resolve only from bundle names.
+  const skills = resolveSkills(trace.bundle.skills, skillMenu);
 
   // Tool visibility is exactly base tools plus allowed tools in selected-skill order.
   const tools = composeTools(skills, requiredTools, toolMenu);
 
   // Metadata is sufficient for the graph snapshot; executable tools remain in the catalog.
-  node.skills = [...selected];
+  node.candidates = trace.candidates.map((candidate) => ({ ...candidate }));
+  node.bundle = {
+    ...trace.bundle,
+    skills: [...trace.bundle.skills],
+  };
   node.tools = metadata(tools);
 };
+
+const emptyTrace = (
+  goalId: string,
+  selectionRationale: string,
+): RoutingTrace => ({
+  candidates: [],
+  bundle: { goalId, skills: [], selectionRationale },
+});
 
 /** Emits the safe, identifier-only summary of the completed bundle stage. */
 const logSelection = (
@@ -298,7 +354,7 @@ const logSelection = (
   logger.debug(
     {
       nodeId: node.id,
-      skills: node.skills.map(({ skill }) => skill),
+      skills: node.bundle?.skills ?? [],
       tools: node.tools.map(({ name }) => name),
     },
     'bundle selected',

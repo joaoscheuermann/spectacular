@@ -41,10 +41,15 @@ test('projects only transitive ancestor artifacts and preserves skill order', ()
     'unrelated artifact',
   );
   const current = createNode('current', 3, ['direct'], 'ready');
-  current.skills = [
-    { skill: 'first', rationale: 'First is needed.' },
-    { skill: 'second', rationale: 'Second is needed.' },
+  current.candidates = [
+    candidate('first', 1, 'First is needed.'),
+    candidate('second', 2, 'Second is needed.'),
   ];
+  current.bundle = {
+    goalId: 'current',
+    skills: ['first', 'second'],
+    selectionRationale: 'Both skills are needed.',
+  };
   current.tools = [{ name: 'lookup', description: 'Lookup evidence.' }];
   const graph: Graph = { nodes: [root, unrelated, direct, current] };
 
@@ -69,7 +74,12 @@ test('uses collision-safe fences for arbitrary dynamic content', () => {
   const current = createNode('current', 0, [], 'ready');
   current.goal = hostile;
   current.doneWhen = [hostile];
-  current.skills = [{ skill: hostile, rationale: 'Needed.' }];
+  current.candidates = [candidate(hostile, 1, 'Needed.')];
+  current.bundle = {
+    goalId: 'current',
+    skills: [hostile],
+    selectionRationale: 'The skill is needed.',
+  };
   const graph: Graph = { nodes: [current] };
 
   const prompt = executionPrompt.user({
@@ -101,7 +111,8 @@ function createNode(
     status,
     deliver: true,
     index,
-    skills: [],
+    candidates: [],
+    bundle: null,
     tools: [],
     artifacts:
       artifact === undefined ? [] : [{ mime: 'text/plain', data: artifact }],
@@ -118,6 +129,10 @@ function skill(name: string, body: string): Skill {
     allowedTools: [],
     indexText: `${name} | ${name} description |  | ${body}`,
   };
+}
+
+function candidate(skillName: string, rank: number, rationale: string) {
+  return { skillName, score: 1, rank, rationale };
 }
 
 function tool(name: string): Tool {

@@ -156,6 +156,11 @@ const nodeResult = (node: Node): WorkflowNodeResult => ({
   goal: node.goal,
   doneWhen: [...node.doneWhen],
   status: node.status as WorkflowNodeResult['status'],
+  candidates: node.candidates.map((candidate) => ({ ...candidate })),
+  bundle:
+    node.bundle === null
+      ? null
+      : { ...node.bundle, skills: [...node.bundle.skills] },
   outcome: node.outcome === null ? null : structuredClone(node.outcome),
   termination:
     node.termination === null ? null : structuredClone(node.termination),

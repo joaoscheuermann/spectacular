@@ -23,7 +23,9 @@ export const system = (maxSkills: number): string =>
     '  at least one completion criterion.',
     '- Omit irrelevant, unnecessary, redundant, conflicting, or out-of-scope skills.',
     `- Select at most ${maxSkills} skills. An empty selection is valid.`,
-    '- Return a concise rationale for every selected skill.',
+    '- Evaluate every candidate exactly once, including rejected candidates.',
+    '- Return a concise rationale for every candidate evaluation.',
+    '- Return one concise rationale for the selection as a whole.',
     '- Do not change the objective or completion criteria.',
     '- Return only the requested structured output.',
   ].join('\n');

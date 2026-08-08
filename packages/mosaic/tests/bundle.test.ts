@@ -36,7 +36,12 @@ test('uses an empty skill bundle and base-only tools without model calls', async
   const action = await run({ nodes: [current] }, harness.options);
 
   assert.equal(action.type, 'transition');
-  assert.deepEqual(current.skills, []);
+  assert.deepEqual(current.candidates, []);
+  assert.deepEqual(current.bundle, {
+    goalId: 'current',
+    skills: [],
+    selectionRationale: 'No routable skill candidates were available.',
+  });
   assert.deepEqual(current.tools, [{ name: 'base', description: 'base tool' }]);
   assert.equal(harness.reranks.length, 0);
   assert.equal(harness.completions.length, 0);
@@ -50,7 +55,13 @@ test('skips reranking and selection when maxSkills is zero', async () => {
   const action = await run({ nodes: [current] }, harness.options);
 
   assert.equal(action.type, 'transition');
-  assert.deepEqual(current.skills, []);
+  assert.deepEqual(current.candidates, []);
+  assert.deepEqual(current.bundle, {
+    goalId: 'current',
+    skills: [],
+    selectionRationale: 'Skill routing is disabled because maxSkills is zero.',
+  });
+  assert.equal(harness.searches.length, 0);
   assert.equal(harness.reranks.length, 0);
   assert.equal(harness.completions.length, 0);
 });
@@ -74,10 +85,24 @@ test('normalizes selected references to score and canonical-name order', async (
       { index: 2, relevanceScore: 2 },
       { index: 1, relevanceScore: 1 },
     ],
-    selected: [
-      { skill: 'beta', rationale: 'Beta behavior is needed.' },
-      { skill: 'gamma', rationale: 'Gamma behavior is needed.' },
+    evaluations: [
+      {
+        skillName: 'beta',
+        selected: true,
+        rationale: 'Beta behavior is needed.',
+      },
+      {
+        skillName: 'alpha',
+        selected: false,
+        rationale: 'Alpha behavior is redundant.',
+      },
+      {
+        skillName: 'gamma',
+        selected: true,
+        rationale: 'Gamma behavior is needed.',
+      },
     ],
+    selectionRationale: 'Gamma and beta form the smallest sufficient bundle.',
     requiredTools: [tools[0]!],
     toolMenu: tools,
   });
@@ -85,15 +110,70 @@ test('normalizes selected references to score and canonical-name order', async (
   const action = await run({ nodes: [current] }, harness.options);
 
   assert.equal(action.type, 'transition');
-  assert.deepEqual(current.skills, [
-    { skill: 'gamma', rationale: 'Gamma behavior is needed.' },
-    { skill: 'beta', rationale: 'Beta behavior is needed.' },
+  assert.deepEqual(current.candidates, [
+    {
+      skillName: 'gamma',
+      score: 2,
+      rank: 1,
+      rationale: 'Gamma behavior is needed.',
+    },
+    {
+      skillName: 'alpha',
+      score: 1,
+      rank: 2,
+      rationale: 'Alpha behavior is redundant.',
+    },
+    {
+      skillName: 'beta',
+      score: 1,
+      rank: 3,
+      rationale: 'Beta behavior is needed.',
+    },
   ]);
+  assert.deepEqual(current.bundle, {
+    goalId: 'current',
+    skills: ['gamma', 'beta'],
+    selectionRationale: 'Gamma and beta form the smallest sufficient bundle.',
+  });
   assert.deepEqual(
     current.tools.map(({ name }) => name),
     ['base', 'shared', 'gamma-tool', 'beta-tool'],
   );
   assert.match(harness.completions[0]?.system ?? '', /at most 5 skills/u);
+});
+
+test('materializes rejected candidates and an empty selected bundle', async () => {
+  const current = node('current');
+  const candidate = skill('candidate');
+  const harness = createHarness({
+    matches: [candidate],
+    ranking: [{ index: 0, relevanceScore: 0.123456789 }],
+    evaluations: [
+      {
+        skillName: 'candidate',
+        selected: false,
+        rationale: 'The candidate does not add required behavior.',
+      },
+    ],
+    selectionRationale: 'General capability is sufficient for this goal.',
+  });
+
+  const action = await run({ nodes: [current] }, harness.options);
+
+  assert.equal(action.type, 'transition');
+  assert.deepEqual(current.candidates, [
+    {
+      skillName: 'candidate',
+      score: 0.123456789,
+      rank: 1,
+      rationale: 'The candidate does not add required behavior.',
+    },
+  ]);
+  assert.deepEqual(current.bundle, {
+    goalId: 'current',
+    skills: [],
+    selectionRationale: 'General capability is sufficient for this goal.',
+  });
 });
 
 test('fails on incomplete duplicate and out-of-range reranker results', async () => {
@@ -108,6 +188,10 @@ test('fails on incomplete duplicate and out-of-range reranker results', async ()
     [
       { index: 0, relevanceScore: 1 },
       { index: 2, relevanceScore: 0 },
+    ],
+    [
+      { index: 0, relevanceScore: Number.NaN },
+      { index: 1, relevanceScore: 0 },
     ],
   ];
 
@@ -125,7 +209,11 @@ test('binds the selection schema to the node candidates uniqueness and limit', (
   const schema = createBundleSelectionSchema('node-1', ['alpha', 'beta'], 1);
   const valid = {
     goalId: 'node-1',
-    skills: [{ skill: 'alpha', rationale: 'Needed.' }],
+    evaluations: [
+      { skillName: 'alpha', selected: true, rationale: 'Needed.' },
+      { skillName: 'beta', selected: false, rationale: 'Not needed.' },
+    ],
+    selectionRationale: 'Alpha is sufficient.',
   };
 
   assert.equal(schema.safeParse(valid).success, true);
@@ -133,14 +221,51 @@ test('binds the selection schema to the node candidates uniqueness and limit', (
   assert.equal(
     schema.safeParse({
       goalId: 'node-1',
-      skills: [{ skill: 'unknown', rationale: 'Needed.' }],
+      evaluations: [
+        { skillName: 'unknown', selected: true, rationale: 'Needed.' },
+        { skillName: 'beta', selected: false, rationale: 'Not needed.' },
+      ],
+      selectionRationale: 'Unknown is sufficient.',
     }).success,
     false,
   );
   assert.equal(
     schema.safeParse({
       goalId: 'node-1',
-      skills: [valid.skills[0], valid.skills[0]],
+      evaluations: [valid.evaluations[0], valid.evaluations[0]],
+      selectionRationale: 'Alpha is sufficient.',
+    }).success,
+    false,
+  );
+  assert.equal(
+    schema.safeParse({
+      goalId: 'node-1',
+      evaluations: [valid.evaluations[0]],
+      selectionRationale: 'Alpha is sufficient.',
+    }).success,
+    false,
+  );
+  assert.equal(
+    schema.safeParse({
+      ...valid,
+      evaluations: valid.evaluations.map((evaluation) => ({
+        ...evaluation,
+        selected: true,
+      })),
+    }).success,
+    false,
+  );
+  assert.equal(
+    schema.safeParse({ ...valid, selectionRationale: ' ' }).success,
+    false,
+  );
+  assert.equal(
+    schema.safeParse({
+      ...valid,
+      evaluations: [
+        { ...valid.evaluations[0], rationale: ' ' },
+        valid.evaluations[1],
+      ],
     }).success,
     false,
   );
@@ -155,15 +280,15 @@ test('excludes required and stale indexed skills and never reads the tool retrie
     matches: [required, stale, selected],
     requiredSkills: [required],
     skillMenu: [required, selected],
-    selected: [{ skill: 'selected', rationale: 'Needed.' }],
+    evaluations: [
+      { skillName: 'selected', selected: true, rationale: 'Needed.' },
+    ],
   });
 
   const action = await run({ nodes: [current] }, harness.options);
 
   assert.equal(action.type, 'transition');
-  assert.deepEqual(current.skills, [
-    { skill: 'selected', rationale: 'Needed.' },
-  ]);
+  assert.deepEqual(current.bundle?.skills, ['selected']);
   assert.equal(harness.reranks[0]?.documents.length, 1);
   assert.match(harness.reranks[0]?.documents[0] ?? '', /selected body/u);
 });
@@ -175,7 +300,13 @@ test('keeps hostile context delimited and excludes private content from logs', a
   const selected = skill('selected');
   const harness = createHarness({
     matches: [selected],
-    selected: [{ skill: 'selected', rationale: 'private-rationale' }],
+    evaluations: [
+      {
+        skillName: 'selected',
+        selected: true,
+        rationale: 'private-rationale',
+      },
+    ],
   });
 
   const action = await run({ nodes: [ancestor, current] }, harness.options);
@@ -192,10 +323,12 @@ type HarnessInput = {
     readonly index: number;
     readonly relevanceScore: number;
   }[];
-  readonly selected?: readonly {
-    readonly skill: string;
+  readonly evaluations?: readonly {
+    readonly skillName: string;
+    readonly selected: boolean;
     readonly rationale: string;
   }[];
+  readonly selectionRationale?: string;
   readonly requiredSkills?: readonly Skill[];
   readonly skillMenu?: readonly Skill[];
   readonly requiredTools?: readonly Tool[];
@@ -255,7 +388,9 @@ const createHarness = (input: HarnessInput) => {
         return {
           structured: {
             goalId: 'current',
-            skills: input.selected ?? [],
+            evaluations: input.evaluations ?? [],
+            selectionRationale:
+              input.selectionRationale ?? 'The selected bundle is sufficient.',
           },
         };
       },
@@ -317,7 +452,8 @@ const node = (
   status,
   deliver: true,
   index: 0,
-  skills: [],
+  candidates: [],
+  bundle: null,
   tools: [],
   artifacts:
     artifact === undefined ? [] : [{ mime: 'text/plain', data: artifact }],

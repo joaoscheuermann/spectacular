@@ -5,8 +5,8 @@ Last reviewed: 2026-08-08
 This document tracks differences between the current Doric implementation and
 the broader MOSAIC 0.2 algorithm and normative contracts. The fourteen
 mandatory conformance requirements in Appendix B are substantially covered;
-the remaining open work concerns richer routing, plan, and artifact contracts
-from Appendix A. Catalog gaps 1 and 3 were closed on 2026-08-08.
+the remaining open work concerns plan and artifact contracts from Appendix A.
+Catalog gaps 1 and 3 and routing gap 2 were closed on 2026-08-08.
 
 The comparison uses the revised [MOSAIC 0.2 paper](revised/mosaic_0_2/mosaic_0_2.pdf),
 especially sections 4.8-4.10, Algorithm 1, and Appendices A and B.
@@ -22,16 +22,6 @@ This list excludes:
 - skill scripts, references, and assets that the paper explicitly leaves
   outside the core profile;
 - more sophisticated tool filtering, authorization, or risk policies.
-
-## Medium priority
-
-2. **Materialize the normative routing contracts.**
-   The paper defines `SkillCandidate` with canonical name, score, rank, and
-   rationale, and `OrderedBundle` with goal ID, ordered skills, and a selection
-   rationale. The current implementation keeps ranking as private transient
-   data and stores only selected skill names with per-skill rationales. Runtime
-   behavior is deterministic, but the complete intermediate contracts are not
-   available for inspection or downstream policy.
 
 ## Low priority
 
@@ -54,7 +44,7 @@ This list excludes:
 
 ## Suggested implementation order
 
-1. Materialize routing contracts and explicit plan revisions.
+1. Materialize explicit plan revisions.
 2. Split retrieval limits and introduce explicit artifact references only when
    their additional policy value is needed.
 
@@ -66,3 +56,7 @@ This list excludes:
 - **Gap 3 — Canonical skill-record normalization.** `SkillSchema` produces the same
   normalized `SkillRecord` consumed by the loader and Doric indexes its
   recalculated `indexText` directly.
+- **Gap 2 — Normative routing contracts.** Nodes and public results expose
+  strict `SkillCandidate` traces with exact reranker scores, contiguous ranks,
+  and per-candidate rationales plus a strict `OrderedBundle` with the selected
+  ordered subset and global selection rationale.

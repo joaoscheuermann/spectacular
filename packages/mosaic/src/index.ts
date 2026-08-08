@@ -20,5 +20,9 @@ export {
 } from './lib/schemas/result.js';
 export type { MosaicOptions } from './lib/types/mosaic-options.js';
 export type { NodeRuntimeState } from './lib/types/graph.js';
-export type { NodeSkillSelection } from './lib/types/node-skill-selection.js';
+export type { OrderedBundle, SkillCandidate } from './lib/types/routing.js';
+export {
+  OrderedBundleSchema,
+  SkillCandidateSchema,
+} from './lib/schemas/routing.js';
 export type { Observation } from './lib/types/revision.js';

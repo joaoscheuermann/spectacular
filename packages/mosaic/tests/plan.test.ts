@@ -7,6 +7,7 @@ import * as hintsPrompt from '../src/lib/prompts/hints.js';
 import * as revisionPrompt from '../src/lib/prompts/revision.js';
 import {
   materializeGraph,
+  GraphSchema,
   PlannedGraphSchema,
   StrictGraphSchema,
   type PlannedGraph,
@@ -205,7 +206,19 @@ test('rejects malformed generated graphs and accepts a valid deliverable DAG', (
     runtime({ ...nodePlan('node', true), index: 0.5 }),
     runtime({
       ...nodePlan('node', true),
-      skills: [{ skill: 'x', rationale: 'x' }],
+      candidates: [
+        {
+          skillName: 'x',
+          score: 1,
+          rank: 1,
+          rationale: 'Candidate is applicable.',
+        },
+      ],
+      bundle: {
+        goalId: 'node',
+        skills: ['x'],
+        selectionRationale: 'Candidate is selected.',
+      },
     }),
     runtime({
       ...nodePlan('node', true),
@@ -246,6 +259,43 @@ test('rejects malformed generated graphs and accepts a valid deliverable DAG', (
   assert.equal(
     PlannedGraphSchema.safeParse({
       nodes: [{ ...nodePlan('node', true), status: 'pending' }],
+    }).success,
+    false,
+  );
+});
+
+test('validates candidate and ordered bundle invariants in graph state', () => {
+  const graph = materializeGraph({ nodes: [nodePlan('node', true)] });
+  const current = graph.nodes[0]!;
+  current.candidates = [
+    {
+      skillName: 'alpha',
+      score: 1,
+      rank: 1,
+      rationale: 'Alpha is applicable.',
+    },
+    {
+      skillName: 'beta',
+      score: 0.5,
+      rank: 2,
+      rationale: 'Beta is not required.',
+    },
+  ];
+  current.bundle = {
+    goalId: 'node',
+    skills: ['alpha'],
+    selectionRationale: 'Alpha alone is sufficient.',
+  };
+
+  assert.equal(GraphSchema.safeParse(graph).success, true);
+  assert.equal(
+    GraphSchema.safeParse({
+      nodes: [
+        {
+          ...current,
+          bundle: { ...current.bundle, skills: ['beta', 'alpha'] },
+        },
+      ],
     }).success,
     false,
   );
@@ -363,7 +413,8 @@ const runtimeNode = (
   ...planned,
   status: 'pending',
   index,
-  skills: [],
+  candidates: [],
+  bundle: null,
   tools: [],
   artifacts: [],
   outcome: null,

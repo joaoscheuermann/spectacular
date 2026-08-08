@@ -88,7 +88,8 @@ export const applyLocalizedRevision = (
       ...planned,
       status: 'pending' as const,
       index,
-      skills: [],
+      candidates: [],
+      bundle: null,
       tools: [],
       artifacts: [],
       outcome: null,
@@ -123,7 +124,11 @@ const cloneNode = (node: Node): Node => ({
   ...node,
   doneWhen: [...node.doneWhen],
   dependsOn: [...node.dependsOn],
-  skills: node.skills.map((selection) => ({ ...selection })),
+  candidates: node.candidates.map((candidate) => ({ ...candidate })),
+  bundle:
+    node.bundle === null
+      ? null
+      : { ...node.bundle, skills: [...node.bundle.skills] },
   tools: node.tools.map((tool) => ({ ...tool })),
   artifacts: node.artifacts.map((artifact) => ({ ...artifact })),
   outcome:
