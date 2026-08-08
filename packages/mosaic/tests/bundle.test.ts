@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { Skill } from 'bundle';
+import type { LlmProvider, ProviderRequest } from 'llms';
 import type { Tool } from 'tool';
 
 import { createBundleSelectionSchema } from '../src/lib/schemas/bundle.js';
@@ -9,6 +10,7 @@ import { bundle } from '../src/lib/states/bundle/index.js';
 import type { Graph, Node } from '../src/lib/types/graph.js';
 import type { MosaicOptions } from '../src/lib/types/mosaic-options.js';
 import type { WorkflowState } from '../src/lib/types/workflow.js';
+import { terminalFinish, terminalTool, userContent } from './structured.js';
 
 test('routes with transitive ancestor artifacts and omits unrelated branches', async () => {
   const root = node('root', 'completed', 'root artifact');
@@ -139,7 +141,18 @@ test('normalizes selected references to score and canonical-name order', async (
     current.tools.map(({ name }) => name),
     ['base', 'shared', 'gamma-tool', 'beta-tool'],
   );
-  assert.match(harness.completions[0]?.system ?? '', /at most 5 skills/u);
+  const completion = harness.completions[0];
+  assert.ok(completion);
+  assert.match(completion.system, /at most 5 skills/u);
+  assert.equal(completion.request.schema, undefined);
+  assert.equal(completion.request.model, 'default-model');
+  assert.deepEqual(completion.request.flags, { sensitiveOutput: true });
+  assert.deepEqual(
+    completion.request.messages.map(({ role }) => role),
+    ['system', 'system', 'user'],
+  );
+  assert.equal(completion.request.tools?.length, 1);
+  terminalTool(completion.request);
 });
 
 test('materializes rejected candidates and an empty selected bundle', async () => {
@@ -379,8 +392,11 @@ const createHarness = (input: HarnessInput) => {
     readonly query: string;
     readonly documents: readonly string[];
   }> = [];
-  const completions: Array<{ readonly system: string; readonly user: string }> =
-    [];
+  const completions: Array<{
+    readonly request: ProviderRequest<unknown>;
+    readonly system: string;
+    readonly user: string;
+  }> = [];
   const logs: unknown[] = [];
   const toolRetriever = new Proxy(
     {},
@@ -398,6 +414,11 @@ const createHarness = (input: HarnessInput) => {
         logs.push({ bindings, message }),
     } as never,
     provider: {
+      metadata: {
+        id: 'fake',
+        name: 'Fake',
+        baseUrl: 'https://fake.invalid',
+      },
       rerank: async (request: {
         readonly query: string;
         readonly documents: readonly string[];
@@ -411,23 +432,24 @@ const createHarness = (input: HarnessInput) => {
           }))
         );
       },
-      complete: async (request: {
-        readonly messages: readonly { readonly content: string }[];
-      }) => {
+      complete: async (request: ProviderRequest<unknown>) => {
+        terminalTool(request);
         completions.push({
-          system: request.messages[0]?.content ?? '',
-          user: request.messages[1]?.content ?? '',
+          request,
+          system:
+            typeof request.messages[0]?.content === 'string'
+              ? request.messages[0].content
+              : '',
+          user: userContent(request),
         });
-        return {
-          structured: {
-            goalId: 'current',
-            evaluations: input.evaluations ?? [],
-            selectionRationale:
-              input.selectionRationale ?? 'The selected bundle is sufficient.',
-          },
-        };
+        return terminalFinish(request, {
+          goalId: 'current',
+          evaluations: input.evaluations ?? [],
+          selectionRationale:
+            input.selectionRationale ?? 'The selected bundle is sufficient.',
+        });
       },
-    } as never,
+    } as unknown as LlmProvider,
     models: {
       default: 'default-model',
       reranker: 'reranker-model',

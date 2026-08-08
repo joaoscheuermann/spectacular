@@ -40,6 +40,24 @@ number of successful localized revisions, and IDs removed by earlier revisions a
 derived from graph contents instead of being reconciled with parallel
 ledgers, queues, counters, or retired-ID collections.
 
+## Structured output boundary
+
+Every model-authored structured object is validated locally against its full
+Zod contract before it can change a graph or node. P0, P1, each concurrent hint
+candidate, bundle selection, and each localized revision run through a fresh
+ephemeral `agent` with empty in-memory message and tool storages. Execution
+keeps its specialized per-node agent because it also owns executable tools,
+observation history, and `execution.maxTurns`.
+
+Structured runs expose a reserved `submit_structured_output` terminal tool and
+never send a provider-native `schema` field. Invalid or malformed arguments are
+discarded without mutating state. The agent may provide bounded diagnostics and
+make three correction attempts after the first invalid submission; the fourth
+invalid submission fails with `invalid_structured_output`. The terminal tool is
+never executed, registered as a Mosaic tool, or materialized as an
+`Observation`. Provider and transport failures propagate without an
+infrastructure retry. `provider.rerank` remains a direct provider operation.
+
 ## Graph planning and revision
 
 The planner's structured output owns only `id`, `goal`, `doneWhen`,
@@ -144,9 +162,9 @@ artifacts from transitive ancestor nodes only, ordered selected skill bodies,
 and the available tool names and descriptions; tool schemas are not duplicated
 in the prompt.
 
-For nodes with executable tools, `agent` represents the decision schema as a
-strict terminal tool. Provider requests therefore contain ordinary tools plus
-that terminal tool, without a provider-native structured-output field. The
+For every node, `agent` represents the decision schema as a strict terminal
+tool. Provider requests therefore contain that terminal tool plus any ordinary
+tools, without a provider-native structured-output field. The
 terminal call is validated by `agent` and is not executed as a Mosaic tool.
 
 The model decision contains only `status`, ordered criterion evaluations,
@@ -241,23 +259,25 @@ validation protocol is also available as a revised
 and [LaTeX source](docs/revised/mosaic_validation_protocol_0_2/mosaic_validation_protocol_0_2.tex).
 The supplied MOSAIC 0.1 editions remain unchanged under `docs/original/`.
 
-| Runtime concept          | MOSAIC 0.2 definition                                                                                                                               |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Ordered skill bundle     | Section 3.5: selected skills are unique, bounded, observably ordered, and may be empty.                                                             |
-| Contextual skill routing | Section 4.5: retrieval and reranking use the objective, criteria, original request, and relevant prior outputs.                                     |
-| Exact tool menu          | Section 4.6: available tools are the base set plus tools declared by selected skills, without a separate tool router.                               |
-| Projected node context   | Section 4.7: the executor receives only the context needed for the current objective.                                                               |
-| Decision and evidence    | Sections 4.8-4.9: the model authors the semantic decision; the runtime creates ordered observations and materializes the node outcome.              |
-| Localized revision       | Section 4.9: every observation from the requesting node is associated automatically and rendered without provider call IDs.                         |
-| Scheduler/executor order | Algorithm 1: ready nodes execute in waves, observations are appended in deterministic node and result order, and revisions preserve completed work. |
-| Normative contracts      | Appendix A: `SkillCandidate`, `OrderedBundle`, `NodeDecision`, `Observation`, runtime `NodeOutcome`, and `RevisionRequest` are separate contracts.  |
-| Final assembly           | Section 4.10: final assembly does not call the model or apply skills again.                                                                         |
+| Runtime concept               | MOSAIC 0.2 definition                                                                                                                               |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Structured output conformance | Section 4.2 and C15: every model-authored structured object satisfies the complete runtime contract before changing state.                          |
+| Ordered skill bundle          | Section 3.5: selected skills are unique, bounded, observably ordered, and may be empty.                                                             |
+| Contextual skill routing      | Section 4.6: retrieval and reranking use the objective, criteria, original request, and relevant prior outputs.                                     |
+| Exact tool menu               | Section 4.7: available tools are the base set plus tools declared by selected skills, without a separate tool router.                               |
+| Projected node context        | Section 4.8: the executor receives only the context needed for the current objective.                                                               |
+| Decision and evidence         | Sections 4.9-4.10: the model authors the semantic decision; the runtime creates ordered observations and materializes the node outcome.             |
+| Localized revision            | Section 4.10: every observation from the requesting node is associated automatically and rendered without provider call IDs.                        |
+| Scheduler/executor order      | Algorithm 1: ready nodes execute in waves, observations are appended in deterministic node and result order, and revisions preserve completed work. |
+| Normative contracts           | Appendix A: `SkillCandidate`, `OrderedBundle`, `NodeDecision`, `Observation`, runtime `NodeOutcome`, and `RevisionRequest` are separate contracts.  |
+| Final assembly                | Section 4.11: final assembly does not call the model or apply skills again.                                                                         |
 
-The paper specifies semantic contracts, not provider transport or dispatch
-mechanics. Concurrent ready waves, `Promise.allSettled`, one isolated `agent`
-instance per node, the strict terminal-output tool, explicit per-criterion proof
-entries, and promotion of primary Markdown as an inline `text/markdown`
-artifact are Doric choices.
+The paper recommends a reserved terminal tool as its provider-independent
+structured-output profile while allowing other protocols that preserve full
+validation, atomicity, bounded feedback, and bounded recovery. Concurrent ready
+waves, `Promise.allSettled`, the exact ephemeral-agent composition, explicit
+per-criterion proof entries, and promotion of primary Markdown as an inline
+`text/markdown` artifact are Doric choices.
 Conforming implementations may vary in model, language, serialization format,
 and tool-calling protocol while preserving the MOSAIC 0.2 invariants and
 Appendix A contracts.

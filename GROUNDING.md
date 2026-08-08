@@ -331,6 +331,20 @@ declared by selected skills, with duplicate names removed by first occurrence.
 Always-available skills are excluded from hints and routing, do not count toward
 the selected-skill limit, and are injected as universal execution instructions;
 they may reference only base tools and do not expand the node tool menu.
+Every model-authored structured object is validated locally against its complete
+Zod contract before changing Mosaic state. P0, P1, each concurrent hint
+candidate, bundle selection, and each localized revision create a fresh agent
+with isolated empty in-memory message and tool storages, preserve the authored
+system prompt and Markdown user input, and terminate through the agent-owned
+reserved structured-output tool without sending a provider-native schema.
+Invalid submissions are discarded atomically and may receive the agent's
+bounded diagnostic feedback for three correction attempts after the first
+invalid submission; the fourth invalid submission propagates
+`invalid_structured_output` through the owning workflow state. The reserved
+tool is never executed, registered in Mosaic, or materialized as an
+`Observation`. Bundle selection preserves `sensitiveOutput`. Reranking remains
+a direct provider operation, and provider or transport failures receive no
+Mosaic infrastructure retry.
 Execution creates one agent per ready node with isolated in-memory message
 storage and executable tools resolved from the catalog. Each node makes one
 `agent.complete` call with tools and a node-bound strict semantic-decision
@@ -342,9 +356,9 @@ provider invocation. The model-facing decision owns only `status`, ordered crite
 evaluations, `result`, `revisionRequest`, and `reason`; criterion `evidence` is
 model-authored prose, and the revision request owns only `goalId`,
 `invalidatedAssumption`, and `requestedEffect`. Unknown legacy reference fields
-are rejected. When executable tools are present, the agent exposes that
-decision schema as its reserved terminal tool rather than combining the tools
-with provider-native structured output. The terminal structured-output tool is
+are rejected. The agent exposes that decision schema as its reserved terminal
+tool, whether or not executable tools are present, rather than using
+provider-native structured output. The terminal structured-output tool is
 never an observation. Its collision-safe Markdown execution context contains
 the original request, current goal and ordered `doneWhen` criteria, only
 transitive-ancestor artifacts, selected skill bodies in bundle order, and tool
@@ -407,13 +421,14 @@ provider call. Descendants of blocked or failed dependencies become blocked
 with direct dependency IDs, while independent branches continue. A completed
 result includes `FinalDelivery`; blocked and failed results omit partial
 delivery, with `failed` taking precedence. This behavior implements
-MOSAIC 0.2 sections 4.7-4.9 and the `NodeContext`, `NodeDecision`,
+MOSAIC 0.2 sections 4.8-4.10 and the `NodeContext`, `NodeDecision`,
 `Observation`, runtime `NodeOutcome`, and `RevisionRequest` contracts in
-Appendix A. The paper defines the semantic lifecycle but leaves tool-calling
-protocol and dispatch mechanics open; concurrent ready waves,
-`Promise.allSettled`, one isolated agent per node, terminal structured-output
-tools, explicit criterion proof entries, and `text/markdown` artifact promotion
-are Doric runtime choices.
+Appendix A. The paper recommends a reserved terminal tool for provider-neutral
+structured output while permitting other protocols that preserve complete
+validation, atomicity, bounded feedback, and bounded recovery. Concurrent ready
+waves, `Promise.allSettled`, the exact isolated-agent composition, explicit
+criterion proof entries, and `text/markdown` artifact promotion are Doric
+runtime choices.
 Planning and revision append a graph, the last graph is active, and
 scheduling mutates that graph when marking nodes ready. It succeeds for an
 already-terminal graph and otherwise preserves the intentional missing-ready

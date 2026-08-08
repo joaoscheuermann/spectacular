@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { AgentErrorObject } from 'agent';
 import type { Skill } from 'bundle';
+import type { LlmProvider, ProviderRequest } from 'llms';
 
+import * as goalsPrompt from '../src/lib/prompts/goals.js';
 import * as hintsPrompt from '../src/lib/prompts/hints.js';
 import * as revisionPrompt from '../src/lib/prompts/revision.js';
 import {
@@ -13,11 +16,11 @@ import {
   StrictGraphSchema,
   type PlannedGraph,
 } from '../src/lib/schemas/graph.js';
-import { SkillHintExtractionSchema } from '../src/lib/schemas/hint.js';
 import { plan } from '../src/lib/states/plan/index.js';
 import type { Graph } from '../src/lib/types/graph.js';
 import type { MosaicOptions } from '../src/lib/types/mosaic-options.js';
 import type { WorkflowState } from '../src/lib/types/workflow.js';
+import { terminalFinish, terminalTool, userContent } from './structured.js';
 
 const skill = createSkill('planning-skill');
 const alternate = createSkill('alternate-skill');
@@ -37,7 +40,17 @@ test('creates P0 without catalog access and materializes runtime-owned fields', 
   assert.deepEqual(action.state.graphs, [materializeGraph(planned, 0)]);
   assert.equal(harness.searches.length, 0);
   assert.equal(harness.completions.length, 1);
-  assert.strictEqual(harness.completions[0]?.schema, PlannedGraphSchema);
+  const request = harness.completions[0];
+  assert.ok(request);
+  assert.equal(request.schema, undefined);
+  assert.equal(request.model, 'default-model');
+  assert.equal(request.flags, undefined);
+  assert.equal(request.messages[0]?.content, goalsPrompt.system());
+  assert.equal(request.messages[0]?.role, 'system');
+  assert.equal(request.messages[1]?.role, 'system');
+  assert.equal(request.messages[2]?.role, 'user');
+  assert.equal(request.tools?.length, 1);
+  terminalTool(request);
 });
 
 test('performs exactly one P0 to P1 revision with bounded stable canonical hints', async () => {
@@ -49,7 +62,11 @@ test('performs exactly one P0 to P1 revision with bounded stable canonical hints
     matches: [skill, skill, stale, alternate],
     menu: [skill, alternate],
     maxHintCandidates: 2,
-    hintResults: [[{ effect: 'gap', evidence: 'A result is missing.' }], []],
+    hintResults: [
+      [{ effect: 'gap', evidence: 'A first result is missing.' }],
+      [{ effect: 'dependency', evidence: 'A second dependency is missing.' }],
+    ],
+    hintDelays: [15, 0],
   });
   const action = await plan(
     state([p0]),
@@ -61,9 +78,13 @@ test('performs exactly one P0 to P1 revision with bounded stable canonical hints
   if (action.type !== 'transition') return;
   assert.equal(action.handler, 'schedule');
   assert.deepEqual(action.state.graphs, [p0, materializeGraph(p1, 1)]);
-  assert.match(
-    harness.completions.at(-1)?.messages[1]?.content ?? '',
-    /## Revision\n\n```text\n0\n```/u,
+  const revisionRequest = harness.completions.at(-1);
+  assert.ok(revisionRequest);
+  const revisionInput = userContent(revisionRequest);
+  assert.match(revisionInput, /## Revision\n\n```text\n0\n```/u);
+  assert.ok(
+    revisionInput.indexOf('A first result is missing.') <
+      revisionInput.indexOf('A second dependency is missing.'),
   );
   assert.deepEqual(
     harness.searches.map(({ topK }) => topK),
@@ -72,6 +93,18 @@ test('performs exactly one P0 to P1 revision with bounded stable canonical hints
   assert.equal(harness.hintRequests.length, 2);
   assert.match(harness.hintRequests[0]?.user ?? '', /planning-skill/u);
   assert.match(harness.hintRequests[1]?.user ?? '', /alternate-skill/u);
+  assert.doesNotMatch(harness.hintRequests[0]?.user ?? '', /alternate-skill/u);
+  assert.doesNotMatch(harness.hintRequests[1]?.user ?? '', /planning-skill/u);
+  for (const request of harness.hintRequests) {
+    assert.deepEqual(
+      request.request.messages.map(({ role }) => role),
+      ['system', 'system', 'user'],
+    );
+    assert.equal(request.request.schema, undefined);
+    assert.equal(request.request.model, 'default-model');
+    assert.equal(request.request.tools?.length, 1);
+    terminalTool(request.request);
+  }
   assert.doesNotMatch(
     harness.hintRequests.map(({ user }) => user).join('\n'),
     /stale/u,
@@ -185,6 +218,83 @@ test('reports provider failures through the workflow failure action', async () =
   );
 
   assert.deepEqual(action, { type: 'fail', error: failure });
+  assert.equal(harness.completions.length, 1);
+});
+
+test('repairs a relationally invalid plan before mutating workflow state', async () => {
+  const invalid: PlannedGraph = {
+    nodes: [
+      nodePlan('draft', true),
+      { ...nodePlan('final', true), dependsOn: ['draft'] },
+    ],
+  };
+  const corrected: PlannedGraph = {
+    nodes: [
+      nodePlan('draft', false),
+      { ...nodePlan('final', true), dependsOn: ['draft'] },
+    ],
+  };
+  const workflow = state([]);
+  let correctionObserved = false;
+  const harness = createHarness({
+    plans: [invalid, corrected],
+    onComplete: (request, index) => {
+      if (index !== 1) return;
+
+      assert.deepEqual(workflow.graphs, []);
+      const correction = request.messages
+        .filter(({ role }) => role === 'system')
+        .map(({ content }) => (typeof content === 'string' ? content : ''))
+        .find((content) =>
+          content.startsWith('# Structured output correction'),
+        );
+      assert.ok(correction);
+      assert.match(correction, /Deliverable node "draft" must be terminal\./u);
+      assert.doesNotMatch(correction, /"goal"|"doneWhen"|"dependsOn"/u);
+      correctionObserved = true;
+    },
+  });
+
+  const action = await plan(
+    workflow,
+    { input: 'Build it.', options: harness.options },
+    handlers(),
+  );
+
+  assert.equal(action.type, 'transition');
+  if (action.type !== 'transition') return;
+  assert.equal(correctionObserved, true);
+  assert.deepEqual(workflow.graphs, []);
+  assert.deepEqual(action.state.graphs, [materializeGraph(corrected, 0)]);
+  assert.equal(harness.completions.length, 2);
+});
+
+test('fails with invalid_structured_output after four invalid plans', async () => {
+  const invalid: PlannedGraph = {
+    nodes: [
+      nodePlan('draft', true),
+      { ...nodePlan('final', true), dependsOn: ['draft'] },
+    ],
+  };
+  const workflow = state([]);
+  const harness = createHarness({ plans: [invalid] });
+
+  const action = await plan(
+    workflow,
+    { input: 'Build it.', options: harness.options },
+    handlers(),
+  );
+
+  assert.equal(action.type, 'fail');
+  if (action.type !== 'fail') return;
+  assert.ok(action.error instanceof AgentErrorObject);
+  assert.equal(action.error.data.code, 'invalid_structured_output');
+  assert.match(
+    action.error.data.diagnostic ?? '',
+    /Deliverable node "draft" must be terminal\./u,
+  );
+  assert.equal(harness.completions.length, 4);
+  assert.deepEqual(workflow.graphs, []);
 });
 
 test('rejects malformed generated graphs and accepts a valid deliverable DAG', () => {
@@ -339,32 +449,44 @@ type HarnessInput = {
   readonly menu?: readonly Skill[];
   readonly maxHintCandidates?: number;
   readonly hintResults?: readonly (readonly unknown[])[];
+  readonly hintDelays?: readonly number[];
   readonly failure?: Error;
+  readonly onComplete?: (
+    request: ProviderRequest<unknown>,
+    index: number,
+  ) => void;
 };
 
 const createHarness = (input: HarnessInput) => {
   let planIndex = 0;
   let hintIndex = 0;
-  const completions: Array<{
-    readonly schema: unknown;
-    readonly messages: readonly { readonly content?: string }[];
-  }> = [];
+  const completions: ProviderRequest<unknown>[] = [];
   const searches: Array<{ readonly query: string; readonly topK: number }> = [];
   const provider = {
-    complete: async (request: {
-      readonly schema: unknown;
-      readonly messages: readonly { readonly content?: string }[];
-    }) => {
-      completions.push(request);
-      if (input.failure !== undefined) throw input.failure;
-      if (request.schema === SkillHintExtractionSchema) {
-        return {
-          structured: { hints: input.hintResults?.[hintIndex++] ?? [] },
-        };
-      }
-      return { structured: input.plans[planIndex++] };
+    metadata: {
+      id: 'fake',
+      name: 'Fake',
+      baseUrl: 'https://fake.invalid',
     },
-  };
+    complete: async (request: ProviderRequest<unknown>) => {
+      completions.push(request);
+      input.onComplete?.(request, completions.length - 1);
+      if (input.failure !== undefined) throw input.failure;
+      terminalTool(request);
+      if (request.messages[0]?.content === hintsPrompt.system()) {
+        const index = hintIndex++;
+        const delay = input.hintDelays?.[index] ?? 0;
+        if (delay > 0) {
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+        return terminalFinish(request, {
+          hints: input.hintResults?.[index] ?? [],
+        });
+      }
+      const plan = input.plans[planIndex++] ?? input.plans.at(-1);
+      return terminalFinish(request, plan);
+    },
+  } as unknown as LlmProvider;
   const retriever = {
     search: async (query: string, topK: number) => {
       searches.push({ query, topK });
@@ -373,7 +495,7 @@ const createHarness = (input: HarnessInput) => {
   };
   const options: MosaicOptions = {
     logger: { info: () => undefined, debug: () => undefined } as never,
-    provider: provider as never,
+    provider,
     models: {
       default: 'default-model',
       reranker: 'unused',
@@ -403,8 +525,8 @@ const createHarness = (input: HarnessInput) => {
     searches,
     get hintRequests() {
       return completions
-        .filter(({ schema }) => schema === SkillHintExtractionSchema)
-        .map(({ messages }) => ({ user: messages[1]?.content ?? '' }));
+        .filter(({ messages }) => messages[0]?.content === hintsPrompt.system())
+        .map((request) => ({ request, user: userContent(request) }));
     },
   };
 };

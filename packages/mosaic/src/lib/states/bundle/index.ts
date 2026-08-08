@@ -5,6 +5,7 @@ import {
   OrderedBundleSchema,
   SkillCandidateSchema,
 } from '../../schemas/routing.js';
+import { completeStructured } from '../../structured.js';
 import type { Graph, Node } from '../../types/graph.js';
 import type { OrderedBundle, SkillCandidate } from '../../types/routing.js';
 import type { WorkflowContext, WorkflowHandler } from '../../types/workflow.js';
@@ -195,20 +196,16 @@ const choose = async ({
   );
 
   // Candidate bodies and prior artifacts make this a sensitive structured call.
-  const { structured } = await provider.complete({
+  const structured = await completeStructured({
+    provider,
     model: models.default,
-    messages: [
-      { role: 'system', content: bundlePrompt.system(routing.maxSkills) },
-      {
-        role: 'user',
-        content: bundlePrompt.user({
-          request: input,
-          node,
-          graph,
-          skills: reranked.map(({ skill }) => skill),
-        }),
-      },
-    ],
+    system: bundlePrompt.system(routing.maxSkills),
+    input: bundlePrompt.user({
+      request: input,
+      node,
+      graph,
+      skills: reranked.map(({ skill }) => skill),
+    }),
     schema,
     flags: { sensitiveOutput: true },
   });

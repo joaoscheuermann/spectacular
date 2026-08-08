@@ -14,7 +14,7 @@ import { materializeObservations } from './observations.js';
 
 /**
  * Implements the node executor and lifecycle from the MOSAIC paper, sections
- * 4.8-4.9 (pp. 16-17) and Algorithm 1 (pp. 18-19). In particular, section 4.9
+ * 4.9-4.10 and Algorithm 1. In particular, section 4.10
  * says: "O scheduler o coloca em running." Doric groups ready nodes into a
  * concurrent wave; that batching policy is a local MOSAIC 0.2 runtime choice.
  */
@@ -58,7 +58,7 @@ export const execution: WorkflowHandler = async (
 
     /**
      * Return to scheduling so downstream dependencies can become ready. This
-     * realizes section 4.9: pending becomes ready after dependencies complete.
+     * realizes section 4.10: pending becomes ready after dependencies complete.
      */
     return transition('schedule', state);
   } catch (e) {
@@ -109,10 +109,10 @@ const execute = async (
 
     /**
      * Run one agent loop with Mosaic's projected context and node-bound outcome
-     * schema. Section 4.8 (p. 16) says the model may finish directly or call
-     * tools and that an observation returns to the same node. When tools exist,
-     * `agent` exposes the outcome as a terminal tool; this is Doric's transport
-     * mechanism, not a tool or protocol mandated by the paper.
+     * schema. Section 4.9 says the model may finish directly or call tools and
+     * that an observation returns to the same node. `agent` always exposes the
+     * outcome as a terminal tool, the paper's recommended provider-independent
+     * profile.
      */
     const { structured: decision } = await agent.complete(
       executionPrompt.user({ request: input, node, graph, skills, tools }),

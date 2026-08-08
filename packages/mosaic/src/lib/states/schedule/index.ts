@@ -5,7 +5,7 @@ const WAVE_LIMIT = 5;
 const MISSING_READY_NODES = 'Impossible to continue, missing ready nodes!';
 
 /**
- * Projects the lifecycle in MOSAIC 0.2 section 4.9 (pp. 16-17) onto a bounded
+ * Projects the lifecycle in MOSAIC 0.2 section 4.10 onto a bounded
  * execution wave, or delegates outstanding structural evidence to revision.
  */
 export const schedule: WorkflowHandler = (
@@ -112,7 +112,7 @@ const propagateDependencyBlocks = (nodes: readonly Node[]): void => {
 };
 
 /**
- * Applies the readiness rule from section 4.9: a pending node is eligible when
+ * Applies the readiness rule from section 4.10: a pending node is eligible when
  * it has no dependencies or every referenced dependency has completed.
  */
 const nodeIsReady = (node: Node, nodes: readonly Node[]): boolean => {

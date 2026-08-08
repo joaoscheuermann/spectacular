@@ -3,12 +3,12 @@
 Last reviewed: 2026-08-08
 
 This document tracks differences between the current Doric implementation and
-the broader MOSAIC 0.2 algorithm and normative contracts. The fourteen
+the broader MOSAIC 0.2 algorithm and normative contracts. The fifteen
 mandatory conformance requirements in Appendix B are substantially covered;
-gaps 1--6 are closed as of 2026-08-08.
+gaps 1--7 are closed as of 2026-08-08.
 
 The comparison uses the revised [MOSAIC 0.2 paper](revised/mosaic_0_2/mosaic_0_2.pdf),
-especially sections 4.8-4.10, Algorithm 1, and Appendices A and B.
+especially sections 4.9-4.11, Algorithm 1, and Appendices A and B.
 
 ## Scope
 
@@ -17,7 +17,8 @@ This list excludes:
 - empirical evaluation harnesses;
 - tools whose sole purpose is testing or validating the agent;
 - distributed persistence, transactional consistency, infrastructure retries,
-  idempotency, complete observability, and infrastructure recovery;
+  idempotency, complete observability, and infrastructure recovery; semantic
+  structured-output validation and bounded correction remain core behavior;
 - skill scripts, references, and assets that the paper explicitly leaves
   outside the core profile;
 - more sophisticated tool filtering, authorization, or risk policies.
@@ -35,8 +36,9 @@ This list excludes:
   and per-candidate rationales plus a strict `OrderedBundle` with the selected
   ordered subset and global selection rationale.
 - **Gap 4 — Explicit runtime plan revision.** Every materialized graph carries
-  a runtime-owned safe non-negative `revision`; P0 is `0`, P1 is `1`, localized
-  revisions increment contiguously, and model-authored plans cannot set it.
+  a runtime-owned safe non-negative integer `revision`; P0 is `0`, P1 is `1`,
+  localized revisions increment contiguously, and model-authored plans cannot
+  set it.
 - **Gap 5 — Independent retrieval limits.** `routing.maxHintCandidates`
   implements `K_hint` and `routing.maxRetrievedCandidates` implements
   `K_retrieve`; both have defensive post-normalization bounds, and `maxSkills`
@@ -45,3 +47,9 @@ This list excludes:
   and delivery use the strict public `Artifact` union between inline content and
   opaque references. The core validates and transports references but does not
   resolve, persist, authorize, or check them.
+- **Gap 7 — Complete structured-output conformance.** P0, P1, every hint,
+  bundle selection, node decision, and localized revision terminate through an
+  agent-owned reserved tool. The original Zod schema validates arguments
+  locally before state mutation, with atomic rejection, bounded diagnostics,
+  three correction attempts, and `invalid_structured_output` on the fourth
+  invalid submission. Provider-native structured output is not used by Mosaic.

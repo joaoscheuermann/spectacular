@@ -5,12 +5,13 @@ import {
   materializeGraph,
   PlannedGraphSchema,
 } from '../../schemas/graph.js';
+import { completeStructured } from '../../structured.js';
 import type { WorkflowHandler } from '../../types/workflow.js';
 import { hints } from './hints.js';
 
 /**
- * Implements the two planning passes from MOSAIC 0.2, sections 4.3-4.4
- * (pp. 12-13): catalog-independent P0 followed by exactly one body-aware P1.
+ * Implements the two planning passes from MOSAIC 0.2, sections 4.4-4.5:
+ * catalog-independent P0 followed by exactly one body-aware P1.
  */
 export const plan: WorkflowHandler = async (
   state,
@@ -42,33 +43,21 @@ export const plan: WorkflowHandler = async (
      * P0 sees only the request and must describe result-oriented goals. P1 sees
      * P0 plus bounded catalog evidence, allowing one informed decomposition pass.
      */
-    const { structured } = await options.provider.complete({
-      messages: [
-        {
-          role: 'system',
-          content:
-            active === undefined
-              ? goalsPrompt.system()
-              : revisionPrompt.system(),
-        },
-        {
-          role: 'user',
-          content:
-            active === undefined
-              ? goalsPrompt.user(input)
-              : revisionPrompt.user(
-                  input,
-                  active,
-                  await hints(input, active, options),
-                ),
-        },
-      ],
+    const planned = await completeStructured({
+      provider: options.provider,
       model: options.models.default,
+      system:
+        active === undefined ? goalsPrompt.system() : revisionPrompt.system(),
+      input:
+        active === undefined
+          ? goalsPrompt.user(input)
+          : revisionPrompt.user(
+              input,
+              active,
+              await hints(input, active, options),
+            ),
       schema: PlannedGraphSchema,
     });
-
-    // Validate the model-owned planning fields before adding runtime-owned state.
-    const planned = PlannedGraphSchema.parse(structured);
 
     // Materialization assigns pending status, stable indices, and empty ledgers.
     const next = materializeGraph(planned, revision);

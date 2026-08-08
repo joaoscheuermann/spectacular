@@ -24,6 +24,11 @@ test('propagates the exact provider failure from graph generation', async () => 
   const options: MosaicOptions = {
     logger: { info: () => undefined, debug: () => undefined } as never,
     provider: {
+      metadata: {
+        id: 'fake',
+        name: 'Fake',
+        baseUrl: 'https://fake.invalid',
+      },
       complete: async () => {
         throw failure;
       },

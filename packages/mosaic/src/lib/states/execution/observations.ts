@@ -13,7 +13,7 @@ export const materializeObservations = (
   // A separate set makes duplicate tool returns distinguishable from duplicate calls.
   const results = new Set<string>();
 
-  // Append order follows tool-result history, as required by section 4.8.
+  // Append order follows tool-result history, as required by section 4.9.
   const observations: Observation[] = [];
 
   for (const message of messages) {

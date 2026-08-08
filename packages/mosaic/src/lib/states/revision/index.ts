@@ -4,6 +4,7 @@ import {
   GraphSchema,
   PlannedGraphSchema,
 } from '../../schemas/graph.js';
+import { completeStructured } from '../../structured.js';
 import type { WorkflowHandler } from '../../types/workflow.js';
 import {
   applyLocalizedRevision,
@@ -13,7 +14,7 @@ import {
 } from './localized.js';
 
 /**
- * Implements localized structural repair from MOSAIC 0.2 section 4.9 and
+ * Implements localized structural repair from MOSAIC 0.2 section 4.10 and
  * Appendix A.2, consuming one node-owned request and its complete evidence set.
  */
 export const revision: WorkflowHandler = async (
@@ -102,25 +103,13 @@ export const revision: WorkflowHandler = async (
      * and every ordered Observation without provider-opaque call IDs. Catalog
      * hints are intentionally absent from runtime revision.
      */
-    const { structured } = await options.provider.complete({
-      messages: [
-        { role: 'system', content: revisionPrompt.localizedSystem() },
-        {
-          role: 'user',
-          content: revisionPrompt.localizedUser(
-            input,
-            active,
-            target,
-            retiredIds,
-          ),
-        },
-      ],
+    const plan = await completeStructured({
+      provider: options.provider,
       model: options.models.default,
+      system: revisionPrompt.localizedSystem(),
+      input: revisionPrompt.localizedUser(input, active, target, retiredIds),
       schema: PlannedGraphSchema,
     });
-
-    // Parse model planning fields before enforcing localized runtime invariants.
-    const plan = PlannedGraphSchema.parse(structured);
 
     // Preserve protected nodes and reset only the revisable, unstarted region.
     const revised = applyLocalizedRevision(

@@ -38,21 +38,21 @@
 \textit{MOSAIC 0.2 — Auxiliary empirical validation protocol}
 
 
-\begin{center}\textbf{João Vitor Scheuermann}\\MOSAIC 0.2 — 7 de agosto de 2026 / 7 August 2026\end{center}
+\begin{center}\textbf{João Vitor Scheuermann}\\MOSAIC 0.2 — 8 de agosto de 2026 / 8 August 2026\end{center}
 
 \textit{Documento auxiliar ao artigo técnico. Define testes de contrato, conformidade e avaliação} \textit{empírica; não contém resultados experimentais.}
 
 
 \section*{RESUMO}
 
-Este documento descreve um protocolo para avaliar as hipóteses arquiteturais do MOSAIC (Micro-skill Orchestration through Skill Activation and Instruction Composition) e verificar a conformidade de implementações com o MOSAIC 0.2. Além de planejamento por objetivos, retrieval body-aware, bundles ordenados, menus de tools, revisão localizada e composição final única, o protocolo testa o contrato de evidência da execução. O modelo produz somente uma decisão semântica; o runtime correlaciona cada retorno de tool executável, cria registros \texttt{Observation} em ordem e materializa o resultado do nó. Uma revisão recebe automaticamente todas as observações do nó solicitante, sem depender de o modelo reproduzir identificadores do provedor. A validação é separada em três níveis: testes de unidade e contrato, suíte determinística de conformidade e estudo empírico comparativo. O benchmark organiza seis classes de composição por objetivo focal, quatro domínios e atributos ortogonais de dificuldade e revisão. Cada caso admite múltiplos planos e bundles corretos e registra comportamentos obrigatórios, opcionais, proibidos e restrições de ordem. O protocolo usa baselines progressivos, ablações internas, oráculos diagnósticos, traces completos por estágio e verificadores determinísticos sempre que o resultado possui contrato observável. A métrica principal é o sucesso end-to-end por execução; métricas de planejamento, retrieval, bundle, menu, estado, evidência, revisão e custo explicam mecanismos e modos de falha. Segurança, prompt injection, autorização e sandbox permanecem fora do escopo, porque o artigo assume um runtime confiável em modo YOLO. O produto esperado é um pacote reproduzível contendo benchmark congelado, catálogo, prompts, configurações, traces, verificadores, testes de conformidade e relatório estatístico. \textbf{Palavras-chave:} avaliação de agentes; micro skills; planejamento; roteamento; evidência de execução; conformidade técnica.
+Este documento descreve um protocolo para avaliar as hipóteses arquiteturais do MOSAIC (Micro-skill Orchestration through Skill Activation and Instruction Composition) e verificar a conformidade de implementações com o MOSAIC 0.2. Além de planejamento por objetivos, retrieval body-aware, bundles ordenados, menus de tools, revisão localizada e composição final única, o protocolo testa o contrato de evidência da execução. O modelo produz somente uma decisão semântica; o runtime correlaciona cada retorno de tool executável, cria registros \texttt{Observation} em ordem e materializa o resultado do nó. Uma revisão recebe automaticamente todas as observações do nó solicitante, sem depender de o modelo reproduzir identificadores do provedor. Toda saída estruturada escrita pelo modelo também deve satisfazer o contrato completo do runtime antes de alterar estado; tentativas inválidas, feedback limitado, correção ou esgotamento ficam observáveis no trace. A validação é separada em três níveis: testes de unidade e contrato, suíte determinística de conformidade e estudo empírico comparativo. O benchmark organiza seis classes de composição por objetivo focal, quatro domínios e atributos ortogonais de dificuldade e revisão. Cada caso admite múltiplos planos e bundles corretos e registra comportamentos obrigatórios, opcionais, proibidos e restrições de ordem. O protocolo usa baselines progressivos, ablações internas, oráculos diagnósticos, traces completos por estágio e verificadores determinísticos sempre que o resultado possui contrato observável. A métrica principal é o sucesso end-to-end por execução; métricas de planejamento, retrieval, bundle, menu, estado, evidência, revisão e custo explicam mecanismos e modos de falha. Segurança, prompt injection, autorização e sandbox permanecem fora do escopo, porque o artigo assume um runtime confiável em modo YOLO. O produto esperado é um pacote reproduzível contendo benchmark congelado, catálogo, prompts, configurações, traces, verificadores, testes de conformidade e relatório estatístico. \textbf{Palavras-chave:} avaliação de agentes; micro skills; planejamento; roteamento; evidência de execução; conformidade técnica.
 
 
 % Source PDF page 2
 
 \section*{ABSTRACT}
 
-This document specifies a protocol for evaluating the architectural hypotheses of MOSAIC (Micro-skill Orchestration through Skill Activation and Instruction Composition) and checking implementation conformance with MOSAIC 0.2. In addition to outcome-oriented planning, body-aware retrieval, ordered bundles, tool menus, localized revision, and single final assembly, it tests the execution-evidence contract. The model emits only a semantic decision; the runtime correlates every executable-tool result, creates ordered \texttt{Observation} records, and materializes the node outcome. A revision automatically receives every observation from its requesting node and never depends on the model reproducing provider identifiers. Validation is separated into three levels: unit and contract tests, a deterministic conformance suite, and a comparative empirical study. The benchmark organizes six composition classes around a focus goal, four domains, and orthogonal difficulty and revision attributes. Each case allows multiple acceptable plans and bundles and records required, optional, and forbidden behaviors together with ordering constraints. The protocol uses progressive baselines, internal ablations, diagnostic oracles, complete stage-level traces, and deterministic verifiers whenever the output has an observable contract. End-to-end success per execution is the primary metric; planning, retrieval, bundle, menu, state, evidence, revision, and cost metrics explain mechanisms and failure modes. Security, prompt injection, authorization, and sandboxing remain out of scope because the paper assumes a trusted YOLO-mode runtime. The expected product is a reproducible package containing the frozen benchmark, catalog, prompts, configurations, traces, verifiers, conformance tests, and statistical report. \textbf{Keywords:} agent evaluation; micro-skills; planning; routing; execution evidence; technical conformance.
+This document specifies a protocol for evaluating the architectural hypotheses of MOSAIC (Micro-skill Orchestration through Skill Activation and Instruction Composition) and checking implementation conformance with MOSAIC 0.2. In addition to outcome-oriented planning, body-aware retrieval, ordered bundles, tool menus, localized revision, and single final assembly, it tests the execution-evidence contract. The model emits only a semantic decision; the runtime correlates every executable-tool result, creates ordered \texttt{Observation} records, and materializes the node outcome. A revision automatically receives every observation from its requesting node and never depends on the model reproducing provider identifiers. Every model-authored structured output must also satisfy the runtime's complete contract before changing state; invalid attempts, limited feedback, correction, or budget exhaustion remain observable in the trace. Validation is separated into three levels: unit and contract tests, a deterministic conformance suite, and a comparative empirical study. The benchmark organizes six composition classes around a focus goal, four domains, and orthogonal difficulty and revision attributes. Each case allows multiple acceptable plans and bundles and records required, optional, and forbidden behaviors together with ordering constraints. The protocol uses progressive baselines, internal ablations, diagnostic oracles, complete stage-level traces, and deterministic verifiers whenever the output has an observable contract. End-to-end success per execution is the primary metric; planning, retrieval, bundle, menu, state, evidence, revision, and cost metrics explain mechanisms and failure modes. Security, prompt injection, authorization, and sandboxing remain out of scope because the paper assumes a trusted YOLO-mode runtime. The expected product is a reproducible package containing the frozen benchmark, catalog, prompts, configurations, traces, verifiers, conformance tests, and statistical report. \textbf{Keywords:} agent evaluation; micro-skills; planning; routing; execution evidence; technical conformance.
 
 
 \section*{1 INTRODUÇÃO}
@@ -85,6 +85,8 @@ A validação do MOSAIC não precisa reproduzir integralmente esses benchmarks. 
 \subsection*{1.3 Escopo e não objetivos}
 
 O experimento assume o mesmo modelo de confiança do artigo: catálogo, runtime e tools são confiáveis; a execução ocorre em modo YOLO. Portanto, não são variáveis primárias: prompt injection, autorização, sandbox, credenciais, confirmação de efeitos, segurança de scripts ou políticas de least privilege. Esses temas podem ser avaliados por outro protocolo sem alterar as perguntas centrais desta validação. Também não se pretende provar que o MOSAIC é universalmente superior. O objetivo é estabelecer em que classes de tarefa cada mecanismo ajuda, não ajuda ou aumenta custo sem ganho. Um resultado negativo localizado é informativo: pode indicar que a composição só é necessária em tarefas com múltiplos comportamentos, ou que um mecanismo deve ser removido do núcleo.
+
+Retries de transporte, backoff e recuperação de provider ou processo permanecem fora do núcleo e são tratados apenas pela regra pré-registrada de rerun técnico. Em contraste, rejeitar atomicamente uma saída estruturada que viola o contrato completo, fornecer feedback limitado e permitir correção dentro de um orçamento finito é comportamento semântico obrigatório do runtime e integra a suíte de conformidade.
 
 
 \subsection*{1.4 Níveis de validação}
@@ -362,6 +364,7 @@ initial_plan: Plan
 skill_hints?: SkillHint[]
 revised_plan?: Plan
 node_traces: NodeTrace[]
+structured_output_attempts: StructuredOutputAttempt[]
 final_delivery: FinalDelivery
 \end{Verbatim}
 
@@ -400,6 +403,23 @@ materialized_outcome: NodeOutcome
 revision_event?: PlanRevisionRecord
 \end{Verbatim}
 
+Cada tentativa estruturada em P0, P1, hint, seleção de bundle, decisão de nó ou revisão localizada deve produzir um registro observável:
+
+
+\begin{Verbatim}[breaklines=true,breakanywhere=true,fontsize=\small]
+stage: StructuredStage
+scope_id: string
+attempt: number
+provider_accepted: boolean
+runtime_accepted: boolean
+feedback_sent: boolean
+diagnostic?: string
+state_hash_before: string
+state_hash_after: string
+\end{Verbatim}
+
+Para uma submissão rejeitada, os hashes de estado devem permanecer iguais. O diagnóstico e o feedback registram somente informação limitada sobre a violação; o feedback enviado ao modelo não repete o payload rejeitado. O trace deve mostrar se uma tentativa posterior foi aceita ou se o orçamento finito terminou em falha. Essa instrumentação separa aceitação estrutural pelo provider de conformidade com invariantes locais não representáveis em JSON Schema.
+
 \texttt{NodeDecision} contém apenas status, avaliações ordenadas dos critérios, resultado, pedido de revisão e razão. Para cada retorno bem-sucedido de tool executável, o runtime deve criar exatamente uma \texttt{Observation}, correlacionada à chamada e ordenada pela posição do retorno nas mensagens. A tool terminal de saída estruturada não é uma observação. \texttt{NodeOutcome} é materializado pelo runtime ao combinar a decisão com a sequência completa de observações.
 
 O identificador de chamada pode existir no registro interno de correlação e em \texttt{Observation}, mas não é campo da decisão do modelo e não deve aparecer no prompt de revisão. Um trace com chamada sem retorno, identificador duplicado, retorno duplicado ou retorno não correlacionado é inválido e caracteriza falha de runtime. Uma decisão \texttt{needs\_revision} exige ao menos uma observação; a fila de revisão associa automaticamente todas as observações do nó e as expõe ao planner como blocos com nome da tool, entrada e saída. O trace também deve permitir verificar a ordem determinística por wave e por retorno, que a composição final ocorreu uma única vez e que ela não invocou o modelo depois do resultado terminal.
@@ -407,7 +427,7 @@ O identificador de chamada pode existir no registro interno de correlação e em
 
 \subsection*{6.4 Tratamento de execução incompleta}
 
-Timeout, limite de passos, saída inválida, status\texttt{ blocked}, status\texttt{ failed} ou tool indisponível são resultados, não casos a serem removidos. Um rerun técnico só é permitido quando a infraestrutura falhou fora do comportamento da condição, por exemplo processo interrompido antes de enviar a primeira requisição. A regra de rerun deve ser registrada antes do teste.
+Timeout, limite de passos, saída inválida, status\texttt{ blocked}, status\texttt{ failed} ou tool indisponível são resultados, não casos a serem removidos. Uma saída estruturada semanticamente inválida deve seguir a recuperação limitada da própria condição; correção aceita ou esgotamento permanecem no mesmo trace e nunca autorizam rerun técnico. Um rerun técnico só é permitido quando a infraestrutura falhou fora do comportamento da condição, por exemplo processo interrompido antes de enviar a primeira requisição. A regra de rerun deve ser registrada antes do teste.
 
 
 % Source PDF page 17
@@ -543,6 +563,8 @@ A regra de parada é o número congelado após o piloto. O piloto estima a distr
 \end{figure}
 
 Na categoria T, o subtipo T-E identifica falhas de evidência: retorno executável omitido, duplicado, não correlacionado ou fora de ordem; inclusão indevida da tool terminal; ou materialização divergente da decisão e das observações. Na categoria V, o subtipo V-E identifica uma revisão sem observação, com conjunto incompleto de observações, em ordem não determinística ou com identificadores internos expostos ao planner. Esses subtipos distinguem defeitos do runtime de erro semântico do modelo.
+
+O sufixo S identifica falha na fronteira de saída estruturada do estágio correspondente. Se o runtime muta estado após uma submissão localmente inválida, deixa de fornecer feedback dentro do orçamento ou aceita uma violação do contrato completo, a causa é de runtime. Se a fronteira preserva estado e esgota corretamente o orçamento após respostas repetidamente inválidas, o resultado é atribuído ao estágio cognitivo que não produziu uma correção conforme, não à infraestrutura.
 
 \subsection*{11.2 Primeiro desvio do conjunto aceitável}
 

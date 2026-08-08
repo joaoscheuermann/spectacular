@@ -6,7 +6,7 @@ import { RevisionRequestSchema } from './revision.js';
 import { ObservationSchema } from './revision.js';
 
 /**
- * Records one ordered evaluation from `doneWhen`. Section 4.8 and Appendix A,
+ * Records one ordered evaluation from `doneWhen`. Section 4.9 and Appendix A,
  * table A.2 require completion to satisfy `doneWhen`; exposing every evaluation
  * is a stricter Doric proof field rather than a field mandated by the paper.
  */

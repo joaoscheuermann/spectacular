@@ -3,12 +3,13 @@ import type { Skill } from 'bundle';
 import * as candidatesPrompt from '../../prompts/candidates.js';
 import * as hintsPrompt from '../../prompts/hints.js';
 import { SkillHintExtractionSchema } from '../../schemas/hint.js';
+import { completeStructured } from '../../structured.js';
 import type { Graph } from '../../types/graph.js';
 import type { SkillExtraction } from '../../types/hint.js';
 import type { MosaicOptions } from '../../types/mosaic-options.js';
 
 /**
- * Produces the catalog feedback described in section 4.4 (p. 13), preserving
+ * Produces the catalog feedback described in section 4.5, preserving
  * node and candidate order while bounding retrieval independently for each goal.
  */
 export async function hints(
@@ -48,15 +49,11 @@ export async function hints(
       // Convert each complete skill body into short, goal-specific planning hints.
       const extracted = await Promise.all(
         candidates.map(async (skill) => {
-          const { structured } = await provider.complete({
-            messages: [
-              { role: 'system', content: hintsPrompt.system() },
-              {
-                role: 'user',
-                content: hintsPrompt.user(input, graph, node, skill),
-              },
-            ],
+          const structured = await completeStructured({
+            provider,
             model: models.default,
+            system: hintsPrompt.system(),
+            input: hintsPrompt.user(input, graph, node, skill),
             schema: SkillHintExtractionSchema,
           });
 

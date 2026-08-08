@@ -18,7 +18,7 @@ type ExecutionContext = {
 };
 
 /**
- * Defines the executor contract from paper sections 4.8-4.9 (pp. 16-17): work
+ * Defines the executor contract from paper sections 4.9-4.10: work
  * on one outcome-oriented node, loop through observations, and author the
  * semantic decision that leaves `running`.
  */
@@ -83,7 +83,7 @@ export const system = (required: readonly Skill[] = []): string =>
   ].join('\n');
 
 /**
- * Renders the ordered NodeContext from section 4.7 (p. 15): request, current
+ * Renders the ordered NodeContext from section 4.8: request, current
  * goal and doneWhen, projected state, ordered skill bodies, and available tool
  * schemas. Schemas travel through provider definitions instead of duplicated
  * prompt text, preserving the same semantic context boundary.
@@ -115,7 +115,7 @@ const criteria = (items: readonly string[]): string =>
 
 const artifacts = (node: Node, graph: Graph): string => {
   /**
-   * Section 4.7 projects transitive-ancestor outputs and omits causally
+   * Section 4.8 projects transitive-ancestor outputs and omits causally
    * unrelated branches unless the plan references them explicitly.
    */
   const projected = projectedArtifacts(node, graph);

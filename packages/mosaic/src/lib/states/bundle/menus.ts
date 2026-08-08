@@ -26,7 +26,7 @@ export const composeTools = (
   // T_registry resolves both base tools and skill-declared menu entries.
   const catalog = new Map(menu.map((tool) => [tool.name, tool]));
 
-  // Section 4.6 defines T(g) as base tools followed by selected-skill tools.
+  // Section 4.7 defines T(g) as base tools followed by selected-skill tools.
   const names = unique([
     ...required.map(({ name }) => name),
     ...skills.flatMap(({ allowedTools }) => allowedTools),

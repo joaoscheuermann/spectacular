@@ -36,7 +36,7 @@
 \textit{MOSAIC 0.2 — Micro-skill Orchestration through Skill Activation and Instruction Composition:} \textit{a minimal architecture for composing micro-skills over general-purpose tools}
 
 
-\begin{center}\textbf{João Vitor Scheuermann}\\MOSAIC 0.2 — 7 de agosto de 2026 / 7 August 2026\end{center}
+\begin{center}\textbf{João Vitor Scheuermann}\\MOSAIC 0.2 — 8 de agosto de 2026 / 8 August 2026\end{center}
 
 \textit{Documento técnico de arquitetura. Esta versão especifica o núcleo conceitual e os contratos} \textit{mínimos do MOSAIC; não apresenta implementação executável, benchmark ou resultados} \textit{experimentais.}
 
@@ -73,7 +73,7 @@ O pedido contém pelo menos quatro tipos de trabalho: localizar o documento corr
 
 \subsection*{1.2 Princípio de redução}
 
-A arquitetura segue uma regra de design deliberada: um componente só pertence ao núcleo quando é necessário para expressar a hipótese central. É fácil acrescentar registros, políticas, resolvedores, verificadores e camadas de compatibilidade; o trabalho de projeto está em retirar aquilo que não altera o conceito. Esse critério produz duas consequências. Primeiro, o artigo especifica um núcleo pequeno, e não uma plataforma operacional completa. Segundo, elementos úteis em produção não são negados; apenas deixam de ser pré-requisitos conceituais. Uma implementação futura pode acrescentar segurança, isolamento, observabilidade, retries, provedores ou otimização, desde que haja uma razão concreta para isso.
+A arquitetura segue uma regra de design deliberada: um componente só pertence ao núcleo quando é necessário para expressar a hipótese central. É fácil acrescentar registros, políticas, resolvedores, verificadores e camadas de compatibilidade; o trabalho de projeto está em retirar aquilo que não altera o conceito. Esse critério produz duas consequências. Primeiro, o artigo especifica um núcleo pequeno, e não uma plataforma operacional completa. Segundo, elementos úteis em produção não são negados; apenas deixam de ser pré-requisitos conceituais. Uma implementação futura pode acrescentar segurança, isolamento, observabilidade, retries de infraestrutura, provedores ou otimização, desde que haja uma razão concreta para isso.
 
 
 \subsection*{1.3 Contribuições da especificação}
@@ -92,7 +92,7 @@ A MOSAIC 0.2 é uma especificação técnica, não uma implementação de produ�
 
 \noindent \textbullet{} catálogo de skills confiável; \textbullet{} registro de tools confiável; \textbullet{} execução em modo YOLO, sem uma fronteira de autorização definida pelo artigo; \textbullet{} modelo capaz de seguir instruções, produzir saídas estruturadas e chamar tools; \textbullet{} estado suficiente para preservar resultados e observações entre objetivos.\par
 
-Não fazem parte do núcleo: defesas contra prompt injection, sandbox, least privilege, confirmação de efeitos, política de credenciais, retries, idempotência, compensação de ações, execução distribuída, scripts e recursos auxiliares de Agent Skills, treinamento de retrievers, implementação de código e avaliação experimental. Esses itens são relevantes em outros recortes, mas não são necessários para especificar a composição many-to-many proposta aqui.
+Não fazem parte do núcleo: defesas contra prompt injection, sandbox, least privilege, confirmação de efeitos, política de credenciais, retries e recuperação de infraestrutura, idempotência, compensação de ações, execução distribuída, scripts e recursos auxiliares de Agent Skills, treinamento de retrievers, implementação de código e avaliação experimental. A correção limitada de uma saída estruturada semanticamente inválida não é retry de infraestrutura: ela pertence à fronteira de conformidade do runtime definida na Seção 4.2. Os demais itens são relevantes em outros recortes, mas não são necessários para especificar a composição many-to-many proposta aqui.
 
 
 \subsection*{1.5 Status normativo e versão do perfil}
@@ -252,7 +252,15 @@ A Figura 3 separa duas responsabilidades. O catálogo prepara representações p
 
 % Source PDF page 12
 
-\subsection*{4.2 Catálogo canônico e índice body-aware}
+\subsection*{4.2 Fronteira transversal de saída estruturada}
+
+JSON Schema expressa apenas a projeção estrutural representável de um contrato. Contratos da MOSAIC também contêm invariantes relacionais e semânticas que podem não aparecer nessa projeção: dependências devem referenciar nós existentes, o grafo deve ser acíclico, entregáveis devem ser terminais e seleções devem respeitar o objetivo, as candidatas e os limites correntes. Portanto, a aceitação estrutural de uma resposta pelo provider não implica conformidade com o contrato da MOSAIC.
+
+Toda saída estruturada escrita pelo modelo deve ser validada localmente pelo runtime contra o contrato completo antes de alterar plano ou estado. Essa fronteira aplica-se ao planejamento P0 e P1, a cada extração de hint, à seleção do bundle, à decisão semântica do nó e à revisão localizada. Uma submissão ausente, malformada ou inválida deve ser descartada integralmente, sem mutação parcial nem execução de chamadas apresentadas junto dela. O runtime pode fornecer feedback diagnóstico limitado, sem repetir o payload rejeitado, e solicitar correção dentro de um orçamento finito. Uma resposta corrigida válida pode então ser aceita atomicamente; o esgotamento do orçamento deve causar falha.
+
+O perfil recomendado representa o contrato completo como uma tool terminal reservada. O runtime intercepta seus argumentos, valida-os localmente e nunca executa essa tool nem a registra como \texttt{Observation}. Esse protocolo é provider-independent e evita depender de structured output nativo. Outros protocolos são conformes quando preservam a mesma validação completa, atomicidade, feedback limitado e recuperação limitada. A correção de conformidade semântica é responsabilidade do runtime; retransmissão, backoff e recuperação de falhas de transporte ou provider continuam fora do núcleo.
+
+\subsection*{4.3 Catálogo canônico e índice body-aware}
 
 Cada skill é representada por um\texttt{ SKILL.md}. O núcleo mantém somente os dados necessários para recuperação e execução:
 
@@ -262,7 +270,7 @@ Cada skill é representada por um\texttt{ SKILL.md}. O núcleo mantém somente o
 O carregamento do catálogo é\textit{ fail-fast} para os campos normativos da MOSAIC 0.2. A implementação deve rejeitar o catálogo quando houver nome de skill duplicado, campo obrigatório ausente, body vazio ou nome de tool declarado que não exista em Tregistry. Tools repetidas em uma mesma skill são deduplicadas. Campos desconhecidos podem ser preservados, mas não alteram o núcleo. Uma versão anterior da arquitetura previa um compilador baseado em modelo para inferir \texttt{useWhen}, behaviors, outputs e outros campos. Esse componente foi removido do núcleo. A recuperação body-aware já pode operar sobre\texttt{ name},\texttt{ description} e body; o reranker lê a fonte original. Metadados inferidos podem ser úteis em implementações específicas, mas não são necessários para expressar a composição. O índice pode ser lexical, vetorial ou híbrido. O MOSAIC não fixa o mecanismo. A única exigência é preservar um caminho do resultado de retrieval até o body canônico, pois o reranking e a execução dependem das instruções reais, não apenas de resumos derivados.
 
 
-\subsection*{4.3 Planejamento inicial por resultados}
+\subsection*{4.4 Planejamento inicial por resultados}
 
 O planejador recebe o pedido e produz um DAG inicial P0. Nessa primeira passagem, ele não recebe nomes de skills. Isso reduz a tendência de copiar a estrutura física do catálogo. Cada nó deve possuir:
 
@@ -279,7 +287,7 @@ O planner não precisa antecipar chamadas como\texttt{ list},\texttt{ read} ou\t
 
 % Source PDF page 13
 
-\subsection*{4.4 Feedback do catálogo e revisão única}
+\subsection*{4.5 Feedback do catálogo e revisão única}
 
 Depois de P0, o runtime executa uma recuperação preliminar por objetivo. Para cada consulta, no máximo Khint candidatas são convertidas em hints curtas, fundamentadas no body. As hints podem revelar:
 
@@ -299,7 +307,7 @@ A regra de controle é simples: uma skill pode revelar que “analisar” e “r
 
 % Source PDF page 14
 
-\subsection*{4.5 Retrieval, reranking e seleção do bundle}
+\subsection*{4.6 Retrieval, reranking e seleção do bundle}
 
 Para cada objetivo pronto, o roteador constrói uma consulta com:
 
@@ -316,7 +324,7 @@ A seleção é baseada no comportamento ensinado pela skill. Uma skill não deve
 
 % Source PDF page 15
 
-\subsection*{4.6 Montagem do menu de tools}
+\subsection*{4.7 Montagem do menu de tools}
 
 Após a seleção, o runtime calcula T(g) pela fórmula apresentada anteriormente. Não existe um tool router independente no núcleo. Essa remoção é deliberada: um segundo roteador duplicaria a decisão de relevância antes que a hipótese básica fosse demonstrada.
 
@@ -325,7 +333,7 @@ Após a seleção, o runtime calcula T(g) pela fórmula apresentada anteriorment
 
 \texttt{allowed-tools} é, neste perfil, um vínculo declarativo entre skill e menu de execução. Não é tratado como fronteira de autorização ou política de segurança.
 
-\subsection*{4.7 Montagem do contexto e projeção de estado}
+\subsection*{4.8 Montagem do contexto e projeção de estado}
 
 O executor recebe somente o contexto necessário para o objetivo atual. A montagem deve seguir a ordem estável abaixo:
 
@@ -344,7 +352,7 @@ Resultados de ramos sem dependência causal com o objetivo atual são omitidos, 
 
 % Source PDF page 16
 
-\subsection*{4.8 Executor do nó}
+\subsection*{4.9 Executor do nó}
 
 O modelo pode concluir diretamente ou chamar tools. Cada retorno bem-sucedido de tool executável volta ao mesmo nó e é convertido pelo runtime em uma \texttt{Observation}; a tool reservada para a saída estruturada terminal nunca é uma observação. A decisão final do modelo contém somente status, avaliações ordenadas de \texttt{doneWhen}, resultado, pedido semântico de revisão e razão. O runtime rejeita dados de chamada ou retorno ausentes, duplicados ou não correlacionados e então materializa o \texttt{NodeOutcome} ao combinar a decisão com todas as observações, na ordem dos resultados. A evidência escrita em cada avaliação de critério continua sendo prosa do modelo; a associação das observações ocorre no nível do nó. Se os critérios não foram satisfeitos e não há ação útil, o nó termina como \texttt{blocked}; saídas inválidas ou falhas terminais podem produzir \texttt{failed}.
 
@@ -355,7 +363,7 @@ O esgotamento de \(L_{\mathrm{node}}\) produz \texttt{blocked}, pois significa q
 
 \input{figures/visual_10.tex}
 
-\subsection*{4.9 Ciclo de vida do nó e revisão localizada}
+\subsection*{4.10 Ciclo de vida do nó e revisão localizada}
 
 O status de um nó pode ser \texttt{pending}, \texttt{ready}, \texttt{running},
 \texttt{completed}, \texttt{needs\_revision}, \texttt{blocked} ou
@@ -383,7 +391,7 @@ Quando ocorre revisão, o planner recebe nome da tool, entrada e saída de cada 
 Rmax limita o número de revisões localizadas em uma execução. O artigo não prescreve um valor universal; o runtime deve declarar o valor usado. Essa guarda impede ciclos infinitos sem transformar o núcleo em um protocolo completo de recuperação.
 
 
-\subsection*{4.10 Composição da resposta final}
+\subsection*{4.11 Composição da resposta final}
 
 Objetivos terminais produzem o conteúdo semanticamente final. Quando a tarefa exige síntese, redação ou decisão, o plano deve conter um objetivo terminal responsável por essa transformação, como G4 no exemplo financeiro. A função\texttt{ compor\_resposta} não chama o modelo e não aplica skills novamente. Ela seleciona resultados de nós terminais marcados para entrega, ordena-os de forma estável pela ordem topológica e empacota texto, artefatos inline ou referências opacas e efeitos observáveis. A ordem dos artefatos é preservada. A composição não resolve nem persiste referências. Assim, a resposta é produzida exatamente uma vez e o trace identifica qual objetivo realizou a síntese.
 
@@ -402,6 +410,11 @@ A arquitetura pode ser expressa pelo algoritmo abstrato abaixo. Ele especifica a
 \begin{Verbatim}[breaklines=true,breakanywhere=true,fontsize=\small]
 entrada: pedido q, catálogo S, registro T_registry, base T_base,
          K_retrieve, K_hint, K_max, L_node e R_max
+
+regra transversal para toda operação cognitiva estruturada:
+  validar localmente o contrato completo antes de alterar plano ou estado
+  descartar submissão inválida e fornecer somente feedback limitado
+  aceitar correção em orçamento finito; se o orçamento esgotar, falhar
 
 validar_catalogo_e_registro(S, T_registry, T_base)
 P0 <- planejar_objetivos(q)              // sem nomes de skills
@@ -450,10 +463,10 @@ enquanto houver objetivo não terminal em P:
 retornar compor_resposta_deterministicamente(q, P, estado)
 \end{Verbatim}
 
-O algoritmo mantém sete invariantes de conformidade:
+O algoritmo mantém oito invariantes de conformidade:
 
 
-\noindent 1. objetivos descrevem resultados, não chamadas de tools nem nomes de skills; 2. o planner inicial não depende dos nomes das skills; 3. o bundle pode conter zero, uma ou várias skills e possui ordem observável; 4. tools gerais podem existir fora das skills por meio de \(T_{\mathrm{base}}\); 5. o body canônico é usado tanto no reranking quanto na execução; 6. toda observação executável é criada, correlacionada e ordenada pelo runtime, nunca pelo modelo; 7. uma revisão recebe o conjunto completo de observações, preserva nós concluídos e altera apenas o nó atual incompleto e a parte ainda não iniciada do plano.\par
+\noindent 1. objetivos descrevem resultados, não chamadas de tools nem nomes de skills; 2. o planner inicial não depende dos nomes das skills; 3. o bundle pode conter zero, uma ou várias skills e possui ordem observável; 4. tools gerais podem existir fora das skills por meio de \(T_{\mathrm{base}}\); 5. o body canônico é usado tanto no reranking quanto na execução; 6. toda operação cognitiva estruturada satisfaz o contrato completo do runtime antes de alterar plano ou estado; 7. toda observação executável é criada, correlacionada e ordenada pelo runtime, nunca pelo modelo; 8. uma revisão recebe o conjunto completo de observações, preserva nós concluídos e altera apenas o nó atual incompleto e a parte ainda não iniciada do plano.\par
 
 Uma implementação que preserve esses invariantes e os contratos do Apêndice A pode variar livremente em modelo, índice, linguagem, formato de serialização e protocolo de tool calling.
 
@@ -764,7 +777,7 @@ O pedido de revisão pressupõe que o executor reconheça quando uma evidência 
 
 \subsection*{9.8 Contratos mínimos não substituem operação de produção}
 
-Os contratos do perfil resolvem ambiguidade entre implementações, mas não especificam persistência distribuída, consistência transacional, retries, idempotência, observabilidade com- pleta ou recuperação de infraestrutura. Eles definem o que deve ser trocado entre os componentes, não como cada componente deve ser operacionalizado.
+Os contratos do perfil resolvem ambiguidade entre implementações, mas não especificam persistência distribuída, consistência transacional, retries de infraestrutura, idempotência, observabilidade com- pleta ou recuperação de infraestrutura. A validação local e a recuperação limitada de saídas estruturadas pertencem à correção semântica do runtime e não devem ser confundidas com essas políticas operacionais. Os contratos definem o que deve ser trocado entre os componentes, não como cada componente deve ser operacionalizado.
 
 
 \section*{10 CONSIDERAÇÕES FINAIS}

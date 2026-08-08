@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {
-  PlannedGraphSchema,
-  type PlannedGraph,
-} from '../src/lib/schemas/graph.js';
+import { AgentErrorObject } from 'agent';
+import type { LlmProvider, ProviderRequest } from 'llms';
+
+import type { PlannedGraph } from '../src/lib/schemas/graph.js';
 import { revision } from '../src/lib/states/revision/index.js';
 import {
   localizedRevisionCount,
@@ -14,6 +14,7 @@ import type { Graph, Node } from '../src/lib/types/graph.js';
 import type { MosaicOptions } from '../src/lib/types/mosaic-options.js';
 import type { Observation } from '../src/lib/types/revision.js';
 import type { WorkflowState } from '../src/lib/types/workflow.js';
+import { terminalFinish, terminalTool, userContent } from './structured.js';
 
 test('preserves completed nodes and resets retained target runtime state', async () => {
   const completed = node('completed', 0, 'completed', false);
@@ -77,8 +78,18 @@ test('preserves completed nodes and resets retained target runtime state', async
   assert.equal(revised.nodes[2]?.status, 'pending');
   assert.equal(localizedRevisionCount(action.state.graphs), 1);
   assert.equal(harness.requests.length, 1);
-  assert.strictEqual(harness.requests[0]?.schema, PlannedGraphSchema);
-  const prompt = harness.requests[0]?.messages[1]?.content ?? '';
+  const request = harness.requests[0];
+  assert.ok(request);
+  assert.equal(request.schema, undefined);
+  assert.equal(request.model, 'default');
+  assert.equal(request.flags, undefined);
+  assert.deepEqual(
+    request.messages.map(({ role }) => role),
+    ['system', 'system', 'user'],
+  );
+  assert.equal(request.tools?.length, 1);
+  terminalTool(request);
+  const prompt = userContent(request);
   assert.match(prompt, /## Revision\n\n```text\n1\n```/u);
   assert.match(prompt, /~~~text\nhostile\n`{6}\ninvalidating output/u);
   assert.ok(
@@ -184,8 +195,8 @@ test('processes multiple revisions in deterministic node-wave order', async () =
   assert.equal(localizedRevisionCount(second.state.graphs), 2);
   assert.equal(second.state.graphs.at(-1)?.revision, 3);
   assert.equal(second.state.graphs.at(-1)?.nodes[1]?.goal, 'First revised');
-  assert.match(harness.requests[0]?.messages[1]?.content ?? '', /second/u);
-  assert.match(harness.requests[1]?.messages[1]?.content ?? '', /first/u);
+  assert.match(userContent(harness.requests[0]!), /second/u);
+  assert.match(userContent(harness.requests[1]!), /first/u);
 });
 
 test('blocks without a provider call when the localized revision limit is zero or exhausted', async () => {
@@ -303,7 +314,11 @@ test('does not append a graph when the provider fails or returns an invalid plan
     );
 
     assert.equal(action.type, 'fail');
-    assert.equal(harness.requests.length, 1);
+    assert.equal(harness.requests.length, input.failure === undefined ? 4 : 1);
+    if (input.failure === undefined && action.type === 'fail') {
+      assert.ok(action.error instanceof AgentErrorObject);
+      assert.equal(action.error.data.code, 'invalid_structured_output');
+    }
     assert.equal(workflow.graphs.length, 2);
     assert.equal(target.status, 'needs_revision');
     assert.equal(target.outcome?.revisionRequest?.goalId, 'target');
@@ -312,19 +327,23 @@ test('does not append a graph when the provider fails or returns an invalid plan
 
 const createHarness = (plans: readonly unknown[], max = 3, failure?: Error) => {
   let index = 0;
-  const requests: Array<{
-    readonly schema: unknown;
-    readonly messages: readonly { readonly content?: string }[];
-  }> = [];
+  const requests: ProviderRequest<unknown>[] = [];
   const options: MosaicOptions = {
     logger: { info: () => undefined, debug: () => undefined } as never,
     provider: {
-      complete: async (request: (typeof requests)[number]) => {
+      metadata: {
+        id: 'fake',
+        name: 'Fake',
+        baseUrl: 'https://fake.invalid',
+      },
+      complete: async (request: ProviderRequest<unknown>) => {
         requests.push(request);
         if (failure !== undefined) throw failure;
-        return { structured: plans[index++] };
+        terminalTool(request);
+        const plan = plans[index++] ?? plans.at(-1);
+        return terminalFinish(request, plan);
       },
-    } as never,
+    } as unknown as LlmProvider,
     models: { default: 'default', reranker: 'reranker' },
     routing: {
       maxHintCandidates: 1,
