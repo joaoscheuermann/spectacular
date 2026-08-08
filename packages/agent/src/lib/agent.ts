@@ -97,11 +97,6 @@ export const createAgent = (options: AgentOptions): Agent => {
         ? definitions
         : [...definitions, outputTool.definition];
 
-    /**
-     * Native provider schemas are used only when no terminal tool is needed.
-     * This avoids sending executable tools and provider-native output format
-     * controls together, which is unsupported by some providers.
-     */
     return {
       model: options.model,
       messages: [...system, ...options.messages.list()],
@@ -114,9 +109,6 @@ export const createAgent = (options: AgentOptions): Agent => {
         : {}),
       ...(options.effort !== undefined ? { effort: options.effort } : {}),
       ...(options.flags !== undefined ? { flags: options.flags } : {}),
-      ...(runOptions.schema !== undefined && outputTool === undefined
-        ? { schema: runOptions.schema }
-        : {}),
       ...(runOptions.signal !== undefined ? { signal: runOptions.signal } : {}),
     };
   };
@@ -126,8 +118,8 @@ export const createAgent = (options: AgentOptions): Agent => {
   ): StructuredOutputTool | undefined => {
     const definitions = options.tools.definitions();
 
-    /** Plain structured calls stay provider-native; mixed runs need a terminal tool. */
-    return runOptions.schema === undefined || definitions.length === 0
+    /** Every structured run terminates through the same provider-neutral tool. */
+    return runOptions.schema === undefined
       ? undefined
       : createStructuredOutputTool(
           options.provider.metadata.id,

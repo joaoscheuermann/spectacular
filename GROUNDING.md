@@ -543,30 +543,28 @@ response has been parsed and validated by that schema. Refusals, tool calls,
 missing or invalid JSON, and schema-validation failures reject with
 `invalid_structured_output`; successful structured completions always include
 the validated `structured` value.
-The agent runtime does not send a provider request that combines executable
-tools with a native structured-output schema. When an agent run requests both,
-it appends one collision-free strict terminal tool derived from the output
-schema, adds a deterministic system instruction naming that tool, and omits the
-native schema from provider requests in that run. Ordinary tool calls continue
-through the existing loop. The terminal tool call must be the only call in its
-response; the agent parses and validates its JSON arguments with the original
-schema, converts it to a tool-free structured finish, and never executes it or
-stores a tool result for it. Missing, malformed, schema-invalid, duplicate, or
-mixed terminal submissions are repairable. The agent discards each invalid
-response without persisting it or executing any included call, then may make
-three correction attempts after the initial invalid submission. Each next
-request receives one transient system correction naming the terminal tool,
-explaining the failure, and including at most ten normalized Zod issue paths
-and messages when available; rejected arguments are never copied into the
-correction. The retry budget is cumulative across the run, and ordinary tool
-turns neither consume nor reset it. The fourth invalid submission throws the
-latest `invalid_structured_output` `AgentErrorObject`, whose existing
-`diagnostic` field contains the same safe validation details when available.
-Runs with a schema and no executable tools retain provider-native structured
-output unchanged. This terminal behavior applies equally to complete and
-stream agent runs. Streaming preserves already-emitted provider deltas,
-suppresses an invalid `response.finished`, and adds no repair-specific public
-event.
+Every agent run with an output schema appends one collision-free strict
+terminal tool derived from that schema, including when its caller-owned tool
+storage has no executable definitions. The agent adds a deterministic system
+instruction naming the terminal tool and never sends the native schema in its
+provider requests. Ordinary executable tool calls continue through the
+existing loop. The terminal tool call must be the only call in its response;
+the agent parses and validates its JSON arguments with the original schema,
+converts it to a tool-free structured finish, and never executes it or stores a
+tool result for it. Missing, malformed, schema-invalid, duplicate, or mixed
+terminal submissions are repairable. The agent discards each invalid response
+without persisting it or executing any included call, then may make three
+correction attempts after the initial invalid submission. Each next request
+receives one transient system correction naming the terminal tool, explaining
+the failure, and including at most ten normalized Zod issue paths and messages
+when available; rejected arguments are never copied into the correction. The
+retry budget is cumulative across the run, and ordinary tool turns neither
+consume nor reset it. The fourth invalid submission throws the latest
+`invalid_structured_output` `AgentErrorObject`, whose existing `diagnostic`
+field contains the same safe validation details when available. This terminal
+behavior applies equally to complete and stream agent runs. Streaming
+preserves already-emitted provider deltas, suppresses an invalid
+`response.finished`, and adds no repair-specific public event.
 Agent runs may declare an optional positive safe-integer `maxTurns`; omission
 keeps the loop unbounded. Invalid values fail with `TypeError` before message
 storage or provider activity. The budget is checked immediately before every

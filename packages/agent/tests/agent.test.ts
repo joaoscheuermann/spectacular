@@ -118,13 +118,19 @@ test('complete executes requested tools and calls the provider again with tool r
   assert.deepEqual(fake.requests[1]?.messages, messages.list().slice(0, 3));
 });
 
-test('complete passes run structured output to provider requests and returns parsed output', async () => {
+test('complete uses a terminal tool for structured output with empty tool storage', async () => {
   const schema = z.object({ answer: z.string() });
-  const finish: ProviderFinished<z.output<typeof schema>> = {
-    ...completeFinish('{"answer":"Done"}'),
-    structured: { answer: 'Done' },
-  };
-  const fake = createProvider({ complete: () => finish });
+  const fake = createProvider({
+    complete: (request) => {
+      const terminal = request.tools?.[0];
+
+      assert.equal(request.tools?.length, 1);
+      assert.equal(terminal?.name, 'submit_structured_output');
+      return completeFinish('', [
+        call(terminal?.name ?? '', { answer: 'Done' }),
+      ]);
+    },
+  });
   const messages = createMessageStorage();
   const agent = createAgent({
     provider: fake.provider,
@@ -142,9 +148,9 @@ test('complete passes run structured output to provider requests and returns par
   const invalid: number | undefined = response.structured;
   void invalid;
 
-  assert.equal(fake.requests[0]?.schema, schema);
+  assert.equal(fake.requests[0]?.schema, undefined);
   assert.deepEqual(structured, { answer: 'Done' });
-  assert.equal(response.finish, finish);
+  assert.deepEqual(response.finish.toolCalls, []);
   assert.deepEqual(messages.list(), [
     { role: 'user', content: 'Return JSON.' },
     { role: 'assistant', content: '{"answer":"Done"}' },
@@ -368,14 +374,18 @@ test('stream yields provider events tool events and final agent event across a t
   );
 });
 
-test('stream passes run structured output to provider requests and emits parsed output', async () => {
+test('stream uses a terminal tool for structured output with empty tool storage', async () => {
   const schema = z.object({ answer: z.string() });
-  const finish: ProviderFinished<z.output<typeof schema>> = {
-    ...completeFinish('{"answer":"Done"}'),
-    structured: { answer: 'Done' },
-  };
   const fake = createProvider({
-    stream: () => streamEvents(finish),
+    stream: (request) => {
+      const terminal = request.tools?.[0];
+
+      assert.equal(request.tools?.length, 1);
+      assert.equal(terminal?.name, 'submit_structured_output');
+      return streamEvents(
+        completeFinish('', [call(terminal?.name ?? '', { answer: 'Done' })]),
+      );
+    },
   });
   const messages = createMessageStorage();
   const agent = createAgent({
@@ -389,7 +399,7 @@ test('stream passes run structured output to provider requests and emits parsed 
   const events = await collect(agent.stream('Return JSON.', { schema }));
   const final = events.at(-1);
 
-  assert.equal(fake.requests[0]?.schema, schema);
+  assert.equal(fake.requests[0]?.schema, undefined);
   assert.equal(final?.type, 'agent.finished');
 
   if (final?.type !== 'agent.finished') {

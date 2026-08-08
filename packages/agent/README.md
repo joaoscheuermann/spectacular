@@ -70,12 +70,11 @@ with code `turn_limit_exceeded` before another provider invocation. Streaming
 preserves events already emitted but does not emit `agent.finished` for an
 exhausted run.
 
-When a run requests structured output without executable tools, the schema is
-passed directly to the provider. When executable tools are also present, the
-agent instead adds one strict terminal tool derived from the schema. Ordinary
-tool calls continue the loop; the terminal call is validated locally, converted
-to the final structured response, and is never executed. This avoids combining
-provider-native structured output with function tools in one request.
+Every run that requests structured output adds one strict terminal tool derived
+from the schema, even when the caller's tool storage is empty. The schema is
+never sent as a provider-native structured-output field by the agent. Ordinary
+executable tool calls continue the loop; the terminal call is validated
+locally, converted to the final structured response, and is never executed.
 
 An invalid terminal submission is discarded without storage or tool execution.
 The agent may request three corrected submissions after the initial failure,

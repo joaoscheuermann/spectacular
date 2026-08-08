@@ -65,7 +65,7 @@ export const createStructuredOutputTool = (
   };
 };
 
-/** Instructs the model how to end a tool-enabled structured run. */
+/** Instructs the model how to end a structured run. */
 export const structuredOutputInstruction = (name: string): string =>
   [
     `When the task is complete, call \`${name}\` exactly once with the final structured output.`,
@@ -118,10 +118,7 @@ export const parseStructuredOutputTool = <Output>(
     );
   }
 
-  /**
-   * Convert the internal terminal call into the same tool-free finish shape
-   * returned by provider-native structured output.
-   */
+  /** Convert the internal terminal call into the agent's tool-free finish shape. */
   return {
     type: 'finished',
     finish: {

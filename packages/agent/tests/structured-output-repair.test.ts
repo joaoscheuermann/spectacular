@@ -360,7 +360,7 @@ test('stream preserves invalid deltas while suppressing the invalid finished eve
 });
 
 for (const mode of ['complete', 'stream'] as const) {
-  test(`${mode} leaves provider-native structured failures unchanged`, async () => {
+  test(`${mode} leaves provider failures unchanged for structured runs`, async () => {
     const failure = new ProviderErrorObject({
       provider: 'fake',
       code: 'invalid_structured_output',
@@ -388,7 +388,12 @@ for (const mode of ['complete', 'stream'] as const) {
 
     await assert.rejects(operation, (error: unknown) => error === failure);
     assert.equal(fake.requests.length, 1);
-    assert.equal(fake.requests[0]?.schema, answerSchema);
+    assert.equal(fake.requests[0]?.schema, undefined);
+    assert.equal(fake.requests[0]?.tools?.length, 1);
+    assert.equal(
+      fake.requests[0]?.tools?.[0]?.name,
+      'submit_structured_output',
+    );
   });
 }
 
