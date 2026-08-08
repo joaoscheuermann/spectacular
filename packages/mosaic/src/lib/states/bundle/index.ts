@@ -116,10 +116,7 @@ const retrieve = async ({
   );
 
   // Vector retrieval limits recall independently from the final bundle limit.
-  const matches = await skills.embeddings.search(
-    context,
-    routing.maxCandidates,
-  );
+  const matches = await skills.retriever.search(context, routing.maxCandidates);
   return currentCandidates(matches, catalog);
 };
 

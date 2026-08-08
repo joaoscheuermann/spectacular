@@ -27,12 +27,19 @@ test('propagates the exact provider failure from graph generation', async () => 
     models: {
       default: 'default-model',
       reranker: 'reranker-model',
-      embedder: 'embedder-model',
     },
     routing: { maxCandidates: 5, maxSkills: 5 },
     revision: { max: 3 },
-    skills: { required: [], menu: [], embeddings: {} as never },
-    tools: { required: [], menu: [], embeddings: {} as never },
+    skills: {
+      required: [],
+      menu: [],
+      retriever: { search: async () => [] },
+    },
+    tools: {
+      required: [],
+      menu: [],
+      retriever: { search: async () => [] },
+    },
   };
 
   await assert.rejects(mosaic(options).prompt('Do it.'), (error) => {

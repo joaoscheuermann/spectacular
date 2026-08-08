@@ -380,19 +380,18 @@ function createHarness(
       models: {
         default: 'default-model',
         reranker: 'reranker-model',
-        embedder: 'embedder-model',
       },
       routing: { maxCandidates: 5, maxSkills: 5 },
       revision: { max: 3 },
       skills: {
         required: requiredSkills,
         menu: [...requiredSkills, ...skills],
-        embeddings: {} as never,
+        retriever: {} as never,
       },
       tools: {
         required: [],
         menu: tools,
-        embeddings: {} as never,
+        retriever: {} as never,
       },
     },
   };

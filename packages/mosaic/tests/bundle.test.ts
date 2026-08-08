@@ -146,7 +146,7 @@ test('binds the selection schema to the node candidates uniqueness and limit', (
   );
 });
 
-test('excludes required and stale indexed skills and never reads tool embeddings', async () => {
+test('excludes required and stale indexed skills and never reads the tool retriever', async () => {
   const current = node('current');
   const required = skill('required');
   const selected = skill('selected');
@@ -216,11 +216,11 @@ const createHarness = (input: HarnessInput) => {
   const completions: Array<{ readonly system: string; readonly user: string }> =
     [];
   const logs: unknown[] = [];
-  const toolEmbeddings = new Proxy(
+  const toolRetriever = new Proxy(
     {},
     {
       get() {
-        throw new Error('tools.embeddings must not be read by bundle');
+        throw new Error('tools.retriever must not be read by bundle');
       },
     },
   );
@@ -263,15 +263,13 @@ const createHarness = (input: HarnessInput) => {
     models: {
       default: 'default-model',
       reranker: 'reranker-model',
-      embedder: 'embedder-model',
     },
     routing: { maxCandidates: 5, maxSkills: input.maxSkills ?? 5 },
     revision: { max: 3 },
     skills: {
       required: input.requiredSkills ?? [],
       menu: skillMenu,
-      embeddings: {
-        add: async () => undefined,
+      retriever: {
         search: async (query: string) => {
           searches.push(query);
           return matches.map((data) => ({ data, score: 1 }));
@@ -281,7 +279,7 @@ const createHarness = (input: HarnessInput) => {
     tools: {
       required: requiredTools,
       menu: toolMenu,
-      embeddings: toolEmbeddings as never,
+      retriever: toolRetriever as never,
     },
   };
 

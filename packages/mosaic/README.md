@@ -6,14 +6,13 @@ Goal-oriented planning and preparation workflow extracted from the Doric host.
 import mosaic, { mosaic as createMosaic } from 'mosaic';
 ```
 
-The factory receives provider, logger, default/reranker/embedder model IDs,
-skill and tool catalogs, both vector databases, and explicit
-`routing.maxCandidates`, `routing.maxSkills`, and `revision.max` limits. The
-localized revision limit is required and accepts any integer greater than or
-equal to zero; the Doric composition root uses `revision.max: 3`. It has no
-session option. The embedder configuration and tool vectors remain part of the
-public composition contract even though bundle routing queries only skill
-vectors.
+The factory receives a provider, logger, default/reranker model IDs, skill and
+tool catalogs, both retrievers, and explicit `routing.maxCandidates`,
+`routing.maxSkills`, and `revision.max` limits. The localized revision limit is
+required and accepts any integer greater than or equal to zero; the Doric
+composition root uses `revision.max: 3`. It has no session option. The tool
+retriever remains part of the public composition contract even though bundle
+routing queries only the skill retriever.
 
 ## Lifecycle
 
@@ -48,7 +47,7 @@ P0 never reads the catalog. P1 retrieves candidates independently for each
 goal, excludes required and stale skills, deduplicates canonical names, and
 applies `routing.maxCandidates` both as `K_hint` and as the later routing
 `K_retrieve`. The hint path reapplies the bound after canonical filtering so an
-over-returning vector index cannot cause more than `K_hint` model calls.
+over-returning retriever cannot cause more than `K_hint` model calls.
 
 A `needs_revision` outcome stores the semantic request and the complete ordered
 observation set produced by its node. `schedule` detects those nodes and routes
@@ -96,9 +95,9 @@ tools and execution context. Base tools appear first, followed by tools declared
 by selected skills in bundle order; the first occurrence of a name wins.
 
 Always-available skills form Doric's derived universal profile. They are
-excluded from hints, vector routing, `node.skills`, and `maxSkills`, then
+excluded from hints, retrieval, `node.skills`, and `maxSkills`, then
 injected into every execution system prompt in manifest order. They may refer
-only to base tools and cannot expand the node tool menu. `tools.embeddings`
+only to base tools and cannot expand the node tool menu. `tools.retriever`
 remains available to other Mosaic policies but is not a tool router for this
 state.
 
@@ -202,3 +201,6 @@ entries, and the `text/markdown` artifact representation are Doric choices.
 Conforming implementations may vary in model, language, serialization format,
 and tool-calling protocol while preserving the MOSAIC 0.2 invariants and
 Appendix A contracts.
+
+Current differences between the implementation and the broader paper contracts
+are tracked in [MOSAIC 0.2 implementation gaps](docs/IMPLEMENTATION_GAPS.md).

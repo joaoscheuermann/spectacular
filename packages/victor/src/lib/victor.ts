@@ -1,11 +1,10 @@
-import type { Logger } from 'pino';
-
 import type {
   Embedding,
-  VectorDatabase,
-  VectorDatabaseOptions,
-  VectorSearchResult,
-} from './types/vector-database.js';
+  SearchIndex,
+  SearchResult,
+  VectorIndexOptions,
+} from './types/search.js';
+import { invalid, validateLogger, validateTopK } from './utils/validation.js';
 
 type Entry<Data> = {
   readonly data: Data;
@@ -18,12 +17,12 @@ type Magnitude = {
   readonly norm: number;
 };
 
-type ScoredEntry<Data> = VectorSearchResult<Data> & {
+type ScoredEntry<Data> = SearchResult<Data> & {
   readonly index: number;
 };
 
-const invalid = (message: string): Error =>
-  new TypeError(`Invalid vector database ${message}.`);
+const invalidVector = (message: string): TypeError =>
+  invalid('vector index', message);
 
 const magnitudeOf = (vector: ReadonlyArray<number>): Magnitude | undefined => {
   let scale = 0;
@@ -50,24 +49,13 @@ const magnitudeOf = (vector: ReadonlyArray<number>): Magnitude | undefined => {
 
 const validateDimensions = (dimensions: number): void => {
   if (!Number.isSafeInteger(dimensions) || dimensions <= 0) {
-    throw invalid('dimensions: expected a positive safe integer');
+    throw invalidVector('dimensions: expected a positive safe integer');
   }
 };
 
-function validateLogger(logger: unknown): asserts logger is Logger {
-  if (
-    typeof logger !== 'object' ||
-    logger === null ||
-    typeof (logger as { debug?: unknown }).debug !== 'function' ||
-    typeof (logger as { child?: unknown }).child !== 'function'
-  ) {
-    throw invalid('logger: expected an object with debug and child functions');
-  }
-}
-
 function validateEmbedding(embedding: unknown): asserts embedding is Embedding {
   if (typeof embedding !== 'function') {
-    throw invalid('embedding: expected a function');
+    throw invalidVector('embedding: expected a function');
   }
 }
 
@@ -76,7 +64,7 @@ const validateVector = (
   dimensions: number,
 ): ReadonlyArray<number> => {
   if (!Array.isArray(value) || value.length !== dimensions) {
-    throw invalid(
+    throw invalidVector(
       `embedding result: expected an array with ${dimensions} dimensions`,
     );
   }
@@ -84,14 +72,14 @@ const validateVector = (
   if (
     !value.every((entry) => typeof entry === 'number' && Number.isFinite(entry))
   ) {
-    throw invalid('embedding result: expected only finite numbers');
+    throw invalidVector('embedding result: expected only finite numbers');
   }
 
   const vector = [...value];
   const magnitude = magnitudeOf(vector);
 
   if (magnitude === undefined) {
-    throw invalid('embedding result: expected a non-zero magnitude');
+    throw invalidVector('embedding result: expected a non-zero magnitude');
   }
 
   return vector;
@@ -114,17 +102,17 @@ const cosine = (
   return Math.max(-1, Math.min(1, score));
 };
 
-/** Creates an in-memory database that embeds stored values and queries. */
-export const createVectorDatabase = <Data = unknown>(
-  options: VectorDatabaseOptions,
-): VectorDatabase<Data> => {
+/** Creates an in-memory vector index that embeds stored values and queries. */
+export const createVectorIndex = <Data = unknown>(
+  options: VectorIndexOptions,
+): SearchIndex<Data> => {
   const dimensions = options?.dimensions;
   const embedding = options?.embedding;
   const parentLogger = options?.logger;
 
   validateDimensions(dimensions);
   validateEmbedding(embedding);
-  validateLogger(parentLogger);
+  validateLogger(parentLogger, 'vector index');
 
   const logger = parentLogger.child({ component: 'victor' });
 
@@ -144,20 +132,22 @@ export const createVectorDatabase = <Data = unknown>(
 
       try {
         if (typeof transform !== 'function') {
-          throw invalid('transform: expected a function');
+          throw invalidVector('transform: expected a function');
         }
 
         const text = transform(data);
 
         if (typeof text !== 'string') {
-          throw invalid('transform result: expected a string');
+          throw invalidVector('transform result: expected a string');
         }
 
         const vector = await embed(text);
         const magnitude = magnitudeOf(vector);
 
         if (magnitude === undefined) {
-          throw invalid('embedding result: expected a non-zero magnitude');
+          throw invalidVector(
+            'embedding result: expected a non-zero magnitude',
+          );
         }
 
         entries.push({ data, vector, magnitude });
@@ -174,19 +164,14 @@ export const createVectorDatabase = <Data = unknown>(
       }
     },
 
-    async search(
-      query,
-      topK,
-    ): Promise<ReadonlyArray<VectorSearchResult<Data>>> {
+    async search(query, topK): Promise<ReadonlyArray<SearchResult<Data>>> {
       const safeTopK = Number.isFinite(topK) ? topK : undefined;
       const fields = { dimensions, entryCount: entries.length, topK: safeTopK };
 
       logger.debug(fields, 'vector database search started');
 
       try {
-        if (!Number.isSafeInteger(topK) || topK < 0) {
-          throw invalid('topK: expected a nonnegative safe integer');
-        }
+        validateTopK(topK, 'vector index');
 
         if (topK === 0 || entries.length === 0) {
           logger.debug(
@@ -200,7 +185,9 @@ export const createVectorDatabase = <Data = unknown>(
         const magnitude = magnitudeOf(vector);
 
         if (magnitude === undefined) {
-          throw invalid('embedding result: expected a non-zero magnitude');
+          throw invalidVector(
+            'embedding result: expected a non-zero magnitude',
+          );
         }
 
         const results = entries

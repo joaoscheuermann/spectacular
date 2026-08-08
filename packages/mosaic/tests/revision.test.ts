@@ -295,19 +295,19 @@ const createHarness = (plans: readonly unknown[], max = 3, failure?: Error) => {
         return { structured: plans[index++] };
       },
     } as never,
-    models: { default: 'default', reranker: 'reranker', embedder: 'embedder' },
+    models: { default: 'default', reranker: 'reranker' },
     routing: { maxCandidates: 1, maxSkills: 0 },
     revision: { max },
     skills: {
       required: [],
       menu: [],
-      embeddings: new Proxy({} as never, {
+      retriever: new Proxy({} as never, {
         get() {
           throw new Error('Localized revision must not query skill hints.');
         },
       }),
     },
-    tools: { required: [], menu: [], embeddings: {} as never },
+    tools: { required: [], menu: [], retriever: {} as never },
   };
 
   return { options, requests };

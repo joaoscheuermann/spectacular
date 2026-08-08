@@ -9,7 +9,6 @@ export const validateOptions = (options: MosaicOptions): void => {
 
   requireModel('default', models.default);
   requireModel('reranker', models.reranker);
-  requireModel('embedder', models.embedder);
   requireInteger('routing.maxCandidates', routing.maxCandidates, 1);
   requireInteger('routing.maxSkills', routing.maxSkills, 0);
   requireInteger('revision.max', revision?.max, 0);
@@ -20,8 +19,8 @@ export const validateOptions = (options: MosaicOptions): void => {
     );
   }
 
-  requireIndex('skills.embeddings', skills.embeddings);
-  requireIndex('tools.embeddings', tools.embeddings);
+  requireRetriever('skills.retriever', skills.retriever);
+  requireRetriever('tools.retriever', tools.retriever);
   requireUnique('skills.menu', skills.menu);
   requireUnique('skills.required', skills.required);
   requireUnique('tools.menu', tools.menu);
@@ -86,9 +85,15 @@ const requireInteger = (
   throw new TypeError(`Mosaic ${name} must be an integer >= ${minimum}.`);
 };
 
-const requireIndex = (name: string, value: object): void => {
-  if (typeof value === 'object' && value !== null) return;
-  throw new TypeError(`Mosaic ${name} must be provided.`);
+const requireRetriever = (name: string, value: object): void => {
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { search?: unknown }).search === 'function'
+  ) {
+    return;
+  }
+  throw new TypeError(`Mosaic ${name} must provide search.`);
 };
 
 const requireUnique = (

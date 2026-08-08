@@ -248,11 +248,16 @@ result.
 Node.js CLI host. It provides Doric-owned text, select, and queued prompt APIs
 instead of coupling CLI user-input handling to Inquirer-shaped contracts.
 
-`packages/victor` is the explicitly requested Node.js-compatible, process-local
-in-memory vector database. It accepts caller-injected embedding generation for
-storage and queries, stores caller values through per-add text transformation,
-and returns original values from cosine-similarity top-K search; it has no
-persistence or provider integration.
+`packages/victor` owns Node.js-compatible, process-local in-memory retrieval.
+It exposes incremental lexical and vector indexes plus a read-only hybrid
+search. The lexical index applies deterministic Unicode tokenization and BM25;
+the vector index accepts caller-injected embedding generation and ranks by
+cosine similarity. Both indexes store caller values through per-add text
+transformation. Hybrid search queries its injected lexical and semantic sources
+concurrently, fuses their bounded ranks with equal-weight reciprocal rank fusion
+using a fixed rank constant of 60, deduplicates by a caller-provided canonical
+key, and resolves fused-score ties by that key. It has no persistence or
+provider integration.
 
 `packages/state-machine` owns reusable, process-local typed transition
 execution. A definition stores only its exhaustive handler map and infers its
@@ -267,13 +272,13 @@ recovery hooks, or external side effects.
 `packages/mosaic` depends on `packages/state-machine` but owns the incomplete
 Doric goal-workflow policy: planning and revision, scheduling, skill
 retrieval and reranking, and per-node skill/tool menu composition. Its public
-factory accepts injected provider, logger, default, reranker, and embedder model
-IDs, explicit candidate and selected-skill limits, a required non-negative
-integer localized-revision limit, bundle skills and executable tools, and both
-vector databases; it has no session option. Doric configures three localized
-revisions. Tool embeddings
-remain part of this composition contract but the bundle state does not query
-them or run an independent tool router. Model graph output owns only `id`,
+factory accepts an injected provider, logger, default and reranker model IDs,
+explicit candidate and selected-skill limits, a required non-negative integer
+localized-revision limit, bundle skills and executable tools, and both
+retrievers; it has no session option. Doric configures three localized
+revisions. The tool retriever remains part of this composition contract, but
+the bundle state does not query it or run an independent tool router. Model
+graph output owns only `id`,
 `goal`, `doneWhen`, `dependsOn`, and `deliver`; Mosaic deterministically assigns
 array-order indices, pending status, and empty runtime-owned `skills`, `tools`,
 `artifacts`, and `observations` arrays plus a null `revisionRequest`. Plans
@@ -284,7 +289,8 @@ its canonical name and a non-empty per-skill rationale. Full skill definitions
 remain in the catalog and are resolved by name when composing tools and the
 execution prompt.
 `agents/doric` remains the composition root that loads bundles, constructs and
-populates the vector databases, and invokes Mosaic. Mosaic runs the fixed
+populates lexical and vector indexes for routable skills and executable tools,
+wraps each pair in hybrid search, and invokes Mosaic. Mosaic runs the fixed
 `plan(P0) -> plan(P1) -> schedule -> bundle -> execution -> schedule -> delivery -> finish(FinalDelivery)`
 lifecycle, with `schedule -> revision -> schedule` for localized runtime
 requests, over a run-local LIFO graph array where `graphs[n]` is plan revision

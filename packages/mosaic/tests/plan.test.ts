@@ -274,7 +274,7 @@ const createHarness = (input: HarnessInput) => {
       return { structured: input.plans[planIndex++] };
     },
   };
-  const embeddings = {
+  const retriever = {
     search: async (query: string, topK: number) => {
       searches.push({ query, topK });
       return (input.matches ?? []).map((data) => ({ data, score: 1 }));
@@ -286,16 +286,19 @@ const createHarness = (input: HarnessInput) => {
     models: {
       default: 'default-model',
       reranker: 'unused',
-      embedder: 'unused',
     },
     routing: { maxCandidates: input.maxCandidates ?? 5, maxSkills: 0 },
     revision: { max: 3 },
     skills: {
       required: [],
       menu: input.menu ?? input.matches ?? [],
-      embeddings: embeddings as never,
+      retriever: retriever as never,
     },
-    tools: { required: [], menu: [], embeddings: {} as never },
+    tools: {
+      required: [],
+      menu: [],
+      retriever: { search: async () => [] },
+    },
   };
 
   return {

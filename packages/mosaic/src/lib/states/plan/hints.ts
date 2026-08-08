@@ -35,7 +35,7 @@ export async function hints(
   const byNode = await Promise.all(
     graph.nodes.map(async (node) => {
       // Retrieve at most K_hint high-recall candidates for this P0 objective.
-      const matches = await skills.embeddings.search(
+      const matches = await skills.retriever.search(
         candidatesPrompt.search(input, node),
         routing.maxCandidates,
       );

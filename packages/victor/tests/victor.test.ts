@@ -5,9 +5,9 @@ import test from 'node:test';
 import pino, { type Logger } from 'pino';
 
 import {
-  createVectorDatabase,
-  type VectorDatabase,
-  type VectorSearchResult,
+  createVectorIndex as createVectorDatabase,
+  type SearchIndex as VectorDatabase,
+  type SearchResult as VectorSearchResult,
 } from '../src/index.js';
 
 type LogRecord = {

@@ -63,11 +63,11 @@ const context = (provider: LlmProvider, tools: Tool[]): WorkflowContext => ({
   options: {
     logger: { info: () => undefined } as never,
     provider,
-    models: { default: 'default', reranker: 'reranker', embedder: 'embedder' },
+    models: { default: 'default', reranker: 'reranker' },
     routing: { maxCandidates: 2, maxSkills: 0 },
     revision: { max: 3 },
-    skills: { required: [], menu: [], embeddings: {} as never },
-    tools: { required: [], menu: tools, embeddings: {} as never },
+    skills: { required: [], menu: [], retriever: {} as never },
+    tools: { required: [], menu: tools, retriever: {} as never },
   },
 });
 

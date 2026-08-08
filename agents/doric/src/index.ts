@@ -14,7 +14,11 @@ import mosaic from 'mosaic';
 import { createSandbox } from 'sandbox';
 import { createSandpool } from 'sandpool';
 import type { Tool } from 'tool';
-import { createVectorDatabase } from 'victor';
+import {
+  createHybridSearch,
+  createLexicalIndex,
+  createVectorIndex,
+} from 'victor';
 
 import { createVmRegistry } from './lib/vms.js';
 import { writeDelivery } from './lib/delivery-writer.js';
@@ -47,11 +51,11 @@ async function main() {
   });
 
   const models = {
-    default: 'openai/gpt-5.6-luna',
+    default: 'google/gemini-3.6-flash',
     reranker: 'voyageai/rerank-2.5-lite',
-    embedder: 'voyageai/voyage-4-large',
+    embedder: 'google/gemini-embedding-2',
   } as const;
-  const embeddingDimensions = 2048;
+  const embeddingDimensions = 3072;
 
   logger.info({ msg: 'initializing' });
 
@@ -59,10 +63,12 @@ async function main() {
     process.env.DORIC_SANDBOX_PROVIDER === 'firecracker'
       ? 'firecracker'
       : 'docker';
+
   const sandboxProvider =
     sandboxProviderName === 'firecracker'
       ? createFirecrackerClient()
       : createDockerClient();
+
   const vms = createVmRegistry(sandboxProviderName, sandboxProvider);
 
   app.use('/vms', createVmsRouter({ list: vms.list }));
@@ -112,7 +118,8 @@ async function main() {
         alwaysAvailable,
       }));
 
-      const skillEmbeddings = createVectorDatabase<Skill>({
+      const skillLexicalIndex = createLexicalIndex<Skill>({ logger });
+      const skillVectorIndex = createVectorIndex<Skill>({
         dimensions: embeddingDimensions,
         logger,
         embedding: async (input) =>
@@ -122,8 +129,15 @@ async function main() {
             dimensions: embeddingDimensions,
           }),
       });
+      const skillRetriever = createHybridSearch({
+        lexical: skillLexicalIndex,
+        semantic: skillVectorIndex,
+        key: ({ name }) => name,
+        logger,
+      });
 
-      const toolEmbeddings = createVectorDatabase<Tool>({
+      const toolLexicalIndex = createLexicalIndex<Tool>({ logger });
+      const toolVectorIndex = createVectorIndex<Tool>({
         dimensions: embeddingDimensions,
         logger,
         embedding: async (input) =>
@@ -132,26 +146,52 @@ async function main() {
             input,
             dimensions: embeddingDimensions,
           }),
+      });
+      const toolRetriever = createHybridSearch({
+        lexical: toolLexicalIndex,
+        semantic: toolVectorIndex,
+        key: ({ name }) => name,
+        logger,
       });
 
       logger.info({ msg: 'loaded bundles' });
 
+      logger.info({ msg: 'indexing skills' });
+
+      const skillText = ({
+        name,
+        description,
+        allowedTools,
+        body,
+      }: Skill): string =>
+        `${name} | ${description} | ${allowedTools.join(',')} | ${body}`;
+
       for (const skill of routableSkills) {
-        await skillEmbeddings.add(
-          skill,
-          ({ name, description, allowedTools, body }) =>
-            `${name} | ${description} | ${allowedTools.join(',')} | ${body}`,
-        );
+        logger.info({ msg: 'indexing skill', skill: skill.name });
+
+        await Promise.all([
+          skillLexicalIndex.add(skill, skillText),
+          skillVectorIndex.add(skill, skillText),
+        ]);
       }
+
+      logger.info({ msg: 'indexed all skills' });
+
+      logger.info({ msg: 'indexing tools' });
+
+      const toolText = ({ name, description }: Tool): string =>
+        `${name} | ${description ?? ''}`;
 
       for (const { tool } of tools) {
-        await toolEmbeddings.add(
-          tool,
-          ({ name, description }) => `${name} | ${description ?? ''}`,
-        );
+        logger.info({ msg: 'indexing tool', tool: tool.name });
+
+        await Promise.all([
+          toolLexicalIndex.add(tool, toolText),
+          toolVectorIndex.add(tool, toolText),
+        ]);
       }
 
-      logger.info({ msg: 'embedded all skills' });
+      logger.info({ msg: 'indexed all tools' });
 
       const prompt = `
         Extend the existing MOSAIC catalog with a new reusable capability for publishing finalized messages to Slack.
@@ -216,14 +256,14 @@ async function main() {
             .filter(({ alwaysAvailable }) => alwaysAvailable)
             .map(({ skill }) => skill),
           menu: skills,
-          embeddings: skillEmbeddings,
+          retriever: skillRetriever,
         },
         tools: {
           required: tools
             .filter(({ alwaysAvailable }) => alwaysAvailable)
             .map(({ tool }) => tool),
           menu: tools.map(({ tool }) => tool),
-          embeddings: toolEmbeddings,
+          retriever: toolRetriever,
         },
       });
 

@@ -6,12 +6,11 @@ import type { Tool } from 'tool';
 
 import { mosaic, type MosaicOptions } from '../src/index.js';
 
-test('preserves the embedder and both vector indexes at the factory boundary', () => {
+test('preserves both search retrievers at the factory boundary', () => {
   const options = validOptions();
   assert.doesNotThrow(() => mosaic(options));
-  assert.equal(options.models.embedder, 'embedder-model');
-  assert.ok(options.skills.embeddings);
-  assert.ok(options.tools.embeddings);
+  assert.ok(options.skills.retriever);
+  assert.ok(options.tools.retriever);
 });
 
 test('rejects invalid routing limits duplicate catalogs and invalid required tools', () => {
@@ -28,6 +27,22 @@ test('rejects invalid routing limits duplicate catalogs and invalid required too
   nonBase.skills.menu = [...nonBase.skills.required];
   nonBase.tools.menu = [tool('special')];
   assert.throws(() => mosaic(nonBase), /non-base tool special/u);
+});
+
+test('requires searchable skill and tool retrievers', () => {
+  const invalidSkillRetriever = validOptions();
+  invalidSkillRetriever.skills.retriever = {} as never;
+  assert.throws(
+    () => mosaic(invalidSkillRetriever),
+    /skills\.retriever must provide search/u,
+  );
+
+  const invalidToolRetriever = validOptions();
+  invalidToolRetriever.tools.retriever = {} as never;
+  assert.throws(
+    () => mosaic(invalidToolRetriever),
+    /tools\.retriever must provide search/u,
+  );
 });
 
 test('requires an explicit non-negative integer localized revision limit', () => {
@@ -57,12 +72,11 @@ const validOptions = (): MutableOptions => ({
   models: {
     default: 'default-model',
     reranker: 'reranker-model',
-    embedder: 'embedder-model',
   },
   routing: { maxCandidates: 5, maxSkills: 5 },
   revision: { max: 3 },
-  skills: { required: [], menu: [], embeddings: {} as never },
-  tools: { required: [], menu: [], embeddings: {} as never },
+  skills: { required: [], menu: [], retriever: { search: async () => [] } },
+  tools: { required: [], menu: [], retriever: { search: async () => [] } },
 });
 
 type MutableOptions = {
