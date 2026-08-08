@@ -20,8 +20,8 @@ export const ArtifactReferenceSchema = z
   })
   .strict();
 
-/** Public discriminated artifact contract. */
-export const ArtifactSchema = z.discriminatedUnion('kind', [
+/** Public artifact contract with strict variants distinguished by `kind`. */
+export const ArtifactSchema = z.union([
   InlineArtifactSchema,
   ArtifactReferenceSchema,
 ]);

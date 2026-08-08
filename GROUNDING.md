@@ -367,7 +367,9 @@ finishes with `MosaicResult`.
 Artifacts use one strict public discriminated union: inline artifacts contain
 `kind: 'inline'`, a normalized non-empty MIME type, and string data that may be
 empty; reference artifacts contain `kind: 'reference'`, a normalized non-empty
-MIME type, and a normalized non-empty opaque reference. The runtime preserves
+MIME type, and a normalized non-empty opaque reference. Its provider-facing
+JSON Schema represents the two strict variants with `anyOf`, avoiding the
+unsupported `oneOf` keyword in terminal function parameters. The runtime preserves
 artifact order through decisions, outcomes, graph snapshots, causal projection,
 and delivery, and renders references as references rather than content. The
 MOSAIC core only validates and transports opaque references; storage, resolution,

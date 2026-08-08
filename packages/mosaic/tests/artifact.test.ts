@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import * as z from 'zod';
 
 import {
   ArtifactReferenceSchema,
@@ -50,4 +51,14 @@ test('rejects ambiguous legacy hybrid empty and unknown artifact shapes', () => 
   ]) {
     assert.equal(ArtifactSchema.safeParse(artifact).success, false);
   }
+});
+
+test('uses provider-compatible anyOf for artifact JSON Schema variants', () => {
+  const schema = z.toJSONSchema(ArtifactSchema, {
+    io: 'output',
+    unrepresentable: 'throw',
+  });
+
+  assert.ok('anyOf' in schema);
+  assert.equal('oneOf' in schema, false);
 });
