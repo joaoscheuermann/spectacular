@@ -406,11 +406,12 @@ domain failure when progress cannot continue.
 for the pinned SkillRouter checkpoint. Only its export target may fetch
 upstream model bytes. Its `artifact/` directory and ONNX sidecars are ignored,
 non-committed generated output; the converter source, pinned revision, and
-`uv.lock` provide provenance. It remains a standalone utility. Doric generates
-embeddings through LM Studio's local OpenAI-compatible
-`http://localhost:1234/v1/embeddings` endpoint using the
-`text-embedding-qwen3-embedding-0.6b` model. Doric fails when that endpoint is
-unavailable, rejects the request, or returns no embedding.
+`uv.lock` provide provenance. It remains a standalone utility. Doric composes
+its OpenAI provider against OpenRouter with `openai/gpt-5.6-luna` as the
+default model, `voyageai/rerank-2.5-lite` for reranking, and
+`voyageai/voyage-4-large` for 2,048-dimensional embeddings. Doric fails when
+the configured endpoint is unavailable, rejects the request, or returns no
+embedding.
 
 CLI streamed A2A event output is visible console rendering through
 `pino`/`pino-pretty`. Redaction must be applied to message text and structured

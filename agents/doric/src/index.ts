@@ -51,11 +51,11 @@ async function main() {
   });
 
   const models = {
-    default: 'google/gemini-3.6-flash',
+    default: 'openai/gpt-5.6-luna',
     reranker: 'voyageai/rerank-2.5-lite',
-    embedder: 'google/gemini-embedding-2',
+    embedder: 'voyageai/voyage-4-large',
   } as const;
-  const embeddingDimensions = 3072;
+  const embeddingDimensions = 2048;
 
   logger.info({ msg: 'initializing' });
 

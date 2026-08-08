@@ -23,7 +23,9 @@ const DependenciesSchema = z
 
 export const PlannedNodeSchema = z
   .object({
-    id: NonEmptyStringSchema.describe('Unique stable node identifier.'),
+    id: NonEmptyStringSchema.describe(
+      'Unique stable node identifier. Use the following format: `n<step>:<description>` ex: n01:explore_workspace',
+    ),
     goal: NonEmptyStringSchema.describe(
       'Observable result that must be true when the node completes.',
     ),
