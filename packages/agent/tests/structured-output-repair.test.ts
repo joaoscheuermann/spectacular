@@ -196,9 +196,14 @@ test('correction feedback includes at most ten normalized issues without rejecte
 
   const correction = correctionFrom(fake.requests[1]);
   assert.ok(correction);
-  assert.match(correction, /items\.0\.count:/);
-  assert.match(correction, /items\.9\.count:/);
-  assert.doesNotMatch(correction, /items\.10\.count:/);
+  assert.match(correction, /Correct every validation issue listed below\./);
+  assert.match(correction, /Do not encode objects or arrays as JSON strings\./);
+  assert.match(
+    correction,
+    /Field: items\.0\.count\n  Kind: invalid_type\n  Expected: number\n  Problem:/,
+  );
+  assert.match(correction, /Field: items\.9\.count/);
+  assert.doesNotMatch(correction, /Field: items\.10\.count/);
   assert.doesNotMatch(correction, /private-value/);
 });
 
@@ -228,7 +233,7 @@ for (const mode of ['complete', 'stream'] as const) {
     assert.ok(caught instanceof AgentErrorObject);
     assert.equal(caught.data.code, 'invalid_structured_output');
     assert.match(caught.data.message, /failed schema validation/i);
-    assert.match(caught.data.diagnostic ?? '', /answer:/);
+    assert.match(caught.data.diagnostic ?? '', /Field: answer/);
     assert.equal(fake.requests.length, 4);
     assert.equal(correctionFrom(fake.requests[0]), undefined);
     assert.ok(correctionFrom(fake.requests[1]));

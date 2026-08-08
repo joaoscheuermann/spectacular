@@ -589,8 +589,10 @@ terminal submissions are repairable. The agent discards each invalid response
 without persisting it or executing any included call, then may make three
 correction attempts after the initial invalid submission. Each next request
 receives one transient system correction naming the terminal tool, explaining
-the failure, and including at most ten normalized Zod issue paths and messages
-when available; rejected arguments are never copied into the correction. The
+the failure, directing the model to correct every issue without stringifying
+objects or arrays, and including at most ten normalized Zod issues with their
+field path, issue kind, expected type when available, and safe message;
+rejected arguments are never copied into the correction. The
 retry budget is cumulative across the run, and ordinary tool turns neither
 consume nor reset it. The fourth invalid submission throws the latest
 `invalid_structured_output` `AgentErrorObject`, whose existing `diagnostic`

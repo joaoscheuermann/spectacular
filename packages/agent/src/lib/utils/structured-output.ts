@@ -169,11 +169,20 @@ const structuredOutputCorrection = (
     `Submit the corrected final output by calling \`${name}\` exactly once. That call must be the only tool call in its response.`,
     ...(error.data.diagnostic === undefined
       ? []
-      : ['', `Validation issues: ${error.data.diagnostic}`]),
+      : [
+          '',
+          'Correct every validation issue listed below. Preserve fields that already satisfy the schema. Do not encode objects or arrays as JSON strings.',
+          '',
+          '# Validation issues',
+          '',
+          error.data.diagnostic,
+        ]),
   ].join('\n');
 
 const validationDiagnostic = (
   issues: readonly {
+    readonly code: string;
+    readonly expected?: unknown;
     readonly path: readonly PropertyKey[];
     readonly message: string;
   }[],
@@ -181,12 +190,22 @@ const validationDiagnostic = (
   issues
     .slice(0, validationIssueLimit)
     .map((issue) => {
-      const path = issue.path.map(String).join('.');
+      const path = issue.path.map(String).join('.') || '<root>';
+      const kind = issue.code.replace(/\s+/g, '_').trim();
+      const expected =
+        typeof issue.expected === 'string'
+          ? [`  Expected: ${issue.expected}`]
+          : [];
       const message = issue.message.replace(/\s+/g, ' ').trim();
 
-      return path === '' ? message : `${path}: ${message}`;
+      return [
+        `- Field: ${path}`,
+        `  Kind: ${kind}`,
+        ...expected,
+        `  Problem: ${message}`,
+      ].join('\n');
     })
-    .join('; ');
+    .join('\n');
 
 const invalidSubmission = <Output>(
   message: string,
