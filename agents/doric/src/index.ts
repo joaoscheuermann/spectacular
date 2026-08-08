@@ -239,7 +239,8 @@ async function main() {
         provider,
         models,
         routing: {
-          maxCandidates: 5,
+          maxHintCandidates: 5,
+          maxRetrievedCandidates: 5,
           maxSkills: 5,
         },
         execution: {

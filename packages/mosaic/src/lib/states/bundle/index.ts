@@ -141,8 +141,11 @@ const retrieve = async ({
   );
 
   // Vector retrieval limits recall independently from the final bundle limit.
-  const matches = await skills.retriever.search(context, routing.maxCandidates);
-  return currentCandidates(matches, catalog);
+  const matches = await skills.retriever.search(
+    context,
+    routing.maxRetrievedCandidates,
+  );
+  return currentCandidates(matches, catalog, routing.maxRetrievedCandidates);
 };
 
 /** Applies the two model-assisted stages: deterministic reranking then selection. */
@@ -244,15 +247,18 @@ const choose = async ({
 const currentCandidates = (
   matches: readonly { readonly data: Skill }[],
   catalog: ReadonlyMap<string, Skill>,
+  limit: number,
 ): Skill[] => {
   const seen = new Set<string>();
 
-  return matches.flatMap(({ data }) => {
-    const skill = catalog.get(data.name);
-    if (skill === undefined || seen.has(skill.name)) return [];
-    seen.add(skill.name);
-    return [skill];
-  });
+  return matches
+    .flatMap(({ data }) => {
+      const skill = catalog.get(data.name);
+      if (skill === undefined || seen.has(skill.name)) return [];
+      seen.add(skill.name);
+      return [skill];
+    })
+    .slice(0, limit);
 };
 
 /** Validates the ranking and sorts by score, then canonical name for stable ties. */

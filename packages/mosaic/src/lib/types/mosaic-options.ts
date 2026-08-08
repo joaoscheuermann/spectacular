@@ -12,7 +12,8 @@ export interface MosaicOptions {
     readonly reranker: string;
   };
   readonly routing: {
-    readonly maxCandidates: number;
+    readonly maxHintCandidates: number;
+    readonly maxRetrievedCandidates: number;
     readonly maxSkills: number;
   };
   readonly execution: {

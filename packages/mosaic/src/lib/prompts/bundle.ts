@@ -1,7 +1,12 @@
 import type { Skill } from 'bundle';
 
 import type { Graph, Node } from '../types/graph.js';
-import { fenced, projectedArtifacts, section } from './context.js';
+import {
+  artifactSections,
+  fenced,
+  projectedArtifacts,
+  section,
+} from './context.js';
 
 type SelectionContext = {
   readonly request: string;
@@ -100,8 +105,7 @@ const ancestorArtifacts = (node: Node, graph: Graph): string => {
     ...artifacts.flatMap((artifact, index) => [
       `## Artifact ${index + 1}`,
       section('Producer Node ID', artifact.producerId),
-      section('MIME Type', artifact.mime),
-      section('Data', artifact.data),
+      ...artifactSections(artifact),
     ]),
   ].join('\n\n');
 };

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import type { Node } from '../types/graph.js';
+import { ArtifactSchema } from './artifact.js';
 import { RevisionRequestSchema } from './revision.js';
 import { ObservationSchema } from './revision.js';
 
@@ -26,18 +27,6 @@ export const CriterionSchema = z
       .trim()
       .min(1)
       .describe('Concise evidence supporting this criterion evaluation.'),
-  })
-  .strict();
-
-/**
- * Carries additional result material. The paper's FinalDelivery contract in
- * Appendix A, table A.2 includes artifactRefs; this MIME/data shape is Doric's
- * existing concrete artifact representation.
- */
-export const ArtifactSchema = z
-  .object({
-    mime: z.string().min(1).describe('MIME type of the artifact.'),
-    data: z.string().describe('Artifact content or reference.'),
   })
   .strict();
 

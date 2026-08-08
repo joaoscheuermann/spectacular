@@ -221,7 +221,9 @@ const completedOutcome = () => ({
   criteria: criteria(true),
   result: {
     markdown: 'Done.',
-    artifacts: [{ mime: 'text/plain', data: 'complete artifact' }],
+    artifacts: [
+      { kind: 'inline', mime: 'text/plain', data: 'complete artifact' },
+    ],
   },
   revisionRequest: null,
   reason: null,

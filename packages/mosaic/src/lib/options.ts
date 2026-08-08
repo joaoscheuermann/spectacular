@@ -9,14 +9,19 @@ export const validateOptions = (options: MosaicOptions): void => {
 
   requireModel('default', models.default);
   requireModel('reranker', models.reranker);
-  requireInteger('routing.maxCandidates', routing.maxCandidates, 1);
+  requireInteger('routing.maxHintCandidates', routing.maxHintCandidates, 1);
+  requireInteger(
+    'routing.maxRetrievedCandidates',
+    routing.maxRetrievedCandidates,
+    1,
+  );
   requireInteger('routing.maxSkills', routing.maxSkills, 0);
   requireInteger('execution.maxTurns', execution?.maxTurns, 1);
   requireInteger('revision.max', revision?.max, 0);
 
-  if (routing.maxSkills > routing.maxCandidates) {
+  if (routing.maxSkills > routing.maxRetrievedCandidates) {
     throw new TypeError(
-      'Mosaic routing.maxSkills must not exceed routing.maxCandidates.',
+      'Mosaic routing.maxSkills must not exceed routing.maxRetrievedCandidates.',
     );
   }
 

@@ -160,7 +160,7 @@ function completed() {
     ],
     result: {
       markdown: 'Completed result.',
-      artifacts: [{ mime: 'text/plain', data: 'artifact' }],
+      artifacts: [{ kind: 'inline', mime: 'text/plain', data: 'artifact' }],
     },
     revisionRequest: null,
     reason: null,

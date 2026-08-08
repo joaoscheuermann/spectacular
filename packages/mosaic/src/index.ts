@@ -1,10 +1,16 @@
 export { default, mosaic } from './lib/mosaic.js';
 export type { MosaicAgent } from './lib/types/mosaic-agent.js';
+export type { FinalDelivery, FinalDeliveryPart } from './lib/types/delivery.js';
 export type {
-  DeliveryArtifact,
-  FinalDelivery,
-  FinalDeliveryPart,
-} from './lib/types/delivery.js';
+  Artifact,
+  ArtifactReference,
+  InlineArtifact,
+} from './lib/types/artifact.js';
+export {
+  ArtifactReferenceSchema,
+  ArtifactSchema,
+  InlineArtifactSchema,
+} from './lib/schemas/artifact.js';
 export { FinalDeliverySchema } from './lib/schemas/delivery.js';
 export type { NodeDecision, NodeOutcome } from './lib/schemas/outcome.js';
 export {

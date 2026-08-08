@@ -1,6 +1,10 @@
 import * as goalsPrompt from '../../prompts/goals.js';
 import * as revisionPrompt from '../../prompts/revision.js';
-import { materializeGraph, PlannedGraphSchema } from '../../schemas/graph.js';
+import {
+  GraphHistorySchema,
+  materializeGraph,
+  PlannedGraphSchema,
+} from '../../schemas/graph.js';
 import type { WorkflowHandler } from '../../types/workflow.js';
 import { hints } from './hints.js';
 
@@ -14,18 +18,21 @@ export const plan: WorkflowHandler = async (
   { transition, fail },
 ) => {
   try {
+    GraphHistorySchema.parse(state.graphs);
+
     // P0 and P1 exhaust the initial planning lifecycle; later changes use revision.
-    if (state.graphs.length >= 2) {
+    const active = state.graphs.at(-1);
+    if (active !== undefined && active.revision >= 1) {
       return fail(new Error('Graph generation supports only P0 and P1.'));
     }
 
-    // Graph snapshots form a LIFO history: no active graph means P0, otherwise P1.
-    const active = state.graphs.at(-1);
+    // No active graph means P0; the runtime alone assigns the next revision.
     const phase = active === undefined ? 'p0' : 'p1';
+    const revision = active === undefined ? 0 : active.revision + 1;
     options.logger.info(
       {
         phase,
-        revision: state.graphs.length,
+        revision,
         nodeCount: active?.nodes.length ?? 0,
       },
       'generating graph',
@@ -64,10 +71,10 @@ export const plan: WorkflowHandler = async (
     const planned = PlannedGraphSchema.parse(structured);
 
     // Materialization assigns pending status, stable indices, and empty ledgers.
-    const next = materializeGraph(planned);
+    const next = materializeGraph(planned, revision);
 
     options.logger.debug(
-      { phase, revision: state.graphs.length, nodeCount: next.nodes.length },
+      { phase, revision: next.revision, nodeCount: next.nodes.length },
       'graph plan completed',
     );
 

@@ -29,8 +29,13 @@ modelo: \texttt{goalId}, \texttt{invalidatedAssumption}, \texttt{requestedEffect
 \texttt{needs\_revision} exige pelo menos uma observação; o runtime associa
 automaticamente o conjunto completo produzido pelo nó \\
 \hline
+\texttt{Artifact} &
+runtime/modelo: \texttt{kind}, \texttt{mime} e \texttt{data} ou \texttt{reference} &
+união estrita entre conteúdo inline e referência opaca; ordem preservada;
+resolução e persistência fora do núcleo \\
+\hline
 \texttt{FinalDelivery} &
-runtime: objetivos terminais, partes e referências de artefatos &
+runtime: objetivos terminais, partes e artefatos discriminados &
 construída sem nova chamada ao modelo; ordem estável e rastreável \\
 \hline
 \end{tabularx}

@@ -1,5 +1,9 @@
 import * as revisionPrompt from '../../prompts/revision.js';
-import { GraphSchema, PlannedGraphSchema } from '../../schemas/graph.js';
+import {
+  GraphHistorySchema,
+  GraphSchema,
+  PlannedGraphSchema,
+} from '../../schemas/graph.js';
 import type { WorkflowHandler } from '../../types/workflow.js';
 import {
   applyLocalizedRevision,
@@ -18,6 +22,8 @@ export const revision: WorkflowHandler = async (
   { transition, fail },
 ) => {
   try {
+    GraphHistorySchema.parse(state.graphs);
+
     // Revisions operate on the latest graph snapshot without mutating its history.
     const active = state.graphs.at(-1);
     if (active === undefined) {
@@ -84,7 +90,7 @@ export const revision: WorkflowHandler = async (
     options.logger.info(
       {
         phase: 'localized',
-        revision: state.graphs.length,
+        revision: active.revision + 1,
         nodeCount: active.nodes.length,
         targetId: target.id,
       },

@@ -2,12 +2,18 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { delivery } from '../src/lib/states/delivery/index.js';
+import type { Artifact } from '../src/lib/types/artifact.js';
 import type { Graph, Node } from '../src/lib/types/graph.js';
 import type { WorkflowState } from '../src/lib/types/workflow.js';
 
 test('assembles one terminal deliverable with additional artifacts and observations', async () => {
   const node = completed('final', 0, [], true, '## Result', [
-    { mime: 'text/plain', data: 'extra' },
+    { kind: 'inline', mime: 'text/plain', data: 'extra' },
+    {
+      kind: 'reference',
+      mime: 'application/octet-stream',
+      reference: 'urn:artifact:1',
+    },
   ]);
   node.candidates = [
     {
@@ -25,7 +31,7 @@ test('assembles one terminal deliverable with additional artifacts and observati
   node.outcome = completedOutcome('final', '## Result', [observation('final')]);
 
   const action = await delivery(
-    state([{ nodes: [node] }]),
+    state([{ revision: 1, nodes: [node] }]),
     context(),
     handlers(),
   );
@@ -41,7 +47,14 @@ test('assembles one terminal deliverable with additional artifacts and observati
         id: 'final',
         goal: 'Goal final',
         markdown: '## Result',
-        artifacts: [{ mime: 'text/plain', data: 'extra' }],
+        artifacts: [
+          { kind: 'inline', mime: 'text/plain', data: 'extra' },
+          {
+            kind: 'reference',
+            mime: 'application/octet-stream',
+            reference: 'urn:artifact:1',
+          },
+        ],
         observations: [observation('final')],
       },
     ],
@@ -57,7 +70,7 @@ test('orders deliverables by stable topological order and preserves Markdown', a
   const first = completed('first', 2, ['source'], true, ' first\n');
   const second = completed('second', 1, ['source'], true, 'second');
   const action = await delivery(
-    state([{ nodes: [source, first, second] }]),
+    state([{ revision: 1, nodes: [source, first, second] }]),
     context(),
     handlers(),
   );
@@ -80,7 +93,7 @@ test('excludes completed nodes that are not deliverable', async () => {
   const preparation = completed('preparation', 0, [], false, 'private');
   const final = completed('final', 1, ['preparation'], true, 'public');
   const action = await delivery(
-    state([{ nodes: [preparation, final] }]),
+    state([{ revision: 1, nodes: [preparation, final] }]),
     context(),
     handlers(),
   );
@@ -103,7 +116,7 @@ test('returns blocked without partial delivery and keeps topological node order'
   const root = completed('root', 2, [], false, 'private');
   const blocked = terminal('blocked', 0, ['root'], 'blocked');
   const action = await delivery(
-    state([{ nodes: [root, blocked] }]),
+    state([{ revision: 1, nodes: [root, blocked] }]),
     context(),
     handlers(),
   );
@@ -142,7 +155,7 @@ test('failed takes precedence over blocked in a terminal workflow', async () => 
   const blocked = terminal('blocked', 0, [], 'blocked');
   const failed = terminal('failed', 1, [], 'failed');
   const action = await delivery(
-    state([{ nodes: [blocked, failed] }]),
+    state([{ revision: 1, nodes: [blocked, failed] }]),
     context(),
     handlers(),
   );
@@ -160,19 +173,23 @@ test('fails delivery for invalid graph and deliverable contracts', async () => {
   }[] = [
     { message: /active graph/u },
     {
-      graph: { nodes: [pending('final', 0)] },
+      graph: { revision: 1, nodes: [pending('final', 0)] },
       message: /incomplete graph/u,
     },
     {
-      graph: { nodes: [completed('internal', 0, [], false, 'private')] },
+      graph: {
+        revision: 1,
+        nodes: [completed('internal', 0, [], false, 'private')],
+      },
       message: /delivery/u,
     },
     {
-      graph: { nodes: [completed('final', 0, [], true, '')] },
+      graph: { revision: 1, nodes: [completed('final', 0, [], true, '')] },
       message: /Markdown result/u,
     },
     {
       graph: {
+        revision: 1,
         nodes: [
           { ...completed('final', 0, [], true, 'result'), artifacts: [] },
         ],
@@ -181,8 +198,10 @@ test('fails delivery for invalid graph and deliverable contracts', async () => {
     },
     {
       graph: {
+        revision: 1,
         nodes: [
           completed('final', 0, [], true, 'result', [], {
+            kind: 'inline',
             mime: 'text/plain',
             data: 'wrong primary',
           }),
@@ -206,11 +225,11 @@ test('fails delivery for invalid graph and deliverable contracts', async () => {
 
 test('copies delivered artifacts and observations instead of retaining graph references', async () => {
   const node = completed('final', 0, [], true, 'result', [
-    { mime: 'application/json', data: '{"ok":true}' },
+    { kind: 'inline', mime: 'application/json', data: '{"ok":true}' },
   ]);
   node.outcome = completedOutcome('final', 'result', [observation('final')]);
   const action = await delivery(
-    state([{ nodes: [node] }]),
+    state([{ revision: 1, nodes: [node] }]),
     context(),
     handlers(),
   );
@@ -258,8 +277,8 @@ const completed = (
   dependsOn: readonly string[],
   deliver: boolean,
   markdown: string,
-  artifacts: readonly { readonly mime: string; readonly data: string }[] = [],
-  primary?: { readonly mime: string; readonly data: string },
+  artifacts: readonly Artifact[] = [],
+  primary?: Artifact,
 ): Node => ({
   id,
   goal: `Goal ${id}`,
@@ -272,7 +291,7 @@ const completed = (
   bundle: null,
   tools: [],
   artifacts: [
-    primary ?? { mime: 'text/markdown', data: markdown },
+    primary ?? { kind: 'inline', mime: 'text/markdown', data: markdown },
     ...artifacts,
   ],
   outcome: completedOutcome(id, markdown || 'semantic result'),

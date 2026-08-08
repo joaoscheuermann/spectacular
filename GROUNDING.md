@@ -280,7 +280,8 @@ recovery hooks, or external side effects.
 goal-workflow policy: planning and revision, scheduling, skill retrieval and
 reranking, and per-node skill/tool menu composition. Its public
 factory accepts an injected provider, logger, default and reranker model IDs,
-explicit candidate and selected-skill limits, a required non-negative integer
+independent required positive safe-integer hint and execution candidate limits,
+a selected-skill limit, a required non-negative integer
 localized-revision limit, a required positive safe-integer per-node model-turn
 limit, bundle skills and executable tools, and both retrievers; it has no
 session option. Doric configures eight model turns per node and three localized
@@ -289,7 +290,10 @@ the bundle state does not query it or run an independent tool router. Model
 graph output owns only `id`,
 `goal`, `doneWhen`, `dependsOn`, and `deliver`; Mosaic deterministically assigns
 array-order indices, pending status, empty runtime-owned `candidates`, `tools`,
-and `artifacts` arrays, plus null `bundle`, `outcome`, and `termination` fields. Plans
+and `artifacts` arrays, plus null `bundle`, `outcome`, and `termination` fields.
+Each materialized graph also receives a runtime-owned safe non-negative integer
+`revision`: P0 is `0`, P1 is `1`, and every localized revision increments it
+contiguously. The model-facing planning schema does not expose this field. Plans
 require non-empty nodes, IDs, goals, and criteria;
 unique existing dependencies; acyclicity; and at least one terminal deliverable,
 while every deliverable must be terminal. A routed node stores a complete
@@ -305,11 +309,14 @@ populates lexical and vector indexes for routable skills and executable tools,
 wraps each pair in hybrid search, and invokes Mosaic. Mosaic runs the fixed
 `plan(P0) -> plan(P1) -> schedule -> bundle -> execution -> schedule -> delivery -> finish(MosaicResult)`
 lifecycle, with `schedule -> revision -> schedule` for localized runtime
-requests, over a run-local LIFO graph array where `graphs[n]` is plan revision
-`n`. The `plan` state rejects every re-entry after P1. P0 is
-catalog-independent and P1 is exactly one body-aware revision. Candidate limits
-apply as both hint and retrieval bounds, including a defensive post-filter hint
-bound over canonical, unique, non-required skills. Bundle routing uses the original request, current
+requests, over a run-local ordered graph snapshot array. Each graph's explicit
+`revision`, rather than its array position or array length, is authoritative;
+the history must be contiguous and ordered. The `plan` state rejects every
+re-entry after P1. P0 is catalog-independent and P1 is exactly one body-aware
+revision. `routing.maxHintCandidates` implements `K_hint`, while the independent
+`routing.maxRetrievedCandidates` implements `K_retrieve`; each is also applied
+as a defensive post-filter bound over canonical, unique, non-required skills.
+`routing.maxSkills` is bounded only by `maxRetrievedCandidates`. Bundle routing uses the original request, current
 goal and completion criteria, and only transitive-ancestor artifacts. It
 retrieves a bounded routable-skill candidate set, reranks complete skill bodies,
 validates one node-bound structured evaluation for every candidate plus a
@@ -351,12 +358,20 @@ the decision and the complete observation sequence. `callId` exists only in an
 `Observation` for runtime correlation and is not exposed in execution or
 revision prompts. Missing, duplicate, or uncorrelated call/result data is a
 runtime failure. A completed decision is valid with zero, one, or multiple
-observations. Completed nodes store their Markdown result as a `text/markdown`
-artifact, append additional artifacts, and return the resolved wave to
+observations. Completed nodes store their Markdown result as an inline
+`text/markdown` artifact, append additional artifacts, and return the resolved wave to
 scheduling. Model-authored `blocked` and `failed` decisions also resolve their
 wave normally. When every node is terminal, `delivery` performs stable
 topological assembly using original node-array position as its tie-breaker and
 finishes with `MosaicResult`.
+Artifacts use one strict public discriminated union: inline artifacts contain
+`kind: 'inline'`, a normalized non-empty MIME type, and string data that may be
+empty; reference artifacts contain `kind: 'reference'`, a normalized non-empty
+MIME type, and a normalized non-empty opaque reference. The runtime preserves
+artifact order through decisions, outcomes, graph snapshots, causal projection,
+and delivery, and renders references as references rather than content. The
+MOSAIC core only validates and transports opaque references; storage, resolution,
+existence checks, persistence, and authorization policy remain out of scope.
 Delivery does not make provider, model, skill, or tool calls. Its public parts
 preserve Markdown exactly, expose copied additional artifacts and complete
 runtime observations (including call IDs and inputs/outputs), and join part
@@ -376,8 +391,8 @@ complete candidate trace, `OrderedBundle | null`, `NodeOutcome | null`, and
 revision work is selected from node outcomes in deterministic node-wave order;
 within each node, observations retain tool-result order. The localized planner receives every
 queued observation as fenced tool name, input, and output evidence and never
-receives `callId`. The successful local revision count is derived from graph
-history, and retired IDs are the IDs found in older snapshots but absent from
+receives `callId`. The successful local revision count and next revision are
+derived from the active graph's explicit `revision`; retired IDs are the IDs found in older snapshots but absent from
 the active graph. Each localized pass is owned by the dedicated `revision`
 state, skips catalog hints, preserves completed and other non-pending nodes
 exactly, permits changes only to the target and pending nodes, clears routing,

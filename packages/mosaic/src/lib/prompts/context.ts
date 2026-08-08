@@ -1,9 +1,8 @@
+import type { Artifact } from '../types/artifact.js';
 import type { Graph, Node } from '../types/graph.js';
 
-export type ProjectedArtifact = {
+export type ProjectedArtifact = Artifact & {
   readonly producerId: string;
-  readonly mime: string;
-  readonly data: string;
 };
 
 /** Returns transitive-ancestor artifacts in stable graph and artifact order. */
@@ -31,10 +30,9 @@ export const projectedArtifacts = (
   return graph.nodes
     .filter(({ id }) => ids.has(id))
     .flatMap((ancestor) =>
-      ancestor.artifacts.map(({ mime, data }) => ({
+      ancestor.artifacts.map((artifact) => ({
+        ...artifact,
         producerId: ancestor.id,
-        mime,
-        data,
       })),
     );
 };
@@ -42,10 +40,20 @@ export const projectedArtifacts = (
 export const section = (heading: string, value: string): string =>
   `## ${heading}\n\n${fenced(value)}`;
 
+/** Renders one artifact without conflating opaque references with inline data. */
+export const artifactSections = (artifact: Artifact): string[] => [
+  section('Kind', artifact.kind),
+  section('MIME Type', artifact.mime),
+  artifact.kind === 'inline'
+    ? section('Data', artifact.data)
+    : section('Reference', artifact.reference),
+];
+
 /** Renders planner-owned graph fields with every dynamic value fenced. */
 export const graphContext = (graph: Graph): string =>
   [
     '# Active Plan',
+    section('Revision', String(graph.revision)),
     ...graph.nodes.flatMap((node, index) => [
       `## Node ${index}`,
       section('ID', node.id),

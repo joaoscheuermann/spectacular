@@ -1,12 +1,10 @@
 import { GraphSchema, type PlannedGraph } from '../../schemas/graph.js';
 import type { Graph, Node } from '../../types/graph.js';
 
-const BASE_GRAPH_COUNT = 2;
-
 /** Returns successful localized revisions already represented by graph snapshots. */
 export const localizedRevisionCount = (graphs: readonly Graph[]): number =>
-  // P0 and P1 are planning passes; only later snapshots consume R_max.
-  Math.max(0, graphs.length - BASE_GRAPH_COUNT);
+  // Revisions after P1 consume R_max; the active revision is authoritative.
+  Math.max(0, (graphs.at(-1)?.revision ?? 1) - 1);
 
 /** Returns IDs present in history but absent from the active graph, in stable order. */
 export const retiredNodeIds = (graphs: readonly Graph[]): string[] => {
@@ -98,7 +96,7 @@ export const applyLocalizedRevision = (
   });
 
   // Full graph validation rechecks references, acyclicity, and deliverable rules.
-  return GraphSchema.parse({ nodes });
+  return GraphSchema.parse({ revision: active.revision + 1, nodes });
 };
 
 /** Compares only planner-owned fields when checking a protected node. */

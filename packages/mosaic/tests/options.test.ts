@@ -15,7 +15,11 @@ test('preserves both search retrievers at the factory boundary', () => {
 
 test('rejects invalid routing limits duplicate catalogs and invalid required tools', () => {
   const invalidLimits = validOptions();
-  invalidLimits.routing = { maxCandidates: 1, maxSkills: 2 };
+  invalidLimits.routing = {
+    maxHintCandidates: 1,
+    maxRetrievedCandidates: 1,
+    maxSkills: 2,
+  };
   assert.throws(() => mosaic(invalidLimits), /maxSkills must not exceed/u);
 
   const duplicate = validOptions();
@@ -27,6 +31,28 @@ test('rejects invalid routing limits duplicate catalogs and invalid required too
   nonBase.skills.menu = [...nonBase.skills.required];
   nonBase.tools.menu = [tool('special')];
   assert.throws(() => mosaic(nonBase), /non-base tool special/u);
+});
+
+test('requires both independent routing limits and rejects the legacy alias', () => {
+  for (const field of [
+    'maxHintCandidates',
+    'maxRetrievedCandidates',
+  ] as const) {
+    for (const value of [0, 0.5, Number.NaN, 2 ** 53]) {
+      const options = validOptions();
+      options.routing[field] = value;
+      assert.throws(() => mosaic(options), new RegExp(field, 'u'));
+    }
+  }
+
+  const legacy = validOptions() as unknown as MutableOptions & {
+    routing: { maxCandidates?: number };
+  };
+  const legacyRouting = legacy.routing as unknown as Record<string, unknown>;
+  delete legacyRouting['maxHintCandidates'];
+  delete legacyRouting['maxRetrievedCandidates'];
+  legacyRouting['maxCandidates'] = 5;
+  assert.throws(() => mosaic(legacy as MosaicOptions), /maxHintCandidates/u);
 });
 
 test('requires searchable skill and tool retrievers', () => {
@@ -93,7 +119,11 @@ const validOptions = (): MutableOptions => ({
     default: 'default-model',
     reranker: 'reranker-model',
   },
-  routing: { maxCandidates: 5, maxSkills: 5 },
+  routing: {
+    maxHintCandidates: 5,
+    maxRetrievedCandidates: 5,
+    maxSkills: 5,
+  },
   execution: { maxTurns: 8 },
   revision: { max: 3 },
   skills: { required: [], menu: [], retriever: { search: async () => [] } },

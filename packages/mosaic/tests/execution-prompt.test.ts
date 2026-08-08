@@ -51,7 +51,10 @@ test('projects only transitive ancestor artifacts and preserves skill order', ()
     selectionRationale: 'Both skills are needed.',
   };
   current.tools = [{ name: 'lookup', description: 'Lookup evidence.' }];
-  const graph: Graph = { nodes: [root, unrelated, direct, current] };
+  const graph: Graph = {
+    revision: 1,
+    nodes: [root, unrelated, direct, current],
+  };
 
   const prompt = executionPrompt.user({
     request: 'Original request.',
@@ -80,7 +83,7 @@ test('uses collision-safe fences for arbitrary dynamic content', () => {
     skills: [hostile],
     selectionRationale: 'The skill is needed.',
   };
-  const graph: Graph = { nodes: [current] };
+  const graph: Graph = { revision: 1, nodes: [current] };
 
   const prompt = executionPrompt.user({
     request: hostile,
@@ -94,6 +97,29 @@ test('uses collision-safe fences for arbitrary dynamic content', () => {
   assert.equal(occurrences, 8);
   assert.match(prompt, /`{7}text\nbefore/u);
   assert.doesNotMatch(prompt, /^\{\s*"/u);
+});
+
+test('renders artifact references as references rather than inline content', () => {
+  const ancestor = createNode('ancestor', 0, [], 'completed');
+  ancestor.artifacts = [
+    {
+      kind: 'reference',
+      mime: 'application/octet-stream',
+      reference: 'urn:artifact:opaque',
+    },
+  ];
+  const current = createNode('current', 1, ['ancestor'], 'ready');
+  const prompt = executionPrompt.user({
+    request: 'Use the artifact.',
+    node: current,
+    graph: { revision: 1, nodes: [ancestor, current] },
+    skills: [],
+    tools: [],
+  });
+
+  assert.match(prompt, /## Kind[\s\S]*reference/u);
+  assert.match(prompt, /## Reference[\s\S]*urn:artifact:opaque/u);
+  assert.doesNotMatch(prompt, /## Data[\s\S]*urn:artifact:opaque/u);
 });
 
 function createNode(
@@ -115,7 +141,9 @@ function createNode(
     bundle: null,
     tools: [],
     artifacts:
-      artifact === undefined ? [] : [{ mime: 'text/plain', data: artifact }],
+      artifact === undefined
+        ? []
+        : [{ kind: 'inline', mime: 'text/plain', data: artifact }],
     outcome: null,
     termination: null,
   };

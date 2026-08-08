@@ -1,6 +1,6 @@
 import * as z from 'zod';
 
-import { NodeArtifactsSchema } from './graph.js';
+import { ArtifactSchema } from './artifact.js';
 import { ObservationSchema } from './revision.js';
 
 const FinalDeliveryPartSchema = z
@@ -8,7 +8,7 @@ const FinalDeliveryPartSchema = z
     id: z.string().trim().min(1),
     goal: z.string().trim().min(1),
     markdown: z.string().min(1),
-    artifacts: z.array(NodeArtifactsSchema),
+    artifacts: z.array(ArtifactSchema),
     observations: z.array(ObservationSchema),
   })
   .strict();

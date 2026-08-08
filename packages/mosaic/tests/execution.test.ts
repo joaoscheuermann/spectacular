@@ -32,13 +32,13 @@ test('fails without executing workflow work when no graph exists', async () => {
 
 test('completes a node stores result artifacts and schedules the next wave', async () => {
   const node = createNode('current');
-  const graph: Graph = { nodes: [node] };
+  const graph: Graph = { revision: 1, nodes: [node] };
   const provider = createProvider([
-    finish(
+    terminalFinish(
       completed({
         result: {
           markdown: ' \n## Final result\n',
-          artifacts: [{ mime: 'text/plain', data: 'extra' }],
+          artifacts: [{ kind: 'inline', mime: 'text/plain', data: 'extra' }],
         },
       }),
     ),
@@ -54,19 +54,23 @@ test('completes a node stores result artifacts and schedules the next wave', asy
   });
   assert.equal(node.status, 'completed');
   assert.deepEqual(node.artifacts, [
-    { mime: 'text/markdown', data: ' \n## Final result\n' },
-    { mime: 'text/plain', data: 'extra' },
+    {
+      kind: 'inline',
+      mime: 'text/markdown',
+      data: ' \n## Final result\n',
+    },
+    { kind: 'inline', mime: 'text/plain', data: 'extra' },
   ]);
   assert.equal(provider.requests.length, 1);
-  assert.ok(provider.requests[0]?.schema);
-  assert.equal(provider.requests[0]?.tools, undefined);
+  assert.equal(provider.requests[0]?.schema, undefined);
+  assert.equal(provider.requests[0]?.tools?.length, 1);
   assert.equal(provider.requests[0]?.messages[0]?.role, 'system');
-  assert.equal(provider.requests[0]?.messages[1]?.role, 'user');
+  assert.ok(provider.requests[0]?.messages.some(({ role }) => role === 'user'));
 });
 
 test('automatically records one returned tool observation for a completed node', async () => {
   const node = createNode('current', ['lookup']);
-  const graph: Graph = { nodes: [node] };
+  const graph: Graph = { revision: 1, nodes: [node] };
   const provider = createProvider([
     toolFinish('call-1', 'lookup'),
     terminalFinish(completed()),
@@ -107,7 +111,7 @@ test('automatically records one returned tool observation for a completed node',
 
 test('automatically records every returned observation in tool-result order', async () => {
   const node = createNode('current', ['first', 'second']);
-  const graph: Graph = { nodes: [node] };
+  const graph: Graph = { revision: 1, nodes: [node] };
   const provider = createProvider([
     toolCallsFinish([
       { id: 'call-first', name: 'first', query: 'alpha' },
@@ -151,7 +155,7 @@ test('automatically records every returned observation in tool-result order', as
 
 test('blocks on turn exhaustion after retaining ordered observations without artifacts', async () => {
   const node = createNode('bounded', ['first', 'second']);
-  const graph: Graph = { nodes: [node] };
+  const graph: Graph = { revision: 1, nodes: [node] };
   const provider = createProvider([
     toolCallsFinish([
       { id: 'call-first', name: 'first', query: 'alpha' },
@@ -226,8 +230,8 @@ test('resolves selected skill references without treating rationales as instruct
     skills: ['selected'],
     selectionRationale: 'private global rationale',
   };
-  const graph: Graph = { nodes: [node] };
-  const provider = createProvider([finish(completed())]);
+  const graph: Graph = { revision: 1, nodes: [node] };
+  const provider = createProvider([terminalFinish(completed())]);
   const harness = createHarness(
     graph,
     provider,
@@ -240,7 +244,10 @@ test('resolves selected skill references without treating rationales as instruct
 
   assert.equal(action.type, 'transition');
   const system = provider.requests[0]?.messages[0]?.content ?? '';
-  const user = provider.requests[0]?.messages[1]?.content ?? '';
+  const user = provider.requests[0]?.messages
+    .filter(({ role }) => role === 'user')
+    .map(({ content }) => content ?? '')
+    .join('\n');
   assert.equal(typeof system, 'string');
   assert.equal(typeof user, 'string');
   if (typeof system !== 'string' || typeof user !== 'string') return;
@@ -255,9 +262,9 @@ test('resolves selected skill references without treating rationales as instruct
 test('preserves each semantic terminal status and resolves the wave', async () => {
   for (const status of ['blocked', 'failed'] as const) {
     const node = createNode(`node-${status}`);
-    const graph: Graph = { nodes: [node] };
+    const graph: Graph = { revision: 1, nodes: [node] };
     const provider = createProvider([
-      finish(nonCompleted(status, `${status} private reason`)),
+      terminalFinish(nonCompleted(status, `${status} private reason`)),
     ]);
     const harness = createHarness(graph, provider);
 
@@ -274,7 +281,7 @@ test('preserves each semantic terminal status and resolves the wave', async () =
 
 test('stores needs_revision with every node observation and does not promote a partial result', async () => {
   const node = createNode('current', ['first', 'middle', 'last']);
-  const graph: Graph = { nodes: [node] };
+  const graph: Graph = { revision: 1, nodes: [node] };
   const provider = createProvider([
     toolCallsFinish([
       { id: 'call-first', name: 'first', query: 'first' },
@@ -321,9 +328,9 @@ test('stores needs_revision with every node observation and does not promote a p
 
 test('fails needs_revision when the node produced no observation', async () => {
   const node = createNode('current');
-  const graph: Graph = { nodes: [node] };
+  const graph: Graph = { revision: 1, nodes: [node] };
   const provider = createProvider([
-    finish({
+    terminalFinish({
       ...nonCompleted('needs_revision', 'Revision required.'),
       revisionRequest: {
         goalId: 'current',
@@ -348,7 +355,7 @@ test('fails needs_revision when the node produced no observation', async () => {
 test('propagates provider and tool failures with their exact identity', async () => {
   const providerError = new Error('schema rejected');
   const providerNode = createNode('provider');
-  const providerGraph: Graph = { nodes: [providerNode] };
+  const providerGraph: Graph = { revision: 1, nodes: [providerNode] };
   const provider = createProvider([providerError]);
   const providerHarness = createHarness(providerGraph, provider);
 
@@ -365,7 +372,7 @@ test('propagates provider and tool failures with their exact identity', async ()
   assert.equal(providerNode.status, 'running');
 
   const toolNode = createNode('tool', ['lookup']);
-  const toolGraph: Graph = { nodes: [toolNode] };
+  const toolGraph: Graph = { revision: 1, nodes: [toolNode] };
   const toolProvider = createProvider([toolFinish('call-failure', 'lookup')]);
   const toolError = new Error('tool payload detail');
   const toolHarness = createHarness(toolGraph, toolProvider, [
@@ -390,13 +397,15 @@ test('propagates provider and tool failures with their exact identity', async ()
 test('waits for the whole concurrent wave and resolves semantic outcomes', async () => {
   const completedNode = createNode('completed');
   const blockedNode = createNode('blocked');
-  const graph: Graph = { nodes: [completedNode, blockedNode] };
+  const graph: Graph = { revision: 1, nodes: [completedNode, blockedNode] };
   let completionIndex = 0;
-  const provider = createProvider([], () => {
+  const provider = createProvider([], (request) => {
     const current = completionIndex++;
-    return current === 0
-      ? finish(completed())
-      : finish(nonCompleted('blocked', 'No useful action.'));
+    const terminal =
+      current === 0
+        ? terminalFinish(completed())
+        : terminalFinish(nonCompleted('blocked', 'No useful action.'));
+    return terminal(request);
   });
   const harness = createHarness(graph, provider);
 
@@ -414,7 +423,7 @@ type Step =
 
 function createProvider(
   steps: Step[],
-  complete?: () => ProviderFinished<unknown>,
+  complete?: (request: ProviderRequest<unknown>) => ProviderFinished<unknown>,
 ) {
   const requests: ProviderRequest<unknown>[] = [];
   let index = 0;
@@ -427,7 +436,7 @@ function createProvider(
     },
     complete: async (request: ProviderRequest<unknown>) => {
       requests.push(request);
-      const selected = complete?.() ?? steps[index++];
+      const selected = complete?.(request) ?? steps[index++];
       const step =
         typeof selected === 'function' ? selected(request) : selected;
       if (step instanceof Error) throw step;
@@ -460,7 +469,11 @@ function createHarness(
         default: 'default-model',
         reranker: 'reranker-model',
       },
-      routing: { maxCandidates: 5, maxSkills: 5 },
+      routing: {
+        maxHintCandidates: 5,
+        maxRetrievedCandidates: 5,
+        maxSkills: 5,
+      },
       execution: { maxTurns },
       revision: { max: 3 },
       skills: {
@@ -556,15 +569,6 @@ function nonCompleted(
   };
 }
 
-function finish(structured: unknown): ProviderFinished<unknown> {
-  return {
-    text: JSON.stringify(structured),
-    finishReason: 'stop',
-    toolCalls: [],
-    structured,
-  };
-}
-
 function toolFinish(id: string, name: string): ProviderFinished<unknown> {
   return toolCallsFinish([{ id, name, query: 'evidence' }]);
 }
@@ -587,7 +591,9 @@ function toolCallsFinish(
   };
 }
 
-function terminalFinish(value: unknown): Step {
+function terminalFinish(
+  value: unknown,
+): (request: ProviderRequest<unknown>) => ProviderFinished<unknown> {
   return (request) => {
     const terminal = request.tools?.find(
       ({ description }) =>

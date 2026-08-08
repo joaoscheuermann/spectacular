@@ -37,12 +37,12 @@ export async function hints(
       // Retrieve at most K_hint high-recall candidates for this P0 objective.
       const matches = await skills.retriever.search(
         candidatesPrompt.search(input, node),
-        routing.maxCandidates,
+        routing.maxHintCandidates,
       );
       const candidates = canonicalCandidates(
         matches.map(({ data }) => data),
         catalog,
-        routing.maxCandidates,
+        routing.maxHintCandidates,
       );
 
       // Convert each complete skill body into short, goal-specific planning hints.

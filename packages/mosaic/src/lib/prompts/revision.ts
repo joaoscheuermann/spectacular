@@ -1,7 +1,7 @@
 import type { Graph, Node } from '../types/graph.js';
 import type { SkillExtraction } from '../types/hint.js';
 import type { Observation } from '../types/revision.js';
-import { fenced, graphContext, section } from './context.js';
+import { artifactSections, fenced, graphContext, section } from './context.js';
 
 const planningRules = [
   '- Preserve the request intent, constraints, and required deliverables.',
@@ -131,8 +131,7 @@ const completedState = (graph: Graph): string => {
           section('Node ID', node.id),
           ...node.artifacts.flatMap((artifact, artifactIndex) => [
             `### Artifact ${artifactIndex + 1}`,
-            section('MIME Type', artifact.mime),
-            section('Data', artifact.data),
+            ...artifactSections(artifact),
           ]),
         ])),
   ].join('\n\n');

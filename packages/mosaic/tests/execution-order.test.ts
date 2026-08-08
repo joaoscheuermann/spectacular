@@ -16,7 +16,7 @@ import type {
 test('derives concurrent revision work in wave order rather than completion order', async () => {
   const first = node('first', 0, 'tool-first');
   const second = node('second', 1, 'tool-second');
-  const graph: Graph = { nodes: [first, second] };
+  const graph: Graph = { revision: 1, nodes: [first, second] };
   const turns = new Map<string, number>();
   const provider = {
     metadata: { id: 'fake', name: 'Fake', baseUrl: 'https://fake.invalid' },
@@ -64,7 +64,11 @@ const context = (provider: LlmProvider, tools: Tool[]): WorkflowContext => ({
     logger: { info: () => undefined } as never,
     provider,
     models: { default: 'default', reranker: 'reranker' },
-    routing: { maxCandidates: 2, maxSkills: 0 },
+    routing: {
+      maxHintCandidates: 2,
+      maxRetrievedCandidates: 2,
+      maxSkills: 0,
+    },
     execution: { maxTurns: 8 },
     revision: { max: 3 },
     skills: { required: [], menu: [], retriever: {} as never },

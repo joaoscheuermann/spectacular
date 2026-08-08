@@ -7,8 +7,9 @@ import mosaic, { mosaic as createMosaic } from 'mosaic';
 ```
 
 The factory receives a provider, logger, default/reranker model IDs, skill and
-tool catalogs, both retrievers, and explicit `routing.maxCandidates`,
-`routing.maxSkills`, `execution.maxTurns`, and `revision.max` limits. The
+tool catalogs, both retrievers, and explicit `routing.maxHintCandidates`,
+`routing.maxRetrievedCandidates`, `routing.maxSkills`, `execution.maxTurns`,
+and `revision.max` limits. The
 per-node turn limit is required and accepts only positive safe integers. The
 localized revision limit is required and accepts any integer greater than or
 equal to zero; the Doric composition root uses `execution.maxTurns: 8` and
@@ -28,12 +29,15 @@ cannot produce another ready node preserves the intentional missing-ready
 domain failure. The current workflow stores graphs as a run-local LIFO stack,
 appends planned and revised graphs, and mutates the active graph at the end of
 the stack when scheduling nodes.
-`graphs[n]` is revision `n`, so P0 is `graphs[0]`, the single body-aware P1 is
-`graphs[1]`, and every successful localized revision appends one later entry.
+Every materialized graph carries a runtime-owned safe non-negative integer
+`revision`. P0 is revision `0`, the single body-aware P1 is revision `1`, and
+every successful localized revision increments it by one. `graphs[]` preserves
+those contiguous snapshots in revision order, but array position is not the
+revision authority.
 The graph array is the complete workflow state. Each node owns a complete
 `NodeOutcome | null` and `RuntimeTermination | null`. Outstanding work, the
 number of successful localized revisions, and IDs removed by earlier revisions are all
-derived from the graph snapshots instead of being reconciled with parallel
+derived from graph contents instead of being reconciled with parallel
 ledgers, queues, counters, or retired-ID collections.
 
 ## Graph planning and revision
@@ -41,15 +45,16 @@ ledgers, queues, counters, or retired-ID collections.
 The planner's structured output owns only `id`, `goal`, `doneWhen`,
 `dependsOn`, and `deliver`. Mosaic rejects empty values, empty criteria,
 duplicate or missing dependencies, cycles, non-terminal deliveries, unknown
-fields, and graphs without a terminal deliverable. It then assigns `pending`,
+fields, and graphs without a terminal deliverable. It then assigns `revision`, `pending`,
 the array-order `index`, empty `candidates`, `tools`, and `artifacts`, plus null
 `bundle`, `outcome`, and `termination` fields itself.
 
 P0 never reads the catalog. P1 retrieves candidates independently for each
 goal, excludes required and stale skills, deduplicates canonical names, and
-applies `routing.maxCandidates` both as `K_hint` and as the later routing
-`K_retrieve`. The hint path reapplies the bound after canonical filtering so an
-over-returning retriever cannot cause more than `K_hint` model calls.
+applies `routing.maxHintCandidates` as `K_hint`. Later execution routing uses
+the independent `routing.maxRetrievedCandidates` as `K_retrieve`. Both paths
+reapply their bound after canonical filtering and deduplication, so an
+over-returning retriever cannot exceed either limit.
 
 A `needs_revision` outcome stores the semantic request and the complete ordered
 observation set produced by its node. `schedule` detects those nodes and routes
@@ -62,7 +67,8 @@ only the target and pending nodes may change. A retained target restarts as
 pending with routing, outcome, termination, and partial artifacts cleared. The
 prior snapshot retains the complete `needs_revision` outcome. IDs present in
 older snapshots but absent from the active graph cannot
-be reused. The successful revision count is `max(0, graphs.length - 2)`;
+be reused. The successful revision count is derived from the active revision as
+`max(0, revision - 1)`;
 exhaustion of `revision.max` preserves that outcome, adds a runtime-owned
 `revision_limit` termination, and blocks the target without a provider call.
 
@@ -70,7 +76,7 @@ exhaustion of `revision.max` preserves that outcome, adds a runtime-owned
 
 The bundle state builds one collision-safe Markdown context from the original
 request, current node, ordered completion criteria, and transitive-ancestor
-artifacts. It retrieves at most `maxCandidates` routable skills, reranks their
+artifacts. It retrieves at most `maxRetrievedCandidates` routable skills, reranks their
 complete canonical bodies, and validates at most `maxSkills` selections. Empty
 selection is a normal result. When no candidates exist, Mosaic materializes a
 deterministic empty bundle without reranking or selection. When `maxSkills` is
@@ -161,7 +167,7 @@ inventing a model decision or evidence.
 
 The runtime materializes and durably stores the node outcome from the semantic
 decision and every correlated observation. A completed decision is valid with zero, one, or many
-observations; it stores its Markdown result as a `text/markdown` artifact,
+observations; it stores its Markdown result as an inline `text/markdown` artifact,
 appends additional artifacts, marks the node completed, and returns the fully
 completed wave to `schedule`. A valid `needs_revision` decision requires at
 least one observation, preserves no partial result, stores its semantic request
@@ -193,9 +199,13 @@ interface FinalDeliveryPart {
   readonly id: string;
   readonly goal: string;
   readonly markdown: string;
-  readonly artifacts: readonly DeliveryArtifact[];
+  readonly artifacts: readonly Artifact[];
   readonly observations: readonly Observation[];
 }
+
+type Artifact =
+  | { kind: 'inline'; mime: string; data: string }
+  | { kind: 'reference'; mime: string; reference: string };
 
 type MosaicResult =
   | {
@@ -209,6 +219,10 @@ type MosaicResult =
 Only a workflow whose nodes all completed includes `delivery`. Part Markdown is
 retained verbatim and `markdown` joins it using exactly `\n\n`. The primary
 Markdown artifact is not duplicated in `artifacts`.
+Artifact MIME types and opaque references are normalized non-empty strings;
+inline data may be empty. Mosaic validates and transports references without
+resolving, persisting, authorizing, or checking their targets. Artifact order
+is preserved through outcomes, snapshots, causal projection, and delivery.
 Artifacts and observations are copies; observations intentionally expose the
 complete ordered runtime ledger, including call IDs, tool inputs, and outputs.
 The strict candidate, ordered-bundle, outcome, termination, node-result,
@@ -242,7 +256,8 @@ The supplied MOSAIC 0.1 editions remain unchanged under `docs/original/`.
 The paper specifies semantic contracts, not provider transport or dispatch
 mechanics. Concurrent ready waves, `Promise.allSettled`, one isolated `agent`
 instance per node, the strict terminal-output tool, explicit per-criterion proof
-entries, and the `text/markdown` artifact representation are Doric choices.
+entries, and promotion of primary Markdown as an inline `text/markdown`
+artifact are Doric choices.
 Conforming implementations may vary in model, language, serialization format,
 and tool-calling protocol while preserving the MOSAIC 0.2 invariants and
 Appendix A contracts.

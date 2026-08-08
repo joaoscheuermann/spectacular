@@ -8,7 +8,7 @@ test('finishes completed graphs through delivery without provider calls', async 
   let providerCalls = 0;
   const result = await createMachine().run({
     initial: 'schedule',
-    state: { graphs: [{ nodes: [node('final')] }] },
+    state: { graphs: [{ revision: 1, nodes: [node('final')] }] },
     context: {
       input: 'Complete the request.',
       options: {
@@ -66,7 +66,7 @@ const node = (id: string): Node => ({
   candidates: [],
   bundle: null,
   tools: [],
-  artifacts: [{ mime: 'text/markdown', data: 'Done.' }],
+  artifacts: [{ kind: 'inline', mime: 'text/markdown', data: 'Done.' }],
   outcome: completedOutcome(),
   termination: null,
 });

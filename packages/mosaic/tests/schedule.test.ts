@@ -190,7 +190,7 @@ const state = (graphs: Graph[]): WorkflowState => ({
   graphs,
 });
 
-const createGraph = (nodes: Node[]): Graph => ({ nodes });
+const createGraph = (nodes: Node[]): Graph => ({ revision: 1, nodes });
 
 const createNode = (
   id: string,

@@ -18,7 +18,7 @@ test('routes with transitive ancestor artifacts and omits unrelated branches', a
   const harness = createHarness({ matches: [] });
 
   const action = await run(
-    { nodes: [root, unrelated, direct, current] },
+    { revision: 1, nodes: [root, unrelated, direct, current] },
     harness.options,
   );
 
@@ -33,7 +33,7 @@ test('uses an empty skill bundle and base-only tools without model calls', async
   const base = tool('base');
   const harness = createHarness({ matches: [], requiredTools: [base] });
 
-  const action = await run({ nodes: [current] }, harness.options);
+  const action = await run({ revision: 1, nodes: [current] }, harness.options);
 
   assert.equal(action.type, 'transition');
   assert.deepEqual(current.candidates, []);
@@ -52,7 +52,7 @@ test('skips reranking and selection when maxSkills is zero', async () => {
   const candidate = skill('candidate');
   const harness = createHarness({ matches: [candidate], maxSkills: 0 });
 
-  const action = await run({ nodes: [current] }, harness.options);
+  const action = await run({ revision: 1, nodes: [current] }, harness.options);
 
   assert.equal(action.type, 'transition');
   assert.deepEqual(current.candidates, []);
@@ -107,7 +107,7 @@ test('normalizes selected references to score and canonical-name order', async (
     toolMenu: tools,
   });
 
-  const action = await run({ nodes: [current] }, harness.options);
+  const action = await run({ revision: 1, nodes: [current] }, harness.options);
 
   assert.equal(action.type, 'transition');
   assert.deepEqual(current.candidates, [
@@ -158,7 +158,7 @@ test('materializes rejected candidates and an empty selected bundle', async () =
     selectionRationale: 'General capability is sufficient for this goal.',
   });
 
-  const action = await run({ nodes: [current] }, harness.options);
+  const action = await run({ revision: 1, nodes: [current] }, harness.options);
 
   assert.equal(action.type, 'transition');
   assert.deepEqual(current.candidates, [
@@ -200,7 +200,10 @@ test('fails on incomplete duplicate and out-of-range reranker results', async ()
       matches: [candidateA, candidateB],
       ranking,
     });
-    const action = await run({ nodes: [node('current')] }, harness.options);
+    const action = await run(
+      { revision: 1, nodes: [node('current')] },
+      harness.options,
+    );
     assert.equal(action.type, 'fail');
   }
 });
@@ -285,12 +288,37 @@ test('excludes required and stale indexed skills and never reads the tool retrie
     ],
   });
 
-  const action = await run({ nodes: [current] }, harness.options);
+  const action = await run({ revision: 1, nodes: [current] }, harness.options);
 
   assert.equal(action.type, 'transition');
   assert.deepEqual(current.bundle?.skills, ['selected']);
   assert.equal(harness.reranks[0]?.documents.length, 1);
   assert.match(harness.reranks[0]?.documents[0] ?? '', /selected body/u);
+});
+
+test('uses and defensively enforces the independent execution retrieval limit', async () => {
+  const current = node('current');
+  const matches = [skill('first'), skill('second'), skill('third')];
+  const harness = createHarness({
+    matches,
+    maxRetrievedCandidates: 2,
+    maxSkills: 2,
+    evaluations: matches.slice(0, 2).map(({ name }) => ({
+      skillName: name,
+      selected: false,
+      rationale: `${name} is unnecessary.`,
+    })),
+  });
+
+  const action = await run({ revision: 1, nodes: [current] }, harness.options);
+
+  assert.equal(action.type, 'transition');
+  assert.deepEqual(harness.topKs, [2]);
+  assert.equal(harness.reranks[0]?.documents.length, 2);
+  assert.deepEqual(
+    current.candidates.map(({ skillName }) => skillName),
+    ['first', 'second'],
+  );
 });
 
 test('keeps hostile context delimited and excludes private content from logs', async () => {
@@ -309,7 +337,10 @@ test('keeps hostile context delimited and excludes private content from logs', a
     ],
   });
 
-  const action = await run({ nodes: [ancestor, current] }, harness.options);
+  const action = await run(
+    { revision: 1, nodes: [ancestor, current] },
+    harness.options,
+  );
 
   assert.equal(action.type, 'transition');
   assert.match(harness.completions[0]?.user ?? '', /`{7}text\nartifact/u);
@@ -334,6 +365,7 @@ type HarnessInput = {
   readonly requiredTools?: readonly Tool[];
   readonly toolMenu?: readonly Tool[];
   readonly maxSkills?: number;
+  readonly maxRetrievedCandidates?: number;
 };
 
 const createHarness = (input: HarnessInput) => {
@@ -342,6 +374,7 @@ const createHarness = (input: HarnessInput) => {
   const requiredTools = input.requiredTools ?? [];
   const toolMenu = input.toolMenu ?? requiredTools;
   const searches: string[] = [];
+  const topKs: number[] = [];
   const reranks: Array<{
     readonly query: string;
     readonly documents: readonly string[];
@@ -399,15 +432,20 @@ const createHarness = (input: HarnessInput) => {
       default: 'default-model',
       reranker: 'reranker-model',
     },
-    routing: { maxCandidates: 5, maxSkills: input.maxSkills ?? 5 },
+    routing: {
+      maxHintCandidates: 5,
+      maxRetrievedCandidates: input.maxRetrievedCandidates ?? 5,
+      maxSkills: input.maxSkills ?? 5,
+    },
     execution: { maxTurns: 8 },
     revision: { max: 3 },
     skills: {
       required: input.requiredSkills ?? [],
       menu: skillMenu,
       retriever: {
-        search: async (query: string) => {
+        search: async (query: string, topK: number) => {
           searches.push(query);
+          topKs.push(topK);
           return matches.map((data) => ({ data, score: 1 }));
         },
       },
@@ -419,7 +457,7 @@ const createHarness = (input: HarnessInput) => {
     },
   };
 
-  return { options, searches, reranks, completions, logs };
+  return { options, searches, topKs, reranks, completions, logs };
 };
 
 const run = (graph: Graph, options: MosaicOptions) =>
@@ -456,7 +494,9 @@ const node = (
   bundle: null,
   tools: [],
   artifacts:
-    artifact === undefined ? [] : [{ mime: 'text/plain', data: artifact }],
+    artifact === undefined
+      ? []
+      : [{ kind: 'inline', mime: 'text/plain', data: artifact }],
   outcome: null,
   termination: null,
 });

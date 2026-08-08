@@ -2,6 +2,7 @@ import * as z from 'zod';
 import { ToolMetadataSchema } from 'tool';
 
 import { validateGraphSchema } from './graph-validations.js';
+import { ArtifactSchema } from './artifact.js';
 import { NodeOutcomeSchema } from './outcome.js';
 import {
   OrderedBundleSchema,
@@ -53,13 +54,6 @@ export const PlannedGraphSchema = withGraphValidation(
   z.object({ nodes: z.array(PlannedNodeSchema).min(1) }).strict(),
 );
 
-export const NodeArtifactsSchema = z
-  .object({
-    mime: NonEmptyStringSchema.describe('MIME type of the artifact.'),
-    data: z.string(),
-  })
-  .strict();
-
 export const NodeSchema = PlannedNodeSchema.extend({
   status: z.enum([
     'pending',
@@ -74,13 +68,18 @@ export const NodeSchema = PlannedNodeSchema.extend({
   candidates: z.array(SkillCandidateSchema),
   bundle: OrderedBundleSchema.nullable(),
   tools: z.array(ToolMetadataSchema),
-  artifacts: z.array(NodeArtifactsSchema),
+  artifacts: z.array(ArtifactSchema),
   outcome: NodeOutcomeSchema.nullable(),
   termination: RuntimeTerminationSchema.nullable(),
 }).strict();
 
 export const GraphSchema = withGraphValidation(
-  z.object({ nodes: z.array(NodeSchema).min(1) }).strict(),
+  z
+    .object({
+      revision: z.number().int().safe().nonnegative(),
+      nodes: z.array(NodeSchema).min(1),
+    })
+    .strict(),
 ).superRefine((graph, context) => {
   graph.nodes.forEach((node, index) => {
     validateRoutingTrace(node, context, ['nodes', index]);
@@ -132,8 +131,9 @@ export const StrictGraphSchema = GraphSchema.superRefine((graph, context) => {
 export type PlannedGraph = z.output<typeof PlannedGraphSchema>;
 
 /** Adds scheduler-owned fields deterministically to model planning output. */
-export const materializeGraph = (plan: PlannedGraph) =>
+export const materializeGraph = (plan: PlannedGraph, revision: number) =>
   StrictGraphSchema.parse({
+    revision,
     nodes: plan.nodes.map((node, index) => ({
       ...node,
       status: 'pending' as const,
@@ -145,6 +145,20 @@ export const materializeGraph = (plan: PlannedGraph) =>
       outcome: null,
       termination: null,
     })),
+  });
+
+/** Validates ordered runtime snapshots and their contiguous revision sequence. */
+export const GraphHistorySchema = z
+  .array(GraphSchema)
+  .superRefine((graphs, context) => {
+    graphs.forEach((graph, index) => {
+      if (graph.revision === index) return;
+      context.addIssue({
+        code: 'custom',
+        path: [index, 'revision'],
+        message: `Graph revision must be ${index}.`,
+      });
+    });
   });
 
 type RuntimeNode = z.output<typeof NodeSchema>;

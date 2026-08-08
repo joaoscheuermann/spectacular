@@ -1,17 +1,12 @@
 import type { Observation } from './revision.js';
-
-/** A concrete artifact included with a completed deliverable. */
-export interface DeliveryArtifact {
-  readonly mime: string;
-  readonly data: string;
-}
+import type { Artifact } from './artifact.js';
 
 /** One completed terminal node selected for the final response. */
 export interface FinalDeliveryPart {
   readonly id: string;
   readonly goal: string;
   readonly markdown: string;
-  readonly artifacts: readonly DeliveryArtifact[];
+  readonly artifacts: readonly Artifact[];
   readonly observations: readonly Observation[];
 }
 

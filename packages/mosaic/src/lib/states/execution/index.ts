@@ -184,7 +184,7 @@ const execute = async (
      */
     node.artifacts = [
       ...node.artifacts,
-      { mime: 'text/markdown', data: result.markdown },
+      { kind: 'inline', mime: 'text/markdown', data: result.markdown },
       ...result.artifacts,
     ];
 

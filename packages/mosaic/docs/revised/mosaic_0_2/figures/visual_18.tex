@@ -22,7 +22,8 @@ nome único; schemas disponíveis ao executor \\
 ID único; dependências válidas; status permitido; objetivo orientado a resultado \\
 \hline
 \texttt{Plan} & \texttt{nodes[]}, \texttt{revision} &
-DAG acíclico; ao menos um nó entregável; nós concluídos imutáveis em revisões \\
+DAG acíclico; revisão inteira não negativa, contígua e atribuída pelo runtime;
+ao menos um nó entregável; nós concluídos imutáveis em revisões \\
 \hline
 \texttt{SkillHint} &
 \texttt{goalId}, \texttt{skillName}, \texttt{evidence}, \texttt{effect} &

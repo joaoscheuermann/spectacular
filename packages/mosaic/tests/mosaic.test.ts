@@ -32,7 +32,11 @@ test('propagates the exact provider failure from graph generation', async () => 
       default: 'default-model',
       reranker: 'reranker-model',
     },
-    routing: { maxCandidates: 5, maxSkills: 5 },
+    routing: {
+      maxHintCandidates: 5,
+      maxRetrievedCandidates: 5,
+      maxSkills: 5,
+    },
     execution: { maxTurns: 8 },
     revision: { max: 3 },
     skills: {

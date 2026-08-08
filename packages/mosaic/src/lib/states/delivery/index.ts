@@ -134,6 +134,7 @@ const part = (node: Node): FinalDeliveryPart => {
   const [primary, ...artifacts] = node.artifacts;
   if (
     primary === undefined ||
+    primary.kind !== 'inline' ||
     primary.mime !== 'text/markdown' ||
     primary.data.length === 0
   ) {

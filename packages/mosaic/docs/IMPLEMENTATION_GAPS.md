@@ -5,8 +5,7 @@ Last reviewed: 2026-08-08
 This document tracks differences between the current Doric implementation and
 the broader MOSAIC 0.2 algorithm and normative contracts. The fourteen
 mandatory conformance requirements in Appendix B are substantially covered;
-the remaining open work concerns plan and artifact contracts from Appendix A.
-Catalog gaps 1 and 3 and routing gap 2 were closed on 2026-08-08.
+gaps 1--6 are closed as of 2026-08-08.
 
 The comparison uses the revised [MOSAIC 0.2 paper](revised/mosaic_0_2/mosaic_0_2.pdf),
 especially sections 4.8-4.10, Algorithm 1, and Appendices A and B.
@@ -23,31 +22,6 @@ This list excludes:
   outside the core profile;
 - more sophisticated tool filtering, authorization, or risk policies.
 
-## Low priority
-
-4. **Make the plan revision explicit.**
-   Appendix A includes `revision` in `Plan`. Mosaic currently infers it from
-   the position of a graph snapshot in `graphs[]`. The behavior is stable, but
-   the revision does not cross the plan boundary as an explicit field.
-
-5. **Separate `K_hint` from `K_retrieve`.**
-   Algorithm 1 exposes independent hint-retrieval and execution-retrieval
-   limits. Mosaic uses one `routing.maxCandidates` value for both. Equal limits
-   are valid, but callers cannot tune the two stages independently.
-
-6. **Represent artifact references explicitly.**
-   The normative `FinalDelivery` describes artifact references. Doric uses
-   inline `{ mime, data }` artifacts, where `data` may contain either content
-   or a reference without a distinct type. This is an intentional local
-   representation, but it does not provide the explicit artifact-reference
-   contract described by the paper.
-
-## Suggested implementation order
-
-1. Materialize explicit plan revisions.
-2. Split retrieval limits and introduce explicit artifact references only when
-   their additional policy value is needed.
-
 ## Closed
 
 - **Gap 1 — Runtime tool output schemas.** Executable factories expose Zod `input`
@@ -60,3 +34,14 @@ This list excludes:
   strict `SkillCandidate` traces with exact reranker scores, contiguous ranks,
   and per-candidate rationales plus a strict `OrderedBundle` with the selected
   ordered subset and global selection rationale.
+- **Gap 4 — Explicit runtime plan revision.** Every materialized graph carries
+  a runtime-owned safe non-negative `revision`; P0 is `0`, P1 is `1`, localized
+  revisions increment contiguously, and model-authored plans cannot set it.
+- **Gap 5 — Independent retrieval limits.** `routing.maxHintCandidates`
+  implements `K_hint` and `routing.maxRetrievedCandidates` implements
+  `K_retrieve`; both have defensive post-normalization bounds, and `maxSkills`
+  is validated only against the latter.
+- **Gap 6 — Discriminated artifacts.** Outcomes, graph state, causal projection,
+  and delivery use the strict public `Artifact` union between inline content and
+  opaque references. The core validates and transports references but does not
+  resolve, persist, authorize, or check them.
