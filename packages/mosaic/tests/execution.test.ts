@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { AgentErrorObject } from 'agent';
 
 import type { Skill } from 'bundle';
 import type { LlmProvider, ProviderFinished, ProviderRequest } from 'llms';
@@ -147,6 +148,62 @@ test('automatically records every returned observation in tool-result order', as
       },
     ],
   );
+});
+
+test('blocks on turn exhaustion after retaining ordered observations without artifacts', async () => {
+  const node = createNode('bounded', ['first', 'second']);
+  const graph: Graph = { nodes: [node] };
+  const provider = createProvider([
+    toolCallsFinish([
+      { id: 'call-first', name: 'first', query: 'alpha' },
+      { id: 'call-second', name: 'second', query: 'beta' },
+    ]),
+  ]);
+  const harness = createHarness(
+    graph,
+    provider,
+    [
+      tool('first', async () => ({ value: 'first result' })),
+      tool('second', async () => ({ value: 'second result' })),
+    ],
+    [],
+    [],
+    1,
+  );
+
+  const action = await execution(state([graph]), harness.context, handlers());
+
+  assert.equal(action.type, 'fail');
+  if (action.type !== 'fail') return;
+  assert.ok(action.error instanceof AgentErrorObject);
+  assert.equal(action.error.data.code, 'turn_limit_exceeded');
+  assert.equal(provider.requests.length, 1);
+  assert.equal(node.status, 'blocked');
+  assert.equal(node.revisionRequest, null);
+  assert.deepEqual(node.artifacts, []);
+  assert.deepEqual(
+    node.observations.map(({ toolName, callId, output }) => ({
+      toolName,
+      callId,
+      output,
+    })),
+    [
+      {
+        toolName: 'first',
+        callId: 'call-first',
+        output: '{"value":"first result"}',
+      },
+      {
+        toolName: 'second',
+        callId: 'call-second',
+        output: '{"value":"second result"}',
+      },
+    ],
+  );
+  assert.deepEqual(harness.logs.at(-1), {
+    bindings: { nodeId: 'bounded', status: 'blocked' },
+    message: 'node execution did not complete',
+  });
 });
 
 test('resolves selected skill references without treating rationales as instructions', async () => {
@@ -367,6 +424,7 @@ function createHarness(
   tools: readonly Tool[] = [],
   skills: readonly Skill[] = [],
   requiredSkills: readonly Skill[] = [],
+  maxTurns = 8,
 ) {
   const logs: unknown[] = [];
   const context: WorkflowContext = {
@@ -382,6 +440,7 @@ function createHarness(
         reranker: 'reranker-model',
       },
       routing: { maxCandidates: 5, maxSkills: 5 },
+      execution: { maxTurns },
       revision: { max: 3 },
       skills: {
         required: requiredSkills,

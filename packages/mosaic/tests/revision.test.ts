@@ -297,6 +297,7 @@ const createHarness = (plans: readonly unknown[], max = 3, failure?: Error) => {
     } as never,
     models: { default: 'default', reranker: 'reranker' },
     routing: { maxCandidates: 1, maxSkills: 0 },
+    execution: { maxTurns: 8 },
     revision: { max },
     skills: {
       required: [],

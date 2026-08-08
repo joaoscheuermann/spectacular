@@ -8,9 +8,11 @@ import mosaic, { mosaic as createMosaic } from 'mosaic';
 
 The factory receives a provider, logger, default/reranker model IDs, skill and
 tool catalogs, both retrievers, and explicit `routing.maxCandidates`,
-`routing.maxSkills`, and `revision.max` limits. The localized revision limit is
-required and accepts any integer greater than or equal to zero; the Doric
-composition root uses `revision.max: 3`. It has no session option. The tool
+`routing.maxSkills`, `execution.maxTurns`, and `revision.max` limits. The
+per-node turn limit is required and accepts only positive safe integers. The
+localized revision limit is required and accepts any integer greater than or
+equal to zero; the Doric composition root uses `execution.maxTurns: 8` and
+`revision.max: 3`. It has no session option. The tool
 retriever remains part of the public composition contract even though bundle
 routing queries only the skill retriever.
 
@@ -107,7 +109,7 @@ Execution creates one `agent` per ready node with isolated in-memory message
 storage and executable tools resolved by name from the Mosaic tool catalog.
 Each node resolves its selected skill names, then makes one `agent.complete`
 call with the provider's tool definitions and a node-bound semantic decision
-schema. Its collision-safe Markdown input
+schema, bounded by `execution.maxTurns` provider invocations. Its collision-safe Markdown input
 contains the original request, current goal and ordered completion criteria,
 artifacts from transitive ancestor nodes only, ordered selected skill bodies,
 and the available tool names and descriptions; tool schemas are not duplicated
@@ -126,6 +128,13 @@ from the node's isolated message history and creates ordered `Observation`
 records. `callId` exists only on those internal records for correlation. The
 terminal structured-output tool is never an observation, and missing,
 duplicate, or uncorrelated calls or results fail execution.
+
+If a node uses its final permitted turn to request tools, those tools execute
+and their results remain in the isolated history. Before another model call,
+the agent raises `turn_limit_exceeded`; Mosaic materializes the complete ordered
+observation ledger, marks the node `blocked`, clears its revision request, and
+promotes no result artifacts. The same agent error is propagated after the
+concurrent wave settles, preserving the current workflow-failure behavior.
 
 The runtime materializes the node outcome from the semantic decision and every
 correlated observation. A completed decision is valid with zero, one, or many

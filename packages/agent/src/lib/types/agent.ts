@@ -30,6 +30,7 @@ export type AgentRunOptions<
   Output = JsonValue,
   Schema extends StructuredOutputSchema = StructuredOutputSchema,
 > = {
+  readonly maxTurns?: number;
   readonly signal?: AbortSignal;
   readonly schema?: Schema;
 };
@@ -109,6 +110,7 @@ export type AgentErrorCode =
   | 'concurrent_run'
   | 'invalid_structured_output'
   | 'missing_provider_finish'
+  | 'turn_limit_exceeded'
   | 'tool_result_serialization_failed';
 
 export type AgentError = {

@@ -1,6 +1,6 @@
 # MOSAIC 0.2 implementation gaps
 
-Last reviewed: 2026-08-07
+Last reviewed: 2026-08-08
 
 This document tracks differences between the current Doric implementation and
 the broader MOSAIC 0.2 algorithm and normative contracts. The fourteen
@@ -25,13 +25,7 @@ This list excludes:
 
 ## High priority
 
-1. **Implement the per-node turn limit `L_node`.**
-   Section 4.8 and Algorithm 1 require a declared bound on executor turns. The
-   current agent tool loop is unbounded, and `MosaicOptions` has no execution
-   turn limit. The runtime must count all model turns for a node and produce a
-   `blocked` terminal outcome when the limit is exhausted.
-
-2. **Complete the lifecycle semantics for `blocked` and `failed`.**
+1. **Complete the lifecycle semantics for `blocked` and `failed`.**
    The paper treats both statuses as terminal node outcomes. The current
    executor records the status and then fails the entire state machine, so
    independent branches cannot continue. Revision-limit exhaustion has the
@@ -40,14 +34,14 @@ This list excludes:
    that is still eligible, and define the final workflow result when a required
    deliverable does not complete.
 
-3. **Remove the all-nodes-completed assumption from successful termination.**
+2. **Remove the all-nodes-completed assumption from successful termination.**
    Algorithm 1 runs until every node is terminal, while the current scheduler
    enters delivery only when every node is `completed`. Delivery also rejects
    any graph containing another terminal status. Termination should distinguish
    a completed delivery from a terminal workflow containing blocked or failed
    nodes instead of collapsing both into an exception.
 
-4. **Expose a structured terminal workflow result.**
+3. **Expose a structured terminal workflow result.**
    `MosaicAgent.prompt` currently returns `FinalDelivery` or throws. It cannot
    distinguish a semantic block, a terminal node failure, a revision-limit
    block, and an infrastructure or state-machine error. A runtime-owned result
@@ -56,7 +50,7 @@ This list excludes:
 
 ## Medium priority
 
-5. **Retain the complete runtime `NodeOutcome`.**
+4. **Retain the complete runtime `NodeOutcome`.**
    Execution temporarily materializes the model decision plus all correlated
    observations, but then discards criterion evaluations and the terminal
    reason. The graph retains status, observations, revision request, and
@@ -64,13 +58,13 @@ This list excludes:
    `NodeDecision` plus `observations[]`; that complete value should be a durable
    runtime contract available to later workflow policy and inspection.
 
-6. **Add output schemas to runtime tool descriptors.**
+5. **Add output schemas to runtime tool descriptors.**
    Appendix A requires each `ToolDescriptor` to expose both `inputSchema` and
    `outputSchema`. The current public tool definition contains only an input
    schema, and tool handlers return an unconstrained value. This gap concerns
    executable runtime tools, not test or validation tooling.
 
-7. **Materialize the normative routing contracts.**
+6. **Materialize the normative routing contracts.**
    The paper defines `SkillCandidate` with canonical name, score, rank, and
    rationale, and `OrderedBundle` with goal ID, ordered skills, and a selection
    rationale. The current implementation keeps ranking as private transient
@@ -78,7 +72,7 @@ This list excludes:
    behavior is deterministic, but the complete intermediate contracts are not
    available for inspection or downstream policy.
 
-8. **Complete canonical skill-record normalization at the public boundary.**
+7. **Complete canonical skill-record normalization at the public boundary.**
    The bundle loader validates non-empty skill fields, but the public
    `SkillSchema` remains permissive, has no explicit `indexText`, and does not
    normalize duplicate `allowedTools`. Doric derives index text when populating
@@ -87,17 +81,17 @@ This list excludes:
 
 ## Low priority
 
-9. **Make the plan revision explicit.**
+8. **Make the plan revision explicit.**
    Appendix A includes `revision` in `Plan`. Mosaic currently infers it from
    the position of a graph snapshot in `graphs[]`. The behavior is stable, but
    the revision does not cross the plan boundary as an explicit field.
 
-10. **Separate `K_hint` from `K_retrieve`.**
-    Algorithm 1 exposes independent hint-retrieval and execution-retrieval
-    limits. Mosaic uses one `routing.maxCandidates` value for both. Equal limits
-    are valid, but callers cannot tune the two stages independently.
+9. **Separate `K_hint` from `K_retrieve`.**
+   Algorithm 1 exposes independent hint-retrieval and execution-retrieval
+   limits. Mosaic uses one `routing.maxCandidates` value for both. Equal limits
+   are valid, but callers cannot tune the two stages independently.
 
-11. **Represent artifact references explicitly.**
+10. **Represent artifact references explicitly.**
     The normative `FinalDelivery` describes artifact references. Doric uses
     inline `{ mime, data }` artifacts, where `data` may contain either content
     or a reference without a distinct type. This is an intentional local
@@ -106,10 +100,9 @@ This list excludes:
 
 ## Suggested implementation order
 
-1. Add `L_node` and bounded node execution.
-2. Implement terminal workflow semantics for `blocked` and `failed`.
-3. Retain and expose complete `NodeOutcome` values.
-4. Add tool output schemas and strengthen catalog contracts.
-5. Materialize routing contracts and explicit plan revisions.
-6. Split retrieval limits and introduce explicit artifact references only when
+1. Implement terminal workflow semantics for `blocked` and `failed`.
+2. Retain and expose complete `NodeOutcome` values.
+3. Add tool output schemas and strengthen catalog contracts.
+4. Materialize routing contracts and explicit plan revisions.
+5. Split retrieval limits and introduce explicit artifact references only when
    their additional policy value is needed.

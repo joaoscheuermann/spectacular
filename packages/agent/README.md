@@ -57,6 +57,18 @@ tool registration, message storage, model selection, and per-call cancellation.
 The system prompt is included in provider requests but is not persisted into
 external message storage.
 
+Each `complete` or `stream` run may set `maxTurns` to a positive safe integer.
+One turn is one provider invocation, including a direct or terminal response,
+a response containing any number of tool calls, or a structured-output repair
+attempt. Omitting the option preserves an unbounded loop. Invalid values throw
+`TypeError` before the input is stored or the provider is called.
+
+When the limit is reached, tools requested by the final permitted turn still
+execute and their results are stored. The run then throws an `AgentErrorObject`
+with code `turn_limit_exceeded` before another provider invocation. Streaming
+preserves events already emitted but does not emit `agent.finished` for an
+exhausted run.
+
 When a run requests structured output without executable tools, the schema is
 passed directly to the provider. When executable tools are also present, the
 agent instead adds one strict terminal tool derived from the schema. Ordinary

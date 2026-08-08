@@ -65,6 +65,7 @@ const context = (provider: LlmProvider, tools: Tool[]): WorkflowContext => ({
     provider,
     models: { default: 'default', reranker: 'reranker' },
     routing: { maxCandidates: 2, maxSkills: 0 },
+    execution: { maxTurns: 8 },
     revision: { max: 3 },
     skills: { required: [], menu: [], retriever: {} as never },
     tools: { required: [], menu: tools, retriever: {} as never },

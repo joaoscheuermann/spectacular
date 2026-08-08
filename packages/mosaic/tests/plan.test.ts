@@ -288,6 +288,7 @@ const createHarness = (input: HarnessInput) => {
       reranker: 'unused',
     },
     routing: { maxCandidates: input.maxCandidates ?? 5, maxSkills: 0 },
+    execution: { maxTurns: 8 },
     revision: { max: 3 },
     skills: {
       required: [],

@@ -248,6 +248,9 @@ async function main() {
           maxCandidates: 5,
           maxSkills: 5,
         },
+        execution: {
+          maxTurns: 8,
+        },
         revision: {
           max: 3,
         },

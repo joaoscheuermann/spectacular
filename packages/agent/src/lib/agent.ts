@@ -41,6 +41,28 @@ export const createAgent = (options: AgentOptions): Agent => {
     running = false;
   };
 
+  const turnGuard = (maxTurns: number | undefined): (() => void) => {
+    if (
+      maxTurns !== undefined &&
+      (!Number.isSafeInteger(maxTurns) || maxTurns <= 0)
+    ) {
+      throw new TypeError('Agent maxTurns must be a positive safe integer.');
+    }
+
+    let turns = 0;
+
+    return (): void => {
+      if (maxTurns !== undefined && turns >= maxTurns) {
+        throw new AgentErrorObject({
+          code: 'turn_limit_exceeded',
+          message: `Agent exceeded its ${maxTurns}-turn limit.`,
+        });
+      }
+
+      turns += 1;
+    };
+  };
+
   const buildRequest = <Output = JsonValue>(
     runOptions: AgentRunOptions<Output>,
     outputTool?: StructuredOutputTool,
@@ -146,6 +168,7 @@ export const createAgent = (options: AgentOptions): Agent => {
       input: string,
       runOptions: AgentRunOptions<Output> = {},
     ): Promise<AgentResponse<Output>> => {
+      const beginTurn = turnGuard(runOptions.maxTurns);
       acquire();
 
       try {
@@ -159,6 +182,7 @@ export const createAgent = (options: AgentOptions): Agent => {
 
         while (true) {
           /** Ask the provider for either executable calls or the terminal result. */
+          beginTurn();
           const request = buildRequest(runOptions, terminal, correction);
           correction = undefined;
           const finish = await options.provider.complete(request);
@@ -207,6 +231,7 @@ export const createAgent = (options: AgentOptions): Agent => {
       input: string,
       runOptions: AgentRunOptions<Output> = {},
     ) {
+      const beginTurn = turnGuard(runOptions.maxTurns);
       acquire();
 
       try {
@@ -224,6 +249,7 @@ export const createAgent = (options: AgentOptions): Agent => {
         while (true) {
           let finish: ProviderFinished<Output> | undefined;
           let rejected = false;
+          beginTurn();
           const request = buildRequest(runOptions, terminal, correction);
           correction = undefined;
 

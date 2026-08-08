@@ -1,6 +1,6 @@
 # Doric Grounding
 
-Last reviewed: 2026-08-07
+Last reviewed: 2026-08-08
 
 This is Doric's repository validity contract. Every agent working in this
 repository must read it before non-trivial planning, reviewing, artifact
@@ -274,8 +274,9 @@ Doric goal-workflow policy: planning and revision, scheduling, skill
 retrieval and reranking, and per-node skill/tool menu composition. Its public
 factory accepts an injected provider, logger, default and reranker model IDs,
 explicit candidate and selected-skill limits, a required non-negative integer
-localized-revision limit, bundle skills and executable tools, and both
-retrievers; it has no session option. Doric configures three localized
+localized-revision limit, a required positive safe-integer per-node model-turn
+limit, bundle skills and executable tools, and both retrievers; it has no
+session option. Doric configures eight model turns per node and three localized
 revisions. The tool retriever remains part of this composition contract, but
 the bundle state does not query it or run an independent tool router. Model
 graph output owns only `id`,
@@ -311,7 +312,11 @@ they may reference only base tools and do not expand the node tool menu.
 Execution creates one agent per ready node with isolated in-memory message
 storage and executable tools resolved from the catalog. Each node makes one
 `agent.complete` call with tools and a node-bound strict semantic-decision
-schema. The model-facing decision owns only `status`, ordered criterion
+schema plus the required Mosaic turn limit. One turn is one provider
+invocation, including direct and terminal responses, tool-call responses, and
+structured-output repair attempts. Tools requested on the final permitted turn
+execute and their results are stored; exhaustion is raised before another
+provider invocation. The model-facing decision owns only `status`, ordered criterion
 evaluations, `result`, `revisionRequest`, and `reason`; criterion `evidence` is
 model-authored prose, and the revision request owns only `goalId`,
 `invalidatedAssumption`, and `requestedEffect`. Unknown legacy reference fields
@@ -342,9 +347,12 @@ runtime observations (including call IDs and inputs/outputs), and join part
 Markdown only with `\n\n`. A `needs_revision` decision requires at least one observation,
 must target the current node, and does not promote partial results: execution
 stores its semantic request and every observation produced by the node, then
-returns normally to scheduling. Blocked, failed, provider, tool, schema, and
-observation-validation failures retain failure precedence and mark unfinished
-nodes failed. Execution emits safe logs with node IDs, terminal statuses, and
+returns normally to scheduling. Turn exhaustion materializes every correlated
+executable-tool observation already stored, marks the node blocked, clears its
+revision request, promotes no result artifacts, and rethrows the same agent
+error so the current workflow still fails after its concurrent wave settles.
+Blocked, failed, provider, tool, schema, and observation-validation failures
+otherwise retain failure precedence and mark unfinished nodes failed. Execution emits safe logs with node IDs, terminal statuses, and
 selected skill and tool names only, never prompts, decisions, outcomes,
 reasons, tool payloads, or error details.
 The run-local state contains only the ordered graph snapshots. Each node owns
@@ -538,6 +546,14 @@ output unchanged. This terminal behavior applies equally to complete and
 stream agent runs. Streaming preserves already-emitted provider deltas,
 suppresses an invalid `response.finished`, and adds no repair-specific public
 event.
+Agent runs may declare an optional positive safe-integer `maxTurns`; omission
+keeps the loop unbounded. Invalid values fail with `TypeError` before message
+storage or provider activity. The budget is checked immediately before every
+provider invocation and counts ordinary responses, tool-call responses, and
+structured-output repair attempts identically in `complete` and `stream`.
+Tools from the last permitted turn execute and their results are stored before
+the next invocation is rejected with `turn_limit_exceeded`. Exhausted streams
+preserve emitted events and do not emit `agent.finished`.
 OpenAI, Codex, and OpenRouter send resolved effort through `reasoning.effort`;
 LM Studio OpenAI compatibility sends `reasoning_effort`; LM Studio native sends
 its native `reasoning` value with `none` mapped to `off`, `minimal` to `low`,

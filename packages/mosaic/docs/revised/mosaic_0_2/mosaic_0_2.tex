@@ -344,7 +344,11 @@ Resultados de ramos sem dependência causal com o objetivo atual são omitidos, 
 
 \subsection*{4.8 Executor do nó}
 
-O modelo pode concluir diretamente ou chamar tools. Cada retorno bem-sucedido de tool executável volta ao mesmo nó e é convertido pelo runtime em uma \texttt{Observation}; a tool reservada para a saída estruturada terminal nunca é uma observação. A decisão final do modelo contém somente status, avaliações ordenadas de \texttt{doneWhen}, resultado, pedido semântico de revisão e razão. O runtime rejeita dados de chamada ou retorno ausentes, duplicados ou não correlacionados e então materializa o \texttt{NodeOutcome} ao combinar a decisão com todas as observações, na ordem dos resultados. A evidência escrita em cada avaliação de critério continua sendo prosa do modelo; a associação das observações ocorre no nível do nó. \(L_{\mathrm{node}}\) limita o número de turnos. Se os critérios não foram satisfeitos e não há ação útil, o nó termina como \texttt{blocked}; saídas inválidas ou falhas terminais podem produzir \texttt{failed}.
+O modelo pode concluir diretamente ou chamar tools. Cada retorno bem-sucedido de tool executável volta ao mesmo nó e é convertido pelo runtime em uma \texttt{Observation}; a tool reservada para a saída estruturada terminal nunca é uma observação. A decisão final do modelo contém somente status, avaliações ordenadas de \texttt{doneWhen}, resultado, pedido semântico de revisão e razão. O runtime rejeita dados de chamada ou retorno ausentes, duplicados ou não correlacionados e então materializa o \texttt{NodeOutcome} ao combinar a decisão com todas as observações, na ordem dos resultados. A evidência escrita em cada avaliação de critério continua sendo prosa do modelo; a associação das observações ocorre no nível do nó. Se os critérios não foram satisfeitos e não há ação útil, o nó termina como \texttt{blocked}; saídas inválidas ou falhas terminais podem produzir \texttt{failed}.
+
+\(L_{\mathrm{node}}\) é um orçamento finito e positivo de turnos do modelo para cada nó, onde um turno corresponde a uma invocação do modelo, independentemente de ela produzir resposta direta, saída terminal, uma ou várias chamadas de tools ou uma tentativa de reparo de saída estruturada. A implementação deve declarar o valor usado. O limite fornece vivacidade local, uso limitado de recursos e uma condição de execução reproduzível: uma mesma configuração não pode continuar solicitando indefinidamente novos passos do modelo. Tools solicitadas no último turno permitido podem concluir e suas observações devem ser preservadas; o esgotamento é detectado antes de outra invocação.
+
+O esgotamento de \(L_{\mathrm{node}}\) produz \texttt{blocked}, pois significa que o nó não obteve uma decisão terminal dentro do orçamento declarado, e não necessariamente uma falha operacional do modelo, do provedor ou de uma tool. Esse limite não substitui cancelamento, timeouts de tools, orçamentos de custo nem políticas separadas para autorizar, limitar ou compensar efeitos colaterais. Esses mecanismos tratam riscos distintos e podem encerrar uma execução antes do orçamento de turnos.
 
 
 \input{figures/visual_10.tex}
@@ -415,11 +419,14 @@ enquanto houver objetivo não terminal em P:
     T <- T_base união tools_declaradas(B)
     contexto <- montar_contexto(q, g, projetar_estado(g, P, estado), B, T)
 
-    historico, decisao <- executar_ate_decisao(contexto, L_node)
+    historico, decisao, limite_esgotado <- executar_ate_decisao(contexto, L_node)
     observacoes <- correlacionar_retornos_executaveis(historico)
     // falhar se chamada/retorno estiver ausente, duplicado ou não correlacionado
     // excluir a tool terminal usada somente para saída estruturada
-    outcome <- materializar(decisao, observacoes)
+    se limite_esgotado:
+      outcome <- bloquear_por_limite(observacoes)
+    senão:
+      outcome <- materializar(decisao, observacoes)
 
   anexar observacoes ao estado na ordem da wave e dos retornos de cada nó
 

@@ -265,6 +265,7 @@ const createHarness = (input: HarnessInput) => {
       reranker: 'reranker-model',
     },
     routing: { maxCandidates: 5, maxSkills: input.maxSkills ?? 5 },
+    execution: { maxTurns: 8 },
     revision: { max: 3 },
     skills: {
       required: input.requiredSkills ?? [],

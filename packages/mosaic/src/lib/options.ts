@@ -5,12 +5,13 @@ import type { MosaicOptions } from './types/mosaic-options.js';
 
 /** Validates Mosaic's catalog and routing invariants before a workflow starts. */
 export const validateOptions = (options: MosaicOptions): void => {
-  const { models, routing, revision, skills, tools } = options;
+  const { models, routing, execution, revision, skills, tools } = options;
 
   requireModel('default', models.default);
   requireModel('reranker', models.reranker);
   requireInteger('routing.maxCandidates', routing.maxCandidates, 1);
   requireInteger('routing.maxSkills', routing.maxSkills, 0);
+  requireInteger('execution.maxTurns', execution?.maxTurns, 1);
   requireInteger('revision.max', revision?.max, 0);
 
   if (routing.maxSkills > routing.maxCandidates) {

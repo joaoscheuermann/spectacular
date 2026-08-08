@@ -66,6 +66,26 @@ test('requires an explicit non-negative integer localized revision limit', () =>
   assert.throws(() => mosaic(missing as MosaicOptions), /revision|max/u);
 });
 
+test('requires a positive safe integer node turn limit', () => {
+  for (const value of [0, -1, 0.5, Number.NaN, Infinity, 2 ** 53]) {
+    const options = validOptions();
+    options.execution = { maxTurns: value };
+    assert.throws(
+      () => mosaic(options),
+      /execution\.maxTurns must be an integer >= 1/u,
+    );
+  }
+
+  const missing = validOptions() as unknown as {
+    execution?: { maxTurns: number };
+  };
+  delete missing.execution;
+  assert.throws(
+    () => mosaic(missing as MosaicOptions),
+    /execution\.maxTurns must be an integer >= 1/u,
+  );
+});
+
 const validOptions = (): MutableOptions => ({
   logger: {} as never,
   provider: {} as never,
@@ -74,6 +94,7 @@ const validOptions = (): MutableOptions => ({
     reranker: 'reranker-model',
   },
   routing: { maxCandidates: 5, maxSkills: 5 },
+  execution: { maxTurns: 8 },
   revision: { max: 3 },
   skills: { required: [], menu: [], retriever: { search: async () => [] } },
   tools: { required: [], menu: [], retriever: { search: async () => [] } },

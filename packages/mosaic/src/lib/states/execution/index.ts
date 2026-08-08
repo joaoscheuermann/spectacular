@@ -1,4 +1,4 @@
-import { createAgent } from 'agent';
+import { AgentErrorObject, createAgent } from 'agent';
 import { createMessageStorage } from 'messages';
 import { createToolStorage, type Tool } from 'tool';
 
@@ -79,6 +79,8 @@ const execute = async (
 ): Promise<void> => {
   /** The runtime owns node status after scheduling hands the node to execution. */
   node.status = 'running';
+  /** Keep history available when a bounded run exhausts after executing tools. */
+  const messages = createMessageStorage();
 
   try {
     /** Resolve graph-approved tool metadata to executable catalog entries. */
@@ -89,8 +91,6 @@ const execute = async (
      * Keep the observation ledger local to this node. Appendix A, table A.2
      * requires every Observation call and return to remain correlated.
      */
-    const messages = createMessageStorage();
-
     /** Compose the node-local agent with only its resolved executable tools. */
     const agent = createAgent({
       provider: options.provider,
@@ -118,7 +118,10 @@ const execute = async (
      */
     const { structured: decision } = await agent.complete(
       executionPrompt.user({ request: input, node, graph, skills, tools }),
-      { schema: createNodeDecisionSchema(node) },
+      {
+        schema: createNodeDecisionSchema(node),
+        maxTurns: options.execution.maxTurns,
+      },
     );
 
     if (decision === undefined) {
@@ -196,6 +199,20 @@ const execute = async (
 
     return;
   } catch (error) {
+    if (
+      error instanceof AgentErrorObject &&
+      error.data.code === 'turn_limit_exceeded'
+    ) {
+      node.observations = materializeObservations(node.id, messages.list());
+      node.revisionRequest = null;
+      node.status = 'blocked';
+      options.logger.info(
+        { nodeId: node.id, status: node.status },
+        'node execution did not complete',
+      );
+      throw error;
+    }
+
     /** Preserve explicit terminal statuses; only an unfinished run becomes failed. */
     if (node.status === 'running') {
       node.status = 'failed';

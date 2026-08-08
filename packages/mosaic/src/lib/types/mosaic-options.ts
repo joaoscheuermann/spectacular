@@ -15,6 +15,9 @@ export interface MosaicOptions {
     readonly maxCandidates: number;
     readonly maxSkills: number;
   };
+  readonly execution: {
+    readonly maxTurns: number;
+  };
   readonly revision: {
     readonly max: number;
   };
