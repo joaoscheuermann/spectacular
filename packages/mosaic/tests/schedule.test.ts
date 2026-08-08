@@ -60,6 +60,40 @@ test('marks a dependent node ready when all its dependencies are completed', asy
   assert.equal(dependent.status, 'ready');
 });
 
+test('blocks descendants causally and continues an independent branch', async () => {
+  const blocked = createNode('blocked', 0, [], 'blocked');
+  blocked.outcome = {
+    status: 'blocked',
+    criteria: [
+      { criterionIndex: 0, satisfied: false, evidence: 'Unavailable.' },
+    ],
+    result: null,
+    revisionRequest: null,
+    reason: 'No useful action remains.',
+    observations: [],
+  };
+  const child = createNode('child', 1, ['blocked']);
+  const grandchild = createNode('grandchild', 2, ['child']);
+  const independent = createNode('independent', 3);
+  const graph = createGraph([blocked, child, grandchild, independent]);
+
+  const action = await schedule(state([graph]), {} as never, handlers());
+
+  assert.equal(action.type, 'transition');
+  assert.equal(action.type === 'transition' ? action.handler : '', 'bundle');
+  assert.equal(independent.status, 'ready');
+  assert.deepEqual(child.termination, {
+    type: 'dependency',
+    status: 'blocked',
+    dependencyIds: ['blocked'],
+  });
+  assert.deepEqual(grandchild.termination, {
+    type: 'dependency',
+    status: 'blocked',
+    dependencyIds: ['child'],
+  });
+});
+
 test('routes a node-owned localized revision to revision before scheduling work', async () => {
   const target = createNode('target', 0, [], 'needs_revision');
   const graph = createGraph([target]);
@@ -71,11 +105,19 @@ test('routes a node-owned localized revision to revision before scheduling work'
     input: '{}',
     output: '{}',
   };
-  target.observations = [observation];
-  target.revisionRequest = {
-    goalId: 'target',
-    invalidatedAssumption: 'Original structure.',
-    requestedEffect: 'Revise it.',
+  target.outcome = {
+    status: 'needs_revision',
+    criteria: [
+      { criterionIndex: 0, satisfied: false, evidence: 'Not complete.' },
+    ],
+    result: null,
+    revisionRequest: {
+      goalId: 'target',
+      invalidatedAssumption: 'Original structure.',
+      requestedEffect: 'Revise it.',
+    },
+    reason: 'Revision required.',
+    observations: [observation],
   };
 
   const action = await schedule(workflow, {} as never, handlers());
@@ -166,6 +208,17 @@ const createNode = (
   skills: [],
   tools: [],
   artifacts: [],
-  observations: [],
+  outcome: status === 'completed' ? completedOutcome(id) : null,
+  termination: null,
+});
+
+const completedOutcome = (id: string) => ({
+  status: 'completed' as const,
+  criteria: [
+    { criterionIndex: 0, satisfied: true, evidence: `${id} is complete.` },
+  ],
+  result: { markdown: `${id} result`, artifacts: [] },
   revisionRequest: null,
+  reason: null,
+  observations: [],
 });

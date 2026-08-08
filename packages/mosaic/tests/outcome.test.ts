@@ -193,7 +193,7 @@ function createNode(): Node {
     skills: [],
     tools: [],
     artifacts: [],
-    observations: [],
-    revisionRequest: null,
+    outcome: null,
+    termination: null,
   };
 }

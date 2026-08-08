@@ -1,33 +1,22 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { writeDelivery } from '../src/lib/delivery-writer.js';
+import { writeResult } from '../src/lib/delivery-writer.js';
 
 test('writes Markdown once with one final newline and no structured delivery data', () => {
   const writes: string[] = [];
 
-  writeDelivery(
+  writeResult(
     {
-      markdown: '## Finished',
-      parts: [
-        {
-          id: 'private-id',
-          goal: 'private goal',
-          markdown: '## Finished',
-          artifacts: [{ mime: 'application/json', data: '{"secret":true}' }],
-          observations: [
-            {
-              goalId: 'private-id',
-              toolName: 'lookup',
-              callId: 'call-private',
-              input: '{"private":true}',
-              output: '{"private":true}',
-            },
-          ],
-        },
-      ],
+      status: 'completed',
+      delivery: {
+        markdown: '## Finished',
+        parts: [],
+      },
+      nodes: [],
     },
     { write: (text: string) => writes.push(text) } as never,
+    { info: () => undefined },
   );
 
   assert.deepEqual(writes, ['## Finished\n']);
@@ -37,9 +26,65 @@ test('writes Markdown once with one final newline and no structured delivery dat
 test('does not add a second newline when Markdown already ends with one', () => {
   const writes: string[] = [];
 
-  writeDelivery({ markdown: 'Finished\n', parts: [] }, {
-    write: (text: string) => writes.push(text),
-  } as never);
+  writeResult(
+    {
+      status: 'completed',
+      delivery: { markdown: 'Finished\n', parts: [] },
+      nodes: [],
+    },
+    { write: (text: string) => writes.push(text) } as never,
+    { info: () => undefined },
+  );
 
   assert.deepEqual(writes, ['Finished\n']);
+});
+
+test('logs only status and node IDs for blocked and failed results', () => {
+  for (const status of ['blocked', 'failed'] as const) {
+    const writes: string[] = [];
+    const logs: unknown[] = [];
+    writeResult(
+      {
+        status,
+        nodes: [
+          {
+            id: 'safe-id',
+            goal: 'private goal',
+            doneWhen: ['private criterion'],
+            status,
+            outcome: status === 'failed' ? failedOutcome() : blockedOutcome(),
+            termination: null,
+          },
+        ],
+      },
+      { write: (text: string) => writes.push(text) } as never,
+      {
+        info: (bindings: unknown, message: string) =>
+          logs.push({ bindings, message }),
+      },
+    );
+
+    assert.deepEqual(writes, []);
+    assert.deepEqual(logs, [
+      {
+        bindings: { status, nodeIds: ['safe-id'] },
+        message: 'mosaic workflow did not complete',
+      },
+    ]);
+    assert.doesNotMatch(JSON.stringify(logs), /private/u);
+  }
+});
+
+const blockedOutcome = () => ({
+  status: 'blocked' as const,
+  criteria: [{ criterionIndex: 0, satisfied: false, evidence: 'private' }],
+  result: null,
+  revisionRequest: null,
+  reason: 'private',
+  observations: [],
+});
+
+const failedOutcome = () => ({
+  ...blockedOutcome(),
+  status: 'failed' as const,
 });

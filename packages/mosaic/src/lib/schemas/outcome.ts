@@ -2,13 +2,14 @@ import { z } from 'zod';
 
 import type { Node } from '../types/graph.js';
 import { RevisionRequestSchema } from './revision.js';
+import { ObservationSchema } from './revision.js';
 
 /**
  * Records one ordered evaluation from `doneWhen`. Section 4.8 and Appendix A,
  * table A.2 require completion to satisfy `doneWhen`; exposing every evaluation
  * is a stricter Doric proof field rather than a field mandated by the paper.
  */
-const CriterionSchema = z
+export const CriterionSchema = z
   .object({
     criterionIndex: z
       .number()
@@ -33,7 +34,7 @@ const CriterionSchema = z
  * Appendix A, table A.2 includes artifactRefs; this MIME/data shape is Doric's
  * existing concrete artifact representation.
  */
-const ArtifactSchema = z
+export const ArtifactSchema = z
   .object({
     mime: z.string().min(1).describe('MIME type of the artifact.'),
     data: z.string().describe('Artifact content or reference.'),
@@ -45,7 +46,7 @@ const ArtifactSchema = z
  * Table A.2 states that a completed NodeOutcome requires a result satisfying
  * `doneWhen`; the Markdown serialization is local to Doric.
  */
-const ResultSchema = z
+export const ResultSchema = z
   .object({
     markdown: z
       .string()
@@ -61,7 +62,7 @@ const ResultSchema = z
  * Defines the semantic decision authored by an executing model. MOSAIC 0.2
  * keeps observations runtime-owned and outside this model-facing contract.
  */
-const DecisionSchema = z
+const DecisionFieldsSchema = z
   .object({
     status: z.enum(['completed', 'needs_revision', 'blocked', 'failed']),
     criteria: z
@@ -78,19 +79,59 @@ const DecisionSchema = z
   })
   .strict();
 
-export type NodeDecision = z.output<typeof DecisionSchema>;
+type Decision = z.output<typeof DecisionFieldsSchema>;
+type RefinementContext = z.RefinementCtx;
+
+/** Strict semantic decision contract authored by the executing model. */
+export const NodeDecisionSchema = DecisionFieldsSchema.superRefine(
+  (decision, context) => validateStatus(undefined, decision, context),
+);
+
+export type NodeDecision = z.output<typeof NodeDecisionSchema>;
+
+/** Complete runtime outcome: the model decision plus ordered observations. */
+export const NodeOutcomeSchema = DecisionFieldsSchema.extend({
+  observations: z.array(ObservationSchema),
+}).superRefine((outcome, context) => {
+  validateStatus(undefined, outcome, context);
+  if (
+    outcome.status === 'needs_revision' &&
+    outcome.observations.length === 0
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['observations'],
+      message: 'A needs_revision outcome requires at least one observation.',
+    });
+  }
+});
+
+export type NodeOutcome = z.output<typeof NodeOutcomeSchema>;
 
 /** Creates the node-bound semantic decision schema used for model output. */
 export const createNodeDecisionSchema = (node: Node) =>
-  DecisionSchema.extend({
-    criteria: DecisionSchema.shape.criteria.length(node.doneWhen.length),
+  DecisionFieldsSchema.extend({
+    criteria: DecisionFieldsSchema.shape.criteria.length(node.doneWhen.length),
   }).superRefine((outcome, context) => {
     validateCriteria(node, outcome, context);
-    validateStatus(node, outcome, context);
+    validateStatus(node.id, outcome, context);
   });
 
-type Decision = z.output<typeof DecisionSchema>;
-type RefinementContext = z.RefinementCtx;
+/** Validates a materialized outcome against its owning node. */
+export const createNodeOutcomeSchema = (node: Node) =>
+  NodeOutcomeSchema.superRefine((outcome, context) => {
+    validateCriteria(node, outcome, context);
+    if (
+      outcome.status === 'needs_revision' &&
+      outcome.revisionRequest?.goalId !== node.id
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['revisionRequest', 'goalId'],
+        message: `Revision goalId must be ${node.id}.`,
+      });
+    }
+  });
 
 const validateCriteria = (
   node: Node,
@@ -118,7 +159,7 @@ const validateCriteria = (
 };
 
 const validateStatus = (
-  node: Node,
+  nodeId: string | undefined,
   outcome: Decision,
   context: RefinementContext,
 ): void => {
@@ -137,7 +178,7 @@ const validateStatus = (
   }
 
   if (outcome.status === 'needs_revision') {
-    validateRevision(node, outcome, context);
+    validateRevision(nodeId, outcome, context);
     return;
   }
 
@@ -197,7 +238,7 @@ const validateCompleted = (
 };
 
 const validateRevision = (
-  node: Node,
+  nodeId: string | undefined,
   outcome: Decision,
   context: RefinementContext,
 ): void => {
@@ -213,11 +254,11 @@ const validateRevision = (
     return;
   }
 
-  if (request.goalId !== node.id) {
+  if (nodeId !== undefined && request.goalId !== nodeId) {
     context.addIssue({
       code: 'custom',
       path: ['revisionRequest', 'goalId'],
-      message: `Revision goalId must be ${node.id}.`,
+      message: `Revision goalId must be ${nodeId}.`,
     });
   }
 };

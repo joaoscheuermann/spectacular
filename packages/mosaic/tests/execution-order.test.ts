@@ -47,12 +47,12 @@ test('derives concurrent revision work in wave order rather than completion orde
   if (action.type !== 'transition') return;
   const revisions = revisionNodes(graph);
   assert.deepEqual(
-    revisions.map(({ revisionRequest }) => revisionRequest?.goalId),
+    revisions.map(({ outcome }) => outcome?.revisionRequest?.goalId),
     ['second', 'first'],
   );
   assert.deepEqual(
-    revisions.flatMap(({ observations }) =>
-      observations.map(({ goalId }) => goalId),
+    revisions.flatMap(({ outcome }) =>
+      (outcome?.observations ?? []).map(({ goalId }) => goalId),
     ),
     ['second', 'first'],
   );
@@ -87,8 +87,8 @@ const node = (id: string, index: number, toolName: string): Node => ({
   skills: [],
   tools: [{ name: toolName, description: `${toolName} tool` }],
   artifacts: [],
-  observations: [],
-  revisionRequest: null,
+  outcome: null,
+  termination: null,
 });
 
 const tool = (name: string): Tool => {

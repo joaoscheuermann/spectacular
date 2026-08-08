@@ -3,7 +3,8 @@ import { ToolMetadataSchema } from 'tool';
 
 import type { NodeSkillSelection } from '../types/node-skill-selection.js';
 import { validateGraphSchema } from './graph-validations.js';
-import { ObservationSchema, RevisionRequestSchema } from './revision.js';
+import { NodeOutcomeSchema } from './outcome.js';
+import { RuntimeTerminationSchema } from './termination.js';
 
 const NonEmptyStringSchema = z.string().trim().min(1);
 const DependenciesSchema = z
@@ -74,13 +75,18 @@ export const NodeSchema = PlannedNodeSchema.extend({
   skills: z.array(NodeSkillSelectionSchema),
   tools: z.array(ToolMetadataSchema),
   artifacts: z.array(NodeArtifactsSchema),
-  observations: z.array(ObservationSchema),
-  revisionRequest: RevisionRequestSchema.nullable(),
+  outcome: NodeOutcomeSchema.nullable(),
+  termination: RuntimeTerminationSchema.nullable(),
 }).strict();
 
 export const GraphSchema = withGraphValidation(
   z.object({ nodes: z.array(NodeSchema).min(1) }).strict(),
-);
+).superRefine((graph, context) => {
+  graph.nodes.forEach((node, index) => {
+    validateRuntimeState(node, index, context);
+    validateRuntimeOwnership(node, graph.nodes, index, context);
+  });
+});
 
 /** Validates a newly materialized graph before execution begins. */
 export const StrictGraphSchema = GraphSchema.superRefine((graph, context) => {
@@ -99,12 +105,7 @@ export const StrictGraphSchema = GraphSchema.superRefine((graph, context) => {
         message: `Generated node index must be ${index}.`,
       });
     }
-    for (const field of [
-      'skills',
-      'tools',
-      'artifacts',
-      'observations',
-    ] as const) {
+    for (const field of ['skills', 'tools', 'artifacts'] as const) {
       if (node[field].length === 0) continue;
       context.addIssue({
         code: 'custom',
@@ -112,11 +113,11 @@ export const StrictGraphSchema = GraphSchema.superRefine((graph, context) => {
         message: `Generated node ${field} must be empty.`,
       });
     }
-    if (node.revisionRequest !== null) {
+    if (node.outcome !== null || node.termination !== null) {
       context.addIssue({
         code: 'custom',
-        path: ['nodes', index, 'revisionRequest'],
-        message: 'Generated node revisionRequest must be null.',
+        path: ['nodes', index],
+        message: 'Generated node outcome and termination must be null.',
       });
     }
   });
@@ -134,7 +135,99 @@ export const materializeGraph = (plan: PlannedGraph) =>
       skills: [],
       tools: [],
       artifacts: [],
-      observations: [],
-      revisionRequest: null,
+      outcome: null,
+      termination: null,
     })),
   });
+
+type RuntimeNode = z.output<typeof NodeSchema>;
+
+const validateRuntimeState = (
+  node: RuntimeNode,
+  index: number,
+  context: z.RefinementCtx,
+): void => {
+  const path = ['nodes', index] as const;
+  if (['pending', 'ready', 'running'].includes(node.status)) {
+    if (node.outcome === null && node.termination === null) return;
+  } else if (node.status === 'completed') {
+    if (node.outcome?.status === 'completed' && node.termination === null)
+      return;
+  } else if (node.status === 'needs_revision') {
+    if (node.outcome?.status === 'needs_revision' && node.termination === null)
+      return;
+  } else if (node.status === 'failed') {
+    if (node.outcome?.status === 'failed' && node.termination === null) return;
+  } else {
+    const modelBlocked =
+      node.outcome?.status === 'blocked' && node.termination === null;
+    const turnBlocked =
+      node.outcome === null && node.termination?.type === 'turn_limit';
+    const dependencyBlocked =
+      node.outcome === null && node.termination?.type === 'dependency';
+    const revisionBlocked =
+      node.outcome?.status === 'needs_revision' &&
+      node.termination?.type === 'revision_limit';
+    if (modelBlocked || turnBlocked || dependencyBlocked || revisionBlocked)
+      return;
+  }
+
+  context.addIssue({
+    code: 'custom',
+    path: [...path, 'status'],
+    message: 'Node status, outcome, and termination are inconsistent.',
+  });
+};
+
+const validateRuntimeOwnership = (
+  node: RuntimeNode,
+  nodes: readonly RuntimeNode[],
+  index: number,
+  context: z.RefinementCtx,
+): void => {
+  if (
+    node.outcome?.revisionRequest !== null &&
+    node.outcome?.revisionRequest !== undefined &&
+    node.outcome.revisionRequest.goalId !== node.id
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['nodes', index, 'outcome', 'revisionRequest', 'goalId'],
+      message: `Revision goalId must be ${node.id}.`,
+    });
+  }
+
+  const observations = [
+    ...(node.outcome?.observations ?? []),
+    ...(node.termination?.type === 'turn_limit'
+      ? node.termination.observations
+      : []),
+  ];
+  if (observations.some(({ goalId }) => goalId !== node.id)) {
+    context.addIssue({
+      code: 'custom',
+      path: ['nodes', index],
+      message: `Every observation must belong to node ${node.id}.`,
+    });
+  }
+
+  if (node.termination?.type !== 'dependency') return;
+  const expected = node.dependsOn.filter((id) => {
+    const dependency = nodes.find((candidate) => candidate.id === id);
+    return dependency?.status !== 'completed';
+  });
+  if (sameItems(node.termination.dependencyIds, expected)) return;
+  context.addIssue({
+    code: 'custom',
+    path: ['nodes', index, 'termination', 'dependencyIds'],
+    message:
+      'Dependency termination must name direct non-completed dependencies.',
+  });
+};
+
+const sameItems = (
+  left: readonly string[],
+  right: readonly string[],
+): boolean =>
+  left.length === right.length &&
+  left.every((item, index) => item === right[index]);

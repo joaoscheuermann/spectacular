@@ -7,7 +7,7 @@ import { delivery } from '../states/delivery/index.js';
 import { revision } from '../states/revision/index.js';
 import { schedule } from '../states/schedule/index.js';
 import type { WorkflowContext, WorkflowState } from '../types/workflow.js';
-import type { FinalDelivery } from '../types/delivery.js';
+import type { MosaicResult } from '../types/result.js';
 
 /**
  * Creates the reusable MOSAIC lifecycle: plan(P0) -> plan(P1) -> schedule ->
@@ -15,7 +15,7 @@ import type { FinalDelivery } from '../types/delivery.js';
  * node evidence invalidates the active graph.
  */
 export const createMachine = () =>
-  createStateMachine<WorkflowContext, WorkflowState, FinalDelivery>()({
+  createStateMachine<WorkflowContext, WorkflowState, MosaicResult>()({
     plan,
     schedule,
     revision,

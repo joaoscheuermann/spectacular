@@ -32,7 +32,8 @@ export const schedule: WorkflowHandler = (
     if (
       graph.nodes.some(
         (node) =>
-          node.status === 'needs_revision' && node.revisionRequest === null,
+          node.status === 'needs_revision' &&
+          (node.outcome === null || node.outcome.revisionRequest === null),
       )
     ) {
       return fail(new Error('Revision node is missing its runtime request.'));
@@ -42,8 +43,11 @@ export const schedule: WorkflowHandler = (
     return transition('revision', state);
   }
 
-  // Final assembly is deterministic and performs no further cognitive work.
-  if (graph.nodes.every((node) => node.status === 'completed')) {
+  // A terminal non-completed dependency causally blocks each pending descendant.
+  propagateDependencyBlocks(graph.nodes);
+
+  // Final assembly is deterministic once every node reaches a terminal status.
+  if (graph.nodes.every(({ status }) => isTerminal(status))) {
     return transition('delivery', state);
   }
 
@@ -69,6 +73,42 @@ export const schedule: WorkflowHandler = (
 
   // Bundle routing and tool-menu composition are performed only for this wave.
   return transition('bundle', state);
+};
+
+const isTerminal = (status: Node['status']): boolean =>
+  status === 'completed' || status === 'blocked' || status === 'failed';
+
+const propagateDependencyBlocks = (nodes: readonly Node[]): void => {
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+    for (const node of nodes) {
+      if (node.status !== 'pending') continue;
+
+      const dependencies = node.dependsOn
+        .map((id) => nodes.find((candidate) => candidate.id === id))
+        .filter((dependency): dependency is Node => dependency !== undefined);
+      if (
+        !dependencies.some(
+          ({ status }) => status === 'blocked' || status === 'failed',
+        )
+      ) {
+        continue;
+      }
+
+      node.status = 'blocked';
+      node.outcome = null;
+      node.termination = {
+        type: 'dependency',
+        status: 'blocked',
+        dependencyIds: dependencies
+          .filter(({ status }) => status !== 'completed')
+          .map(({ id }) => id),
+      };
+      changed = true;
+    }
+  }
 };
 
 /**

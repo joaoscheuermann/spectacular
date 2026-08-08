@@ -26,14 +26,27 @@ test('finishes completed graphs through delivery without provider calls', async 
   assert.equal(result.status, 'finished');
   if (result.status !== 'finished') return;
   assert.deepEqual(result.value, {
-    markdown: 'Done.',
-    parts: [
+    status: 'completed',
+    delivery: {
+      markdown: 'Done.',
+      parts: [
+        {
+          id: 'final',
+          goal: 'Goal final',
+          markdown: 'Done.',
+          artifacts: [],
+          observations: [],
+        },
+      ],
+    },
+    nodes: [
       {
         id: 'final',
         goal: 'Goal final',
-        markdown: 'Done.',
-        artifacts: [],
-        observations: [],
+        doneWhen: ['final is complete.'],
+        status: 'completed',
+        outcome: completedOutcome(),
+        termination: null,
       },
     ],
   });
@@ -51,6 +64,15 @@ const node = (id: string): Node => ({
   skills: [],
   tools: [],
   artifacts: [{ mime: 'text/markdown', data: 'Done.' }],
-  observations: [],
+  outcome: completedOutcome(),
+  termination: null,
+});
+
+const completedOutcome = () => ({
+  status: 'completed' as const,
+  criteria: [{ criterionIndex: 0, satisfied: true, evidence: 'Done.' }],
+  result: { markdown: 'Done.', artifacts: [] },
   revisionRequest: null,
+  reason: null,
+  observations: [],
 });

@@ -269,9 +269,9 @@ an available handler name and passes that handler a shallow copy of the
 supplied state object. It owns no workflow policy, persistence, listeners,
 recovery hooks, or external side effects.
 
-`packages/mosaic` depends on `packages/state-machine` but owns the incomplete
-Doric goal-workflow policy: planning and revision, scheduling, skill
-retrieval and reranking, and per-node skill/tool menu composition. Its public
+`packages/mosaic` depends on `packages/state-machine` and owns the Doric
+goal-workflow policy: planning and revision, scheduling, skill retrieval and
+reranking, and per-node skill/tool menu composition. Its public
 factory accepts an injected provider, logger, default and reranker model IDs,
 explicit candidate and selected-skill limits, a required non-negative integer
 localized-revision limit, a required positive safe-integer per-node model-turn
@@ -281,8 +281,8 @@ revisions. The tool retriever remains part of this composition contract, but
 the bundle state does not query it or run an independent tool router. Model
 graph output owns only `id`,
 `goal`, `doneWhen`, `dependsOn`, and `deliver`; Mosaic deterministically assigns
-array-order indices, pending status, and empty runtime-owned `skills`, `tools`,
-`artifacts`, and `observations` arrays plus a null `revisionRequest`. Plans
+array-order indices, pending status, empty runtime-owned `skills`, `tools`, and
+`artifacts` arrays, plus null `outcome` and `termination` fields. Plans
 require non-empty nodes, IDs, goals, and criteria;
 unique existing dependencies; acyclicity; and at least one terminal deliverable,
 while every deliverable must be terminal. A routed node skill stores only
@@ -292,7 +292,7 @@ execution prompt.
 `agents/doric` remains the composition root that loads bundles, constructs and
 populates lexical and vector indexes for routable skills and executable tools,
 wraps each pair in hybrid search, and invokes Mosaic. Mosaic runs the fixed
-`plan(P0) -> plan(P1) -> schedule -> bundle -> execution -> schedule -> delivery -> finish(FinalDelivery)`
+`plan(P0) -> plan(P1) -> schedule -> bundle -> execution -> schedule -> delivery -> finish(MosaicResult)`
 lifecycle, with `schedule -> revision -> schedule` for localized runtime
 requests, over a run-local LIFO graph array where `graphs[n]` is plan revision
 `n`. The `plan` state rejects every re-entry after P1. P0 is
@@ -337,10 +337,11 @@ the decision and the complete observation sequence. `callId` exists only in an
 revision prompts. Missing, duplicate, or uncorrelated call/result data is a
 runtime failure. A completed decision is valid with zero, one, or multiple
 observations. Completed nodes store their Markdown result as a `text/markdown`
-artifact, append additional artifacts, and return a fully completed wave to
-scheduling. A completed active graph transitions only to `delivery`, which
-performs stable topological assembly using original node-array position as its
-tie-breaker, selects terminal deliverables, and finishes with `FinalDelivery`.
+artifact, append additional artifacts, and return the resolved wave to
+scheduling. Model-authored `blocked` and `failed` decisions also resolve their
+wave normally. When every node is terminal, `delivery` performs stable
+topological assembly using original node-array position as its tie-breaker and
+finishes with `MosaicResult`.
 Delivery does not make provider, model, skill, or tool calls. Its public parts
 preserve Markdown exactly, expose copied additional artifacts and complete
 runtime observations (including call IDs and inputs/outputs), and join part
@@ -348,27 +349,31 @@ Markdown only with `\n\n`. A `needs_revision` decision requires at least one obs
 must target the current node, and does not promote partial results: execution
 stores its semantic request and every observation produced by the node, then
 returns normally to scheduling. Turn exhaustion materializes every correlated
-executable-tool observation already stored, marks the node blocked, clears its
-revision request, promotes no result artifacts, and rethrows the same agent
-error so the current workflow still fails after its concurrent wave settles.
-Blocked, failed, provider, tool, schema, and observation-validation failures
-otherwise retain failure precedence and mark unfinished nodes failed. Execution emits safe logs with node IDs, terminal statuses, and
-selected skill and tool names only, never prompts, decisions, outcomes,
+executable-tool observation already stored, adds a runtime-owned `turn_limit`
+termination, marks the node blocked, promotes no result artifacts, and resolves
+the wave normally. Provider, tool, schema, correlation, and state-machine
+failures retain their original identity and reject the workflow. Execution
+emits safe logs with node IDs, terminal statuses, and selected skill and tool names only, never prompts, decisions, outcomes,
 reasons, tool payloads, or error details.
-The run-local state contains only the ordered graph snapshots. Each node owns
-its observations and optional revision request. Outstanding revision work is
-selected from node outcomes in deterministic node-wave order; within each node,
-observations retain tool-result order. The localized planner receives every
+The run-local state contains only the ordered graph snapshots. Each node owns a
+complete `NodeOutcome | null` and `RuntimeTermination | null`. Outstanding
+revision work is selected from node outcomes in deterministic node-wave order;
+within each node, observations retain tool-result order. The localized planner receives every
 queued observation as fenced tool name, input, and output evidence and never
 receives `callId`. The successful local revision count is derived from graph
 history, and retired IDs are the IDs found in older snapshots but absent from
 the active graph. Each localized pass is owned by the dedicated `revision`
 state, skips catalog hints, preserves completed and other non-pending nodes
 exactly, permits changes only to the target and pending nodes, clears routing,
-observations, the consumed request, and partial results from a retained target,
-and prevents retired ID reuse. Only successfully appended localized graphs
-count against the configured limit; exhaustion blocks the target without a
-provider call. This behavior implements
+outcome, termination, and partial results from a retained target, and prevents
+retired ID reuse. The prior graph snapshot retains its complete
+`needs_revision` outcome. Only successfully appended localized graphs count
+against the configured limit; exhaustion preserves the outcome, adds a
+runtime-owned `revision_limit` termination, and blocks the target without a
+provider call. Descendants of blocked or failed dependencies become blocked
+with direct dependency IDs, while independent branches continue. A completed
+result includes `FinalDelivery`; blocked and failed results omit partial
+delivery, with `failed` taking precedence. This behavior implements
 MOSAIC 0.2 sections 4.7-4.9 and the `NodeContext`, `NodeDecision`,
 `Observation`, runtime `NodeOutcome`, and `RevisionRequest` contracts in
 Appendix A. The paper defines the semantic lifecycle but leaves tool-calling
@@ -378,7 +383,7 @@ tools, explicit criterion proof entries, and `text/markdown` artifact promotion
 are Doric runtime choices.
 Planning and revision append a graph, the last graph is active, and
 scheduling mutates that graph when marking nodes ready. It succeeds for an
-already-completed graph and otherwise preserves the intentional missing-ready
+already-terminal graph and otherwise preserves the intentional missing-ready
 domain failure when progress cannot continue.
 
 `models/skillrouter-embedding` is the user-approved Nx/uv conversion utility

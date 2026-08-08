@@ -134,10 +134,27 @@ test('rejects every plan re-entry after the body-aware P1', async () => {
   const target = active.nodes[0];
   assert.ok(target);
   target.status = 'needs_revision';
-  target.revisionRequest = {
-    goalId: target.id,
-    invalidatedAssumption: 'The initial structure remains valid.',
-    requestedEffect: 'Revise the target structure.',
+  target.outcome = {
+    status: 'needs_revision',
+    criteria: [
+      { criterionIndex: 0, satisfied: false, evidence: 'Not complete.' },
+    ],
+    result: null,
+    revisionRequest: {
+      goalId: target.id,
+      invalidatedAssumption: 'The initial structure remains valid.',
+      requestedEffect: 'Revise the target structure.',
+    },
+    reason: 'Revision required.',
+    observations: [
+      {
+        goalId: target.id,
+        toolName: 'inspect',
+        callId: 'call-1',
+        input: '{}',
+        output: '{}',
+      },
+    ],
   };
   const harness = createHarness({ plans: [] });
   const action = await plan(
@@ -192,23 +209,15 @@ test('rejects malformed generated graphs and accepts a valid deliverable DAG', (
     }),
     runtime({
       ...nodePlan('node', true),
-      observations: [
-        {
-          goalId: 'node',
-          toolName: 'lookup',
-          callId: 'call-node',
-          input: '{}',
-          output: '{}',
-        },
-      ],
+      termination: {
+        type: 'dependency',
+        status: 'blocked',
+        dependencyIds: ['other'],
+      },
     }),
     runtime({
       ...nodePlan('node', true),
-      revisionRequest: {
-        goalId: 'node',
-        invalidatedAssumption: 'An assumption failed.',
-        requestedEffect: 'Revise the node.',
-      },
+      outcome: completedOutcome('node'),
     }),
     runtime({ ...nodePlan('node', true), extra: true }),
     {
@@ -357,8 +366,19 @@ const runtimeNode = (
   skills: [],
   tools: [],
   artifacts: [],
-  observations: [],
+  outcome: null,
+  termination: null,
+});
+
+const completedOutcome = (id: string) => ({
+  status: 'completed' as const,
+  criteria: [
+    { criterionIndex: 0, satisfied: true, evidence: `${id} complete.` },
+  ],
+  result: { markdown: `${id} result`, artifacts: [] },
   revisionRequest: null,
+  reason: null,
+  observations: [],
 });
 
 function createSkill(name: string): Skill {

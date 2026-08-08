@@ -5,17 +5,12 @@ import { createToolStorage, type Tool } from 'tool';
 import * as executionPrompt from '../../prompts/execution.js';
 import {
   createNodeDecisionSchema,
-  type NodeDecision,
+  createNodeOutcomeSchema,
 } from '../../schemas/outcome.js';
 import { resolveSkills } from '../bundle/menus.js';
 import type { Graph, Node } from '../../types/graph.js';
-import type { Observation } from '../../types/revision.js';
 import type { WorkflowContext, WorkflowHandler } from '../../types/workflow.js';
 import { materializeObservations } from './observations.js';
-
-type RuntimeOutcome = NodeDecision & {
-  readonly observations: readonly Observation[];
-};
 
 /**
  * Implements the node executor and lifecycle from the MOSAIC paper, sections
@@ -133,10 +128,14 @@ const execute = async (
      * executable-tool observation. The terminal structured-output tool is
      * normalized away by `agent` and therefore never enters this ledger.
      */
-    const outcome: RuntimeOutcome = {
+    const outcome = createNodeOutcomeSchema(node).parse({
       ...decision,
       observations: materializeObservations(node.id, messages.list()),
-    };
+    });
+
+    // Persist the complete semantic outcome before applying lifecycle policy.
+    node.outcome = outcome;
+    node.termination = null;
 
     if (outcome.status === 'needs_revision') {
       const request = outcome.revisionRequest;
@@ -149,8 +148,6 @@ const execute = async (
         );
       }
 
-      node.observations = [...outcome.observations];
-      node.revisionRequest = { ...request };
       node.status = outcome.status;
       options.logger.info(
         { nodeId: node.id, status: outcome.status },
@@ -160,17 +157,15 @@ const execute = async (
       return;
     }
 
-    /** Blocked and failed remain terminal wave failures. */
+    /** Semantic blocked and failed decisions resolve the wave normally. */
     if (outcome.status !== 'completed') {
-      node.observations = [...outcome.observations];
-      node.revisionRequest = null;
       node.status = outcome.status;
       options.logger.info(
         { nodeId: node.id, status: outcome.status },
         'node execution did not complete',
       );
 
-      throw new Error(`Node ${node.id} ended with status ${outcome.status}.`);
+      return;
     }
 
     const result = outcome.result;
@@ -191,8 +186,6 @@ const execute = async (
     ];
 
     /** Completion makes the node eligible to satisfy downstream dependencies. */
-    node.observations = [...outcome.observations];
-    node.revisionRequest = null;
     node.status = outcome.status;
 
     options.logger.info({ nodeId: node.id }, 'node execution completed');
@@ -203,25 +196,23 @@ const execute = async (
       error instanceof AgentErrorObject &&
       error.data.code === 'turn_limit_exceeded'
     ) {
-      node.observations = materializeObservations(node.id, messages.list());
-      node.revisionRequest = null;
+      const observations = materializeObservations(node.id, messages.list());
+      node.outcome = null;
+      node.termination = {
+        type: 'turn_limit',
+        status: 'blocked',
+        limit: options.execution.maxTurns,
+        observations,
+      };
       node.status = 'blocked';
       options.logger.info(
         { nodeId: node.id, status: node.status },
         'node execution did not complete',
       );
-      throw error;
+      return;
     }
 
-    /** Preserve explicit terminal statuses; only an unfinished run becomes failed. */
-    if (node.status === 'running') {
-      node.status = 'failed';
-      options.logger.info(
-        { nodeId: node.id, status: node.status },
-        'node execution failed',
-      );
-    }
-
+    // Operational failures are not semantic outcomes and retain their identity.
     throw error;
   }
 };

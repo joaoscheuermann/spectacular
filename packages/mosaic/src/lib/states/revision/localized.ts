@@ -33,7 +33,9 @@ export const revisionNodes = (graph: Graph): Node[] =>
   graph.nodes
     .filter(
       (node) =>
-        node.status === 'needs_revision' && node.revisionRequest !== null,
+        node.status === 'needs_revision' &&
+        node.outcome !== null &&
+        node.outcome.revisionRequest !== null,
     )
     .sort((left, right) => right.index - left.index);
 
@@ -45,7 +47,11 @@ export const applyLocalizedRevision = (
   retiredIds: ReadonlySet<string>,
 ): Graph => {
   // A planner response can only revise the node whose decision supplied evidence.
-  if (target.status !== 'needs_revision' || target.revisionRequest === null) {
+  if (
+    target.status !== 'needs_revision' ||
+    target.outcome === null ||
+    target.outcome.revisionRequest === null
+  ) {
     throw new Error('Localized revision target is not awaiting revision.');
   }
 
@@ -85,8 +91,8 @@ export const applyLocalizedRevision = (
       skills: [],
       tools: [],
       artifacts: [],
-      observations: [],
-      revisionRequest: null,
+      outcome: null,
+      termination: null,
     };
   });
 
@@ -120,7 +126,45 @@ const cloneNode = (node: Node): Node => ({
   skills: node.skills.map((selection) => ({ ...selection })),
   tools: node.tools.map((tool) => ({ ...tool })),
   artifacts: node.artifacts.map((artifact) => ({ ...artifact })),
-  observations: node.observations.map((observation) => ({ ...observation })),
-  revisionRequest:
-    node.revisionRequest === null ? null : { ...node.revisionRequest },
+  outcome:
+    node.outcome === null
+      ? null
+      : {
+          ...node.outcome,
+          criteria: node.outcome.criteria.map((criterion) => ({
+            ...criterion,
+          })),
+          result:
+            node.outcome.result === null
+              ? null
+              : {
+                  ...node.outcome.result,
+                  artifacts: node.outcome.result.artifacts.map((artifact) => ({
+                    ...artifact,
+                  })),
+                },
+          revisionRequest:
+            node.outcome.revisionRequest === null
+              ? null
+              : { ...node.outcome.revisionRequest },
+          observations: node.outcome.observations.map((observation) => ({
+            ...observation,
+          })),
+        },
+  termination:
+    node.termination === null
+      ? null
+      : node.termination.type === 'turn_limit'
+        ? {
+            ...node.termination,
+            observations: node.termination.observations.map((observation) => ({
+              ...observation,
+            })),
+          }
+        : node.termination.type === 'dependency'
+          ? {
+              ...node.termination,
+              dependencyIds: [...node.termination.dependencyIds],
+            }
+          : { ...node.termination },
 });

@@ -10,7 +10,11 @@ import mosaicDefault, {
 test('exports the same factory as named and default with an async prompt', () => {
   assert.strictEqual(mosaicDefault, mosaic);
   const agent: MosaicAgent = {
-    prompt: async () => ({ markdown: 'Done.', parts: [] }),
+    prompt: async () => ({
+      status: 'completed',
+      delivery: { markdown: 'Done.', parts: [] },
+      nodes: [],
+    }),
   };
   assert.ok(agent.prompt('request') instanceof Promise);
 });

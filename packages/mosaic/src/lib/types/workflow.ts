@@ -1,6 +1,6 @@
 import type { Graph } from './graph.js';
 import type { MosaicOptions } from './mosaic-options.js';
-import type { FinalDelivery } from './delivery.js';
+import type { MosaicResult } from './result.js';
 import type { StateMachineHandler } from 'state-machine';
 
 export type WorkflowHandlerName =
@@ -24,5 +24,5 @@ export type WorkflowHandler = StateMachineHandler<
   WorkflowContext,
   WorkflowState,
   WorkflowHandlerName,
-  FinalDelivery
+  MosaicResult
 >;

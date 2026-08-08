@@ -1,6 +1,5 @@
 import * as revisionPrompt from '../../prompts/revision.js';
 import { GraphSchema, PlannedGraphSchema } from '../../schemas/graph.js';
-import { RevisionRequestSchema } from '../../schemas/revision.js';
 import type { WorkflowHandler } from '../../types/workflow.js';
 import {
   applyLocalizedRevision,
@@ -35,7 +34,8 @@ export const revision: WorkflowHandler = async (
     if (
       active.nodes.some(
         (node) =>
-          node.status === 'needs_revision' && node.revisionRequest === null,
+          node.status === 'needs_revision' &&
+          (node.outcome === null || node.outcome.revisionRequest === null),
       )
     ) {
       return fail(new Error('Revision node is missing its runtime request.'));
@@ -46,7 +46,10 @@ export const revision: WorkflowHandler = async (
 
     // Validate all queued requests before selecting one, preventing latent bad state.
     for (const candidate of targets) {
-      const request = RevisionRequestSchema.parse(candidate.revisionRequest);
+      const request = candidate.outcome?.revisionRequest;
+      if (request === null || request === undefined) {
+        return fail(new Error('Revision node is missing its runtime request.'));
+      }
       if (request.goalId !== candidate.id) {
         return fail(
           new Error(
@@ -67,7 +70,12 @@ export const revision: WorkflowHandler = async (
     if (revisionCount >= options.revision.max) {
       // Limit exhaustion blocks the target without spending another provider call.
       target.status = 'blocked';
-      return fail(new Error(`Node ${target.id} exceeded revision limit.`));
+      target.termination = {
+        type: 'revision_limit',
+        status: 'blocked',
+        limit: options.revision.max,
+      };
+      return transition('schedule', state);
     }
 
     // IDs removed by earlier revisions cannot be recycled for different semantics.

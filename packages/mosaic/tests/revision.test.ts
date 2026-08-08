@@ -42,6 +42,7 @@ test('preserves completed nodes and resets retained target runtime state', async
     'hostile\n``````\ninvalidating output',
     'confirmation output',
   ]);
+  const historicalOutcome = target.outcome;
   const harness = createHarness([planned]);
   const workflow = state(active);
 
@@ -60,8 +61,10 @@ test('preserves completed nodes and resets retained target runtime state', async
   assert.deepEqual(revised.nodes[1]?.skills, []);
   assert.deepEqual(revised.nodes[1]?.tools, []);
   assert.deepEqual(revised.nodes[1]?.artifacts, []);
-  assert.deepEqual(revised.nodes[1]?.observations, []);
-  assert.equal(revised.nodes[1]?.revisionRequest, null);
+  assert.equal(revised.nodes[1]?.outcome, null);
+  assert.equal(revised.nodes[1]?.termination, null);
+  assert.strictEqual(target.outcome, historicalOutcome);
+  assert.equal(target.outcome?.status, 'needs_revision');
   assert.equal(revised.nodes[1]?.status, 'pending');
   assert.equal(revised.nodes[2]?.status, 'pending');
   assert.equal(localizedRevisionCount(action.state.graphs), 1);
@@ -189,8 +192,14 @@ test('blocks without a provider call when the localized revision limit is zero o
       handlers(),
     );
 
-    assert.equal(action.type, 'fail');
+    assert.equal(action.type, 'transition');
     assert.equal(target.status, 'blocked');
+    assert.deepEqual(target.termination, {
+      type: 'revision_limit',
+      status: 'blocked',
+      limit: max,
+    });
+    assert.equal(target.outcome?.status, 'needs_revision');
     assert.equal(harness.requests.length, 0);
     assert.equal(localizedRevisionCount(workflow.graphs), count);
   }
@@ -218,7 +227,7 @@ test('rejects changes to a completed node without consuming the revision', async
 
   assert.equal(action.type, 'fail');
   assert.equal(localizedRevisionCount(workflow.graphs), 0);
-  assert.equal(target.revisionRequest?.goalId, 'target');
+  assert.equal(target.outcome?.revisionRequest?.goalId, 'target');
   assert.deepEqual(completed.artifacts, []);
 });
 
@@ -234,8 +243,8 @@ test('validates the active graph and target request before calling the provider'
     true,
   );
   requestRevision(invalidRequestTarget);
-  assert.ok(invalidRequestTarget.revisionRequest);
-  invalidRequestTarget.revisionRequest.goalId = 'another-node';
+  assert.ok(invalidRequestTarget.outcome?.revisionRequest);
+  invalidRequestTarget.outcome.revisionRequest.goalId = 'another-node';
 
   for (const target of [invalidGraphTarget, invalidRequestTarget]) {
     const workflow = state({ nodes: [target] });
@@ -276,7 +285,7 @@ test('does not append a graph when the provider fails or returns an invalid plan
     assert.equal(harness.requests.length, 1);
     assert.equal(workflow.graphs.length, 2);
     assert.equal(target.status, 'needs_revision');
-    assert.equal(target.revisionRequest?.goalId, 'target');
+    assert.equal(target.outcome?.revisionRequest?.goalId, 'target');
   }
 });
 
@@ -331,12 +340,21 @@ const requestRevision = (
     output,
   }));
   target.status = 'needs_revision';
-  target.observations = observations;
-  target.revisionRequest = {
-    goalId,
-    invalidatedAssumption: 'The original structure remains valid.',
-    requestedEffect: 'Revise the target structure.',
+  target.outcome = {
+    status: 'needs_revision',
+    criteria: [
+      { criterionIndex: 0, satisfied: false, evidence: 'Not complete.' },
+    ],
+    result: null,
+    revisionRequest: {
+      goalId,
+      invalidatedAssumption: 'The original structure remains valid.',
+      requestedEffect: 'Revise the target structure.',
+    },
+    reason: 'Revision required.',
+    observations,
   };
+  target.termination = null;
 };
 
 const node = (
@@ -352,8 +370,19 @@ const node = (
   skills: [],
   tools: [],
   artifacts: [],
-  observations: [],
+  outcome: status === 'completed' ? completedOutcome(id) : null,
+  termination: null,
+});
+
+const completedOutcome = (id: string) => ({
+  status: 'completed' as const,
+  criteria: [
+    { criterionIndex: 0, satisfied: true, evidence: `${id} complete.` },
+  ],
+  result: { markdown: `${id} result`, artifacts: [] },
   revisionRequest: null,
+  reason: null,
+  observations: [],
 });
 
 const nodePlan = (

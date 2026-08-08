@@ -321,8 +321,8 @@ const node = (
   tools: [],
   artifacts:
     artifact === undefined ? [] : [{ mime: 'text/plain', data: artifact }],
-  observations: [],
-  revisionRequest: null,
+  outcome: null,
+  termination: null,
 });
 
 const skill = (name: string, allowedTools: readonly string[] = []): Skill => ({

@@ -21,7 +21,7 @@ import {
 } from 'victor';
 
 import { createVmRegistry } from './lib/vms.js';
-import { writeDelivery } from './lib/delivery-writer.js';
+import { writeResult } from './lib/delivery-writer.js';
 import { createVmsRouter } from './routes/vms.js';
 
 async function main() {
@@ -270,7 +270,7 @@ async function main() {
         },
       });
 
-      writeDelivery(await agent.prompt(prompt), process.stdout);
+      writeResult(await agent.prompt(prompt), process.stdout, logger);
     } finally {
       await lease.release();
     }

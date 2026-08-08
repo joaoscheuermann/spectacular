@@ -9,7 +9,7 @@ test('assembles one terminal deliverable with additional artifacts and observati
   const node = completed('final', 0, [], true, '## Result', [
     { mime: 'text/plain', data: 'extra' },
   ]);
-  node.observations = [observation('final')];
+  node.outcome = completedOutcome('final', '## Result', [observation('final')]);
 
   const action = await delivery(
     state([{ nodes: [node] }]),
@@ -19,7 +19,9 @@ test('assembles one terminal deliverable with additional artifacts and observati
 
   assert.equal(action.type, 'finish');
   if (action.type !== 'finish' || action.value === undefined) return;
-  assert.deepEqual(action.value, {
+  assert.equal(action.value.status, 'completed');
+  if (action.value.status !== 'completed') return;
+  assert.deepEqual(action.value.delivery, {
     markdown: '## Result',
     parts: [
       {
@@ -46,10 +48,15 @@ test('orders deliverables by stable topological order and preserves Markdown', a
   assert.equal(action.type, 'finish');
   if (action.type !== 'finish' || action.value === undefined) return;
   assert.deepEqual(
-    action.value.parts.map(({ id }) => id),
+    action.value.status === 'completed'
+      ? action.value.delivery.parts.map(({ id }) => id)
+      : [],
     ['first', 'second'],
   );
-  assert.equal(action.value.markdown, ' first\n\n\nsecond');
+  assert.equal(
+    action.value.status === 'completed' ? action.value.delivery.markdown : '',
+    ' first\n\n\nsecond',
+  );
 });
 
 test('excludes completed nodes that are not deliverable', async () => {
@@ -64,10 +71,65 @@ test('excludes completed nodes that are not deliverable', async () => {
   assert.equal(action.type, 'finish');
   if (action.type !== 'finish' || action.value === undefined) return;
   assert.deepEqual(
-    action.value.parts.map(({ id }) => id),
+    action.value.status === 'completed'
+      ? action.value.delivery.parts.map(({ id }) => id)
+      : [],
     ['final'],
   );
-  assert.equal(action.value.markdown, 'public');
+  assert.equal(
+    action.value.status === 'completed' ? action.value.delivery.markdown : '',
+    'public',
+  );
+});
+
+test('returns blocked without partial delivery and keeps topological node order', async () => {
+  const root = completed('root', 2, [], false, 'private');
+  const blocked = terminal('blocked', 0, ['root'], 'blocked');
+  const action = await delivery(
+    state([{ nodes: [root, blocked] }]),
+    context(),
+    handlers(),
+  );
+
+  assert.equal(action.type, 'finish');
+  if (action.type !== 'finish' || action.value === undefined) return;
+  assert.deepEqual(action.value, {
+    status: 'blocked',
+    nodes: [
+      {
+        id: 'root',
+        goal: 'Goal root',
+        doneWhen: ['root is complete.'],
+        status: 'completed',
+        outcome: completedOutcome('root', 'private'),
+        termination: null,
+      },
+      {
+        id: 'blocked',
+        goal: 'Goal blocked',
+        doneWhen: ['blocked is complete.'],
+        status: 'blocked',
+        outcome: terminalOutcome('blocked', 'blocked'),
+        termination: null,
+      },
+    ],
+  });
+  assert.equal('delivery' in action.value, false);
+});
+
+test('failed takes precedence over blocked in a terminal workflow', async () => {
+  const blocked = terminal('blocked', 0, [], 'blocked');
+  const failed = terminal('failed', 1, [], 'failed');
+  const action = await delivery(
+    state([{ nodes: [blocked, failed] }]),
+    context(),
+    handlers(),
+  );
+
+  assert.equal(action.type, 'finish');
+  if (action.type !== 'finish' || action.value === undefined) return;
+  assert.equal(action.value.status, 'failed');
+  assert.equal('delivery' in action.value, false);
 });
 
 test('fails delivery for invalid graph and deliverable contracts', async () => {
@@ -125,7 +187,7 @@ test('copies delivered artifacts and observations instead of retaining graph ref
   const node = completed('final', 0, [], true, 'result', [
     { mime: 'application/json', data: '{"ok":true}' },
   ]);
-  node.observations = [observation('final')];
+  node.outcome = completedOutcome('final', 'result', [observation('final')]);
   const action = await delivery(
     state([{ nodes: [node] }]),
     context(),
@@ -134,12 +196,13 @@ test('copies delivered artifacts and observations instead of retaining graph ref
 
   assert.equal(action.type, 'finish');
   if (action.type !== 'finish' || action.value === undefined) return;
-  const part = action.value.parts[0];
+  if (action.value.status !== 'completed') return;
+  const part = action.value.delivery.parts[0];
   assert.ok(part);
   assert.notStrictEqual(part.artifacts, node.artifacts);
   assert.notStrictEqual(part.artifacts[0], node.artifacts[1]);
-  assert.notStrictEqual(part.observations, node.observations);
-  assert.notStrictEqual(part.observations[0], node.observations[0]);
+  assert.notStrictEqual(part.observations, node.outcome.observations);
+  assert.notStrictEqual(part.observations[0], node.outcome.observations[0]);
 });
 
 const state = (graphs: Graph[]): WorkflowState => ({ graphs });
@@ -165,6 +228,7 @@ const pending = (id: string, index: number): Node => ({
   ...completed(id, index, [], true, 'result'),
   status: 'pending',
   artifacts: [],
+  outcome: null,
 });
 
 const completed = (
@@ -189,6 +253,52 @@ const completed = (
     primary ?? { mime: 'text/markdown', data: markdown },
     ...artifacts,
   ],
-  observations: [],
+  outcome: completedOutcome(id, markdown || 'semantic result'),
+  termination: null,
+});
+
+const terminal = (
+  id: string,
+  index: number,
+  dependsOn: readonly string[],
+  status: 'blocked' | 'failed',
+): Node => ({
+  id,
+  goal: `Goal ${id}`,
+  doneWhen: [`${id} is complete.`],
+  dependsOn: [...dependsOn],
+  deliver: true,
+  status,
+  index,
+  skills: [],
+  tools: [],
+  artifacts: [],
+  outcome: terminalOutcome(id, status),
+  termination: null,
+});
+
+const terminalOutcome = (id: string, status: 'blocked' | 'failed') => ({
+  status,
+  criteria: [
+    { criterionIndex: 0, satisfied: false, evidence: `${id} incomplete.` },
+  ],
+  result: null,
   revisionRequest: null,
+  reason: `${id} ${status}.`,
+  observations: [],
+});
+
+const completedOutcome = (
+  id: string,
+  markdown: string,
+  observations: readonly ReturnType<typeof observation>[] = [],
+) => ({
+  status: 'completed' as const,
+  criteria: [
+    { criterionIndex: 0, satisfied: true, evidence: `${id} is complete.` },
+  ],
+  result: { markdown, artifacts: [] },
+  revisionRequest: null,
+  reason: null,
+  observations: [...observations],
 });

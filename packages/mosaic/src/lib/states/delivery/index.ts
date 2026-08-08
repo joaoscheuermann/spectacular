@@ -1,12 +1,14 @@
 import { GraphSchema } from '../../schemas/graph.js';
 import { FinalDeliverySchema } from '../../schemas/delivery.js';
+import { MosaicResultSchema } from '../../schemas/result.js';
 import type { Graph, Node } from '../../types/graph.js';
 import type { FinalDeliveryPart } from '../../types/delivery.js';
+import type { WorkflowNodeResult } from '../../types/result.js';
 import type { WorkflowHandler, WorkflowState } from '../../types/workflow.js';
 
 /**
- * Assembles completed terminal node results without invoking models, skills, or
- * tools. Its output is the workflow's only successful finish value.
+ * Finalizes terminal node results without invoking models, skills, or tools.
+ * Only an all-completed graph receives an assembled delivery.
  */
 export const delivery: WorkflowHandler = (
   state,
@@ -17,24 +19,40 @@ export const delivery: WorkflowHandler = (
     const graph = activeGraph(state);
     const ordered = topologicalOrder(graph);
 
-    if (ordered.some(({ status }) => status !== 'completed')) {
-      throw new Error('Cannot deliver an incomplete graph.');
+    if (ordered.some(({ status }) => !isTerminal(status))) {
+      throw new Error('Cannot finalize an incomplete graph.');
+    }
+
+    const nodes = ordered.map(nodeResult);
+    const status = nodes.some((node) => node.status === 'failed')
+      ? 'failed'
+      : nodes.some((node) => node.status === 'blocked')
+        ? 'blocked'
+        : 'completed';
+
+    if (status !== 'completed') {
+      const result = MosaicResultSchema.parse({ status, nodes });
+      options.logger.info(
+        { status, nodeIds: nodes.map(({ id }) => id) },
+        'workflow terminated',
+      );
+      return finish(result);
     }
 
     const parts = ordered.filter(({ deliver }) => deliver).map(part);
-    if (parts.length === 0) {
+    if (parts.length === 0)
       throw new Error('Cannot deliver a graph without deliverable nodes.');
-    }
 
-    const result = FinalDeliverySchema.parse({
+    const delivery = FinalDeliverySchema.parse({
       markdown: parts.map(({ markdown }) => markdown).join('\n\n'),
       parts,
     });
+    const result = MosaicResultSchema.parse({ status, delivery, nodes });
 
     options.logger.info(
       {
-        nodeIds: result.parts.map(({ id }) => id),
-        partCount: result.parts.length,
+        nodeIds: delivery.parts.map(({ id }) => id),
+        partCount: delivery.parts.length,
       },
       'delivery assembled',
     );
@@ -43,6 +61,9 @@ export const delivery: WorkflowHandler = (
     return fail(error);
   }
 };
+
+const isTerminal = (status: Node['status']): boolean =>
+  status === 'completed' || status === 'blocked' || status === 'failed';
 
 const activeGraph = (state: WorkflowState): Graph => {
   const graph = state.graphs.at(-1);
@@ -124,6 +145,18 @@ const part = (node: Node): FinalDeliveryPart => {
     goal: node.goal,
     markdown: primary.data,
     artifacts: artifacts.map((artifact) => ({ ...artifact })),
-    observations: node.observations.map((observation) => ({ ...observation })),
+    observations:
+      node.outcome?.observations.map((observation) => ({ ...observation })) ??
+      [],
   };
 };
+
+const nodeResult = (node: Node): WorkflowNodeResult => ({
+  id: node.id,
+  goal: node.goal,
+  doneWhen: [...node.doneWhen],
+  status: node.status as WorkflowNodeResult['status'],
+  outcome: node.outcome === null ? null : structuredClone(node.outcome),
+  termination:
+    node.termination === null ? null : structuredClone(node.termination),
+});

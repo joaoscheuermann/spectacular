@@ -105,8 +105,8 @@ function createNode(
     tools: [],
     artifacts:
       artifact === undefined ? [] : [{ mime: 'text/plain', data: artifact }],
-    observations: [],
-    revisionRequest: null,
+    outcome: null,
+    termination: null,
   };
 }
 

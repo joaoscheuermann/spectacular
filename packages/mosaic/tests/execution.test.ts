@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { AgentErrorObject } from 'agent';
 
 import type { Skill } from 'bundle';
 import type { LlmProvider, ProviderFinished, ProviderRequest } from 'llms';
@@ -95,7 +94,7 @@ test('automatically records one returned tool observation for a completed node',
   assert.equal(provider.requests[1]?.schema, undefined);
   assert.equal(provider.requests[0]?.tools?.length, 2);
   if (action.type !== 'transition') return;
-  assert.deepEqual(node.observations, [
+  assert.deepEqual(node.outcome?.observations, [
     {
       goalId: 'current',
       toolName: 'lookup',
@@ -127,7 +126,7 @@ test('automatically records every returned observation in tool-result order', as
   if (action.type !== 'transition') return;
   assert.equal(node.status, 'completed');
   assert.deepEqual(
-    node.observations.map(({ toolName, callId, input, output }) => ({
+    node.outcome?.observations.map(({ toolName, callId, input, output }) => ({
       toolName,
       callId,
       input,
@@ -173,20 +172,20 @@ test('blocks on turn exhaustion after retaining ordered observations without art
 
   const action = await execution(state([graph]), harness.context, handlers());
 
-  assert.equal(action.type, 'fail');
-  if (action.type !== 'fail') return;
-  assert.ok(action.error instanceof AgentErrorObject);
-  assert.equal(action.error.data.code, 'turn_limit_exceeded');
+  assert.equal(action.type, 'transition');
+  if (action.type !== 'transition') return;
   assert.equal(provider.requests.length, 1);
   assert.equal(node.status, 'blocked');
-  assert.equal(node.revisionRequest, null);
+  assert.equal(node.outcome, null);
   assert.deepEqual(node.artifacts, []);
   assert.deepEqual(
-    node.observations.map(({ toolName, callId, output }) => ({
-      toolName,
-      callId,
-      output,
-    })),
+    node.termination?.type === 'turn_limit'
+      ? node.termination.observations.map(({ toolName, callId, output }) => ({
+          toolName,
+          callId,
+          output,
+        }))
+      : [],
     [
       {
         toolName: 'first',
@@ -232,7 +231,7 @@ test('resolves selected skill references without treating rationales as instruct
   assert.doesNotMatch(user, /private rationale/u);
 });
 
-test('preserves each non-completed status and fails with only node ID and status', async () => {
+test('preserves each semantic terminal status and resolves the wave', async () => {
   for (const status of ['blocked', 'failed'] as const) {
     const node = createNode(`node-${status}`);
     const graph: Graph = { nodes: [node] };
@@ -243,14 +242,11 @@ test('preserves each non-completed status and fails with only node ID and status
 
     const action = await execution(state([graph]), harness.context, handlers());
 
-    assert.equal(action.type, 'fail');
-    if (action.type !== 'fail') continue;
+    assert.equal(action.type, 'transition');
+    if (action.type !== 'transition') continue;
     assert.equal(node.status, status);
-    assert.equal(
-      (action.error as Error).message,
-      `Node node-${status} ended with status ${status}.`,
-    );
-    assert.doesNotMatch((action.error as Error).message, /private reason/u);
+    assert.equal(node.outcome?.status, status);
+    assert.equal(node.outcome?.reason, `${status} private reason`);
     assert.deepEqual(node.artifacts, []);
   }
 });
@@ -288,7 +284,7 @@ test('stores needs_revision with every node observation and does not promote a p
   assert.equal(node.status, 'needs_revision');
   assert.deepEqual(node.artifacts, []);
   assert.deepEqual(
-    node.observations.map(({ toolName, output }) => ({
+    node.outcome?.observations.map(({ toolName, output }) => ({
       toolName,
       output,
     })),
@@ -298,8 +294,8 @@ test('stores needs_revision with every node observation and does not promote a p
       { toolName: 'last', output: '{"stage":"confirmation"}' },
     ],
   );
-  assert.equal(node.revisionRequest?.goalId, 'current');
-  assert.equal(node.observations.length, 3);
+  assert.equal(node.outcome?.revisionRequest?.goalId, 'current');
+  assert.equal(node.outcome?.observations.length, 3);
 });
 
 test('fails needs_revision when the node produced no observation', async () => {
@@ -321,14 +317,14 @@ test('fails needs_revision when the node produced no observation', async () => {
 
   assert.equal(action.type, 'fail');
   if (action.type !== 'fail') return;
-  assert.equal(node.status, 'failed');
-  assert.equal(
+  assert.equal(node.status, 'running');
+  assert.match(
     (action.error as Error).message,
-    'Node current requested revision without an observation.',
+    /requires at least one observation/u,
   );
 });
 
-test('marks provider schema and tool failures as failed and propagates them', async () => {
+test('propagates provider and tool failures with their exact identity', async () => {
   const providerError = new Error('schema rejected');
   const providerNode = createNode('provider');
   const providerGraph: Graph = { nodes: [providerNode] };
@@ -345,14 +341,15 @@ test('marks provider schema and tool failures as failed and propagates them', as
   if (providerAction.type === 'fail') {
     assert.strictEqual(providerAction.error, providerError);
   }
-  assert.equal(providerNode.status, 'failed');
+  assert.equal(providerNode.status, 'running');
 
   const toolNode = createNode('tool', ['lookup']);
   const toolGraph: Graph = { nodes: [toolNode] };
   const toolProvider = createProvider([toolFinish('call-failure', 'lookup')]);
+  const toolError = new Error('tool payload detail');
   const toolHarness = createHarness(toolGraph, toolProvider, [
     tool('lookup', async () => {
-      throw new Error('tool payload detail');
+      throw toolError;
     }),
   ]);
 
@@ -363,10 +360,13 @@ test('marks provider schema and tool failures as failed and propagates them', as
   );
 
   assert.equal(toolAction.type, 'fail');
-  assert.equal(toolNode.status, 'failed');
+  if (toolAction.type === 'fail') {
+    assert.strictEqual((toolAction.error as Error).cause, toolError);
+  }
+  assert.equal(toolNode.status, 'running');
 });
 
-test('waits for the whole concurrent wave before reporting a node outcome failure', async () => {
+test('waits for the whole concurrent wave and resolves semantic outcomes', async () => {
   const completedNode = createNode('completed');
   const blockedNode = createNode('blocked');
   const graph: Graph = { nodes: [completedNode, blockedNode] };
@@ -381,7 +381,7 @@ test('waits for the whole concurrent wave before reporting a node outcome failur
 
   const action = await execution(state([graph]), harness.context, handlers());
 
-  assert.equal(action.type, 'fail');
+  assert.equal(action.type, 'transition');
   assert.equal(completedNode.status, 'completed');
   assert.equal(blockedNode.status, 'blocked');
 });
@@ -496,8 +496,8 @@ function createNode(id: string, toolNames: readonly string[] = []): Node {
     skills: [],
     tools: toolNames.map((name) => ({ name, description: `${name} tool` })),
     artifacts: [],
-    observations: [],
-    revisionRequest: null,
+    outcome: null,
+    termination: null,
   };
 }
 
