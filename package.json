@@ -33,6 +33,7 @@
     "agents/*",
     "packages/*",
     "tools/*",
-    "workflows/*"
+    "workflows/*",
+    "benchmarks/*"
   ]
 }

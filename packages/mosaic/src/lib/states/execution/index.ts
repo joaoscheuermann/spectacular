@@ -1,6 +1,12 @@
 import { AgentErrorObject, createAgent } from 'agent';
 import { createMessageStorage } from 'messages';
-import { createToolStorage, type Tool } from 'tool';
+import {
+  createToolStorage,
+  type Tool,
+  type ToolCall,
+  type ToolCallRequest,
+  type ToolStorage,
+} from 'tool';
 
 import * as executionPrompt from '../../prompts/execution.js';
 import {
@@ -11,6 +17,9 @@ import { resolveSkills } from '../bundle/menus.js';
 import type { Graph, Node } from '../../types/graph.js';
 import type { WorkflowContext, WorkflowHandler } from '../../types/workflow.js';
 import { materializeObservations } from './observations.js';
+import { evaluate } from '../../evaluation.js';
+import type { MosaicRuntime } from '../../observability.js';
+import type { MosaicEvaluationHooks } from '../../types/evaluation.js';
 
 /**
  * Implements the node executor and lifecycle from the MOSAIC paper, sections
@@ -20,7 +29,7 @@ import { materializeObservations } from './observations.js';
  */
 export const execution: WorkflowHandler = async (
   state,
-  { input, options },
+  { input, options, runtime, hooks },
   { transition, fail },
 ) => {
   try {
@@ -46,8 +55,14 @@ export const execution: WorkflowHandler = async (
      * Algorithm 1 selects the next ready objective abstractly; it does not
      * prescribe sequential or concurrent dispatch.
      */
+    await runtime?.emit({
+      type: 'wave.started',
+      stage: 'execution',
+      revision: graph.revision,
+      nodeIds: nodes.map(({ id }) => id),
+    });
     const results = await Promise.allSettled(
-      nodes.map((node) => execute(input, node, graph, options)),
+      nodes.map((node) => execute(input, node, graph, options, runtime, hooks)),
     );
 
     const failure = results.find(
@@ -55,6 +70,13 @@ export const execution: WorkflowHandler = async (
     );
 
     if (failure !== undefined) return fail(failure.reason);
+
+    await runtime?.emit({
+      type: 'wave.finished',
+      stage: 'execution',
+      revision: graph.revision,
+      nodeIds: nodes.map(({ id }) => id),
+    });
 
     /**
      * Return to scheduling so downstream dependencies can become ready. This
@@ -71,9 +93,18 @@ const execute = async (
   node: Node,
   graph: Graph,
   options: WorkflowContext['options'],
+  runtime?: MosaicRuntime,
+  hooks?: MosaicEvaluationHooks,
 ): Promise<void> => {
   /** The runtime owns node status after scheduling hands the node to execution. */
   node.status = 'running';
+  await runtime?.emit({
+    type: 'node.status',
+    stage: 'execution',
+    revision: graph.revision,
+    nodeId: node.id,
+    status: node.status,
+  });
   /** Keep history available when a bounded run exhausts after executing tools. */
   const messages = createMessageStorage();
 
@@ -90,14 +121,6 @@ const execute = async (
      * requires every Observation call and return to remain correlated.
      */
     /** Compose the node-local agent with only its resolved executable tools. */
-    const agent = createAgent({
-      provider: options.provider,
-      tools: createToolStorage(tools),
-      messages,
-      system: executionPrompt.system(options.skills.required),
-      model: options.models.default,
-    });
-
     options.logger.info(
       {
         nodeId: node.id,
@@ -114,17 +137,76 @@ const execute = async (
      * outcome as a terminal tool, the paper's recommended provider-independent
      * profile.
      */
-    const { structured: decision } = await agent.complete(
-      executionPrompt.user({ request: input, node, graph, skills, tools }),
-      {
-        schema: createNodeDecisionSchema(node),
-        maxTurns: options.execution.maxTurns,
+    const execution = await evaluate(
+      hooks?.execution,
+      { request: input, node, graph, skills, tools },
+      async ({ request, node: current, graph: active, skills, tools }) => {
+        if (current.id !== node.id || active.revision !== graph.revision) {
+          throw new Error('Evaluation execution changed its node identity.');
+        }
+        const agent = createAgent({
+          provider:
+            runtime?.provider(
+              options.provider,
+              'execution',
+              node.id,
+              graph.revision,
+            ) ?? options.provider,
+          tools: observedTools(tools, node.id, graph.revision, runtime),
+          messages,
+          system: executionPrompt.system(options.skills.required),
+          model: options.models.execution.model,
+          effort: options.models.execution.effort,
+        });
+        const { structured: decision } = await agent.complete(
+          executionPrompt.user({
+            request,
+            node: current,
+            graph: active,
+            skills,
+            tools,
+          }),
+          {
+            schema: createNodeDecisionSchema(node),
+            maxTurns: options.execution.maxTurns,
+            ...(runtime === undefined
+              ? {}
+              : {
+                  onStructuredAttempt: (event) =>
+                    runtime.emit({
+                      type: 'structured.attempt',
+                      stage: 'execution',
+                      nodeId: node.id,
+                      revision: graph.revision,
+                      attempt: event.attempt,
+                      runtimeAccepted: event.runtimeAccepted,
+                      feedbackSent: event.feedbackSent,
+                      ...(event.diagnostic === undefined
+                        ? {}
+                        : { diagnostic: event.diagnostic }),
+                    }),
+                  onToolCallRepair: (event) =>
+                    runtime.emit({
+                      type: 'tool.repair',
+                      stage: 'execution',
+                      nodeId: node.id,
+                      revision: graph.revision,
+                      attempt: event.attempt,
+                      maxAttempts: event.maxAttempts,
+                    }),
+                }),
+          },
+        );
+        if (decision === undefined) {
+          throw new Error(`Node ${node.id} returned no structured decision.`);
+        }
+        return {
+          decision,
+          observations: materializeObservations(node.id, messages.list()),
+        };
       },
     );
-
-    if (decision === undefined) {
-      throw new Error(`Node ${node.id} returned no structured decision.`);
-    }
+    const decision = createNodeDecisionSchema(node).parse(execution.decision);
 
     /**
      * MOSAIC 0.2 materializes the runtime outcome by attaching every correlated
@@ -133,7 +215,35 @@ const execute = async (
      */
     const outcome = createNodeOutcomeSchema(node).parse({
       ...decision,
-      observations: materializeObservations(node.id, messages.list()),
+      observations: execution.observations,
+    });
+
+    await runtime?.emit({
+      type: 'decision.created',
+      stage: 'execution',
+      nodeId: node.id,
+      revision: graph.revision,
+      status: decision.status,
+      ...(runtime.capture === 'io' ? { decision } : {}),
+    });
+    await runtime?.emit({
+      type: 'observations.created',
+      stage: 'execution',
+      nodeId: node.id,
+      revision: graph.revision,
+      count: outcome.observations.length,
+      toolNames: outcome.observations.map(({ toolName }) => toolName),
+      ...(runtime.capture === 'io'
+        ? { observations: outcome.observations }
+        : {}),
+    });
+    await runtime?.emit({
+      type: 'outcome.created',
+      stage: 'execution',
+      nodeId: node.id,
+      revision: graph.revision,
+      status: outcome.status,
+      ...(runtime.capture === 'io' ? { outcome } : {}),
     });
 
     // Persist the complete semantic outcome before applying lifecycle policy.
@@ -152,6 +262,7 @@ const execute = async (
       }
 
       node.status = outcome.status;
+      await statusEvent(runtime, graph, node);
       options.logger.info(
         { nodeId: node.id, status: outcome.status },
         'node execution did not complete',
@@ -163,6 +274,7 @@ const execute = async (
     /** Semantic blocked and failed decisions resolve the wave normally. */
     if (outcome.status !== 'completed') {
       node.status = outcome.status;
+      await statusEvent(runtime, graph, node);
       options.logger.info(
         { nodeId: node.id, status: outcome.status },
         'node execution did not complete',
@@ -190,6 +302,7 @@ const execute = async (
 
     /** Completion makes the node eligible to satisfy downstream dependencies. */
     node.status = outcome.status;
+    await statusEvent(runtime, graph, node);
 
     options.logger.info({ nodeId: node.id }, 'node execution completed');
 
@@ -208,6 +321,7 @@ const execute = async (
         observations,
       };
       node.status = 'blocked';
+      await statusEvent(runtime, graph, node);
       options.logger.info(
         { nodeId: node.id, status: node.status },
         'node execution did not complete',
@@ -218,6 +332,86 @@ const execute = async (
     // Operational failures are not semantic outcomes and retain their identity.
     throw error;
   }
+};
+
+const observedTools = (
+  tools: readonly Tool[],
+  nodeId: string,
+  revision: number,
+  runtime?: MosaicRuntime,
+): ToolStorage => {
+  const storage = createToolStorage(tools);
+  if (runtime === undefined) return storage;
+
+  return {
+    definitions: () => storage.definitions(),
+    calls: (turn) => storage.calls(turn),
+    validate: (call) => storage.validate(call),
+    get: (name) => storage.get(name),
+    execute: async (call) => {
+      const identity = callIdentity(call);
+      await runtime.emit({
+        type: 'tool.started',
+        stage: 'execution',
+        nodeId,
+        revision,
+        ...identity,
+        ...(runtime.capture === 'io' ? { input: callInput(call) } : {}),
+      });
+      const timer = runtime.timer();
+      try {
+        const output = await storage.execute(call);
+        await runtime.emit({
+          type: 'tool.finished',
+          stage: 'execution',
+          nodeId,
+          revision,
+          ...identity,
+          durationMs: runtime.duration(timer),
+          ...(runtime.capture === 'io' ? { output } : {}),
+        });
+        return output;
+      } catch (error) {
+        await runtime.emit({
+          type: 'tool.failed',
+          stage: 'execution',
+          nodeId,
+          revision,
+          ...identity,
+          durationMs: runtime.duration(timer),
+        });
+        throw error;
+      }
+    },
+  };
+};
+
+const callIdentity = (call: ToolCall | ToolCallRequest) => ({
+  callId: call.id,
+  toolName: call.name,
+});
+
+const callInput = (call: ToolCall | ToolCallRequest): unknown => {
+  if ('payload' in call) return call.payload;
+  try {
+    return JSON.parse(call.arguments) as unknown;
+  } catch {
+    return undefined;
+  }
+};
+
+const statusEvent = async (
+  runtime: MosaicRuntime | undefined,
+  graph: Graph,
+  node: Node,
+): Promise<void> => {
+  await runtime?.emit({
+    type: 'node.status',
+    stage: 'execution',
+    revision: graph.revision,
+    nodeId: node.id,
+    status: node.status,
+  });
 };
 
 const executors = (

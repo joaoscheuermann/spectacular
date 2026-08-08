@@ -269,7 +269,7 @@ test('repairs a relationally invalid plan before mutating workflow state', async
   assert.equal(harness.completions.length, 2);
 });
 
-test('fails with invalid_structured_output after four invalid plans', async () => {
+test('fails with invalid_structured_output after two plan repairs', async () => {
   const invalid: PlannedGraph = {
     nodes: [
       nodePlan('draft', true),
@@ -293,7 +293,7 @@ test('fails with invalid_structured_output after four invalid plans', async () =
     action.error.data.diagnostic ?? '',
     /Deliverable node "draft" must be terminal\./u,
   );
-  assert.equal(harness.completions.length, 4);
+  assert.equal(harness.completions.length, 3);
   assert.deepEqual(workflow.graphs, []);
 });
 
@@ -497,8 +497,11 @@ const createHarness = (input: HarnessInput) => {
     logger: { info: () => undefined, debug: () => undefined } as never,
     provider,
     models: {
-      default: 'default-model',
+      planning: { model: 'default-model', effort: 'low' },
+      revision: { model: 'default-model', effort: 'low' },
+      execution: { model: 'default-model', effort: 'low' },
       reranker: 'unused',
+      embedder: 'unused',
     },
     routing: {
       maxHintCandidates: input.maxHintCandidates ?? 5,

@@ -42,10 +42,8 @@ test('maps OpenAI Responses DTO with instructions tools reasoning and fast servi
       parameters: {
         type: 'object',
         properties: {},
-        required: [],
-        additionalProperties: false,
       },
-      strict: true,
+      strict: false,
     },
   ]);
   assert.deepEqual(body.input, [
@@ -60,6 +58,7 @@ test('maps OpenAI Responses DTO with instructions tools reasoning and fast servi
     },
   ]);
   assert.equal('text' in body, false);
+  assert.equal(body.store, false);
 });
 
 test('maps top-level OpenAI effort before legacy reasoning effort', () => {
@@ -166,7 +165,7 @@ test('omits assistant text-only messages from Responses input items', () => {
   ]);
 });
 
-test('maps strict OpenAI tool schemas with optional properties to required parameters', () => {
+test('does not mutate strict OpenAI tool schemas with optional properties', () => {
   const inputSchema = {
     type: 'object',
     properties: {
@@ -202,10 +201,10 @@ test('maps strict OpenAI tool schemas with optional properties to required param
       parameters: {
         type: 'object',
         properties: inputSchema.properties,
-        required: ['pattern', 'path', 'limit'],
+        required: ['pattern'],
         additionalProperties: false,
       },
-      strict: true,
+      strict: false,
     },
   ]);
   assert.deepEqual(inputSchema.required, ['pattern']);
@@ -344,7 +343,7 @@ test('rejects OpenAI top-level union structured output schemas', () => {
   );
 });
 
-test('maps nested optional structured output properties to required schema properties', () => {
+test('keeps nested optional structured output properties non-strict', () => {
   const body = openAiBody(
     {
       model: 'gpt-5',
@@ -365,7 +364,7 @@ test('maps nested optional structured output properties to required schema prope
     format: {
       type: 'json_schema',
       name: 'structured_output',
-      strict: true,
+      strict: false,
       schema: {
         $schema: 'https://json-schema.org/draft/2020-12/schema',
         type: 'object',
@@ -378,7 +377,7 @@ test('maps nested optional structured output properties to required schema prope
                 prompt: { type: 'string' },
                 impact: { type: 'string' },
               },
-              required: ['prompt', 'impact'],
+              required: ['prompt'],
               additionalProperties: false,
             },
           },
@@ -388,6 +387,52 @@ test('maps nested optional structured output properties to required schema prope
       },
     },
   });
+});
+
+test('maps tool controls and replays opaque Responses output items', () => {
+  const replay = [
+    { type: 'reasoning', encrypted_content: 'opaque' },
+    {
+      type: 'function_call',
+      call_id: 'call_1',
+      name: 'lookup',
+      arguments: '{"query":"x"}',
+    },
+  ] as const;
+  const body = openAiBody(
+    {
+      model: 'gpt-5',
+      messages: [
+        { role: 'user', content: 'Find it.' },
+        { role: 'assistant', replay },
+        {
+          role: 'tool',
+          toolCallId: 'call_1',
+          toolResultStatus: 'incomplete',
+          content: 'Invalid payload.',
+        },
+      ],
+      toolChoice: { name: 'lookup' },
+      parallelToolCalls: false,
+    },
+    false,
+  );
+
+  assert.deepEqual(body.tool_choice, { type: 'function', name: 'lookup' });
+  assert.equal(body.parallel_tool_calls, false);
+  assert.deepEqual(body.input, [
+    {
+      role: 'user',
+      content: [{ type: 'input_text', text: 'Find it.' }],
+    },
+    ...replay,
+    {
+      type: 'function_call_output',
+      call_id: 'call_1',
+      output: 'Invalid payload.',
+      status: 'incomplete',
+    },
+  ]);
 });
 
 test('accepts tool definitions from shared tool storage', () => {

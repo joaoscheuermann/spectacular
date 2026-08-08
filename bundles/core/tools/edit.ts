@@ -9,20 +9,10 @@ const description =
 
 const entry = z
   .object({
-    oldText: z.string().optional(),
-    newText: z.string().optional(),
-    old_text: z.string().optional(),
-    new_text: z.string().optional(),
+    oldText: z.string(),
+    newText: z.string(),
   })
-  .strict()
-  .refine(
-    (value) => (value.oldText ?? value.old_text) !== undefined,
-    'oldText is required',
-  )
-  .refine(
-    (value) => (value.newText ?? value.new_text) !== undefined,
-    'newText is required',
-  );
+  .strict();
 
 export const input = z
   .object({
@@ -140,12 +130,8 @@ const readTarget = async (
 };
 
 const normalizeEntry = (edit: z.output<typeof entry>): NormalizedEdit => ({
-  oldText: normalizeForFuzzy(
-    normalizeToLf(edit.oldText ?? edit.old_text ?? ''),
-  ),
-  newText: normalizeForFuzzy(
-    normalizeToLf(edit.newText ?? edit.new_text ?? ''),
-  ),
+  oldText: normalizeForFuzzy(normalizeToLf(edit.oldText)),
+  newText: normalizeForFuzzy(normalizeToLf(edit.newText)),
 });
 
 const validate = (

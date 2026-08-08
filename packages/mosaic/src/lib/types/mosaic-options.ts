@@ -1,5 +1,5 @@
 import type { Skill } from 'bundle';
-import type { LlmProvider } from 'llms';
+import type { LlmProvider, ReasoningEffort } from 'llms';
 import type { Logger } from 'pino';
 import type { Tool } from 'tool';
 import type { Search } from 'victor';
@@ -8,8 +8,11 @@ export interface MosaicOptions {
   readonly logger: Logger;
   readonly provider: LlmProvider;
   readonly models: {
-    readonly default: string;
+    readonly planning: MosaicModelProfile;
+    readonly revision: MosaicModelProfile;
+    readonly execution: MosaicModelProfile;
     readonly reranker: string;
+    readonly embedder: string;
   };
   readonly routing: {
     readonly maxHintCandidates: number;
@@ -32,4 +35,9 @@ export interface MosaicOptions {
     readonly menu: readonly Tool[];
     readonly retriever: Search<Tool>;
   };
+}
+
+export interface MosaicModelProfile {
+  readonly model: string;
+  readonly effort: ReasoningEffort;
 }

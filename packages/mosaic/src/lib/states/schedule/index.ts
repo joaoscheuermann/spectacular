@@ -8,9 +8,9 @@ const MISSING_READY_NODES = 'Impossible to continue, missing ready nodes!';
  * Projects the lifecycle in MOSAIC 0.2 section 4.10 onto a bounded
  * execution wave, or delegates outstanding structural evidence to revision.
  */
-export const schedule: WorkflowHandler = (
+export const schedule: WorkflowHandler = async (
   state,
-  _context,
+  { runtime },
   { transition, fail },
 ) => {
   const { graphs } = state;
@@ -44,7 +44,18 @@ export const schedule: WorkflowHandler = (
   }
 
   // A terminal non-completed dependency causally blocks each pending descendant.
+  const prior = new Map(graph.nodes.map(({ id, status }) => [id, status]));
   propagateDependencyBlocks(graph.nodes);
+  for (const node of graph.nodes) {
+    if (prior.get(node.id) === node.status) continue;
+    await runtime?.emit({
+      type: 'node.status',
+      stage: 'schedule',
+      revision: graph.revision,
+      nodeId: node.id,
+      status: node.status,
+    });
+  }
 
   // Final assembly is deterministic once every node reaches a terminal status.
   if (graph.nodes.every(({ status }) => isTerminal(status))) {
@@ -69,6 +80,13 @@ export const schedule: WorkflowHandler = (
   // Scheduling owns pending -> ready; execution owns every later status change.
   for (const node of wave) {
     node.status = 'ready';
+    await runtime?.emit({
+      type: 'node.status',
+      stage: 'schedule',
+      revision: graph.revision,
+      nodeId: node.id,
+      status: node.status,
+    });
   }
 
   // Bundle routing and tool-menu composition are performed only for this wave.

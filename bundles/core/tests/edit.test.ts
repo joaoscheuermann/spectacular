@@ -41,7 +41,7 @@ describe('edit tool', () => {
 
     const result = await factory(sandbox).execute({
       path: 'same.txt',
-      edits: [{ old_text: 'same', new_text: 'changed' }],
+      edits: [{ oldText: 'same', newText: 'changed' }],
     });
 
     assert.equal(result.success, false);

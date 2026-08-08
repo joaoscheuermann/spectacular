@@ -121,7 +121,7 @@ const invalidSubmissions: readonly InvalidSubmission[] = [
 
 for (const mode of ['complete', 'stream'] as const) {
   for (const submission of invalidSubmissions) {
-    test(`${mode} repairs ${submission.name} without storing or executing it`, async () => {
+    test(`${mode} repairs ${submission.name} without executing it and preserves replay`, async () => {
       const fake = createProvider({
         complete: (request, index) =>
           index === 0
@@ -158,10 +158,22 @@ for (const mode of ['complete', 'stream'] as const) {
       assert.match(correction, new RegExp(terminalName(fake.requests[1])));
       assert.match(correction, submission.reason);
       assert.deepEqual(tools.calls, []);
-      assert.deepEqual(messages.list(), [
-        { role: 'user', content: 'Return evidence.' },
-        { role: 'assistant', content: '{"answer":"Done"}' },
-      ]);
+      const stored = messages.list();
+      assert.deepEqual(stored[0], {
+        role: 'user',
+        content: 'Return evidence.',
+      });
+      assert.deepEqual(stored.at(-1), {
+        role: 'assistant',
+        content: '{"answer":"Done"}',
+      });
+      assert.equal(
+        stored.filter(
+          ({ role, toolResultStatus }) =>
+            role === 'tool' && toolResultStatus === 'incomplete',
+        ).length,
+        submission.finish(fake.requests[0]!).toolCalls.length,
+      );
     });
   }
 }
@@ -208,7 +220,7 @@ test('correction feedback includes at most ten normalized issues without rejecte
 });
 
 for (const mode of ['complete', 'stream'] as const) {
-  test(`${mode} throws the fourth invalid submission with its latest diagnostic`, async () => {
+  test(`${mode} throws after two repair attempts with its latest error`, async () => {
     const fake = createProvider({
       complete: (request, index) => exhaustionFinish(request, index),
       stream: (request, index) =>
@@ -232,16 +244,16 @@ for (const mode of ['complete', 'stream'] as const) {
 
     assert.ok(caught instanceof AgentErrorObject);
     assert.equal(caught.data.code, 'invalid_structured_output');
-    assert.match(caught.data.message, /failed schema validation/i);
-    assert.match(caught.data.diagnostic ?? '', /Field: answer/);
-    assert.equal(fake.requests.length, 4);
+    assert.match(caught.data.message, /must be the only tool call/i);
+    assert.equal(caught.data.diagnostic, undefined);
+    assert.equal(fake.requests.length, 3);
     assert.equal(correctionFrom(fake.requests[0]), undefined);
     assert.ok(correctionFrom(fake.requests[1]));
     assert.ok(correctionFrom(fake.requests[2]));
-    assert.ok(correctionFrom(fake.requests[3]));
-    assert.deepEqual(messages.list(), [
-      { role: 'user', content: 'Return evidence.' },
-    ]);
+    assert.equal(
+      messages.list().filter(({ role }) => role === 'assistant').length,
+      3,
+    );
   });
 }
 
@@ -297,21 +309,26 @@ test('ordinary tool turns consume transient corrections without changing the ret
       error.data.code === 'invalid_structured_output',
   );
 
-  assert.equal(fake.requests.length, 7);
+  assert.equal(fake.requests.length, 5);
   assert.deepEqual(
     fake.requests.map((request) => correctionFrom(request) !== undefined),
-    [false, true, false, true, false, true, false],
+    [false, true, false, true, false],
   );
   assert.deepEqual(
     tools.calls.map(({ name }) => name),
-    [...sequence],
+    sequence.slice(0, 2),
   );
   assert.deepEqual(
     messages
       .list()
       .filter(({ role }) => role === 'assistant')
       .flatMap(({ toolCalls }) => toolCalls?.map(({ name }) => name) ?? []),
-    [...sequence],
+    [
+      sequence[0],
+      terminalName(fake.requests[2]!),
+      sequence[1],
+      terminalName(fake.requests[4]!),
+    ],
   );
 });
 
@@ -358,10 +375,19 @@ test('stream preserves invalid deltas while suppressing the invalid finished eve
     ),
     true,
   );
-  assert.deepEqual(messages.list(), [
-    { role: 'user', content: 'Return evidence.' },
-    { role: 'assistant', content: '{"answer":"Done"}' },
-  ]);
+  assert.deepEqual(messages.list().at(-1), {
+    role: 'assistant',
+    content: '{"answer":"Done"}',
+  });
+  assert.equal(
+    messages
+      .list()
+      .some(
+        ({ role, toolResultStatus }) =>
+          role === 'tool' && toolResultStatus === 'incomplete',
+      ),
+    true,
+  );
 });
 
 for (const mode of ['complete', 'stream'] as const) {
@@ -395,6 +421,8 @@ for (const mode of ['complete', 'stream'] as const) {
     assert.equal(fake.requests.length, 1);
     assert.equal(fake.requests[0]?.schema, undefined);
     assert.equal(fake.requests[0]?.tools?.length, 1);
+    assert.equal(fake.requests[0]?.toolChoice, undefined);
+    assert.equal(fake.requests[0]?.parallelToolCalls, false);
     assert.equal(
       fake.requests[0]?.tools?.[0]?.name,
       'submit_structured_output',

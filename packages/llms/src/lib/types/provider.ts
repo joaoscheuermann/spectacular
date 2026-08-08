@@ -1,4 +1,9 @@
-import type { JsonValue, ToolCallRequest, ToolDefinition } from 'tool';
+import type {
+  JsonObject,
+  JsonValue,
+  ToolCallRequest,
+  ToolDefinition,
+} from 'tool';
 import type { z } from 'zod';
 
 export type { JsonArray, JsonObject, JsonPrimitive, JsonValue } from 'tool';
@@ -41,12 +46,25 @@ export type ProviderContentPart =
       readonly imageUrl: string;
     };
 
+/** Opaque provider output item retained only for exact multi-turn replay. */
+export type ProviderReplayItem = JsonObject;
+
+export type ProviderToolChoice =
+  | 'auto'
+  | 'required'
+  | 'none'
+  | { readonly name: string };
+
+export type ProviderToolResultStatus = 'completed' | 'incomplete';
+
 export type ProviderMessage = {
   readonly role: 'system' | 'user' | 'assistant' | 'tool';
   readonly content?: string | readonly ProviderContentPart[];
   readonly name?: string;
   readonly toolCallId?: string;
+  readonly toolResultStatus?: ProviderToolResultStatus;
   readonly toolCalls?: readonly ProviderToolCall[];
+  readonly replay?: readonly ProviderReplayItem[];
 };
 
 export type ProviderToolCall = ToolCallRequest;
@@ -108,6 +126,7 @@ export type ProviderFinished<Output = JsonValue> = {
   readonly reasoning?: ReasoningMetadata;
   readonly refusal?: string;
   readonly toolCalls: readonly ProviderToolCall[];
+  readonly replay?: readonly ProviderReplayItem[];
   readonly structured?: Output;
 };
 
@@ -177,6 +196,8 @@ export type ProviderRequest<
   readonly model: string;
   readonly messages: readonly ProviderMessage[];
   readonly tools?: readonly ToolDefinition[];
+  readonly toolChoice?: ProviderToolChoice;
+  readonly parallelToolCalls?: boolean;
   readonly schema?: Schema;
   readonly effort?: ReasoningEffort;
   readonly temperature?: number;

@@ -75,18 +75,25 @@ from the schema, even when the caller's tool storage is empty. The schema is
 never sent as a provider-native structured-output field by the agent. Ordinary
 executable tool calls continue the loop; the terminal call is validated
 locally, converted to the final structured response, and is never executed.
+Structured runs disable parallel tool calls but leave provider tool selection
+automatic. Requiring the terminal call is a runtime invariant: the agent does
+not send forced `tool_choice`, because some reasoning providers cannot combine
+thinking mode with forced tool selection.
 
-An invalid terminal submission is discarded without storage or tool execution.
-The agent may request three corrected submissions after the initial failure,
+An invalid terminal submission is stored for provider replay but no tool runs.
+Every rejected call receives an `incomplete` tool result. The agent may request
+two corrected submissions after the initial failure,
 using a transient system correction that names the terminal tool and reports
 bounded schema issues without copying the rejected arguments. Missing,
 malformed, schema-invalid, duplicate, and mixed terminal calls share this fixed
-budget. Ordinary tool turns neither consume nor reset it. The fourth invalid
-submission throws the latest `invalid_structured_output` error.
+budget. Invalid ordinary tool-call batches share the same budget and are
+validated atomically before any handler runs. Ordinary valid tool turns neither
+consume nor reset it. The next invalid submission throws the latest error.
 
 `complete` and `stream` use the same repair behavior. Streaming preserves
 provider deltas already emitted for a rejected response but suppresses its
-`response.finished` event and adds no repair-specific public event.
+`response.finished` event. `onToolCallRepair` receives safe attempt counters;
+`maxToolCallRepairs` overrides the default budget of two.
 
 ## Streaming Usage
 

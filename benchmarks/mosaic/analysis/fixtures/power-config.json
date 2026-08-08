@@ -1,0 +1,11 @@
+{
+  "simulations": 10000,
+  "seed": "L'Ecuyer-CMRG:104729",
+  "numericSeed": 104729,
+  "minimumEffect": 0.1,
+  "minimumCases": 24,
+  "maximumCases": 960,
+  "baselineProbability": 0.45,
+  "randomInterceptSd": 0.7,
+  "adaptiveClasses": ["E", "F"]
+}

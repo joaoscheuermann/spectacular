@@ -7,8 +7,11 @@ import type { MosaicOptions } from './types/mosaic-options.js';
 export const validateOptions = (options: MosaicOptions): void => {
   const { models, routing, execution, revision, skills, tools } = options;
 
-  requireModel('default', models.default);
+  requireProfile('planning', models.planning);
+  requireProfile('revision', models.revision);
+  requireProfile('execution', models.execution);
   requireModel('reranker', models.reranker);
+  requireModel('embedder', models.embedder);
   requireInteger('routing.maxHintCandidates', routing.maxHintCandidates, 1);
   requireInteger(
     'routing.maxRetrievedCandidates',
@@ -79,6 +82,17 @@ const validateRequiredSkillTools = (
 const requireModel = (name: string, value: string): void => {
   if (value.trim().length > 0) return;
   throw new TypeError(`Mosaic models.${name} must be a non-empty string.`);
+};
+
+const efforts = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
+
+const requireProfile = (
+  name: 'planning' | 'revision' | 'execution',
+  profile: MosaicOptions['models'][typeof name],
+): void => {
+  requireModel(`${name}.model`, profile.model);
+  if (efforts.has(profile.effort)) return;
+  throw new TypeError(`Mosaic models.${name}.effort is invalid.`);
 };
 
 const requireInteger = (

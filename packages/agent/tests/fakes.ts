@@ -112,6 +112,7 @@ export const createTools = (
   const storage: ToolStorage = {
     definitions: () => options.definitions ?? [],
     calls: (turn: ToolTurn) => (turn.toolCalls ?? []).map(parseToolCall),
+    validate: (call) => ('payload' in call ? call : parseToolCall(call)),
     get: () => undefined,
     execute: async (toolCall) => {
       const parsed = 'payload' in toolCall ? toolCall : parseToolCall(toolCall);

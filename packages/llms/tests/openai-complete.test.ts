@@ -65,7 +65,7 @@ test('parses OpenAI completion output usage reasoning and tool calls', async () 
   });
 
   assert.equal(result.text, 'Done');
-  assert.equal(result.finishReason, 'stop');
+  assert.equal(result.finishReason, 'tool_calls');
   assert.deepEqual(result.reasoning, { text: 'Thought' });
   assert.deepEqual(result.usage, {
     inputTokens: 3,
@@ -76,6 +76,15 @@ test('parses OpenAI completion output usage reasoning and tool calls', async () 
   });
   assert.deepEqual(result.toolCalls, [
     { id: 'call_1', name: 'lookup', arguments: '{"q":"x"}', index: 0 },
+  ]);
+  assert.deepEqual(result.replay, [
+    { type: 'reasoning', summary: [{ text: 'Thought' }] },
+    {
+      type: 'function_call',
+      call_id: 'call_1',
+      name: 'lookup',
+      arguments: '{"q":"x"}',
+    },
   ]);
 });
 

@@ -51,7 +51,12 @@ async function main() {
   });
 
   const models = {
-    default: 'openai/gpt-5.6-luna',
+    planning: { model: 'qwen/qwen3.8-max', effort: 'medium' },
+    revision: { model: 'z-ai/glm-5.2', effort: 'medium' },
+    execution: {
+      model: 'deepseek/deepseek-v4-flash-0731',
+      effort: 'none',
+    },
     reranker: 'voyageai/rerank-2.5-lite',
     embedder: 'voyageai/voyage-4-large',
   } as const;
@@ -237,14 +242,20 @@ async function main() {
       const agent = mosaic({
         logger,
         provider,
-        models,
+        models: {
+          planning: models.planning,
+          revision: models.revision,
+          execution: models.execution,
+          reranker: models.reranker,
+          embedder: models.embedder,
+        },
         routing: {
           maxHintCandidates: 5,
           maxRetrievedCandidates: 5,
           maxSkills: 5,
         },
         execution: {
-          maxTurns: 8,
+          maxTurns: 16,
         },
         revision: {
           max: 3,

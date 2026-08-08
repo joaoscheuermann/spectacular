@@ -12,6 +12,12 @@
       "types": "./dist/src/index.d.ts",
       "import": "./dist/src/index.js",
       "default": "./dist/src/index.js"
+    },
+    "./evaluation": {
+      "@org/source": "./src/evaluation.ts",
+      "types": "./dist/src/evaluation.d.ts",
+      "import": "./dist/src/evaluation.js",
+      "default": "./dist/src/evaluation.js"
     }
   },
   "files": [

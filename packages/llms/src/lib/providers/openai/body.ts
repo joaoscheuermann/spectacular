@@ -22,10 +22,6 @@ export const openAiBody = (
   requireRequestInput('openai', request);
   const schema = structuredJsonSchema('openai', request.schema);
   const messages = messagesWithStructuredSchema('openai', request, schema);
-  const strictSchema =
-    schema === undefined
-      ? undefined
-      : (strictSchemaValue(schema) as JsonObject);
   const alias = fastAlias(request.model);
   const system = messages
     .filter((message) => message.role === 'system')
@@ -42,24 +38,27 @@ export const openAiBody = (
       type: 'function',
       name: tool.name,
       description: tool.description,
-      parameters: toolParameters(tool.inputSchema, tool.strict),
-      strict: tool.strict,
+      parameters: tool.inputSchema,
+      strict: tool.strict === true && isStrictCompatible(tool.inputSchema),
     })),
+    tool_choice: toolChoice(request.toolChoice),
+    parallel_tool_calls: request.parallelToolCalls,
     text:
-      request.schema === undefined
+      schema === undefined
         ? undefined
         : {
             format: prune({
               type: 'json_schema',
               name: structuredOutputName,
-              strict: true,
-              schema: strictSchema,
+              strict: isStrictCompatible(schema),
+              schema,
             }),
           },
     temperature: request.temperature,
     max_output_tokens: request.maxOutputTokens,
     service_tier: request.flags?.serviceTier ?? alias.serviceTier,
     reasoning: reasoningRequest(request),
+    store: false,
     stream,
   });
 };
@@ -69,16 +68,21 @@ const inputItems = (
 ): readonly Record<string, unknown>[] => {
   if (message.role === 'tool') {
     return [
-      {
+      prune({
         type: 'function_call_output',
         call_id: message.toolCallId,
         output: messageText(message),
-      },
+        status: message.toolResultStatus,
+      }),
     ];
   }
 
   const text = messageText(message);
   if (message.role === 'assistant') {
+    if (message.replay !== undefined && message.replay.length > 0) {
+      return message.replay;
+    }
+
     return message.toolCalls?.map(functionCallItem) ?? [];
   }
 
@@ -129,41 +133,39 @@ const reasoningRequest = (
   }) as JsonObject;
 };
 
-const toolParameters = (
-  schema: JsonObject,
-  strict: boolean | undefined,
-): JsonObject =>
-  strict === true ? (strictSchemaValue(schema) as JsonObject) : schema;
-
-const strictSchemaValue = (value: JsonValue): JsonValue => {
+const isStrictCompatible = (value: JsonValue): boolean => {
   if (Array.isArray(value)) {
-    return value.map(strictSchemaValue);
+    return value.every(isStrictCompatible);
   }
 
   const record = asRecord(value);
 
   if (record === undefined) {
-    return value;
+    return true;
   }
 
-  const schema = Object.fromEntries(
-    Object.entries(record).map(([key, child]) => [
-      key,
-      strictSchemaValue(child as JsonValue),
-    ]),
-  ) as JsonObject;
-  const properties = asRecord(schema.properties);
+  const childrenAreStrict = Object.values(record).every((child) =>
+    isStrictCompatible(child as JsonValue),
+  );
+  const properties = asRecord(record.properties);
 
-  if (schema.type !== 'object' || properties === undefined) {
-    return schema;
+  if (record.type !== 'object' || properties === undefined) {
+    return childrenAreStrict;
   }
 
-  return {
-    ...schema,
-    required: Object.keys(properties),
-    additionalProperties: false,
-  };
+  const required = Array.isArray(record.required) ? record.required : [];
+
+  return (
+    record.additionalProperties === false &&
+    Object.keys(properties).every((key) => required.includes(key)) &&
+    childrenAreStrict
+  );
 };
+
+const toolChoice = (
+  choice: ProviderRequest<unknown>['toolChoice'],
+): string | Record<string, string> | undefined =>
+  typeof choice === 'object' ? { type: 'function', name: choice.name } : choice;
 
 const prune = (value: Record<string, unknown>): Record<string, unknown> =>
   Object.fromEntries(

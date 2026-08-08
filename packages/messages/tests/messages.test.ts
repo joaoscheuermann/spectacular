@@ -5,11 +5,7 @@ import {
   createMessageStorage,
   type MessageStorageEntry,
 } from '../src/index.js';
-import type {
-  ProviderFinished,
-  ProviderMessage,
-  ProviderRequest,
-} from 'llms';
+import type { ProviderFinished, ProviderMessage, ProviderRequest } from 'llms';
 
 test('preserves initial order and returns defensive snapshots', () => {
   const initial: readonly ProviderMessage[] = [
@@ -107,7 +103,7 @@ test('uses refusal as assistant content when finished text is empty', () => {
   ]);
 });
 
-test('omits usage reasoning and empty tool calls from replayable messages', () => {
+test('omits public reasoning metadata while preserving opaque provider replay', () => {
   const storage = createMessageStorage();
 
   storage.push({
@@ -124,6 +120,7 @@ test('omits usage reasoning and empty tool calls from replayable messages', () =
       effort: 'low',
       summary: 'Concise summary.',
     },
+    replay: [{ type: 'reasoning', encrypted_content: 'opaque' }],
     toolCalls: [],
   });
 
@@ -131,14 +128,13 @@ test('omits usage reasoning and empty tool calls from replayable messages', () =
     {
       role: 'assistant',
       content: 'Final answer.',
+      replay: [{ type: 'reasoning', encrypted_content: 'opaque' }],
     },
   ]);
 });
 
 test('accepts message lists as provider request messages', () => {
-  const storage = createMessageStorage([
-    { role: 'user', content: 'Hello.' },
-  ]);
+  const storage = createMessageStorage([{ role: 'user', content: 'Hello.' }]);
   const request = {
     model: 'test-model',
     messages: storage.list(),

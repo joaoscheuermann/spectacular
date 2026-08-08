@@ -51,5 +51,5 @@ This list excludes:
   bundle selection, node decision, and localized revision terminate through an
   agent-owned reserved tool. The original Zod schema validates arguments
   locally before state mutation, with atomic rejection, bounded diagnostics,
-  three correction attempts, and `invalid_structured_output` on the fourth
+  two correction attempts, and `invalid_structured_output` on the third
   invalid submission. Provider-native structured output is not used by Mosaic.

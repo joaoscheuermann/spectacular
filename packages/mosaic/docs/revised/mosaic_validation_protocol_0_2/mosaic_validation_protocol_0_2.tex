@@ -328,11 +328,15 @@ Antes de congelar o benchmark, calcule concordância por camada: acordo categór
 Cada condição precisa de uma ficha de configuração imutável durante a execução princi- pal:
 
 
-\noindent \textbullet{} identificador e versão do modelo;\par
+\noindent \textbullet{} identificador, versão e reasoning effort do modelo usado em cada estágio cognitivo; quando planner, revisão e executor compartilham o mesmo perfil, essa igualdade deve ser declarada explicitamente;\par
 
 % Source PDF page 14
 
-\noindent \textbullet{} parâmetros de amostragem e seed quando suportada; \textbullet{} prompts de planner, reranker, seletor, executor e compositor; \textbullet{} hash do catálogo e dos\texttt{ SKILL.md}; \textbullet{} registro de tools, schemas e Tbase; \textbullet{} Kretrieve, Khint, Kmax, Lnode, Rmax e orçamento de contexto; \textbullet{} versão do código, ambiente e data de execução.\par
+\noindent \textbullet{} parâmetros de amostragem e seed quando suportada; \textbullet{} prompts de planner, reranker, seletor, executor e compositor; \textbullet{} hash do catálogo e dos\texttt{ SKILL.md}; \textbullet{} registro de tools, schemas e Tbase; \textbullet{} Kretrieve, Khint, Kmax, Lnode, Rmax e orçamento de contexto; \textbullet{} perfil e versão do protocolo de saída estruturada, incluindo formato do schema exposto ao modelo, política de seleção e paralelismo de tools e orçamento de correção; \textbullet{} política de armazenamento e replay do provider; \textbullet{} versão do código, ambiente e data de execução.\par
+
+Na instanciação V1 deste protocolo, cada execução congela um único perfil de modelo e aplica o mesmo identificador e o mesmo reasoning effort a planejamento, revisão localizada e execução. O effort é \texttt{medium}. Essa escolha preserva o estimando comparativo entre condições; uma avaliação futura com modelos especializados por estágio deve congelar cada perfil separadamente e constitui outro desenho experimental.
+
+O perfil V1 de saída estruturada expõe diretamente o schema de objeto da operação por meio da tool terminal reservada, sem envelope semântico adicional e sem schema nativo do provider. A seleção de tools permanece automática, chamadas paralelas ficam desabilitadas em respostas terminais e o runtime permite no máximo duas solicitações de correção depois da submissão inicial inválida. O provider opera sem armazenamento remoto da resposta; itens opacos necessários à continuidade podem ser retidos apenas para replay de protocolo e não integram o trace científico.
 
 Mudanças após o início do teste criam uma nova condição e não substituem silenciosa- mente resultados anteriores.
 
@@ -410,7 +414,6 @@ Cada tentativa estruturada em P0, P1, hint, seleção de bundle, decisão de nó
 stage: StructuredStage
 scope_id: string
 attempt: number
-provider_accepted: boolean
 runtime_accepted: boolean
 feedback_sent: boolean
 diagnostic?: string
@@ -418,7 +421,7 @@ state_hash_before: string
 state_hash_after: string
 \end{Verbatim}
 
-Para uma submissão rejeitada, os hashes de estado devem permanecer iguais. O diagnóstico e o feedback registram somente informação limitada sobre a violação; o feedback enviado ao modelo não repete o payload rejeitado. O trace deve mostrar se uma tentativa posterior foi aceita ou se o orçamento finito terminou em falha. Essa instrumentação separa aceitação estrutural pelo provider de conformidade com invariantes locais não representáveis em JSON Schema.
+Para uma submissão rejeitada, os hashes de estado devem permanecer iguais. O diagnóstico e o feedback registram somente informação limitada sobre a violação; o feedback enviado ao modelo não repete o payload rejeitado. O trace deve mostrar se uma tentativa posterior foi aceita ou se o orçamento finito terminou em falha. \texttt{runtime\_accepted} significa que a submissão recebida satisfez o contrato completo local; não afirma que o provider aplicou ou aceitou um schema. Falhas de transporte, rejeições HTTP e respostas sem submissão terminal são registradas separadamente como falhas de model/provider e não como tentativas aceitas. Essa instrumentação distingue a disponibilidade do provider da conformidade com invariantes locais não representáveis em JSON Schema.
 
 \texttt{NodeDecision} contém apenas status, avaliações ordenadas dos critérios, resultado, pedido de revisão e razão. Para cada retorno bem-sucedido de tool executável, o runtime deve criar exatamente uma \texttt{Observation}, correlacionada à chamada e ordenada pela posição do retorno nas mensagens. A tool terminal de saída estruturada não é uma observação. \texttt{NodeOutcome} é materializado pelo runtime ao combinar a decisão com a sequência completa de observações.
 

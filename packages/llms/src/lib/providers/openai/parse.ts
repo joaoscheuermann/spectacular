@@ -2,6 +2,7 @@ import type {
   ProviderFinished,
   ProviderStreamEvent,
   ProviderToolCall,
+  ProviderReplayItem,
   ReasoningMetadata,
 } from '../../types/provider.js';
 import {
@@ -201,13 +202,21 @@ export const parseFinished = (
 
   return {
     text: outputText,
-    finishReason: finishReason(
-      response.status === 'completed' ? 'stop' : response.status,
-    ),
+    finishReason:
+      toolCalls.length > 0
+        ? 'tool_calls'
+        : refusal !== ''
+          ? 'content_filter'
+          : finishReason(
+              response.status === 'completed' ? 'stop' : response.status,
+            ),
     usage,
     reasoning,
     refusal: refusal === '' ? undefined : refusal,
     toolCalls,
+    ...(output.length === 0
+      ? {}
+      : { replay: output as readonly ProviderReplayItem[] }),
   };
 };
 

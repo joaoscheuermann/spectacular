@@ -5,6 +5,7 @@ import {
   PlannedGraphSchema,
 } from '../../schemas/graph.js';
 import { completeStructured } from '../../structured.js';
+import { evaluate } from '../../evaluation.js';
 import type { WorkflowHandler } from '../../types/workflow.js';
 import {
   applyLocalizedRevision,
@@ -19,7 +20,7 @@ import {
  */
 export const revision: WorkflowHandler = async (
   state,
-  { input, options },
+  { input, options, runtime, hooks },
   { transition, fail },
 ) => {
   try {
@@ -82,6 +83,13 @@ export const revision: WorkflowHandler = async (
         status: 'blocked',
         limit: options.revision.max,
       };
+      await runtime?.emit({
+        type: 'node.status',
+        stage: 'revision',
+        revision: active.revision,
+        nodeId: target.id,
+        status: target.status,
+      });
       return transition('schedule', state);
     }
 
@@ -103,13 +111,29 @@ export const revision: WorkflowHandler = async (
      * and every ordered Observation without provider-opaque call IDs. Catalog
      * hints are intentionally absent from runtime revision.
      */
-    const plan = await completeStructured({
-      provider: options.provider,
-      model: options.models.default,
-      system: revisionPrompt.localizedSystem(),
-      input: revisionPrompt.localizedUser(input, active, target, retiredIds),
-      schema: PlannedGraphSchema,
-    });
+    const plan = PlannedGraphSchema.parse(
+      await evaluate(
+        hooks?.localizedRevision,
+        { request: input, graph: active, target, retiredIds },
+        ({ request, graph, target, retiredIds }) =>
+          completeStructured({
+            provider: options.provider,
+            profile: options.models.revision,
+            system: revisionPrompt.localizedSystem(),
+            input: revisionPrompt.localizedUser(
+              request,
+              graph,
+              target,
+              retiredIds,
+            ),
+            schema: PlannedGraphSchema,
+            runtime,
+            stage: 'revision',
+            nodeId: target.id,
+            revision: active.revision,
+          }),
+      ),
+    );
 
     // Preserve protected nodes and reset only the revisable, unstarted region.
     const revised = applyLocalizedRevision(
@@ -118,6 +142,15 @@ export const revision: WorkflowHandler = async (
       target,
       new Set(retiredIds),
     );
+
+    await runtime?.emit({
+      type: 'graph.revised',
+      stage: 'revision',
+      revision: revised.revision,
+      nodeId: target.id,
+      nodeIds: revised.nodes.map(({ id }) => id),
+      ...(runtime.capture === 'io' ? { graph: revised } : {}),
+    });
 
     // Append the successful snapshot, then let scheduling recompute readiness.
     return transition('schedule', {

@@ -63,7 +63,13 @@ const context = (provider: LlmProvider, tools: Tool[]): WorkflowContext => ({
   options: {
     logger: { info: () => undefined } as never,
     provider,
-    models: { default: 'default', reranker: 'reranker' },
+    models: {
+      planning: { model: 'default', effort: 'low' },
+      revision: { model: 'default', effort: 'low' },
+      execution: { model: 'default', effort: 'low' },
+      reranker: 'reranker',
+      embedder: 'embedder',
+    },
     routing: {
       maxHintCandidates: 2,
       maxRetrievedCandidates: 2,

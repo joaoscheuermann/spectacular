@@ -9,7 +9,7 @@ import { AgentErrorObject } from '../classes/agent-error.js';
 
 const baseName = 'submit_structured_output';
 const description = 'Submit the final structured output and end the agent run.';
-const invalidSubmissionLimit = 4;
+const defaultInvalidSubmissionLimit = 2;
 const validationIssueLimit = 10;
 const terminalOutputSchema = { not: {} } as const;
 
@@ -136,13 +136,12 @@ export const nextStructuredOutputRepair = (
   tool: StructuredOutputTool,
   error: AgentErrorObject,
   invalidSubmissions: number,
+  maxRepairs = defaultInvalidSubmissionLimit,
 ): StructuredOutputRepair => {
-  const nextInvalidSubmissions = invalidSubmissions + 1;
-
-  if (nextInvalidSubmissions >= invalidSubmissionLimit) throw error;
+  if (invalidSubmissions >= maxRepairs) throw error;
 
   return {
-    invalidSubmissions: nextInvalidSubmissions,
+    invalidSubmissions: invalidSubmissions + 1,
     correction: structuredOutputCorrection(tool.name, error),
   };
 };

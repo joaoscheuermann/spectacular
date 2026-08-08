@@ -7,12 +7,12 @@ export type MessageStorage = {
   push(entry: MessageStorageEntry): number;
 };
 
-const isFinished = (
-  entry: MessageStorageEntry,
-): entry is ProviderFinished => 'finishReason' in entry;
+const isFinished = (entry: MessageStorageEntry): entry is ProviderFinished =>
+  'finishReason' in entry;
 
 const assistant = (turn: ProviderFinished): ProviderMessage => {
-  const content = turn.text.length > 0 ? turn.text : (turn.refusal ?? turn.text);
+  const content =
+    turn.text.length > 0 ? turn.text : (turn.refusal ?? turn.text);
   const toolCalls =
     turn.toolCalls.length > 0 ? { toolCalls: turn.toolCalls } : {};
 
@@ -20,6 +20,7 @@ const assistant = (turn: ProviderFinished): ProviderMessage => {
     role: 'assistant',
     content,
     ...toolCalls,
+    ...(turn.replay === undefined ? {} : { replay: turn.replay }),
   };
 };
 

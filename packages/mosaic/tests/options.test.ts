@@ -112,12 +112,42 @@ test('requires a positive safe integer node turn limit', () => {
   );
 });
 
+test('requires a model and reasoning effort for every model-backed stage', () => {
+  for (const stage of ['planning', 'revision', 'execution'] as const) {
+    const missingModel = validOptions();
+    missingModel.models[stage] = { model: ' ', effort: 'low' };
+    assert.throws(
+      () => mosaic(missingModel),
+      new RegExp(`${stage}\\.model`, 'u'),
+    );
+
+    const invalidEffort = validOptions();
+    invalidEffort.models[stage] = {
+      model: 'model',
+      effort: 'invalid' as never,
+    };
+    assert.throws(
+      () => mosaic(invalidEffort),
+      new RegExp(`${stage}\\.effort`, 'u'),
+    );
+  }
+
+  for (const stage of ['reranker', 'embedder'] as const) {
+    const missingModel = validOptions();
+    missingModel.models[stage] = ' ';
+    assert.throws(() => mosaic(missingModel), new RegExp(stage, 'u'));
+  }
+});
+
 const validOptions = (): MutableOptions => ({
   logger: {} as never,
   provider: {} as never,
   models: {
-    default: 'default-model',
+    planning: { model: 'default-model', effort: 'low' },
+    revision: { model: 'default-model', effort: 'low' },
+    execution: { model: 'default-model', effort: 'low' },
     reranker: 'reranker-model',
+    embedder: 'embedder-model',
   },
   routing: {
     maxHintCandidates: 5,

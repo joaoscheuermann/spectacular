@@ -20,6 +20,7 @@ export const terminalFinish = (
   value: unknown,
   id = 'call-structured-output',
 ): ProviderFinished<unknown> => {
+  const tool = terminalTool(request);
   const argumentsJson = JSON.stringify(value);
   assert.notEqual(argumentsJson, undefined);
 
@@ -29,7 +30,7 @@ export const terminalFinish = (
     toolCalls: [
       {
         id,
-        name: terminalTool(request).name,
+        name: tool.name,
         arguments: argumentsJson,
       },
     ],

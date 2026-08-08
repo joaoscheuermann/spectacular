@@ -314,7 +314,7 @@ test('does not append a graph when the provider fails or returns an invalid plan
     );
 
     assert.equal(action.type, 'fail');
-    assert.equal(harness.requests.length, input.failure === undefined ? 4 : 1);
+    assert.equal(harness.requests.length, input.failure === undefined ? 3 : 1);
     if (input.failure === undefined && action.type === 'fail') {
       assert.ok(action.error instanceof AgentErrorObject);
       assert.equal(action.error.data.code, 'invalid_structured_output');
@@ -344,7 +344,13 @@ const createHarness = (plans: readonly unknown[], max = 3, failure?: Error) => {
         return terminalFinish(request, plan);
       },
     } as unknown as LlmProvider,
-    models: { default: 'default', reranker: 'reranker' },
+    models: {
+      planning: { model: 'default', effort: 'low' },
+      revision: { model: 'default', effort: 'low' },
+      execution: { model: 'default', effort: 'low' },
+      reranker: 'reranker',
+      embedder: 'embedder',
+    },
     routing: {
       maxHintCandidates: 1,
       maxRetrievedCandidates: 1,

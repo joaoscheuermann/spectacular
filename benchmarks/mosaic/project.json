@@ -1,0 +1,55 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "mosaic-benchmark",
+  "projectType": "library",
+  "sourceRoot": "benchmarks/mosaic/src",
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "dependsOn": ["^build"],
+      "outputs": ["{projectRoot}/dist"],
+      "options": {
+        "outputPath": "benchmarks/mosaic/dist",
+        "main": "benchmarks/mosaic/src/index.ts",
+        "tsConfig": "benchmarks/mosaic/tsconfig.lib.json",
+        "clean": false,
+        "assets": [
+          {
+            "input": "benchmarks/mosaic",
+            "glob": "prompts/**/*.md",
+            "output": "."
+          }
+        ]
+      }
+    },
+    "analysis-test": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "Rscript benchmarks/mosaic/analysis/test-analysis.R"
+      }
+    },
+    "schemas": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "outputs": ["{projectRoot}/schemas/v1"],
+      "options": {
+        "command": "node benchmarks/mosaic/dist/src/generate-schemas.js benchmarks/mosaic/schemas/v1"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build", "^build"],
+      "outputs": ["{projectRoot}/dist-tests"],
+      "options": {
+        "commands": [
+          "tsc -p benchmarks/mosaic/tsconfig.spec.json",
+          "node --test benchmarks/mosaic/dist-tests/tests/*.test.js",
+          "node --test benchmarks/mosaic/tests/*.test.mjs"
+        ],
+        "parallel": false
+      }
+    }
+  },
+  "tags": ["benchmark", "private"]
+}

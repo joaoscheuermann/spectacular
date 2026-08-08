@@ -6,10 +6,14 @@ import {
   SkillCandidateSchema,
 } from '../../schemas/routing.js';
 import { completeStructured } from '../../structured.js';
+import { evaluate } from '../../evaluation.js';
 import type { Graph, Node } from '../../types/graph.js';
-import type { OrderedBundle, SkillCandidate } from '../../types/routing.js';
+import type { RoutingTrace } from '../../types/routing.js';
+import type { MosaicEvaluationHooks } from '../../types/evaluation.js';
+import type { MosaicRuntime } from '../../observability.js';
 import type { WorkflowContext, WorkflowHandler } from '../../types/workflow.js';
 import { composeTools, metadata, resolveSkills } from './menus.js';
+import { validateMatches, validateTools, validateTrace } from './validation.js';
 
 /** Provider ranking entry. The index points back to the retrieved candidate. */
 type Ranking = {
@@ -23,6 +27,8 @@ type Preparation = {
   readonly node: Node;
   readonly graph: Graph;
   readonly options: WorkflowContext['options'];
+  readonly runtime: WorkflowContext['runtime'];
+  readonly hooks: WorkflowContext['hooks'];
 };
 
 /** Preparation inputs after vector retrieval produced canonical candidates. */
@@ -41,11 +47,6 @@ type RankedCandidate = {
   readonly rank: number;
 };
 
-type RoutingTrace = {
-  readonly candidates: readonly SkillCandidate[];
-  readonly bundle: OrderedBundle;
-};
-
 const NO_CANDIDATES_RATIONALE = 'No routable skill candidates were available.';
 const ROUTING_DISABLED_RATIONALE =
   'Skill routing is disabled because maxSkills is zero.';
@@ -53,7 +54,7 @@ const ROUTING_DISABLED_RATIONALE =
 /** Selects ordered skill references and derives the exact tool menu for a wave. */
 export const bundle: WorkflowHandler = async (
   state,
-  { input, options },
+  { input, options, runtime, hooks },
   { transition, fail },
 ) => {
   try {
@@ -71,7 +72,7 @@ export const bundle: WorkflowHandler = async (
 
     // Prepare nodes sequentially so provider calls and node mutations stay ordered.
     for (const node of nodes) {
-      await prepare({ input, node, graph, options });
+      await prepare({ input, node, graph, options, runtime, hooks });
     }
 
     // Every ready node now has its selected skill references and exact tool menu.
@@ -88,6 +89,8 @@ const prepare = async ({
   node,
   graph,
   options,
+  runtime,
+  hooks,
 }: Preparation): Promise<void> => {
   const { skills, tools, routing, logger } = options;
 
@@ -95,15 +98,43 @@ const prepare = async ({
   const trace =
     routing.maxSkills === 0
       ? emptyTrace(node.id, ROUTING_DISABLED_RATIONALE)
-      : await route({ input, node, graph, options });
+      : await evaluate(
+          hooks?.routing,
+          { request: input, node, graph },
+          async () => route({ input, node, graph, options, runtime, hooks }),
+        );
+  const validated = validateTrace(
+    trace,
+    node,
+    skills.menu.filter(
+      ({ name }) => !skills.required.some((required) => required.name === name),
+    ),
+    routing.maxRetrievedCandidates,
+    routing.maxSkills,
+  );
 
   // Persist the diagnostic trace and derive execution state from the bundle only.
-  assign({
+  await assign({
     node,
-    trace,
+    trace: validated,
     skillMenu: skills.menu,
     requiredTools: tools.required,
     toolMenu: tools.menu,
+    revision: graph.revision,
+    runtime,
+    hook: hooks?.menu,
+  });
+
+  await runtime?.emit({
+    type: 'bundle.selected',
+    stage: 'bundle',
+    nodeId: node.id,
+    revision: graph.revision,
+    candidateNames: node.candidates.map(({ skillName }) => skillName),
+    skillNames: node.bundle?.skills ?? [],
+    ...(runtime.capture === 'io'
+      ? { candidates: node.candidates, bundle: node.bundle }
+      : {}),
   });
 
   // Log only stable identifiers; bodies, rationales, and artifacts stay private.
@@ -125,6 +156,8 @@ const retrieve = async ({
   node,
   graph,
   options,
+  runtime,
+  hooks,
 }: Preparation): Promise<Skill[]> => {
   const { skills, routing } = options;
 
@@ -142,16 +175,55 @@ const retrieve = async ({
   );
 
   // Vector retrieval limits recall independently from the final bundle limit.
-  const matches = await skills.retriever.search(
-    context,
+  const matches = await evaluate(
+    hooks?.retrieval,
+    {
+      request: input,
+      graph,
+      node,
+      query: context,
+      limit: routing.maxRetrievedCandidates,
+      catalog: [...catalog.values()],
+    },
+    async ({ query, limit }) =>
+      (await skills.retriever.search(query, limit)).map(
+        ({ data: skill, score }) => ({ skill, score }),
+      ),
+  );
+  const candidates = currentCandidates(
+    validateMatches(matches, catalog, routing.maxRetrievedCandidates).map(
+      ({ skill }) => ({ data: skill }),
+    ),
+    catalog,
     routing.maxRetrievedCandidates,
   );
-  return currentCandidates(matches, catalog, routing.maxRetrievedCandidates);
+  await runtime?.emit({
+    type: 'retrieval.result',
+    stage: 'bundle',
+    nodeId: node.id,
+    revision: graph.revision,
+    skillNames: candidates.map(({ name }) => name),
+    ...(runtime?.capture === 'io' ? { query: context } : {}),
+  });
+  return candidates;
 };
 
 /** Applies the two model-assisted stages: deterministic reranking then selection. */
 const select = async (input: CandidateSelection): Promise<RoutingTrace> => {
-  const reranked = await rerank(input);
+  const candidates = await Promise.all(
+    input.candidates.map(async (skill) => {
+      const body = await evaluate(
+        input.hooks?.skillView,
+        { skill, purpose: 'routing' as const, nodeId: input.node.id },
+        async ({ skill: current }) => current.body,
+      );
+      if (body.trim().length === 0) {
+        throw new Error('Evaluation skill view must be non-empty.');
+      }
+      return { ...skill, body };
+    }),
+  );
+  const reranked = await rerank({ ...input, candidates });
   return choose({ ...input, reranked });
 };
 
@@ -162,11 +234,14 @@ const rerank = async ({
   graph,
   options,
   candidates,
+  runtime,
 }: CandidateSelection): Promise<RankedCandidate[]> => {
   const { provider, models } = options;
 
   // The reranker sees the full routing context and complete canonical skill bodies.
-  const ranking = await provider.rerank({
+  const ranking = await (
+    runtime?.provider(provider, 'bundle', node.id, graph.revision) ?? provider
+  ).rerank({
     model: models.reranker,
     query: bundlePrompt.rerankQuery(input, node, graph),
     documents: candidates.map(bundlePrompt.candidateDocument),
@@ -175,7 +250,19 @@ const rerank = async ({
   });
 
   // Provider order is not trusted; validation and sorting happen in this process.
-  return orderCandidates(candidates, ranking);
+  const ordered = orderCandidates(candidates, ranking);
+  await runtime?.emit({
+    type: 'rerank.result',
+    stage: 'bundle',
+    nodeId: node.id,
+    revision: graph.revision,
+    ranking: ordered.map(({ skill, score, rank }) => ({
+      skillName: skill.name,
+      score,
+      rank,
+    })),
+  });
+  return ordered;
 };
 
 /** Asks the selector for a bounded set of names with one rationale per skill. */
@@ -185,6 +272,7 @@ const choose = async ({
   graph,
   options,
   reranked,
+  runtime,
 }: RankedSelection): Promise<RoutingTrace> => {
   const { provider, models, routing } = options;
 
@@ -198,7 +286,7 @@ const choose = async ({
   // Candidate bodies and prior artifacts make this a sensitive structured call.
   const structured = await completeStructured({
     provider,
-    model: models.default,
+    profile: models.planning,
     system: bundlePrompt.system(routing.maxSkills),
     input: bundlePrompt.user({
       request: input,
@@ -208,6 +296,10 @@ const choose = async ({
     }),
     schema,
     flags: { sensitiveOutput: true },
+    runtime,
+    stage: 'bundle',
+    nodeId: node.id,
+    revision: graph.revision,
   });
 
   const evaluations = new Map(
@@ -316,21 +408,39 @@ type Assignment = {
   readonly skillMenu: readonly Skill[];
   readonly requiredTools: WorkflowContext['options']['tools']['required'];
   readonly toolMenu: WorkflowContext['options']['tools']['menu'];
+  readonly revision: number;
+  readonly runtime?: MosaicRuntime;
+  readonly hook?: MosaicEvaluationHooks['menu'];
 };
 
 /** Resolves definitions transiently, derives tools, and stores only compact state. */
-const assign = ({
+const assign = async ({
   node,
   trace,
   skillMenu,
   requiredTools,
   toolMenu,
-}: Assignment): void => {
+  revision,
+  runtime,
+  hook,
+}: Assignment): Promise<void> => {
   // Full definitions live in the catalog and resolve only from bundle names.
   const skills = resolveSkills(trace.bundle.skills, skillMenu);
 
   // Tool visibility is exactly base tools plus allowed tools in selected-skill order.
-  const tools = composeTools(skills, requiredTools, toolMenu);
+  const tools = await evaluate(
+    hook,
+    {
+      node,
+      trace,
+      skills,
+      required: requiredTools,
+      catalog: toolMenu,
+    },
+    async ({ skills: selected, required, catalog }) =>
+      composeTools(selected, required, catalog),
+  );
+  const validatedTools = validateTools(tools, requiredTools, toolMenu);
 
   // Metadata is sufficient for the graph snapshot; executable tools remain in the catalog.
   node.candidates = trace.candidates.map((candidate) => ({ ...candidate }));
@@ -338,7 +448,14 @@ const assign = ({
     ...trace.bundle,
     skills: [...trace.bundle.skills],
   };
-  node.tools = metadata(tools);
+  node.tools = metadata(validatedTools);
+  await runtime?.emit({
+    type: 'menu.composed',
+    stage: 'bundle',
+    nodeId: node.id,
+    revision,
+    toolNames: validatedTools.map(({ name }) => name),
+  });
 };
 
 const emptyTrace = (

@@ -1,0 +1,10 @@
+{
+  "order": [
+    "glmer-bobyqa",
+    "glmer-nloptwrap",
+    "glm-hc2-cluster",
+    "case-bootstrap",
+    "not-estimable"
+  ],
+  "minimumValidFitRate": 0.95
+}

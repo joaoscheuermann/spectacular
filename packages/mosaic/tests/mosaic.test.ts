@@ -34,8 +34,11 @@ test('propagates the exact provider failure from graph generation', async () => 
       },
     } as never,
     models: {
-      default: 'default-model',
+      planning: { model: 'default-model', effort: 'low' },
+      revision: { model: 'default-model', effort: 'low' },
+      execution: { model: 'default-model', effort: 'low' },
       reranker: 'reranker-model',
+      embedder: 'embedder-model',
     },
     routing: {
       maxHintCandidates: 5,

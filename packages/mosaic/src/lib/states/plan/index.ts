@@ -6,6 +6,7 @@ import {
   PlannedGraphSchema,
 } from '../../schemas/graph.js';
 import { completeStructured } from '../../structured.js';
+import { evaluate } from '../../evaluation.js';
 import type { WorkflowHandler } from '../../types/workflow.js';
 import { hints } from './hints.js';
 
@@ -15,7 +16,7 @@ import { hints } from './hints.js';
  */
 export const plan: WorkflowHandler = async (
   state,
-  { input, options },
+  { input, options, runtime, hooks },
   { transition, fail },
 ) => {
   try {
@@ -43,24 +44,68 @@ export const plan: WorkflowHandler = async (
      * P0 sees only the request and must describe result-oriented goals. P1 sees
      * P0 plus bounded catalog evidence, allowing one informed decomposition pass.
      */
-    const planned = await completeStructured({
-      provider: options.provider,
-      model: options.models.default,
-      system:
-        active === undefined ? goalsPrompt.system() : revisionPrompt.system(),
-      input:
-        active === undefined
-          ? goalsPrompt.user(input)
-          : revisionPrompt.user(
-              input,
-              active,
-              await hints(input, active, options),
+    const result =
+      active === undefined
+        ? await evaluate(
+            hooks?.initialPlan,
+            { request: input },
+            ({ request }) =>
+              completeStructured({
+                provider: options.provider,
+                profile: options.models.planning,
+                system: goalsPrompt.system(),
+                input: goalsPrompt.user(request),
+                schema: PlannedGraphSchema,
+                runtime,
+                stage: 'plan',
+                revision,
+              }),
+          )
+        : await evaluate(
+            hooks?.feedbackPlan,
+            { request: input, graph: active },
+            async ({ request, graph }) =>
+              completeStructured({
+                provider: options.provider,
+                profile: options.models.planning,
+                system: revisionPrompt.system(),
+                input: revisionPrompt.user(
+                  request,
+                  graph,
+                  await hints(request, graph, options, runtime, hooks),
+                ),
+                schema: PlannedGraphSchema,
+                runtime,
+                stage: 'plan',
+                revision,
+              }),
+          );
+    const planned =
+      result === 'unchanged'
+        ? PlannedGraphSchema.parse({
+            nodes: active?.nodes.map(
+              ({ id, goal, doneWhen, dependsOn, deliver }) => ({
+                id,
+                goal,
+                doneWhen,
+                dependsOn,
+                deliver,
+              }),
             ),
-      schema: PlannedGraphSchema,
-    });
+          })
+        : PlannedGraphSchema.parse(result);
 
     // Materialization assigns pending status, stable indices, and empty ledgers.
     const next = materializeGraph(planned, revision);
+
+    await runtime?.emit({
+      type: 'plan.snapshot',
+      stage: 'plan',
+      phase,
+      revision: next.revision,
+      nodeIds: next.nodes.map(({ id }) => id),
+      ...(runtime.capture === 'io' ? { graph: next } : {}),
+    });
 
     options.logger.debug(
       { phase, revision: next.revision, nodeCount: next.nodes.length },

@@ -88,6 +88,7 @@ export type ToolFactory<
 export type ToolStorage = {
   definitions(): readonly ToolDefinition[];
   calls(turn: ToolTurn): readonly ToolCall[];
+  validate(call: ToolCall | ToolCallRequest): ToolCall;
   get(name: string): Tool | undefined;
   execute(call: ToolCall | ToolCallRequest): Promise<unknown>;
 };

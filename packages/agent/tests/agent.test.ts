@@ -17,6 +17,7 @@ import {
 } from './fakes.js';
 import type { ProviderFinished } from 'llms';
 import { createMessageStorage } from 'messages';
+import { createToolStorage, defineTool } from 'tool';
 
 test('complete stores user and final assistant messages and includes system in provider requests', async () => {
   const finish: ProviderFinished = {
@@ -118,6 +119,57 @@ test('complete executes requested tools and calls the provider again with tool r
   assert.deepEqual(fake.requests[1]?.messages, messages.list().slice(0, 3));
 });
 
+test('rejects an invalid tool-call batch before any handler executes', async () => {
+  let executions = 0;
+  const tools = createToolStorage(
+    ['first', 'second'].map((name) =>
+      defineTool({
+        name,
+        input: z.object({ value: z.string() }),
+        output: z.string(),
+        execute: (_sandbox, { value }) => {
+          executions += 1;
+          return value;
+        },
+      })(undefined as never),
+    ),
+  );
+  const repairs: number[] = [];
+  const fake = createProvider({
+    complete: (_request, index) =>
+      index === 0
+        ? completeFinish('', [
+            call('first', { value: 'valid' }),
+            call('second', { value: 42 }),
+          ])
+        : completeFinish('Recovered.'),
+  });
+  const agent = createAgent({
+    provider: fake.provider,
+    tools,
+    messages: createMessageStorage(),
+    system: '',
+    model: 'fake-model',
+  });
+
+  const response = await agent.complete('Run tools.', {
+    onToolCallRepair: ({ attempt }) => {
+      repairs.push(attempt);
+    },
+  });
+
+  assert.equal(response.text, 'Recovered.');
+  assert.equal(executions, 0);
+  assert.deepEqual(repairs, [1]);
+  assert.equal(
+    fake.requests[1]?.messages.filter(
+      ({ role, toolResultStatus }) =>
+        role === 'tool' && toolResultStatus === 'incomplete',
+    ).length,
+    2,
+  );
+});
+
 test('complete uses a terminal tool for structured output with empty tool storage', async () => {
   const schema = z.object({ answer: z.string() });
   const fake = createProvider({
@@ -207,6 +259,8 @@ test('complete uses a terminal tool for structured output after executable tools
   assert.equal(fake.requests[0]?.schema, undefined);
   assert.equal(fake.requests[1]?.schema, undefined);
   assert.equal(fake.requests[0]?.tools?.length, 3);
+  assert.equal(fake.requests[0]?.toolChoice, undefined);
+  assert.equal(fake.requests[0]?.parallelToolCalls, false);
   assert.equal(
     fake.requests[0]?.tools?.find(
       ({ description }) =>

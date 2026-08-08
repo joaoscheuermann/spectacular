@@ -279,12 +279,14 @@ recovery hooks, or external side effects.
 `packages/mosaic` depends on `packages/state-machine` and owns the Doric
 goal-workflow policy: planning and revision, scheduling, skill retrieval and
 reranking, and per-node skill/tool menu composition. Its public
-factory accepts an injected provider, logger, default and reranker model IDs,
+factory accepts an injected provider, logger, independent planning, localized
+revision, and execution model profiles with explicit reasoning effort, plus a
+reranker and embedder model IDs without reasoning effort,
 independent required positive safe-integer hint and execution candidate limits,
 a selected-skill limit, a required non-negative integer
 localized-revision limit, a required positive safe-integer per-node model-turn
 limit, bundle skills and executable tools, and both retrievers; it has no
-session option. Doric configures eight model turns per node and three localized
+session option. Doric configures sixteen model turns per node and three localized
 revisions. The tool retriever remains part of this composition contract, but
 the bundle state does not query it or run an independent tool router. Model
 graph output owns only `id`,
@@ -336,10 +338,10 @@ Zod contract before changing Mosaic state. P0, P1, each concurrent hint
 candidate, bundle selection, and each localized revision create a fresh agent
 with isolated empty in-memory message and tool storages, preserve the authored
 system prompt and Markdown user input, and terminate through the agent-owned
-reserved structured-output tool without sending a provider-native schema.
-Invalid submissions are discarded atomically and may receive the agent's
-bounded diagnostic feedback for three correction attempts after the first
-invalid submission; the fourth invalid submission propagates
+reserved structured-output tool using the operation's direct object schema
+without sending a provider-native schema. Invalid submissions cannot
+mutate Mosaic state, are retained only for provider replay, and may receive
+bounded diagnostic feedback for two correction attempts; the next invalid submission propagates
 `invalid_structured_output` through the owning workflow state. The reserved
 tool is never executed, registered in Mosaic, or materialized as an
 `Observation`. Bundle selection preserves `sensitiveOutput`. Reranking remains
@@ -434,16 +436,92 @@ scheduling mutates that graph when marking nodes ready. It succeeds for an
 already-terminal graph and otherwise preserves the intentional missing-ready
 domain failure when progress cannot continue.
 
+Agent structured runs expose an optional awaited `onStructuredAttempt`
+callback on `AgentRunOptions`. It receives only schema version, one-based
+structured-submission attempt, runtime acceptance, whether bounded feedback
+will be sent, and an optional safe validation diagnostic. It never receives
+rejected arguments, model reasoning, thrown values, or raw causes. A callback
+failure retains its identity and aborts both complete and stream runs before
+further provider activity.
+
+Agent runs validate an entire provider tool-call batch before any handler
+executes. Invalid JSON, unknown tools, invalid payloads, and invalid terminal
+submissions share a default two-repair budget, append `incomplete` tool results,
+and may be observed through the safe `onToolCallRepair` counter callback.
+Handler failures are never retried by this protocol repair path. Structured
+runs require a terminal tool call at the runtime validation boundary and
+disable parallel tool calls. They do not force provider `tool_choice`, because
+reasoning models may support tools and reasoning without supporting forced tool
+selection in the same request.
+
+The public Mosaic result contract remains unchanged. `MosaicOptions.models`
+separates planning, revision, and execution profiles and keeps reranking and
+embedding as non-reasoning model IDs. Each
+`MosaicAgent.prompt` additionally accepts run-local observation options with a
+serial awaited observer and either `structure` capture, the default, or `io`
+capture. Version-one Mosaic events carry one run ID and contiguous sequence,
+cover lifecycle, planning, retrieval/reranking, bundle/menu, scheduling waves,
+node execution and tools, decisions and runtime observations, revision, and
+delivery. Every delivered event is a detached deeply frozen copy. Observer
+latency is excluded from reported durations; the first observer failure aborts
+the run and suppresses later events without reverting effects already
+executed. Structure capture contains only allowlisted identifiers, statuses,
+counts, ranks, scores, and durations. IO capture may additionally contain
+model-visible messages and tool definitions, model-emitted visible content,
+and tool inputs and outputs; it excludes credentials, provider controls,
+private reasoning, provider replay, encrypted reasoning content, usage
+payloads, diagnostics from caught failures, and raw causes. Existing Mosaic
+logs remain allowlisted structural projections. Safe `tool.repair` events carry
+only stage identity and attempt counters.
+
+`mosaic/evaluation` is the benchmark-only interception entrypoint over the
+same validated engine. Its optional initial-plan, feedback-plan, skill-view,
+retrieval, routing, menu, execution, and localized-revision hooks receive
+detached readonly snapshots and may delegate through `next`. Hook results pass
+the normal complete schemas and runtime invariants before state mutation. An
+adapter with no hooks is behaviorally neutral. A feedback hook may return
+`unchanged`; Mosaic then performs no hint or P1 provider call and materializes
+revision 1 as a validated plan identical to P0.
+
 `models/skillrouter-embedding` is the user-approved Nx/uv conversion utility
 for the pinned SkillRouter checkpoint. Only its export target may fetch
 upstream model bytes. Its `artifact/` directory and ONNX sidecars are ignored,
 non-committed generated output; the converter source, pinned revision, and
 `uv.lock` provide provenance. It remains a standalone utility. Doric composes
-its OpenAI provider against OpenRouter with `openai/gpt-5.6-luna` as the
-default model, `voyageai/rerank-2.5-lite` for reranking, and
+its OpenAI provider against OpenRouter with `qwen/qwen3.8-max` at `medium` for
+planning, `z-ai/glm-5.2` at `high` for localized revision, and
+`deepseek/deepseek-v4-flash-0731` at `low` for node execution. It uses
+`voyageai/rerank-2.5-lite` for reranking and
 `voyageai/voyage-4-large` for 2,048-dimensional embeddings. Doric fails when
 the configured endpoint is unavailable, rejects the request, or returns no
 embedding.
+
+`benchmarks/mosaic` is the user-approved private Nx project for the empirical
+MOSAIC study. It owns versioned experimental schemas, condition and case
+catalogs, deterministic simulated tools over an isolated in-memory world,
+content-addressed append-only traces, scoring and blinded-review utilities,
+and the offline R analysis/container surface. It is an evaluation instrument,
+not a product package, and its Doric smokes remain opt-in and outside the
+confirmatory analysis. Benchmark tools have no host filesystem, shell, or
+network authority. Model credentials remain runtime-only inputs and are never
+written to cases, freeze manifests, traces, scores, reviews, or reports. Its
+command-line surface reserves stdout for one JSON result and renders progress
+only on stderr.
+The executable `benchmarks/mosaic/scripts/study.mjs` is the resumable official
+computational-study orchestrator. It requires an exact version-one config, an
+external artifact root, an immutable analysis-image digest, runtime-only
+OpenRouter credentials, and explicit `--yes-paid-study` acknowledgement.
+Before paid work it pins byte-exact copies of every authored input and runs the
+repository, instrument, container, price, case, and isolation gates. Stages
+resume only from a valid CLI receipt plus every declared output; orphan or
+changed artifacts stop the study. The orchestrator covers pilot, calibration,
+power, freeze, primary, replication, sensitivity, scoring, and R analysis;
+failure-only oracles, the two-pass blinded human review, and publication
+package selection remain explicit post-study protocols.
+The version-one study contract retains one model and effort per run; the
+benchmark adapter maps that same profile to all three Mosaic stages and keeps
+the frozen `medium` effort, so production model specialization does not alter
+the experimental estimand or generated schemas.
 
 CLI streamed A2A event output is visible console rendering through
 `pino`/`pino-pretty`. Redaction must be applied to message text and structured
@@ -558,6 +636,12 @@ optional provider-neutral `effort` value of `none`, `minimal`, `low`,
 the same effort alias. Config parsing rejects models that provide conflicting
 `effort` and `reasoning` values. Provider requests may include top-level
 `effort`, which takes precedence over legacy `flags.reasoning.effort`.
+Provider requests may also control tool selection and parallel tool calls.
+The OpenAI Responses adapter sends `store: false`, preserves every opaque
+response output item for exact replay, forwards incomplete tool results, and
+marks schemas strict only when their unmodified JSON Schema is already
+strict-compatible. Replay and encrypted reasoning never enter provider
+operational logs.
 Provider requests may also set `flags.sensitiveOutput`; repository-owned
 providers then suppress operational logs for the call and omit model-response
 bodies, excerpts, diagnostics, and causes from error surfaces while preserving
@@ -594,7 +678,7 @@ objects or arrays, and including at most ten normalized Zod issues with their
 field path, issue kind, expected type when available, and safe message;
 rejected arguments are never copied into the correction. The
 retry budget is cumulative across the run, and ordinary tool turns neither
-consume nor reset it. The fourth invalid submission throws the latest
+consume nor reset it. The third invalid submission throws the latest
 `invalid_structured_output` `AgentErrorObject`, whose existing `diagnostic`
 field contains the same safe validation details when available. This terminal
 behavior applies equally to complete and stream agent runs. Streaming
@@ -634,7 +718,8 @@ not forward unsupported public Responses API controls such as `temperature`.
 ## Repository Shape
 
 Doric is an Nx-managed TypeScript workspace with npm workspaces for
-`apps/*`, `agents/*`, `packages/*`, `tools/*`, and `workflows/*`.
+`apps/*`, `agents/*`, `packages/*`, `tools/*`, `workflows/*`, and
+`benchmarks/*`.
 
 Use current manifests and source as the package inventory. Do not treat this
 file as the source of truth for every package responsibility.
@@ -646,6 +731,7 @@ Durable boundaries:
 - agent entry surfaces live under `agents/*`;
 - standalone tool packages live under `tools/*`;
 - workflow packages live under `workflows/*`;
+- private evaluation instruments live under `benchmarks/*`;
 - package APIs should be exported through public entrypoints;
 - sibling packages should not deep-import another package's private source.
 

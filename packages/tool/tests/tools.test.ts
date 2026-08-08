@@ -238,6 +238,36 @@ test('validates payloads before execution and supports async handlers', async ()
   );
 });
 
+test('validates calls without executing handlers', () => {
+  let executions = 0;
+  const storage = createToolStorage([
+    defineTool({
+      name: 'lookup',
+      input: z.object({ query: z.string() }),
+      output: z.string(),
+      execute(_sandbox, { query }) {
+        executions += 1;
+        return query;
+      },
+    })(sandbox),
+  ]);
+
+  assert.deepEqual(
+    storage.validate({
+      id: 'call_1',
+      name: 'lookup',
+      arguments: '{"query":"doric"}',
+    }),
+    {
+      id: 'call_1',
+      name: 'lookup',
+      payload: { query: 'doric' },
+      index: undefined,
+    },
+  );
+  assert.equal(executions, 0);
+});
+
 test('throws typed errors for unknown tools invalid JSON and handler failures', async () => {
   const storage = createToolStorage([
     defineTool({

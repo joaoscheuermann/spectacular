@@ -6,13 +6,14 @@ Goal-oriented planning and preparation workflow extracted from the Doric host.
 import mosaic, { mosaic as createMosaic } from 'mosaic';
 ```
 
-The factory receives a provider, logger, default/reranker model IDs, skill and
-tool catalogs, both retrievers, and explicit `routing.maxHintCandidates`,
+The factory receives a provider, logger, independent planning, revision, and
+execution profiles, reranker and embedder model IDs, skill and tool catalogs,
+both retrievers, and explicit `routing.maxHintCandidates`,
 `routing.maxRetrievedCandidates`, `routing.maxSkills`, `execution.maxTurns`,
 and `revision.max` limits. The
 per-node turn limit is required and accepts only positive safe integers. The
 localized revision limit is required and accepts any integer greater than or
-equal to zero; the Doric composition root uses `execution.maxTurns: 8` and
+equal to zero; the Doric composition root uses `execution.maxTurns: 16` and
 `revision.max: 3`. It has no session option. The tool
 retriever remains part of the public composition contract even though bundle
 routing queries only the skill retriever.
@@ -49,11 +50,12 @@ ephemeral `agent` with empty in-memory message and tool storages. Execution
 keeps its specialized per-node agent because it also owns executable tools,
 observation history, and `execution.maxTurns`.
 
-Structured runs expose a reserved `submit_structured_output` terminal tool and
-never send a provider-native `schema` field. Invalid or malformed arguments are
-discarded without mutating state. The agent may provide bounded diagnostics and
-make three correction attempts after the first invalid submission; the fourth
-invalid submission fails with `invalid_structured_output`. The terminal tool is
+Structured planning and revision operations expose the operation's direct
+object schema through a reserved `submit_structured_output` terminal tool and
+never send a provider-native `schema` field. Invalid or malformed arguments cannot
+mutate state. The agent may provide bounded diagnostics and make two correction
+attempts; the next invalid submission fails with `invalid_structured_output`.
+Rejected provider output is retained only for protocol replay. The terminal tool is
 never executed, registered as a Mosaic tool, or materialized as an
 `Observation`. Provider and transport failures propagate without an
 infrastructure retry. `provider.rerank` remains a direct provider operation.

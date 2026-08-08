@@ -95,23 +95,31 @@ export const createToolStorage = (tools: readonly Tool[]): ToolStorage => {
 
   const byName = new Map(entries);
 
+  const validate = (call: ToolCall | ToolCallRequest): ToolCall => {
+    const parsed = normalizeCall(call);
+    const tool = byName.get(parsed.name);
+
+    if (tool === undefined) {
+      throw new ToolErrorObject({
+        code: 'unknown_tool',
+        toolName: parsed.name,
+        callId: parsed.id,
+        message: `Unknown tool requested: ${parsed.name}`,
+      });
+    }
+
+    validatePayload(tool, parsed);
+    return parsed;
+  };
+
   return {
     definitions: () => tools.map((tool) => tool.definition),
     calls: (turn: ToolTurn) => (turn.toolCalls ?? []).map(parseCall),
+    validate,
     get: (name: string) => byName.get(name),
     execute: async (call: ToolCall | ToolCallRequest): Promise<unknown> => {
-      const parsed = normalizeCall(call);
-      const tool = byName.get(parsed.name);
-
-      if (tool === undefined) {
-        throw new ToolErrorObject({
-          code: 'unknown_tool',
-          toolName: parsed.name,
-          callId: parsed.id,
-          message: `Unknown tool requested: ${parsed.name}`,
-        });
-      }
-
+      const parsed = validate(call);
+      const tool = byName.get(parsed.name)!;
       const payload = validatePayload(tool, parsed);
 
       try {

@@ -7,6 +7,12 @@ import { completeStructured } from '../../structured.js';
 import type { Graph } from '../../types/graph.js';
 import type { SkillExtraction } from '../../types/hint.js';
 import type { MosaicOptions } from '../../types/mosaic-options.js';
+import type { MosaicRuntime } from '../../observability.js';
+import type {
+  MosaicEvaluationHooks,
+  SkillMatch,
+} from '../../types/evaluation.js';
+import { evaluate } from '../../evaluation.js';
 
 /**
  * Produces the catalog feedback described in section 4.5, preserving
@@ -16,6 +22,8 @@ export async function hints(
   input: string,
   graph: Graph,
   options: MosaicOptions,
+  runtime?: MosaicRuntime,
+  hooks?: MosaicEvaluationHooks,
 ): Promise<SkillExtraction[]> {
   const { provider, skills, models, routing } = options;
 
@@ -36,25 +44,70 @@ export async function hints(
   const byNode = await Promise.all(
     graph.nodes.map(async (node) => {
       // Retrieve at most K_hint high-recall candidates for this P0 objective.
-      const matches = await skills.retriever.search(
-        candidatesPrompt.search(input, node),
-        routing.maxHintCandidates,
+      const query = candidatesPrompt.search(input, node);
+      const matches = await evaluate(
+        hooks?.retrieval,
+        {
+          request: input,
+          graph,
+          node,
+          query,
+          limit: routing.maxHintCandidates,
+          catalog: [...catalog.values()],
+        },
+        async ({ query: searchQuery, limit }) =>
+          (await skills.retriever.search(searchQuery, limit)).map(
+            ({ data: skill, score }) => ({ skill, score }),
+          ),
       );
       const candidates = canonicalCandidates(
-        matches.map(({ data }) => data),
+        validateMatches(matches, catalog, routing.maxHintCandidates).map(
+          ({ skill }) => skill,
+        ),
         catalog,
         routing.maxHintCandidates,
       );
+      await runtime?.emit({
+        type: 'retrieval.result',
+        stage: 'plan',
+        nodeId: node.id,
+        revision: graph.revision,
+        skillNames: candidates.map(({ name }) => name),
+        ...(runtime.capture === 'io' ? { query } : {}),
+      });
 
       // Convert each complete skill body into short, goal-specific planning hints.
       const extracted = await Promise.all(
         candidates.map(async (skill) => {
+          const body = await evaluate(
+            hooks?.skillView,
+            { skill, purpose: 'hint' as const, nodeId: node.id },
+            async ({ skill: current }) => current.body,
+          );
+          if (body.trim().length === 0) {
+            throw new Error('Evaluation skill view must be non-empty.');
+          }
+          const viewed = { ...skill, body };
           const structured = await completeStructured({
             provider,
-            model: models.default,
+            profile: models.planning,
             system: hintsPrompt.system(),
-            input: hintsPrompt.user(input, graph, node, skill),
+            input: hintsPrompt.user(input, graph, node, viewed),
             schema: SkillHintExtractionSchema,
+            runtime,
+            stage: 'plan',
+            nodeId: node.id,
+            revision: graph.revision,
+          });
+
+          await runtime?.emit({
+            type: 'hint.result',
+            stage: 'plan',
+            nodeId: node.id,
+            revision: graph.revision,
+            skillName: skill.name,
+            hintCount: structured.hints.length,
+            ...(runtime.capture === 'io' ? { hints: structured.hints } : {}),
           });
 
           // A skill with no useful hint is omitted instead of influencing P1.
@@ -89,6 +142,27 @@ const canonicalCandidates = (
       if (skill === undefined || seen.has(skill.name)) return [];
       seen.add(skill.name);
       return [skill];
+    })
+    .slice(0, limit);
+};
+
+const validateMatches = (
+  matches: readonly SkillMatch[],
+  catalog: ReadonlyMap<string, Skill>,
+  limit: number,
+): readonly SkillMatch[] => {
+  const seen = new Set<string>();
+  return matches
+    .flatMap(({ skill, score }) => {
+      if (!Number.isFinite(score)) {
+        throw new Error(
+          'Evaluation retrieval returned an invalid skill score.',
+        );
+      }
+      const current = catalog.get(skill.name);
+      if (current === undefined || seen.has(current.name)) return [];
+      seen.add(current.name);
+      return [{ skill: current, score }];
     })
     .slice(0, limit);
 };

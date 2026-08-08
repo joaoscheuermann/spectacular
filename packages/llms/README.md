@@ -56,6 +56,13 @@ for await (const event of provider.stream({
 `*-fast` OpenAI model aliases are sent to the Responses API without the
 suffix and with `service_tier: "priority"`.
 
+OpenAI Responses requests use `store: false`. `ProviderFinished.replay`
+retains opaque output items for exact multi-turn replay, including encrypted
+reasoning, without exposing them through provider logs. Requests may set
+`toolChoice` and `parallelToolCalls`; tool results may be marked `incomplete`.
+Schemas are sent unchanged and marked strict only when they are already
+strict-compatible.
+
 ## Embeddings
 
 OpenAI, OpenRouter, and LM Studio OpenAI-compatible providers accept an

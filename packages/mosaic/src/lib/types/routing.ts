@@ -12,3 +12,9 @@ export interface OrderedBundle {
   readonly skills: readonly string[];
   readonly selectionRationale: string;
 }
+
+/** Complete validated routing decision for one workflow goal. */
+export interface RoutingTrace {
+  readonly candidates: readonly SkillCandidate[];
+  readonly bundle: OrderedBundle;
+}

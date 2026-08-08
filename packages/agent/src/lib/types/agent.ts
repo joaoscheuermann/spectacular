@@ -26,13 +26,36 @@ export type AgentOptions = {
   readonly maxOutputTokens?: number;
 };
 
+/** Safe runtime evidence for one terminal structured-output submission. */
+export interface AgentStructuredAttemptEvent {
+  readonly schemaVersion: 1;
+  readonly attempt: number;
+  readonly runtimeAccepted: boolean;
+  readonly feedbackSent: boolean;
+  readonly diagnostic?: string;
+}
+
+/** Safe evidence that one provider tool-call turn was rejected and retried. */
+export interface AgentToolCallRepairEvent {
+  readonly schemaVersion: 1;
+  readonly attempt: number;
+  readonly maxAttempts: number;
+}
+
 export type AgentRunOptions<
   Output = JsonValue,
   Schema extends StructuredOutputSchema = StructuredOutputSchema,
 > = {
   readonly maxTurns?: number;
+  readonly maxToolCallRepairs?: number;
   readonly signal?: AbortSignal;
   readonly schema?: Schema;
+  readonly onStructuredAttempt?: (
+    event: AgentStructuredAttemptEvent,
+  ) => void | Promise<void>;
+  readonly onToolCallRepair?: (
+    event: AgentToolCallRepairEvent,
+  ) => void | Promise<void>;
 };
 
 export type Agent = {

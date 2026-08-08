@@ -1,5 +1,12 @@
 export { default, mosaic } from './lib/mosaic.js';
 export type { MosaicAgent } from './lib/types/mosaic-agent.js';
+export type {
+  MosaicCapture,
+  MosaicEvent,
+  MosaicObserver,
+  MosaicRunOptions,
+  MosaicStage,
+} from './lib/types/events.js';
 export type { FinalDelivery, FinalDeliveryPart } from './lib/types/delivery.js';
 export type {
   Artifact,
@@ -24,9 +31,16 @@ export {
   MosaicResultSchema,
   WorkflowNodeResultSchema,
 } from './lib/schemas/result.js';
-export type { MosaicOptions } from './lib/types/mosaic-options.js';
+export type {
+  MosaicModelProfile,
+  MosaicOptions,
+} from './lib/types/mosaic-options.js';
 export type { NodeRuntimeState } from './lib/types/graph.js';
-export type { OrderedBundle, SkillCandidate } from './lib/types/routing.js';
+export type {
+  OrderedBundle,
+  RoutingTrace,
+  SkillCandidate,
+} from './lib/types/routing.js';
 export {
   OrderedBundleSchema,
   SkillCandidateSchema,

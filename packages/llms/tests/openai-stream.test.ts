@@ -71,6 +71,15 @@ test('streams OpenAI text reasoning usage finish and tool calls', async () => {
       response: {
         status: 'completed',
         output_text: 'Hello',
+        output: [
+          { type: 'reasoning', encrypted_content: 'opaque' },
+          {
+            type: 'function_call',
+            call_id: 'call_1',
+            name: 'lookup',
+            arguments: '{"q":"x"}',
+          },
+        ],
         usage: { input_tokens: 1, output_tokens: 2, total_tokens: 3 },
       },
     }),
@@ -110,6 +119,15 @@ test('streams OpenAI text reasoning usage finish and tool calls', async () => {
   }
 
   assert.equal(finished.finish.structured, undefined);
+  assert.deepEqual(finished.finish.replay, [
+    { type: 'reasoning', encrypted_content: 'opaque' },
+    {
+      type: 'function_call',
+      call_id: 'call_1',
+      name: 'lookup',
+      arguments: '{"q":"x"}',
+    },
+  ]);
 });
 
 test('keeps streamed OpenAI tool calls from completed responses without output', async () => {

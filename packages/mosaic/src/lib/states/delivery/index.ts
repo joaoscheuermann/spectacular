@@ -10,9 +10,9 @@ import type { WorkflowHandler, WorkflowState } from '../../types/workflow.js';
  * Finalizes terminal node results without invoking models, skills, or tools.
  * Only an all-completed graph receives an assembled delivery.
  */
-export const delivery: WorkflowHandler = (
+export const delivery: WorkflowHandler = async (
   state,
-  { options },
+  { options, runtime },
   { finish, fail },
 ) => {
   try {
@@ -36,6 +36,12 @@ export const delivery: WorkflowHandler = (
         { status, nodeIds: nodes.map(({ id }) => id) },
         'workflow terminated',
       );
+      await runtime?.emit({
+        type: 'delivery.created',
+        stage: 'delivery',
+        partIds: [],
+        ...(runtime.capture === 'io' ? { delivery: null } : {}),
+      });
       return finish(result);
     }
 
@@ -48,6 +54,13 @@ export const delivery: WorkflowHandler = (
       parts,
     });
     const result = MosaicResultSchema.parse({ status, delivery, nodes });
+
+    await runtime?.emit({
+      type: 'delivery.created',
+      stage: 'delivery',
+      partIds: delivery.parts.map(({ id }) => id),
+      ...(runtime.capture === 'io' ? { delivery } : {}),
+    });
 
     options.logger.info(
       {
