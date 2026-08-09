@@ -1,12 +1,15 @@
 import { constants } from 'node:fs';
-import { access, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { access, mkdir, open, readFile, readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 
 import {
+  AttemptReservationV1,
   ExecutionRecordV1,
   Id,
   TraceReferenceV1,
+  type AttemptReservation,
   type ExecutionRecord,
+  type RunSpec,
 } from '../schemas/index.js';
 import { artifactHash } from '../core/hash.js';
 import { canonicalJson, jsonSnapshot, type JsonValue } from '../core/json.js';
@@ -102,6 +105,16 @@ const isExisting = (error: unknown): boolean =>
 const readJson = async <T>(path: string): Promise<T> =>
   JSON.parse(await readFile(path, 'utf8')) as T;
 
+const writeExclusive = async (path: string, content: string): Promise<void> => {
+  const handle = await open(path, 'wx', 0o600);
+  try {
+    await handle.writeFile(content, 'utf8');
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+};
+
 const assertRunId = (runId: string): string => Id.parse(runId);
 const assertAttempt = (attempt: number): number => {
   if (!Number.isSafeInteger(attempt) || attempt < 1)
@@ -193,14 +206,9 @@ export const createEventStore = (root: string): EventStore => {
       const event: StoredEvent = { ...body, eventHash: artifactHash(body) };
       const directory = eventDirectory(runId, attempt);
       await mkdir(directory, { recursive: true });
-      await writeFile(
+      await writeExclusive(
         join(directory, eventFile(event)),
         `${canonicalJson(event)}\n`,
-        {
-          encoding: 'utf8',
-          flag: 'wx',
-          mode: 0o600,
-        },
       );
       return event;
     });
@@ -216,11 +224,7 @@ export const createEventStore = (root: string): EventStore => {
     const path = join(directory, name);
     await mkdir(directory, { recursive: true });
     try {
-      await writeFile(path, `${canonicalJson(body)}\n`, {
-        encoding: 'utf8',
-        flag: 'wx',
-        mode: 0o600,
-      });
+      await writeExclusive(path, `${canonicalJson(body)}\n`);
     } catch (error) {
       if (!isExisting(error)) throw error;
       const existing = await readFile(path, 'utf8');
@@ -239,6 +243,14 @@ export const createEventStore = (root: string): EventStore => {
 };
 
 export interface RecordStore {
+  readonly reserve: (
+    run: RunSpec,
+    reservedAt: string,
+  ) => Promise<AttemptReservation>;
+  readonly reservations: (
+    runId: string,
+  ) => Promise<readonly AttemptReservation[]>;
+  readonly pending: (runId: string) => Promise<readonly AttemptReservation[]>;
   readonly append: (record: ExecutionRecord) => Promise<string>;
   readonly read: (runId: string) => Promise<readonly ExecutionRecord[]>;
 }
@@ -246,6 +258,41 @@ export interface RecordStore {
 /** Stores every immutable execution attempt without replacing earlier outcomes. */
 export const createRecordStore = (root: string): RecordStore => {
   const lock = createLocks();
+  const reservationDirectory = (runId: string): string =>
+    join(root, 'attempts', assertRunId(runId));
+  const reservationName = (attempt: number): string =>
+    `${String(assertAttempt(attempt)).padStart(8, '0')}.json`;
+  const reservations = async (
+    runId: string,
+  ): Promise<readonly AttemptReservation[]> => {
+    const directory = reservationDirectory(runId);
+    let names: readonly string[];
+    try {
+      names = (await readdir(directory))
+        .filter((name) => name.endsWith('.json'))
+        .sort();
+    } catch (error) {
+      if (isMissing(error)) return [];
+      throw error;
+    }
+    const values = await Promise.all(
+      names.map(async (name) =>
+        AttemptReservationV1.parse(
+          await readJson<unknown>(join(directory, name)),
+        ),
+      ),
+    );
+    values.forEach((reservation, index) => {
+      if (
+        reservation.run.id !== runId ||
+        names[index] !== reservationName(reservation.attempt) ||
+        (index > 0 && reservation.attempt <= values[index - 1]!.attempt)
+      ) {
+        throw new Error('attempt reservation sequence mismatch');
+      }
+    });
+    return values;
+  };
   const read = async (runId: string): Promise<readonly ExecutionRecord[]> => {
     const directory = join(root, 'records', assertRunId(runId));
     let names: readonly string[];
@@ -273,6 +320,53 @@ export const createRecordStore = (root: string): RecordStore => {
     });
     return records;
   };
+  const reserve = async (
+    run: RunSpec,
+    reservedAt: string,
+  ): Promise<AttemptReservation> =>
+    lock(assertRunId(run.id), async () => {
+      const [attempts, reserved] = await Promise.all([
+        read(run.id),
+        reservations(run.id),
+      ]);
+      const attempt =
+        Math.max(attempts.at(-1)?.attempt ?? 0, reserved.at(-1)?.attempt ?? 0) +
+        1;
+      const reservation = AttemptReservationV1.parse({
+        schemaVersion: 1,
+        attempt,
+        run,
+        reservedAt,
+      });
+      const directory = reservationDirectory(run.id);
+      await mkdir(directory, { recursive: true });
+      await writeExclusive(
+        join(directory, reservationName(attempt)),
+        `${canonicalJson(reservation)}\n`,
+      );
+      return reservation;
+    });
+  const pending = async (
+    runId: string,
+  ): Promise<readonly AttemptReservation[]> => {
+    const [reserved, attempts] = await Promise.all([
+      reservations(runId),
+      read(runId),
+    ]);
+    const terminal = new Map(
+      attempts.map((record) => [record.attempt, record]),
+    );
+    for (const reservation of reserved) {
+      const record = terminal.get(reservation.attempt);
+      if (
+        record !== undefined &&
+        artifactHash(record.run) !== artifactHash(reservation.run)
+      ) {
+        throw new Error('attempt reservation run mismatch');
+      }
+    }
+    return reserved.filter(({ attempt }) => !terminal.has(attempt));
+  };
   const append = async (record: ExecutionRecord): Promise<string> =>
     lock(assertRunId(record.run.id), async () => {
       const attempts = await read(record.run.id);
@@ -282,18 +376,23 @@ export const createRecordStore = (root: string): RecordStore => {
           'record attempt is not the next immutable sequence',
         );
       const directory = join(root, 'records', record.run.id);
+      const reservation = (await reservations(record.run.id)).find(
+        ({ attempt }) => attempt === record.attempt,
+      );
+      if (
+        reservation !== undefined &&
+        artifactHash(reservation.run) !== artifactHash(record.run)
+      ) {
+        throw new TypeError('record does not match its attempt reservation');
+      }
       const hash = artifactHash(record);
       const name = `${String(record.attempt).padStart(3, '0')}-${hash.slice(7)}.json`;
       await mkdir(directory, { recursive: true });
       const path = join(directory, name);
-      await writeFile(path, `${canonicalJson(record)}\n`, {
-        encoding: 'utf8',
-        flag: 'wx',
-        mode: 0o600,
-      });
+      await writeExclusive(path, `${canonicalJson(record)}\n`);
       return path;
     });
-  return { append, read };
+  return { reserve, reservations, pending, append, read };
 };
 
 /** Checks whether a frozen file already exists without mutating it. */

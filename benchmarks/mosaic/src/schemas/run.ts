@@ -58,6 +58,16 @@ export const TraceReferenceV1 = z
   })
   .strict();
 
+/** Durable write-ahead reservation created before an execution attempt starts. */
+export const AttemptReservationV1 = z
+  .object({
+    schemaVersion: SchemaVersion,
+    attempt: PositiveInteger,
+    run: RunSpecV1,
+    reservedAt: IsoDateTime,
+  })
+  .strict();
+
 /** Immutable record of one scheduled attempt, including infrastructure outcomes. */
 export const ExecutionRecordV1 = z
   .object({
@@ -78,4 +88,5 @@ export const ExecutionRecordV1 = z
   .strict();
 
 export type RunSpec = z.infer<typeof RunSpecV1>;
+export type AttemptReservation = z.infer<typeof AttemptReservationV1>;
 export type ExecutionRecord = z.infer<typeof ExecutionRecordV1>;

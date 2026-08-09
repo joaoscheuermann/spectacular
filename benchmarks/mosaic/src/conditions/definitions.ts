@@ -3,17 +3,27 @@ import { ConditionV1, type Condition } from '../schemas/index.js';
 const condition = (value: Omit<Condition, 'schemaVersion'>): Condition =>
   ConditionV1.parse({ schemaVersion: 1, ...value });
 
+/** Shared controls are fixed experimental constants, not treatment factors. */
+export const SHARED_CONTROLS = {
+  maxCandidates: 5,
+  maxTurns: 16,
+  structuredRepairRetries: 2,
+} as const;
+
 const m1Factors: Condition['factors'] = {
   decomposition: 'goal',
   catalogFeedback: true,
   skillView: 'body',
   retrieval: 'top-k',
+  maxCandidates: SHARED_CONTROLS.maxCandidates,
   maxSkills: 3,
   bundle: 'selective',
   bundleOrder: 'ranked',
   menu: 'base-plus-bundle',
   baseTools: true,
   localizedRevision: true,
+  maxTurns: SHARED_CONTROLS.maxTurns,
+  structuredRepairRetries: SHARED_CONTROLS.structuredRepairRetries,
 };
 
 export const B0 = condition({
@@ -27,12 +37,15 @@ export const B0 = condition({
     catalogFeedback: false,
     skillView: 'none',
     retrieval: 'none',
+    maxCandidates: null,
     maxSkills: 0,
     bundle: 'none',
     bundleOrder: 'not-applicable',
     menu: 'global',
     baseTools: true,
     localizedRevision: false,
+    maxTurns: SHARED_CONTROLS.maxTurns,
+    structuredRepairRetries: SHARED_CONTROLS.structuredRepairRetries,
   },
   declaredChange: 'Reference baseline with no decomposition or skills.',
 });
@@ -49,12 +62,15 @@ export const B1 = condition({
     catalogFeedback: false,
     skillView: 'body',
     retrieval: 'top-k',
+    maxCandidates: SHARED_CONTROLS.maxCandidates,
     maxSkills: 1,
     bundle: 'single',
     bundleOrder: 'not-applicable',
     menu: 'global',
     baseTools: true,
     localizedRevision: false,
+    maxTurns: SHARED_CONTROLS.maxTurns,
+    structuredRepairRetries: SHARED_CONTROLS.structuredRepairRetries,
   },
   declaredChange: 'Adds one whole-request skill to B0.',
 });
@@ -71,12 +87,15 @@ export const B2 = condition({
     catalogFeedback: false,
     skillView: 'body',
     retrieval: 'top-k',
+    maxCandidates: SHARED_CONTROLS.maxCandidates,
     maxSkills: 1,
     bundle: 'single',
     bundleOrder: 'not-applicable',
     menu: 'declared',
     baseTools: false,
     localizedRevision: false,
+    maxTurns: SHARED_CONTROLS.maxTurns,
+    structuredRepairRetries: SHARED_CONTROLS.structuredRepairRetries,
   },
   declaredChange: 'Adds task decomposition and skill-declared tool menus.',
 });

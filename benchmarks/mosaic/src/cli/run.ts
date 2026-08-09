@@ -1,7 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
-import { createFetchTransport, createOpenAiProvider } from 'llms';
 import pino from 'pino';
 import { z } from 'zod';
 
@@ -23,6 +22,7 @@ import {
   createEventStore,
   createRecordStore,
   executeRun,
+  recoverInterruptedRun,
 } from '../runtime/index.js';
 import {
   CaseV1,
@@ -48,13 +48,14 @@ import {
   requiredFlag,
 } from './args.js';
 import { progress, readJson } from './io.js';
-import { createMeteredProvider } from './provider.js';
-import { parsePrices, pricesHash } from './pricing.js';
+import { loadProductionIndex } from './index-lifecycle.js';
+import { createMeteringStore, reservationScope } from './metering-store.js';
+import { validateFreeCapabilities } from './preflight.js';
+import { parsePrices, pricesHash, validatePriceCoverage } from './pricing.js';
+import { createStudyProvider } from './provider-factory.js';
 import { buildProductionRetrievers } from './retrievers.js';
 
 const executeFile = promisify(execFile);
-const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
-
 export const loadBenchmarkCases = async (
   path: string | undefined,
 ): Promise<readonly Case[]> => {
@@ -288,6 +289,7 @@ export const runProductionSchedule = async (
     'artifacts',
     'prices',
     'freeze',
+    'index',
     'resume',
     'doric-smoke',
   ]);
@@ -308,19 +310,38 @@ export const runProductionSchedule = async (
   ) {
     throw new Error('frozen prices hash mismatch');
   }
+  validatePriceCoverage(prices, [
+    ...[...new Set(schedule.map(({ model }) => model.model))].map((model) => ({
+      model,
+      kind: 'completion' as const,
+    })),
+    { model: EMBEDDING_MODEL.model, kind: 'embedding' },
+    { model: RERANKER_MODEL, kind: 'rerank' },
+  ]);
+  const index = await loadProductionIndex(requiredFlag(invocation, 'index'));
+  if (
+    freeze !== undefined &&
+    index.indexHash !== freeze.artifactHashes.retrievalIndex
+  ) {
+    throw new Error('frozen retrieval index hash mismatch');
+  }
   const apiKey = process.env['OPENROUTER_API_KEY'];
   if (apiKey === undefined || apiKey.trim().length === 0) {
     throw new Error('OPENROUTER_API_KEY is required');
   }
   const logger = pino({ level: 'silent' });
-  const source = createOpenAiProvider({
-    transport: createFetchTransport(),
-    baseUrl: OPENROUTER_BASE_URL,
-    apiKey,
+  const meter = createStudyProvider(apiKey, prices, logger);
+  await validateFreeCapabilities(
+    meter.provider,
+    freeze?.replication.candidate.model ??
+      schedule.find(({ model }) => model.model !== PRIMARY_MODEL.model)?.model
+        .model,
+  );
+  const retrievers = await buildProductionRetrievers(
+    meter.provider,
     logger,
-  });
-  const meter = createMeteredProvider(source, prices);
-  const retrievers = await buildProductionRetrievers(meter.provider, logger);
+    index,
+  );
   meter.reset();
   const prompts = await loadConditionPrompts();
   if (freeze !== undefined && prompts.hash !== freeze.artifactHashes.prompts) {
@@ -330,10 +351,17 @@ export const runProductionSchedule = async (
   const root = requiredFlag(invocation, 'artifacts');
   const events = createEventStore(root);
   const records = createRecordStore(root);
+  const metering = createMeteringStore(root);
   const byCase = new Map(cases.map((entry) => [entry.id, entry]));
 
   return runSchedule(schedule, {
     resume: booleanFlag(invocation, 'resume'),
+    recover: (run) =>
+      recoverInterruptedRun(run, {
+        events,
+        records,
+        usage: (reservation) => metering.usage(reservationScope(reservation)),
+      }).then(() => undefined),
     readAttempts: records.read,
     execute: async (run) => {
       const benchmarkCase = byCase.get(run.caseId);
@@ -344,7 +372,9 @@ export const runProductionSchedule = async (
         run.oracleParentRunId === undefined
           ? undefined
           : (await records.read(run.oracleParentRunId)).at(-1);
+      meter.bind(undefined);
       meter.reset();
+      meter.stage('run');
       const profile = {
         model: run.model.model,
         effort: run.model.effort,
@@ -395,6 +425,12 @@ export const runProductionSchedule = async (
           records,
           execute,
           usage: meter.snapshot,
+          onAttemptReserved: (reservation) => {
+            const scope = reservationScope(reservation);
+            meter.bind({
+              append: (entry) => metering.append(scope, entry),
+            });
+          },
         },
         parent,
       );

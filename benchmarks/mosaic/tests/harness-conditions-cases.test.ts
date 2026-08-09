@@ -7,12 +7,16 @@ import {
   A3,
   A4,
   A5,
+  B0,
+  B1,
+  B2,
   B3,
   M0,
   M1,
   ORACLES,
   boundaryPolicy,
   validateAblationMatrix,
+  validatePrimaryControlParity,
 } from '../src/conditions/index.js';
 import { artifactHash } from '../src/core/index.js';
 import {
@@ -93,6 +97,19 @@ test('M0 is selective MOSAIC without feedback while B3 uses a fixed top-three bu
   assert.equal(B3.factors.bundle, 'top-k');
   assert.equal(boundaryPolicy(M0).feedbackPlan, 'unchanged');
   assert.equal(boundaryPolicy(M1).feedbackPlan, 'default');
+});
+
+test('primary conditions freeze common turn repair and retrieval controls', () => {
+  assert.deepEqual(validatePrimaryControlParity(), []);
+  assert.ok(
+    [B0, B1, B2, B3, M0, M1].every(
+      ({ factors }) =>
+        factors.maxTurns === 16 && factors.structuredRepairRetries === 2,
+    ),
+  );
+  assert.ok(
+    [B1, B2, B3, M0, M1].every(({ factors }) => factors.maxCandidates === 5),
+  );
 });
 
 test('ablations change metadata order base tools selection and revision independently', () => {

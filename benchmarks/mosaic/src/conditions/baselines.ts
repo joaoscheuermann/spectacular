@@ -1,63 +1,42 @@
 import type { Condition } from '../schemas/index.js';
-import { SKILLS, type MicroSkill } from '../catalog/index.js';
+import type { MicroSkill } from '../catalog/index.js';
 import { BASE_TOOL_NAMES, TOOL_NAMES, type ToolName } from '../config/index.js';
 import type { JsonValue } from '../core/json.js';
 import {
-  HarnessInfrastructureError,
-  ModelCallBudgetError,
   TOOL_CONTRACTS,
   type EngineResult,
   type EngineUsage,
   type RunContext,
 } from '../runtime/index.js';
+import type {
+  BaselineDecision,
+  BaselineModel,
+  BaselinePlan,
+  ModelAnswer,
+  PlannedGoal,
+} from './baseline-contracts.js';
+import { callModel } from './baseline-lifecycle.js';
 import type { ConditionPrompts } from './prompts.js';
-import { isProviderError, isProviderErrorCode } from './provider.js';
+import { isAgentErrorCode } from './provider.js';
+import {
+  rankedSkills,
+  skillDocument,
+  type SkillRetrieval,
+} from './retrieval.js';
 
-export interface PlannedGoal {
-  readonly id: string;
-  readonly goal: string;
-  readonly doneWhen: readonly string[];
-}
-
-export interface BaselinePlan {
-  readonly goals: readonly PlannedGoal[];
-}
-
-export interface ToolRequest {
-  readonly name: string;
-  readonly input: JsonValue;
-}
-
-export interface BaselineDecision {
-  readonly status: 'completed' | 'failed' | 'needs_revision';
-  readonly output: string;
-  readonly toolCalls: readonly ToolRequest[];
-  readonly revisionReason?: string;
-}
-
-export interface ModelAnswer<Value> {
-  readonly value: Value;
-  readonly usage: EngineUsage;
-}
-
-export interface BaselineModel {
-  readonly plan: (request: {
-    readonly system: string;
-    readonly user: string;
-  }) => Promise<ModelAnswer<BaselinePlan>>;
-  readonly execute: (request: {
-    readonly system: string;
-    readonly user: string;
-    readonly toolNames: readonly ToolName[];
-  }) => Promise<ModelAnswer<BaselineDecision>>;
-  readonly revise: (request: {
-    readonly system: string;
-    readonly user: string;
-  }) => Promise<ModelAnswer<PlannedGoal>>;
-}
+export type {
+  BaselineCallLifecycle,
+  BaselineDecision,
+  BaselineModel,
+  BaselinePlan,
+  BaselineRunControls,
+  ModelAnswer,
+  PlannedGoal,
+  ToolRequest,
+} from './baseline-contracts.js';
 
 interface GoalResult {
-  readonly status: BaselineDecision['status'];
+  readonly status: BaselineDecision['status'] | 'blocked';
   readonly output: string;
   readonly toolNames: readonly string[];
   readonly revisionReason?: string;
@@ -69,131 +48,30 @@ interface ToolObservation {
   readonly output: JsonValue;
 }
 
-const MAX_BASELINE_TURNS = 8;
-
 const emptyUsage = (): EngineUsage => ({
   inputTokens: 0,
   outputTokens: 0,
   costUsd: 0,
 });
 
+const optionalSum = (
+  left: number | undefined,
+  right: number | undefined,
+): number | undefined =>
+  left === undefined && right === undefined
+    ? undefined
+    : (left ?? 0) + (right ?? 0);
+
 const addUsage = (left: EngineUsage, right: EngineUsage): EngineUsage => ({
   inputTokens: left.inputTokens + right.inputTokens,
   outputTokens: left.outputTokens + right.outputTokens,
-  cachedInputTokens:
-    (left.cachedInputTokens ?? 0) + (right.cachedInputTokens ?? 0),
-  reasoningTokens: (left.reasoningTokens ?? 0) + (right.reasoningTokens ?? 0),
+  cachedInputTokens: optionalSum(
+    left.cachedInputTokens,
+    right.cachedInputTokens,
+  ),
+  reasoningTokens: optionalSum(left.reasoningTokens, right.reasoningTokens),
   costUsd: left.costUsd + right.costUsd,
 });
-
-const jsonValue = (value: unknown): JsonValue =>
-  JSON.parse(JSON.stringify(value)) as JsonValue;
-
-const callModel = async <Value>(
-  context: RunContext,
-  stage: 'plan' | 'execution' | 'revision',
-  operation: 'plan' | 'execute' | 'revise',
-  request: {
-    readonly system: string;
-    readonly user: string;
-    readonly toolNames?: readonly ToolName[];
-  },
-  invoke: () => Promise<ModelAnswer<Value>>,
-): Promise<ModelAnswer<Value>> => {
-  await context.startModelCall();
-  await context.emit({
-    type: 'model.request',
-    stage,
-    operation,
-    model: context.run.model.model,
-    messageCount: 2,
-    ...(request.toolNames === undefined
-      ? {}
-      : { toolNames: request.toolNames }),
-    prompt: { system: request.system, user: request.user },
-  });
-  const started = Date.now();
-  let answer: ModelAnswer<Value>;
-  try {
-    answer = await invoke();
-  } catch (error) {
-    if (isProviderErrorCode(error, 'invalid_structured_output')) {
-      await context.emit({
-        type: 'structured.attempt',
-        stage,
-        attempt: 1,
-        runtimeAccepted: false,
-        feedbackSent: false,
-        diagnostic: 'invalid_structured_output',
-      });
-    }
-    await context.emit({
-      type: 'model.failed',
-      stage,
-      operation,
-      model: context.run.model.model,
-      status: 'failed',
-      durationMs: Math.max(0, Date.now() - started),
-    });
-    if (
-      error instanceof HarnessInfrastructureError ||
-      error instanceof ModelCallBudgetError
-    ) {
-      throw error;
-    }
-    if (isProviderError(error)) {
-      throw new HarnessInfrastructureError('model', 'provider_failed');
-    }
-    throw error;
-  }
-  const durationMs = Math.max(0, Date.now() - started);
-  await context.emit({
-    type: 'structured.attempt',
-    stage,
-    attempt: 1,
-    runtimeAccepted: true,
-    feedbackSent: false,
-  });
-  await context.emit({
-    type: 'model.response',
-    stage,
-    operation,
-    model: context.run.model.model,
-    finishReason: 'structured',
-    durationMs,
-    response: jsonValue(answer.value),
-  });
-  return answer;
-};
-
-const compare = (left: string, right: string): number =>
-  left < right ? -1 : left > right ? 1 : 0;
-
-const tokens = (value: string): ReadonlySet<string> =>
-  new Set(value.toLocaleLowerCase('en-US').match(/[a-z0-9]+/gu) ?? []);
-
-const skillScore = (query: ReadonlySet<string>, skill: MicroSkill): number => {
-  const body = tokens(`${skill.title} ${skill.description} ${skill.body}`);
-  return [...query].reduce(
-    (score, token) => score + (body.has(token) ? 1 : 0),
-    0,
-  );
-};
-
-/** Deterministic body-aware catalog ranking used by non-MOSAIC baselines. */
-export const rankSkills = (
-  query: string,
-  limit: number,
-): readonly MicroSkill[] => {
-  const queryTokens = tokens(query);
-  return [...SKILLS]
-    .sort(
-      (left, right) =>
-        skillScore(queryTokens, right) - skillScore(queryTokens, left) ||
-        compare(left.id, right.id),
-    )
-    .slice(0, limit);
-};
 
 const fence = (value: string): string => {
   const longest = Math.max(
@@ -273,17 +151,108 @@ const toolsFor = (
   return [...new Set(names)];
 };
 
-const skillsFor = (
-  condition: Condition,
+const skillQuery = (goal: PlannedGoal, request: string): string =>
+  `# Request\n\n${fence(request)}\n\n# Goal\n\n${fence(goal.goal)}\n\n# Completion criteria\n\n${goal.doneWhen.map((criterion) => `- ${criterion}`).join('\n')}`;
+
+const observedRetrieval = async <Value>(
+  context: RunContext,
+  operation: 'embedding' | 'rerank',
+  model: string,
+  request: Readonly<Record<string, JsonValue>>,
+  invoke: () => Promise<Value>,
+): Promise<Value> => {
+  await context.startModelCall();
+  await context.emit({
+    type: 'model.request',
+    stage: 'retrieval',
+    operation,
+    model,
+    messageCount: 1,
+    ...request,
+  });
+  const started = Date.now();
+  try {
+    const value = await invoke();
+    await context.emit({
+      type: 'model.response',
+      stage: 'retrieval',
+      operation,
+      model,
+      durationMs: Math.max(0, Date.now() - started),
+    });
+    return value;
+  } catch (error) {
+    await context.emit({
+      type: 'model.failed',
+      stage: 'retrieval',
+      operation,
+      model,
+      status: 'failed',
+      durationMs: Math.max(0, Date.now() - started),
+    });
+    throw error;
+  }
+};
+
+const skillsFor = async (
+  context: RunContext,
   goal: PlannedGoal,
-  request: string,
-): readonly MicroSkill[] => {
-  if (condition.id === 'B0') return [];
-  if (condition.id === 'B1') return rankSkills(request, 1);
-  return rankSkills(
-    `${request}\n${goal.goal}\n${goal.doneWhen.join('\n')}`,
-    condition.id === 'B2' ? 1 : 3,
+  revision: number,
+  retrieval: SkillRetrieval,
+): Promise<readonly MicroSkill[]> => {
+  if (context.condition.id === 'B0') return [];
+  const maxCandidates = context.condition.factors.maxCandidates;
+  const maxSkills = context.condition.factors.maxSkills;
+  if (maxCandidates === null || maxSkills === null || maxSkills <= 0)
+    throw new TypeError('skill-bearing baseline requires retrieval limits');
+  const query =
+    context.condition.id === 'B1'
+      ? context.benchmarkCase.request
+      : skillQuery(goal, context.benchmarkCase.request);
+  const matches = await observedRetrieval(
+    context,
+    'embedding',
+    retrieval.models.embedder,
+    { query },
+    () => retrieval.search(query, maxCandidates),
   );
+  await context.emit({
+    type: 'retrieval.result',
+    stage: 'bundle',
+    goalId: goal.id,
+    revision,
+    k: maxCandidates,
+    skillNames: matches.map(({ skill }) => skill.id),
+  });
+  if (matches.length < maxSkills)
+    throw new TypeError('retrieval returned too few skills for the bundle');
+  const ranking = await observedRetrieval(
+    context,
+    'rerank',
+    retrieval.models.reranker,
+    { count: matches.length },
+    () =>
+      retrieval.rerank({
+        model: retrieval.models.reranker,
+        query,
+        documents: matches.map(({ skill }) => skillDocument(skill)),
+        topN: matches.length,
+        flags: { sensitiveOutput: true },
+      }),
+  );
+  const ranked = rankedSkills(matches, ranking);
+  await context.emit({
+    type: 'rerank.result',
+    stage: 'bundle',
+    goalId: goal.id,
+    revision,
+    ranking: ranked.map(({ skill, relevanceScore, rank }) => ({
+      skillName: skill.id,
+      score: relevanceScore,
+      rank,
+    })),
+  });
+  return ranked.slice(0, maxSkills).map(({ skill }) => skill);
 };
 
 const runGoal = async (
@@ -294,12 +263,9 @@ const runGoal = async (
   previous: readonly GoalResult[],
   usage: EngineUsage,
   revision: number,
+  retrieval: SkillRetrieval,
 ): Promise<{ readonly result: GoalResult; readonly usage: EngineUsage }> => {
-  const skills = skillsFor(
-    context.condition,
-    goal,
-    context.benchmarkCase.request,
-  );
+  const skills = await skillsFor(context, goal, revision, retrieval);
   const tools = toolsFor(context.condition, skills);
   await context.emit({
     type: 'baseline.menu',
@@ -315,7 +281,8 @@ const runGoal = async (
     context.condition.id === 'B0' || context.condition.id === 'B1'
       ? prompts.baseline
       : prompts.executor;
-  for (let turn = 1; turn <= MAX_BASELINE_TURNS; turn += 1) {
+  let turns = 0;
+  while (turns < context.condition.factors.maxTurns) {
     const user = executionPrompt(
       context,
       goal,
@@ -324,13 +291,31 @@ const runGoal = async (
       previous,
       observations,
     );
-    const answer = await callModel(
-      context,
-      'execution',
-      'execute',
-      { system, user, toolNames: tools },
-      () => model.execute({ system, user, toolNames: tools }),
-    );
+    let completion;
+    try {
+      completion = await callModel(
+        context,
+        model,
+        'execution',
+        'execute',
+        { system, user, toolNames: tools },
+        context.condition.factors.maxTurns - turns,
+        (controls) =>
+          model.execute({ system, user, toolNames: tools, controls }),
+      );
+    } catch (error) {
+      if (!isAgentErrorCode(error, 'turn_limit_exceeded')) throw error;
+      return {
+        result: {
+          status: 'blocked',
+          output: '',
+          toolNames: observations.map((observation) => observation.name),
+        },
+        usage: currentUsage,
+      };
+    }
+    turns += completion.calls;
+    const { answer } = completion;
     currentUsage = addUsage(currentUsage, answer.usage);
     for (const call of answer.value.toolCalls) {
       if (!allowed.has(call.name as ToolName))
@@ -354,7 +339,14 @@ const runGoal = async (
       usage: currentUsage,
     };
   }
-  throw new TypeError('baseline model exceeded the bounded tool-evidence loop');
+  return {
+    result: {
+      status: 'blocked',
+      output: '',
+      toolNames: observations.map((observation) => observation.name),
+    },
+    usage: currentUsage,
+  };
 };
 
 const initialGoals = async (
@@ -381,13 +373,16 @@ const initialGoals = async (
     context,
     context.condition.id === 'B2' ? 'task' : 'goal',
   );
-  const answer = await callModel(
+  const completion = await callModel(
     context,
+    model,
     'plan',
     'plan',
     { system: prompts.planner, user },
-    () => model.plan({ system: prompts.planner, user }),
+    context.condition.factors.maxTurns,
+    (controls) => model.plan({ system: prompts.planner, user, controls }),
   );
+  const { answer } = completion;
   return { goals: validatePlan(answer.value), usage: answer.usage };
 };
 
@@ -404,13 +399,16 @@ const reviseGoal = async (
     revision: 1,
   });
   const user = `# Request\n\n${fence(context.benchmarkCase.request)}\n\n# Goal requiring revision\n\n${fence(goal.goal)}\n\n# Observed reason\n\n${fence(result.revisionReason ?? 'The goal requested revision without a reason.')}`;
-  return callModel(
+  const completion = await callModel(
     context,
+    model,
     'revision',
     'revise',
     { system: prompts.revision, user },
-    () => model.revise({ system: prompts.revision, user }),
+    context.condition.factors.maxTurns,
+    (controls) => model.revise({ system: prompts.revision, user, controls }),
   );
+  return completion.answer;
 };
 
 /** Executes a complete B0-B3 condition against an injected structured model. */
@@ -418,6 +416,7 @@ export const executeBaseline = async (
   context: RunContext,
   model: BaselineModel,
   prompts: ConditionPrompts,
+  retrieval: SkillRetrieval,
 ): Promise<EngineResult> => {
   if (!['B0', 'B1', 'B2', 'B3'].includes(context.condition.id))
     throw new TypeError('condition is not a baseline executor');
@@ -433,6 +432,7 @@ export const executeBaseline = async (
       results,
       usage,
       0,
+      retrieval,
     );
     usage = execution.usage;
     if (
@@ -455,6 +455,7 @@ export const executeBaseline = async (
         results,
         usage,
         1,
+        retrieval,
       );
       usage = execution.usage;
     }

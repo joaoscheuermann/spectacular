@@ -13,16 +13,20 @@ export interface ScheduleInput {
   readonly studyId: string;
   readonly cases: readonly Case[];
   readonly conditions: readonly Condition[];
+  /** Controls block ordering and deterministic hooks, never provider sampling. */
   readonly seed: string;
   readonly repetitions?: number;
   readonly capture?: 'structure' | 'io';
   readonly freezeHash?: string | null;
 }
 
+export const SCHEDULE_SEED_SCOPE =
+  'condition-order-and-deterministic-hooks-only' as const;
+
 const specId = (value: unknown): string =>
   `run.${contentHash(value).slice(0, 32)}`;
 
-/** Creates paired blocks with one shared seed and randomized condition order. */
+/** Creates paired blocks with one shared hook seed and randomized condition order. */
 export const createSchedule = (input: ScheduleInput): readonly RunSpec[] => {
   const repetitions = input.repetitions ?? REPETITIONS;
   if (!Number.isSafeInteger(repetitions) || repetitions <= 0) {
@@ -39,14 +43,14 @@ export const createSchedule = (input: ScheduleInput): readonly RunSpec[] => {
   let order = 0;
   return blocks.flatMap((block) => {
     const rng = createPrng(input.seed).fork(block.pairedBlock);
-    const seed = rng.integer(2_147_483_647);
+    const hookSeed = rng.integer(2_147_483_647);
     return rng.shuffle(input.conditions).map((condition) => {
       const identity = {
         studyId: input.studyId,
         caseId: block.benchmarkCase.id,
         conditionId: condition.id,
         repetition: block.repetition,
-        seed,
+        hookSeed,
       };
       const run = RunSpecV1.parse({
         schemaVersion: 1,
@@ -56,7 +60,7 @@ export const createSchedule = (input: ScheduleInput): readonly RunSpec[] => {
         caseId: block.benchmarkCase.id,
         conditionId: condition.id,
         repetition: block.repetition,
-        seed,
+        seed: hookSeed,
         pairedBlock: block.pairedBlock,
         order,
         model: PRIMARY_MODEL,

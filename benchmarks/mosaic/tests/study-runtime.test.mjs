@@ -5,12 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import {
-  cli,
-  materializeInputs,
-  parseArgs,
-  pathsFor,
-} from '../scripts/study-runtime.mjs';
+import { cli, parseArgs } from '../scripts/study-runtime.mjs';
+import { materializeInputs, pathsFor } from '../scripts/study-inputs.mjs';
 import { createFamilySchedules } from '../scripts/study-confirmatory.mjs';
 import { createPrefreezeSchedule } from '../scripts/study-preparation.mjs';
 
@@ -21,23 +17,29 @@ const temporaryDirectory = async (context) => {
 };
 
 test('argument modes are explicit and mutually exclusive', () => {
-  assert.deepEqual(parseArgs(['--config', '/study.json', '--yes-paid-study']), {
-    config: '/study.json',
-    validate: undefined,
-    paid: true,
-    help: false,
-    print: false,
-  });
+  assert.deepEqual(
+    parseArgs(['--prepare', '/study.json', '--yes-paid-study']),
+    {
+      prepare: '/study.json',
+      continue: undefined,
+      validate: undefined,
+      readiness: undefined,
+      stage: undefined,
+      paid: true,
+      help: false,
+      print: false,
+    },
+  );
   assert.throws(
-    () => parseArgs(['--config', '--yes-paid-study']),
-    /--config requires a path/u,
+    () => parseArgs(['--prepare', '--yes-paid-study']),
+    /--prepare requires a path/u,
   );
   assert.throws(
     () => parseArgs(['--print-config', '--yes-paid-study']),
-    /cannot be combined/u,
+    /paid mode/u,
   );
   assert.throws(
-    () => parseArgs(['--config', '/one.json', '--config', '/two.json']),
+    () => parseArgs(['--prepare', '/one.json', '--prepare', '/two.json']),
     /duplicate argument/u,
   );
 });
@@ -49,9 +51,13 @@ test('scientific inputs are copied once and source drift is rejected', async (co
   const configPath = join(authored, 'study.json');
   const files = {
     prices: join(authored, 'prices.json'),
+    calibrationAudit: join(authored, 'calibration-audit.json'),
     calibrationCases: join(authored, 'calibration-cases.json'),
+    confirmatoryAudit: join(authored, 'confirmatory-audit.json'),
     confirmatoryCases: join(authored, 'confirmatory-cases.json'),
+    costApproval: join(authored, 'cost-approval.json'),
     powerConfig: join(authored, 'power-config.json'),
+    powerApproval: join(authored, 'power-approval.json'),
   };
   await mkdir(authored);
   await Promise.all([

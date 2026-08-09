@@ -18,6 +18,7 @@ import {
   loadConditionPrompts,
   oracleEligible,
   validateAblationMatrix,
+  validatePrimaryControlParity,
 } from '../conditions/index.js';
 import { artifactHash } from '../core/hash.js';
 import { canonicalJson } from '../core/json.js';
@@ -34,7 +35,11 @@ import {
   validateFamilyIsolation,
 } from './cases.js';
 import { writeFreeze, type FreezeInput } from './freeze.js';
-import { createSchedule, resumeAction } from './scheduler.js';
+import {
+  SCHEDULE_SEED_SCOPE,
+  createSchedule,
+  resumeAction,
+} from './scheduler.js';
 import { selectBaseline } from './selection.js';
 import { DORIC_SMOKE_CASES, DORIC_SMOKE_CONDITIONS } from './smoke.js';
 import { DECISIONS, type Decision } from './decisions.js';
@@ -131,8 +136,13 @@ const freezeInput = (): FreezeInput => ({
     prices: HASH,
     seeds: HASH,
     calibration: HASH,
+    calibrationAudit: HASH,
+    confirmatoryAudit: HASH,
+    costApproval: HASH,
     powerConfig: HASH,
+    powerApproval: HASH,
     powerResult: HASH,
+    retrievalIndex: HASH,
     analysis: HASH,
     renvLock: HASH,
   },
@@ -283,7 +293,8 @@ const CHECKS: Readonly<Record<Decision['id'], Check>> = {
       return (
         runs.length === 2 &&
         new Set(runs.map((run) => run.seed)).size === 1 &&
-        new Set(runs.map((run) => run.conditionId)).size === 2
+        new Set(runs.map((run) => run.conditionId)).size === 2 &&
+        SCHEDULE_SEED_SCOPE === 'condition-order-and-deterministic-hooks-only'
       );
     });
   },
@@ -360,6 +371,15 @@ export const runConformance = async (): Promise<
       id: '$',
       testName: '',
       detail: 'decision registry must contain exactly D01-D25',
+    });
+  }
+  if (validatePrimaryControlParity().length > 0) {
+    registryIssues.push({
+      id: '$condition-parity',
+      testName:
+        'primary conditions freeze common retrieval, turn, and repair controls',
+      detail:
+        'undeclared experimental controls differ between primary conditions',
     });
   }
   try {

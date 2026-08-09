@@ -1,8 +1,8 @@
 #!/usr/bin/env Rscript
 
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) != 2L) {
-  stop("usage: power.R <config.json> <result.json>")
+if (length(args) != 3L) {
+  stop("usage: power.R <config.json> <result.json> <checkpoint.json>")
 }
 
 script_arg <- grep("^--file=", commandArgs(), value = TRUE)
@@ -62,6 +62,8 @@ if (
 
 RNGkind("L'Ecuyer-CMRG")
 set.seed(as.integer(numeric_seed))
+config_hash <- sha256_file(args[[1]])
+checkpoint_path <- args[[3]]
 
 treatment_shift <- function(intercepts, baseline_probability, minimum_effect) {
   baseline_logit <- stats::qlogis(baseline_probability)
@@ -148,24 +150,103 @@ estimate_power <- function(cases) {
 }
 
 candidates <- seq.int(minimum, maximum, by = 24L)
-n_power <- NA_integer_
-selected_power <- NA_real_
-for (candidate in candidates) {
-  estimated <- estimate_power(candidate)
-  if (!is.na(estimated) && estimated >= 0.8) {
-    n_power <- candidate
-    selected_power <- estimated
-    break
+n_evaluated <- 0L
+evaluated <- list()
+if (file.exists(checkpoint_path)) {
+  checkpoint <- read_json(checkpoint_path)
+  if (
+    !identical(as.integer(checkpoint$schemaVersion), 1L) ||
+      !identical(as.character(checkpoint$configHash), config_hash)
+  ) {
+    stop("power checkpoint does not match the frozen configuration")
+  }
+  evaluated <- checkpoint$evaluated
+  n_evaluated <- length(evaluated)
+  if (n_evaluated > length(candidates)) {
+    stop("power checkpoint contains too many candidates")
+  }
+  if (n_evaluated > 0L) {
+    recorded <- vapply(
+      evaluated,
+      function(value) as.integer(value$cases),
+      integer(1)
+    )
+    if (!identical(recorded, candidates[seq_len(n_evaluated)])) {
+      stop("power checkpoint candidate sequence changed")
+    }
+  }
+  random_seed <- as.integer(unlist(checkpoint$randomSeed, use.names = FALSE))
+  if (length(random_seed) == 0L || any(is.na(random_seed))) {
+    stop("power checkpoint has no valid RNG state")
+  }
+  assign(".Random.seed", random_seed, envir = .GlobalEnv)
+}
+
+write_checkpoint <- function() {
+  value <- list(
+    schemaVersion = 1L,
+    configHash = config_hash,
+    evaluated = evaluated,
+    randomSeed = as.list(as.integer(.Random.seed))
+  )
+  temporary <- paste0(checkpoint_path, ".tmp")
+  write_json(value, temporary)
+  if (!file.rename(temporary, checkpoint_path)) {
+    stop("could not atomically publish the power checkpoint")
   }
 }
-if (is.na(n_power)) stop("no candidate achieved 80% power")
+
+n_power <- NA_integer_
+selected_power <- NA_real_
+if (n_evaluated > 0L) {
+  for (entry in evaluated) {
+    if (isTRUE(entry$estimable) && as.numeric(entry$power) >= 0.8) {
+      n_power <- as.integer(entry$cases)
+      selected_power <- as.numeric(entry$power)
+      break
+    }
+  }
+}
+if (is.na(n_power) && n_evaluated < length(candidates)) {
+  for (candidate in candidates[(n_evaluated + 1L):length(candidates)]) {
+    estimated <- estimate_power(candidate)
+    evaluated[[length(evaluated) + 1L]] <- list(
+      cases = as.integer(candidate),
+      estimable = !is.na(estimated),
+      power = if (is.na(estimated)) 0 else unname(estimated)
+    )
+    write_checkpoint()
+    if (!is.na(estimated) && estimated >= 0.8) {
+      n_power <- candidate
+      selected_power <- estimated
+      break
+    }
+  }
+}
+if (!is.na(n_power)) {
+  matching <- Filter(
+    function(entry) as.integer(entry$cases) == n_power,
+    evaluated
+  )
+  if (length(matching) != 1L || !isTRUE(matching[[1]]$estimable)) {
+    stop("power checkpoint selected result is inconsistent")
+  }
+  selected_power <- as.numeric(matching[[1]]$power)
+}
+if (is.na(n_power)) {
+  if (length(evaluated) < length(candidates)) {
+    stop("power checkpoint stopped before all candidates were evaluated")
+  } else {
+    stop("no candidate achieved 80% power")
+  }
+}
 n_final <- round_up(max(240L, n_power), 120L)
 
 result <- list(
   simulations = 10000L,
   seed = seed,
   numericSeed = as.integer(numeric_seed),
-  configHash = sha256_file(args[[1]]),
+  configHash = config_hash,
   baselineProbability = baseline_probability,
   randomInterceptSd = random_intercept_sd,
   adaptiveClasses = as.list(adaptive_classes),

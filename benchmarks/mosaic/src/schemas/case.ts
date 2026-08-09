@@ -14,11 +14,13 @@ export const CriterionV1 = z
   .object({
     id: Id,
     description: z.string().trim().min(1),
+    evidenceRefs: z.array(Id).min(1),
   })
   .strict();
 
 export const ToolEvidenceV1 = z
   .object({
+    id: Id,
     name: Id,
     input: JsonValue,
     evidenceHash: Hash,
@@ -36,7 +38,57 @@ export const ExpectedStateV1 = z
 
 export const ExpectedDeliveryV1 = z
   .object({
-    contains: z.array(z.string().min(1)).min(1),
+    document: z.record(z.string(), JsonValue),
+    fields: z
+      .array(
+        z
+          .object({
+            id: Id,
+            path: z.array(z.string().min(1)).min(1),
+          })
+          .strict(),
+      )
+      .min(1),
+  })
+  .strict();
+
+export const CaseDraftToolV1 = z
+  .object({
+    id: Id,
+    name: Id,
+    input: JsonValue,
+  })
+  .strict();
+
+/** Human-authored semantics from which deterministic case evidence is compiled. */
+export const CaseDraftV1 = z
+  .object({
+    schemaVersion: SchemaVersion,
+    id: Id,
+    familyId: Id,
+    phase: StudyPhase,
+    title: z.string().trim().min(1),
+    domain: Domain,
+    compositionClass: CompositionClass,
+    focusGoalRole: Id,
+    adaptive: z.boolean(),
+    request: z.string().trim().min(1),
+    fixtureIds: z.array(Id).min(1),
+    tags: z.array(Id),
+    criteria: z.array(CriterionV1).min(1),
+    requiredSkills: z.array(Id),
+    relevantSkills: z.array(Id),
+    forbiddenSkills: z.array(Id),
+    tools: z.array(CaseDraftToolV1),
+    expectedAnswer: JsonValue,
+    requiresRevision: z.boolean(),
+  })
+  .strict();
+
+export const CaseDraftDocumentV1 = z
+  .object({
+    schemaVersion: SchemaVersion,
+    cases: z.array(CaseDraftV1).min(1),
   })
   .strict();
 
@@ -86,3 +138,4 @@ export const CaseV1 = z
   .strict();
 
 export type Case = z.infer<typeof CaseV1>;
+export type CaseDraft = z.infer<typeof CaseDraftV1>;

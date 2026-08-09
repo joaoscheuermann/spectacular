@@ -16,6 +16,7 @@ import {
   type RunContext,
   type ToolCallCorrelation,
 } from '../runtime/index.js';
+import type { SkillRetrieval } from './retrieval.js';
 
 type MosaicSkill = MosaicOptions['skills']['menu'][number];
 type MosaicTool = MosaicOptions['tools']['menu'][number];
@@ -173,6 +174,7 @@ export const mosaicOptions = (
   context: RunContext,
   dependencies: MosaicDependencies,
   correlations?: ToolCorrelations,
+  retrieval?: SkillRetrieval,
 ): MosaicOptions => {
   const { base } = dependencies;
   const skills = mosaicSkills();
@@ -183,12 +185,44 @@ export const mosaicOptions = (
         (tool): tool is MosaicTool => tool !== undefined,
       )
     : [];
+  const maxCandidates = context.condition.factors.maxCandidates;
+  if (maxCandidates === null)
+    throw new TypeError(
+      'MOSAIC condition requires a retrieval candidate limit',
+    );
+  const bySkillName = new Map(skills.map((skill) => [skill.name, skill]));
+  const sharedRetriever =
+    retrieval === undefined
+      ? dependencies.retrievers.skills
+      : {
+          search: async (query: string, topK: number) =>
+            (await retrieval.search(query, topK)).flatMap(
+              ({ skill, score }) => {
+                const current = bySkillName.get(skill.id);
+                return current === undefined ? [] : [{ data: current, score }];
+              },
+            ),
+        };
+  const provider =
+    retrieval === undefined
+      ? base.provider
+      : new Proxy(base.provider, {
+          get(target, property, receiver) {
+            if (property === 'rerank') return retrieval.rerank;
+            const value = Reflect.get(target, property, receiver) as unknown;
+            return typeof value === 'function' ? value.bind(target) : value;
+          },
+        });
   return {
     ...base,
+    provider,
     routing: {
       ...base.routing,
+      maxHintCandidates: maxCandidates,
+      maxRetrievedCandidates: maxCandidates,
       maxSkills: context.condition.factors.maxSkills ?? base.routing.maxSkills,
     },
+    execution: { maxTurns: context.condition.factors.maxTurns },
     revision: {
       max: context.condition.factors.localizedRevision ? base.revision.max : 0,
     },
@@ -198,7 +232,7 @@ export const mosaicOptions = (
       retriever:
         context.condition.id === 'A1'
           ? dependencies.retrievers.metadataSkills
-          : dependencies.retrievers.skills,
+          : sharedRetriever,
     },
     tools: { required, menu: tools, retriever: dependencies.retrievers.tools },
   };

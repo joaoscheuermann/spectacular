@@ -9,6 +9,7 @@ import { artifactHash } from '../core/hash.js';
 import { TOOL_CONTRACTS } from '../runtime/index.js';
 import { schemasV1, type Case, type RunSpec } from '../schemas/index.js';
 import { PILOT_CASES } from './cases.js';
+import { SCHEDULE_SEED_SCOPE } from './scheduler.js';
 
 const readBenchmarkFile = async (relativePath: string): Promise<string> => {
   const candidates = [
@@ -114,18 +115,24 @@ export const localInstrumentHashes =
 export const confirmatoryCasesHash = (cases: readonly Case[]): string =>
   artifactHash(cases);
 
-/** Hashes the paired seed ledger without the freeze hash or model family. */
-export const seedLedgerHash = (schedule: readonly RunSpec[]): string =>
-  artifactHash(
-    [...schedule]
+/** Hashes condition order and hook seeds; these never represent provider sampling. */
+export const scheduleAndHookSeedLedgerHash = (
+  schedule: readonly RunSpec[],
+): string =>
+  artifactHash({
+    scope: SCHEDULE_SEED_SCOPE,
+    runs: [...schedule]
       .sort((left, right) => left.order - right.order)
       .map((run) => ({
         studyId: run.studyId,
         caseId: run.caseId,
         conditionId: run.conditionId,
         repetition: run.repetition,
-        seed: run.seed,
+        hookSeed: run.seed,
         pairedBlock: run.pairedBlock,
         order: run.order,
       })),
-  );
+  });
+
+/** Version-one compatibility alias for the frozen artifact field `seeds`. */
+export const seedLedgerHash = scheduleAndHookSeedLedgerHash;

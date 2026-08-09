@@ -81,9 +81,10 @@ go to stderr. Output artifacts use exclusive creation and are never replaced.
 
 ```text
 mosaic-benchmark validate [--cases confirmatory-cases.json --n-final <N>] \
-  [--schedule schedule.json] [--prices prices.json] \
+  [--schedule schedule.json] [--prices prices.json] [--index index.json] \
   [--pilot-scores pilot-scores.json] [--calibration calibration.json] \
-  [--power-config power-config.json --power-result power-result.json]
+  [--power-config power-config.json --power-approval approval.json \
+   --power-result power-result.json]
 mosaic-benchmark conformance
 mosaic-benchmark pilot --study-id <id> --seed <seed> [--output schedule.json]
 mosaic-benchmark calibrate-models --input calibration-input.json \
@@ -91,13 +92,20 @@ mosaic-benchmark calibrate-models --input calibration-input.json \
 mosaic-benchmark power --config power-config.json \
   --image '<repository>@sha256:<digest>' --work-dir verification \
   --result power.json
+mosaic-benchmark index --artifacts setup-root --prices prices.json \
+  --candidate-model <model-id> --yes-paid-probes --yes-paid-setup
 mosaic-benchmark freeze --input freeze-input.json --path freeze.json \
   --pilot-scores pilot-scores.json --calibration calibration.json \
-  --power-config power-config.json --power-result power-result.json \
+  --calibration-audit calibration-audit.json \
+  --confirmatory-audit confirmatory-audit.json --cost-approval cost.json \
+  --power-config power-config.json --power-approval approval.json \
+  --power-result power-result.json \
   --cases confirmatory-cases.json --schedule confirmatory-schedule.json \
-  --prices prices.json --image '<repository>@sha256:<digest>'
+  --prices prices.json --index index.json \
+  --image '<repository>@sha256:<digest>'
 mosaic-benchmark run --schedule schedule.json --artifacts artifacts \
-  --prices prices.json [--cases cases.json] [--freeze freeze.json] [--resume]
+  --prices prices.json --index index.json \
+  [--cases cases.json] [--freeze freeze.json] [--resume]
 mosaic-benchmark score --schedule schedule.json --artifacts artifacts \
   --family exploratory|primary|replication|sensitivity \
   [--cases cases.json] [--freeze freeze.json] \
@@ -115,10 +123,10 @@ mosaic-benchmark package --input package-plan.json
 `validate` returns the canonical hashes for the local protocol, schemas,
 catalog, tools, pilot cases, conditions, prompts, R implementation, and
 `renv.lock`. With study artifacts supplied, it also validates and returns the
-confirmatory-case, paired-seed, price, pilot-score, calibration, power-config,
-and power-result hashes required by the freeze. `--power-config` and
-`--power-result` are an inseparable pair: the first binds the simulation input
-bytes and the second binds the published result bytes.
+confirmatory-case, paired-seed, price, retrieval-index, pilot-score,
+calibration, approvals, power-config, and power-result hashes required by the
+freeze. `--power-config`, `--power-approval`, and `--power-result` are an
+inseparable triple.
 
 `calibrate-models` accepts one independent 60-case calibration corpus plus the
 complete 180-row M1 score sets for Luna and the candidate. It verifies the
@@ -135,24 +143,50 @@ data.
 {
   "schemaVersion": 1,
   "currency": "USD",
-  "capturedAt": "2026-08-08T00:00:00.000Z",
-  "source": "https://provider.example/pricing",
   "models": {
     "openai/gpt-5.6-luna": {
-      "inputPerMillion": 1.25,
-      "outputPerMillion": 10,
-      "cachedInputPerMillion": 0.125,
-      "perRequest": 0
+      "kind": "completion",
+      "capturedAt": "2026-08-09T00:00:00.000Z",
+      "source": "https://provider.example/pricing/luna",
+      "charges": [
+        { "unit": "input-token", "quantity": 1000000, "priceUsd": 1.25 },
+        {
+          "unit": "cached-input-token",
+          "quantity": 1000000,
+          "priceUsd": 0.125
+        },
+        { "unit": "output-token", "quantity": 1000000, "priceUsd": 10 }
+      ]
     },
     "voyageai/voyage-4-large": {
-      "perRequest": 0.001
+      "kind": "embedding",
+      "capturedAt": "2026-08-09T00:00:00.000Z",
+      "source": "https://provider.example/pricing/voyage-4-large",
+      "charges": [
+        {
+          "unit": "embedding-input-token",
+          "quantity": 1000000,
+          "priceUsd": 0.12
+        }
+      ]
     },
     "voyageai/rerank-2.5-lite": {
-      "perRequest": 0.001
+      "kind": "rerank",
+      "capturedAt": "2026-08-09T00:00:00.000Z",
+      "source": "https://provider.example/pricing/rerank-2.5-lite",
+      "charges": [
+        { "unit": "rerank-input-token", "quantity": 1000000, "priceUsd": 0.05 }
+      ]
     }
   }
 }
 ```
+
+`index` performs free metadata checks first and runs no paid probe without both
+acknowledgements. Its immutable setup attempt records exact usage and cost;
+resuming reuses completed vectors, while an unresolved paid boundary stops for
+audited recovery. `run` requires that content-addressed index and meters only
+queries/reranks in each run.
 
 `run --resume` retries only a technical failure before the first model call.
 Once any model call begins, an interruption is terminal and remains in the

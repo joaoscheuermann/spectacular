@@ -515,17 +515,62 @@ network authority. Model credentials remain runtime-only inputs and are never
 written to cases, freeze manifests, traces, scores, reviews, or reports. Its
 command-line surface reserves stdout for one JSON result and renders progress
 only on stderr.
+
+Benchmark case sources are human-authored drafts compiled without a model into
+frozen `CaseV1` artifacts. The compiler derives tool evidence, expected world
+state, required effects, canonical delivery fields, composition, and all
+content hashes from the deterministic fixture and tool catalogs. Every gold
+criterion names observable evidence, and delivery succeeds only when one
+non-contradictory JSON document equals the canonical expected document; skill
+selection, bundle shape, and revision behavior remain diagnostics rather than
+delivery requirements. Structural compilation can reject inconsistent cases,
+but neutrality, difficulty, independence, and answer leakage remain explicit
+human audit responsibilities.
+
+All primary benchmark conditions share the frozen maximum turn count and two
+structured-repair retries, and skill-bearing conditions consume the same
+body-aware hybrid retrieval and reranking boundary. Condition factors record
+those controls and the remaining declared treatment differences. Study seeds
+determine schedules, order, deterministic shuffles, and benchmark hooks only;
+they are not claimed to control provider-side sampling. Each paid execution
+reserves an immutable run attempt before its first side effect. Reservations,
+metered response usage, hash-chained events, derived traces, and terminal
+records are durable artifacts, and resume deterministically converts an
+interrupted reserved attempt into an infrastructure outcome before deciding
+whether the run may be retried.
+
+The study builds its production retrieval index once as an immutable,
+content-addressed setup artifact bound to the exact catalog views, embedder,
+dimension, and algorithm. The freeze manifest pins that index hash and each run
+refuses mismatched bytes. Setup embedding usage is journaled and reported
+separately; per-run embedding, rerank, and completion usage is captured from
+authenticated provider responses before it is reduced to public provider
+results. Frozen USD price snapshots declare model kind, capture time, source,
+positive unit charges, quantities, and contiguous context tiers where
+applicable. Missing or zero price coverage for any active model is invalid.
+Capabilities provable from free model metadata are rejected before paid work;
+remaining capability probes are explicit, opt-in, metered setup calls and are
+never silently repeated after an unresolved paid boundary.
+
 The executable `benchmarks/mosaic/scripts/study.mjs` is the resumable official
-computational-study orchestrator. It requires an exact version-one config, an
-external artifact root, an immutable analysis-image digest, runtime-only
-OpenRouter credentials, and explicit `--yes-paid-study` acknowledgement.
-Before paid work it pins byte-exact copies of every authored input and runs the
-repository, instrument, container, price, case, and isolation gates. Stages
+computational-study orchestrator. Its `--prepare` mode pins byte-exact authored
+inputs, verifies the repository, instrument, container, capabilities, prices,
+case corpus, approvals, resource envelope, and isolation gates, builds the
+index, and runs only the pilot, calibration, and resumable power analysis. It
+then stops with an immutable preparation result and final sample size. A
+separate `--continue` config under the same study identity must supply exactly
+that many independently authored and audited confirmatory cases before freeze,
+primary, replication, sensitivity, scoring, and R analysis may run. Both paid
+modes require an external artifact root, an immutable analysis-image digest,
+runtime-only OpenRouter credentials, and explicit `--yes-paid-study`
+acknowledgement. Human corpus, price/cost, and power approvals are
+content-hash-bound inputs and are never synthesized by the orchestrator. The
+no-cost `--check-readiness` mode aggregates independent implementation, human,
+and operational blockers instead of stopping at the first failure. Stages
 resume only from a valid CLI receipt plus every declared output; orphan or
-changed artifacts stop the study. The orchestrator covers pilot, calibration,
-power, freeze, primary, replication, sensitivity, scoring, and R analysis;
-failure-only oracles, the two-pass blinded human review, and publication
-package selection remain explicit post-study protocols.
+changed artifacts stop the study. Failure-only oracles, the two-pass blinded
+human review, and publication-package selection remain explicit post-study
+protocols.
 The version-one study contract retains one model and effort per run; the
 benchmark adapter maps that same profile to all three Mosaic stages and keeps
 the frozen `medium` effort, so production model specialization does not alter

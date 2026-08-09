@@ -125,12 +125,14 @@ export const runSchedule = async (
   schedule: readonly RunSpec[],
   options: {
     readonly resume: boolean;
+    readonly recover?: (run: RunSpec) => Promise<void>;
     readonly readAttempts: (
       runId: string,
     ) => Promise<readonly ExecutionRecord[]>;
     readonly execute: (run: RunSpec) => Promise<ExecutionRecord>;
   },
 ): Promise<readonly ScheduledRunResult[]> => {
+  for (const run of schedule) await options.recover?.(run);
   const plan = await planResume(schedule, options.readAttempts);
   if (!options.resume && plan.some((entry) => entry.action !== 'run')) {
     throw new TypeError('existing attempts require --resume');

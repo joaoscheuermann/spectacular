@@ -20,6 +20,80 @@ export interface CaseIssue {
   readonly detail: string;
 }
 
+const pathValue = (value: unknown, path: readonly string[]): unknown => {
+  let current = value;
+  for (const segment of path) {
+    if (
+      typeof current !== 'object' ||
+      current === null ||
+      Array.isArray(current) ||
+      !Object.hasOwn(current, segment)
+    ) {
+      return undefined;
+    }
+    current = (current as Readonly<Record<string, unknown>>)[segment];
+  }
+  return current;
+};
+
+const evidenceIssues = (entry: Case): readonly CaseIssue[] => {
+  const expected = [
+    ...entry.gold.expectedState.toolEvidence.map(({ id }) => id),
+    ...entry.gold.expectedDelivery.fields.map(({ id }) => id),
+  ];
+  const known = new Set(expected);
+  const issues: CaseIssue[] = [];
+  if (known.size !== expected.length) {
+    issues.push({
+      code: 'duplicate_evidence_id',
+      caseId: entry.id,
+      detail: 'evidence IDs must be unique across tools and delivery fields',
+    });
+  }
+  const criterionIds = entry.gold.criteria.map(({ id }) => id);
+  if (new Set(criterionIds).size !== criterionIds.length) {
+    issues.push({
+      code: 'duplicate_criterion_id',
+      caseId: entry.id,
+      detail: 'criterion IDs must be unique',
+    });
+  }
+  entry.gold.criteria.forEach((criterion) => {
+    criterion.evidenceRefs
+      .filter((reference) => !known.has(reference))
+      .forEach((reference) => {
+        issues.push({
+          code: 'unknown_evidence_ref',
+          caseId: entry.id,
+          detail: `${criterion.id}:${reference}`,
+        });
+      });
+  });
+  const paths = entry.gold.expectedDelivery.fields.map(({ path }) =>
+    path.join('\u0000'),
+  );
+  if (new Set(paths).size !== paths.length) {
+    issues.push({
+      code: 'duplicate_delivery_path',
+      caseId: entry.id,
+      detail: 'delivery field paths must be unique',
+    });
+  }
+  entry.gold.expectedDelivery.fields
+    .filter(
+      ({ path }) =>
+        pathValue(entry.gold.expectedDelivery.document, path) === undefined,
+    )
+    .forEach(({ id }) => {
+      issues.push({
+        code: 'missing_delivery_field',
+        caseId: entry.id,
+        detail: id,
+      });
+    });
+  return issues;
+};
+
 const validClassComposition = (entry: Case): boolean => {
   const skills = entry.gold.requiredSkills.length;
   const tools = entry.gold.requiredTools.length;
@@ -193,6 +267,17 @@ export const validateCases = (
         detail: 'revision requires an explicit tool observation trigger',
       });
     }
+    issues.push(...evidenceIssues(entry));
+    if (
+      entry.fixtureIds.length !== 1 ||
+      entry.fixtureIds[0] !== entry.gold.expectedState.fixtureId
+    ) {
+      issues.push({
+        code: 'fixture_binding',
+        caseId: entry.id,
+        detail: 'case fixture IDs must bind the expected world fixture',
+      });
+    }
     if (!validExpectedExecution(entry)) {
       issues.push({
         code: 'expected_execution',
@@ -234,6 +319,34 @@ export const validateCases = (
     });
   return issues;
 };
+
+/** Validates the complete balanced calibration corpus without paid calls. */
+export const validateCalibrationCases = (
+  cases: readonly Case[],
+  pilot: readonly Case[],
+  confirmatory: readonly Case[] = [],
+  skills: readonly MicroSkill[] = SKILLS,
+): readonly CaseIssue[] => [
+  ...validateCases(cases, skills).map((issue) =>
+    issue.code === 'pilot_cardinality'
+      ? { ...issue, code: 'calibration_cardinality' }
+      : issue,
+  ),
+  ...cases
+    .filter(({ phase }) => phase !== 'calibration')
+    .map((entry) => ({
+      code: 'calibration_phase',
+      caseId: entry.id,
+      detail: entry.phase,
+    })),
+  ...validateFamilyIsolation(pilot, cases),
+  ...(confirmatory.length === 0
+    ? []
+    : validateFamilyIsolation(cases, confirmatory).map((issue) => ({
+        ...issue,
+        code: `confirmatory_${issue.code}`,
+      }))),
+];
 
 /** Validates a frozen confirmatory corpus against the 6-by-4 balanced design. */
 export const validateConfirmatoryCases = (

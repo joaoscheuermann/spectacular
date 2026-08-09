@@ -20,7 +20,7 @@ export const repoRoot = resolve(benchmarkRoot, '../..');
 const cliPath = join(benchmarkRoot, 'dist/src/cli.js');
 const apiPath = join(benchmarkRoot, 'dist/src/index.js');
 
-export const template = {
+const completeTemplate = {
   schemaVersion: 1,
   studyId: 'mosaic-study-001',
   root: '/absolute/path/to/mosaic-study-001',
@@ -34,8 +34,12 @@ export const template = {
   files: {
     prices: '/absolute/path/to/prices.json',
     calibrationCases: '/absolute/path/to/calibration-cases.json',
+    calibrationAudit: '/absolute/path/to/calibration-audit.json',
     confirmatoryCases: '/absolute/path/to/confirmatory-cases.json',
+    confirmatoryAudit: '/absolute/path/to/confirmatory-audit.json',
+    costApproval: '/absolute/path/to/cost-approval.json',
     powerConfig: '/absolute/path/to/power-config.json',
+    powerApproval: '/absolute/path/to/power-approval.json',
   },
   seeds: {
     pilot: 'pilot-seed-001',
@@ -45,19 +49,34 @@ export const template = {
   },
 };
 
-export const usage = `Usage:
-  node benchmarks/mosaic/scripts/study.mjs --print-config
-  node benchmarks/mosaic/scripts/study.mjs --validate-config <study.json>
-  node benchmarks/mosaic/scripts/study.mjs --config <study.json> --yes-paid-study
+export const templateFor = (stage = 'prepare') => {
+  if (stage !== 'prepare' && stage !== 'continue') fail('invalid study stage');
+  const files = { ...completeTemplate.files };
+  if (stage === 'prepare') {
+    delete files.confirmatoryCases;
+    delete files.confirmatoryAudit;
+  }
+  return { ...completeTemplate, files };
+};
 
-The analysis image must already exist by immutable digest. Calibration and
-confirmatory cases, prices, and the power config are human-authored inputs.
-The primary model is frozen as openai/gpt-5.6-luna at medium effort and is not
-configured here. candidate is the required non-OpenAI replication model.
-The command runs all deterministic gates, paid schedules, scoring, freeze,
-replication, sensitivity, and R analyses. It is resumable and never deletes
-an existing attempt. Blinded human review and publication packaging remain
-explicit post-study steps.`;
+export const template = templateFor('prepare');
+
+export const usage = `Usage:
+  node benchmarks/mosaic/scripts/study.mjs --print-config [--stage prepare|continue]
+  node benchmarks/mosaic/scripts/study.mjs --validate-config <study.json> --stage prepare|continue
+  node benchmarks/mosaic/scripts/study.mjs --check-readiness <study.json> --stage prepare|continue
+  node benchmarks/mosaic/scripts/study.mjs --prepare <study.json> --yes-paid-study
+  node benchmarks/mosaic/scripts/study.mjs --continue <study.json> --yes-paid-study
+
+The analysis image must already exist by immutable digest. Cases, corpus
+audits, prices, cost approval, power config, and power approval are authored
+inputs. The primary model is frozen as openai/gpt-5.6-luna at medium effort;
+candidate is the required non-OpenAI replication model. prepare stops after
+pilot, calibration, and resumable power analysis. continue requires the exact
+independently authored nFinal confirmatory corpus before freeze and paid
+families. Both modes are resumable and never delete an existing attempt.
+Blinded human review and publication packaging remain explicit post-study
+steps.`;
 
 export const fail = (message) => {
   throw new Error(message);
@@ -92,8 +111,11 @@ export const exists = async (path) =>
 
 export const parseArgs = (argv) => {
   const result = {
-    config: undefined,
+    prepare: undefined,
+    continue: undefined,
     validate: undefined,
+    readiness: undefined,
+    stage: undefined,
     paid: false,
     help: false,
     print: false,
@@ -109,14 +131,34 @@ export const parseArgs = (argv) => {
     } else if (arg === '--print-config') {
       if (result.print) fail('duplicate argument: --print-config');
       result.print = true;
-    } else if (arg === '--config' || arg === '--validate-config') {
+    } else if (
+      arg === '--prepare' ||
+      arg === '--continue' ||
+      arg === '--validate-config' ||
+      arg === '--check-readiness' ||
+      arg === '--stage'
+    ) {
       const value = argv[(index += 1)];
       if (value === undefined || value.startsWith('--')) {
         fail(`${arg} requires a path`);
       }
-      if (arg === '--config') {
-        if (result.config !== undefined) fail('duplicate argument: --config');
-        result.config = value;
+      if (arg === '--prepare') {
+        if (result.prepare !== undefined) fail('duplicate argument: --prepare');
+        result.prepare = value;
+      } else if (arg === '--continue') {
+        if (result.continue !== undefined)
+          fail('duplicate argument: --continue');
+        result.continue = value;
+      } else if (arg === '--check-readiness') {
+        if (result.readiness !== undefined)
+          fail('duplicate argument: --check-readiness');
+        result.readiness = value;
+      } else if (arg === '--stage') {
+        if (result.stage !== undefined) fail('duplicate argument: --stage');
+        if (value !== 'prepare' && value !== 'continue') {
+          fail('--stage must be prepare or continue');
+        }
+        result.stage = value;
       } else {
         if (result.validate !== undefined) {
           fail('duplicate argument: --validate-config');
@@ -129,19 +171,31 @@ export const parseArgs = (argv) => {
     result.help,
     result.print,
     result.validate !== undefined,
+    result.readiness !== undefined,
+    result.prepare !== undefined,
+    result.continue !== undefined,
   ].filter(Boolean).length;
-  if (
-    modes > 1 ||
-    (modes > 0 && (result.config !== undefined || result.paid))
-  ) {
+  if (modes > 1) {
     fail(
-      'help, print, validation, and paid execution modes cannot be combined',
+      'help, print, validation, readiness, prepare, and continue modes cannot be combined',
     );
+  }
+  const paidMode =
+    result.prepare !== undefined || result.continue !== undefined;
+  if (result.paid && !paidMode) fail('--yes-paid-study requires a paid mode');
+  if (result.stage !== undefined && paidMode) {
+    fail('--stage is implied by --prepare or --continue');
+  }
+  if (
+    (result.validate !== undefined || result.readiness !== undefined) &&
+    result.stage === undefined
+  ) {
+    fail('--stage is required for validation and readiness');
   }
   return result;
 };
 
-const fields = (value) => {
+const fields = (value, stage) => {
   const input = object(value, 'config');
   exactKeys(
     input,
@@ -161,11 +215,27 @@ const fields = (value) => {
   const files = object(input.files, 'config.files');
   const seeds = object(input.seeds, 'config.seeds');
   const candidate = object(input.candidate, 'config.candidate');
-  exactKeys(
-    files,
-    ['prices', 'calibrationCases', 'confirmatoryCases', 'powerConfig'],
-    'config.files',
-  );
+  const fileNames =
+    stage === 'prepare'
+      ? [
+          'prices',
+          'calibrationCases',
+          'calibrationAudit',
+          'costApproval',
+          'powerConfig',
+          'powerApproval',
+        ]
+      : [
+          'prices',
+          'calibrationCases',
+          'calibrationAudit',
+          'confirmatoryCases',
+          'confirmatoryAudit',
+          'costApproval',
+          'powerConfig',
+          'powerApproval',
+        ];
+  exactKeys(files, fileNames, 'config.files');
   exactKeys(
     seeds,
     [
@@ -177,10 +247,10 @@ const fields = (value) => {
     'config.seeds',
   );
   exactKeys(candidate, ['provider', 'model', 'effort'], 'config.candidate');
-  return { input, files, seeds, candidate };
+  return { input, files, seeds, candidate, fileNames };
 };
 
-const materializeFields = ({ input, files, seeds, candidate }) => ({
+const materializeFields = ({ input, files, seeds, candidate, fileNames }) => ({
   schemaVersion: 1,
   studyId: string(input.studyId, 'config.studyId'),
   root: string(input.root, 'config.root'),
@@ -192,9 +262,10 @@ const materializeFields = ({ input, files, seeds, candidate }) => ({
     effort: string(candidate.effort, 'config.candidate.effort'),
   },
   files: Object.fromEntries(
-    ['prices', 'calibrationCases', 'confirmatoryCases', 'powerConfig'].map(
-      (name) => [name, string(files[name], `config.files.${name}`)],
-    ),
+    fileNames.map((name) => [
+      name,
+      string(files[name], `config.files.${name}`),
+    ]),
   ),
   seeds: Object.fromEntries(
     [
@@ -243,8 +314,9 @@ const validateProtocol = (config) => {
 };
 
 /** Validates the complete trust-boundary config without starting a study. */
-export const validateConfig = async (value) => {
-  const config = materializeFields(fields(value));
+export const validateConfig = async (value, stage = 'continue') => {
+  if (stage !== 'prepare' && stage !== 'continue') fail('invalid study stage');
+  const config = materializeFields(fields(value, stage));
   validateIdentity(config);
   validateProtocol(config);
   for (const path of Object.values(config.files)) {
@@ -257,50 +329,6 @@ export const validateConfig = async (value) => {
     }
   }
   return config;
-};
-
-export const pathsFor = (root) => ({
-  inputs: join(root, 'inputs'),
-  preflight: join(root, 'preflight'),
-  pilot: join(root, 'pilot'),
-  calibration: join(root, 'calibration'),
-  power: join(root, 'power'),
-  freeze: join(root, 'freeze'),
-  schedules: join(root, 'schedules'),
-  primary: join(root, 'primary'),
-  replication: join(root, 'replication'),
-  sensitivity: join(root, 'sensitivity'),
-  analysisConfig: join(root, 'analysis', 'config'),
-  final: join(root, 'final'),
-});
-
-const copyExact = async (source, destination) => {
-  const bytes = await readFile(source);
-  if (await exists(destination)) {
-    if (!bytes.equals(await readFile(destination))) {
-      fail(`immutable study input differs: ${destination}`);
-    }
-    return;
-  }
-  await mkdir(dirname(destination), { recursive: true });
-  await writeFile(destination, bytes, { flag: 'wx', mode: 0o600 });
-};
-
-/** Copies every scientific input once so it cannot drift during long runs. */
-export const materializeInputs = async (config, configPath, paths) => {
-  const destinations = {
-    prices: join(paths.inputs, 'prices.json'),
-    calibrationCases: join(paths.inputs, 'calibration-cases.json'),
-    confirmatoryCases: join(paths.inputs, 'confirmatory-cases.json'),
-    powerConfig: join(paths.inputs, 'power-config.json'),
-  };
-  await copyExact(configPath, join(paths.inputs, 'study.json'));
-  await Promise.all(
-    Object.entries(config.files).map(([name, source]) =>
-      copyExact(source, destinations[name]),
-    ),
-  );
-  return { ...config, files: destinations };
 };
 
 /** Loads the built benchmark API only after the preflight build succeeds. */

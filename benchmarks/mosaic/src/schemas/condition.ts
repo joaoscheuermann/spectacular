@@ -1,6 +1,11 @@
 import { z } from 'zod';
 
-import { Id, NonNegativeInteger, SchemaVersion } from './common.js';
+import {
+  Id,
+  NonNegativeInteger,
+  PositiveInteger,
+  SchemaVersion,
+} from './common.js';
 
 export const ConditionFactorsV1 = z
   .object({
@@ -8,12 +13,15 @@ export const ConditionFactorsV1 = z
     catalogFeedback: z.boolean(),
     skillView: z.enum(['none', 'metadata', 'body']),
     retrieval: z.enum(['none', 'top-k', 'oracle']),
+    maxCandidates: PositiveInteger.nullable(),
     maxSkills: NonNegativeInteger.nullable(),
     bundle: z.enum(['none', 'single', 'selective', 'top-k', 'oracle']),
     bundleOrder: z.enum(['not-applicable', 'ranked', 'shuffled']),
     menu: z.enum(['global', 'declared', 'base-plus-bundle', 'oracle']),
     baseTools: z.boolean(),
     localizedRevision: z.boolean(),
+    maxTurns: PositiveInteger,
+    structuredRepairRetries: NonNegativeInteger,
   })
   .strict();
 

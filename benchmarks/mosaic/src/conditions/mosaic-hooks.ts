@@ -339,8 +339,9 @@ export const evaluationHooks = (
                   }),
                 ),
                 result: {
-                  markdown:
-                    benchmarkCase.gold.expectedDelivery.contains.join(' '),
+                  markdown: JSON.stringify(
+                    benchmarkCase.gold.expectedDelivery.document,
+                  ),
                   artifacts: [],
                 },
                 revisionRequest: null,

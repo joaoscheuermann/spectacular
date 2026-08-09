@@ -61,7 +61,12 @@ test('power simulation and report consume every registered provenance parameter'
     readFile('benchmarks/mosaic/analysis/report.R', 'utf8'),
   ]);
 
-  assert.match(powerSource, /configHash = sha256_file\(args\[\[1\]\]\)/);
+  assert.match(powerSource, /configHash = config_hash/);
+  assert.match(powerSource, /checkpoint_path <- args\[\[3\]\]/);
+  assert.match(
+    powerSource,
+    /randomSeed = as\.list\(as\.integer\(\.Random\.seed\)\)/,
+  );
   assert.match(powerSource, /classes = as\.list\(adaptive_classes\)/);
   for (const field of [
     'numericSeed',
@@ -221,7 +226,10 @@ test('power verifier uses the same immutable offline two-run gate', async () => 
   assert.match(script, /--pull never/);
   assert.match(script, /--read-only/);
   assert.match(script, /--tmpfs \/tmp:rw,noexec,nosuid,size=256m/);
-  assert.match(script, /run_once power-1\.json\nrun_once power-2\.json/);
+  assert.match(
+    script,
+    /run_once power-1\.json power-1\.checkpoint\.json[\s\S]*run_once power-2\.json power-2\.checkpoint\.json/,
+  );
   assert.match(script, /cmp .*power-1\.json.*power-2\.json/);
   assert.match(script, /power-1\.json.*power-2\.json.*SHA256SUMS/s);
 });

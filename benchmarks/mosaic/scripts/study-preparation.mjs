@@ -3,99 +3,16 @@ import { join } from 'node:path';
 import {
   cleanCommit,
   cli,
-  execute,
   fail,
   readJson,
   writeJson,
 } from './study-runtime.mjs';
+import {
+  validateHumanApproval,
+  validatePowerApproval,
+} from './study-approvals.mjs';
 
 const scorePath = (root) => join(root, 'scores.json');
-
-export const preflight = async (context) => {
-  await cleanCommit();
-  const gates = [
-    ['sync', ['nx', 'sync']],
-    ['projects', ['nx', 'show', 'projects']],
-    [
-      'typecheck',
-      [
-        'nx',
-        'run-many',
-        '-t',
-        'typecheck',
-        '-p',
-        'agent,mosaic,mosaic-benchmark',
-        '--parallel=2',
-      ],
-    ],
-    [
-      'build',
-      [
-        'nx',
-        'run-many',
-        '-t',
-        'build',
-        '-p',
-        'agent,mosaic,mosaic-benchmark',
-        '--parallel=1',
-      ],
-    ],
-    [
-      'test',
-      [
-        'nx',
-        'run-many',
-        '-t',
-        'test',
-        '-p',
-        'agent,mosaic,mosaic-benchmark',
-        '--parallel=1',
-      ],
-    ],
-    ['schemas', ['nx', 'run', 'mosaic-benchmark:schemas']],
-  ];
-  for (const [label, args] of gates) await execute('npx', args, { label });
-  await cli({
-    label: 'validate instrument',
-    args: ['validate'],
-    receipt: join(context.paths.preflight, 'validate.json'),
-  });
-  await cli({
-    label: 'conformance',
-    args: ['conformance'],
-    receipt: join(context.paths.preflight, 'conformance.json'),
-  });
-  await execute('git', ['diff', '--check'], { label: 'git diff check' });
-  await execute('docker', ['image', 'inspect', context.config.analysisImage], {
-    label: 'analysis image check',
-  });
-  await execute(
-    'docker',
-    [
-      'run',
-      '--rm',
-      '--pull',
-      'never',
-      '--network',
-      'none',
-      '--read-only',
-      '--cap-drop',
-      'ALL',
-      '--security-opt',
-      'no-new-privileges',
-      '--tmpfs',
-      '/tmp:rw,noexec,nosuid,size=256m',
-      '--env',
-      'TMPDIR=/tmp',
-      '--user',
-      `${process.getuid()}:${process.getgid()}`,
-      context.config.analysisImage,
-      '/benchmark/analysis/test-analysis.R',
-    ],
-    { label: 'R container test' },
-  );
-  context.commit = await cleanCommit();
-};
 
 const caseFile = async (context, path) =>
   (await readJson(path)).map((value) => context.api.CaseV1.parse(value));
@@ -112,9 +29,25 @@ export const validateAuthoredInputs = async (context) => {
     context,
     context.config.files.calibrationCases,
   );
-  const confirmatoryCases = await caseFile(
+  validateHumanApproval(
     context,
-    context.config.files.confirmatoryCases,
+    await readJson(context.config.files.calibrationAudit),
+    {
+      subject: 'calibration-corpus',
+      artifact: calibrationCases,
+      checks: [
+        'english',
+        'neutrality',
+        'difficulty',
+        'no-answer-marker',
+        'procedural-equivalence',
+        'overlap',
+        'distractors',
+        'conflicts',
+        'phase-isolation',
+      ],
+      maximumCost: false,
+    },
   );
   issue('calibration cases', context.api.study.validateCases(calibrationCases));
   issue(
@@ -127,27 +60,66 @@ export const validateAuthoredInputs = async (context) => {
   if (calibrationCases.some(({ phase }) => phase !== 'calibration')) {
     fail('calibration cases must use the calibration phase');
   }
-  issue(
-    'confirmatory cases',
-    context.api.study.validateConfirmatoryCases(
-      confirmatoryCases,
-      context.api.study.PILOT_CASES,
-      confirmatoryCases.length,
-    ),
-  );
-  issue(
-    'calibration/confirmatory isolation',
-    context.api.study.validateFamilyIsolation(
-      calibrationCases,
-      confirmatoryCases,
-    ),
-  );
+  const confirmatoryCases =
+    context.config.files.confirmatoryCases === undefined
+      ? undefined
+      : await caseFile(context, context.config.files.confirmatoryCases);
+  if (confirmatoryCases !== undefined) {
+    validateHumanApproval(
+      context,
+      await readJson(context.config.files.confirmatoryAudit),
+      {
+        subject: 'confirmatory-corpus',
+        artifact: confirmatoryCases,
+        checks: [
+          'english',
+          'neutrality',
+          'independence',
+          'no-answer-marker',
+          'balance',
+          'phase-isolation',
+        ],
+        maximumCost: false,
+      },
+    );
+    issue(
+      'confirmatory cases',
+      context.api.study.validateConfirmatoryCases(
+        confirmatoryCases,
+        context.api.study.PILOT_CASES,
+        confirmatoryCases.length,
+      ),
+    );
+    issue(
+      'calibration/confirmatory isolation',
+      context.api.study.validateFamilyIsolation(
+        calibrationCases,
+        confirmatoryCases,
+      ),
+    );
+  }
   await cli({
     label: 'validate prices',
     args: ['validate', '--prices', context.config.files.prices],
     receipt: join(context.paths.preflight, 'prices.json'),
   });
   const prices = await readJson(context.config.files.prices);
+  validateHumanApproval(
+    context,
+    await readJson(context.config.files.costApproval),
+    {
+      subject: 'study-cost',
+      artifact: prices,
+      checks: [
+        'setup-cost-included',
+        'run-cost-estimated',
+        'credit-confirmed',
+        'rate-limits-confirmed',
+        'maximum-cost-approved',
+      ],
+      maximumCost: true,
+    },
+  );
   const requiredModels = [
     context.api.config.PRIMARY_MODEL.model,
     context.config.candidate.model,
@@ -161,9 +133,14 @@ export const validateAuthoredInputs = async (context) => {
   ) {
     fail('prices must include the primary, candidate, embedder, and reranker');
   }
+  const powerConfig = await readJson(context.config.files.powerConfig);
+  const approval = await readJson(context.config.files.powerApproval);
+  validatePowerApproval(context, powerConfig, approval);
   context.cases = {
     calibration: calibrationCases,
-    confirmatory: confirmatoryCases,
+    ...(confirmatoryCases === undefined
+      ? {}
+      : { confirmatory: confirmatoryCases }),
   };
 };
 
@@ -173,6 +150,8 @@ export const runAndScore = async (context, phase) => {
     phase.schedule,
     '--artifacts',
     join(phase.root, 'artifacts'),
+    '--index',
+    context.index.path,
   ];
   const cases = phase.cases ? ['--cases', phase.cases] : [];
   const freeze = phase.freeze ? ['--freeze', phase.freeze] : [];
@@ -370,6 +349,16 @@ export const prepareFreeze = async (context, powerResult) => {
       context.config.files.powerConfig,
       '--power-result',
       join(context.paths.power, 'power-result.json'),
+      '--power-approval',
+      context.config.files.powerApproval,
+      '--calibration-audit',
+      context.config.files.calibrationAudit,
+      '--confirmatory-audit',
+      context.config.files.confirmatoryAudit,
+      '--cost-approval',
+      context.config.files.costApproval,
+      '--index',
+      context.index.path,
     ],
     receipt: join(context.paths.freeze, 'validate.json'),
   });
@@ -441,6 +430,16 @@ export const freeze = async (context, prepared) => {
       context.config.files.prices,
       '--image',
       context.config.analysisImage,
+      '--power-approval',
+      context.config.files.powerApproval,
+      '--calibration-audit',
+      context.config.files.calibrationAudit,
+      '--confirmatory-audit',
+      context.config.files.confirmatoryAudit,
+      '--cost-approval',
+      context.config.files.costApproval,
+      '--index',
+      context.index.path,
     ],
     receipt: join(context.paths.freeze, 'command.json'),
     outputs: [resultPath],

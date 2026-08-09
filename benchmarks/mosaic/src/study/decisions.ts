@@ -108,8 +108,8 @@ export const DECISIONS: readonly Decision[] = [
   ),
   decision(
     'D20',
-    'Condition runs remain paired inside case/repetition blocks.',
-    'D20 pairs condition order and seed by case repetition',
+    'Condition runs share order and deterministic-hook seeds inside case/repetition blocks; provider sampling is unseeded.',
+    'D20 scopes paired seeds to condition order and deterministic hooks',
   ),
   decision(
     'D21',

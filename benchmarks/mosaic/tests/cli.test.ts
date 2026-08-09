@@ -17,7 +17,11 @@ import {
   createRecordStore,
   executeRun,
 } from '../src/runtime/index.js';
-import { createSchedule, PILOT_CASES } from '../src/study/index.js';
+import {
+  PILOT_CASES,
+  canonicalDelivery,
+  createSchedule,
+} from '../src/study/index.js';
 
 const executeFile = promisify(execFile);
 const hash = `sha256:${'a'.repeat(64)}`;
@@ -91,14 +95,20 @@ test('frozen pricing is hashed and costs cached input separately', () => {
   const prices = parsePrices({
     schemaVersion: 1,
     currency: 'USD',
-    capturedAt: '2026-08-08T00:00:00.000Z',
-    source: 'https://example.test/prices',
     models: {
       model: {
-        inputPerMillion: 2,
-        cachedInputPerMillion: 1,
-        outputPerMillion: 4,
-        perRequest: 0,
+        kind: 'completion',
+        capturedAt: '2026-08-08T00:00:00.000Z',
+        source: 'https://example.test/prices/model',
+        charges: [
+          { unit: 'input-token', quantity: 1_000_000, priceUsd: 2 },
+          {
+            unit: 'cached-input-token',
+            quantity: 1_000_000,
+            priceUsd: 1,
+          },
+          { unit: 'output-token', quantity: 1_000_000, priceUsd: 4 },
+        ],
       },
     },
   });
@@ -243,12 +253,7 @@ test('score derives assertions only from the terminal record and verified trace'
         return {
           status: 'succeeded',
           outcome: {
-            goals: [
-              {
-                output:
-                  benchmarkCase.gold.expectedDelivery?.contains.join(' ') ?? '',
-              },
-            ],
+            goals: [{ output: canonicalDelivery(benchmarkCase) }],
           },
           usage: { inputTokens: 2, outputTokens: 1, costUsd: 0.01 },
         };

@@ -12,11 +12,12 @@ import { CaseV1 } from './case.js';
 import { ConditionV1 } from './condition.js';
 import { FreezeManifestV1 } from './freeze.js';
 import { ReviewAssignmentV1, ReviewV1 } from './review.js';
-import { ExecutionRecordV1, RunSpecV1 } from './run.js';
+import { AttemptReservationV1, ExecutionRecordV1, RunSpecV1 } from './run.js';
 import { ScoreRowV1 } from './score.js';
 
 export const schemasV1 = {
   AnalysisResultV1,
+  AttemptReservationV1,
   CaseV1,
   ConditionV1,
   ExecutionRecordV1,

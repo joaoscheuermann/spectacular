@@ -27,6 +27,8 @@ import type { CliInvocation } from './args.js';
 import { rejectUnknownFlags, requiredFlag } from './args.js';
 import { objectValue, readJson } from './io.js';
 import { parsePrices, pricesHash } from './pricing.js';
+import { validatePriceCoverage } from './pricing.js';
+import { loadProductionIndex } from './index-lifecycle.js';
 import { loadBenchmarkCases } from './run.js';
 import { fileHash, imageDigest, input } from './shared.js';
 import { verifiedCalibration } from './calibration.js';
@@ -192,11 +194,16 @@ export const freeze = async (invocation: CliInvocation): Promise<unknown> => {
     'path',
     'pilot-scores',
     'calibration',
+    'calibration-audit',
+    'confirmatory-audit',
+    'cost-approval',
     'power-config',
+    'power-approval',
     'power-result',
     'cases',
     'schedule',
     'prices',
+    'index',
     'image',
   ]);
   const raw = objectValue(await input(invocation), 'freeze input');
@@ -228,14 +235,30 @@ export const freeze = async (invocation: CliInvocation): Promise<unknown> => {
   ) {
     throw new Error('frozen replication calibration mismatch');
   }
+  const [calibrationAuditHash, confirmatoryAuditHash, costApprovalHash] =
+    await Promise.all([
+      fileHash(requiredFlag(invocation, 'calibration-audit')),
+      fileHash(requiredFlag(invocation, 'confirmatory-audit')),
+      fileHash(requiredFlag(invocation, 'cost-approval')),
+    ]);
+  if (
+    calibrationAuditHash !== proposed.artifactHashes.calibrationAudit ||
+    confirmatoryAuditHash !== proposed.artifactHashes.confirmatoryAudit ||
+    costApprovalHash !== proposed.artifactHashes.costApproval
+  ) {
+    throw new Error('frozen human approval hash mismatch');
+  }
 
   const powerConfigPath = requiredFlag(invocation, 'power-config');
+  const powerApprovalPath = requiredFlag(invocation, 'power-approval');
   const powerResultPath = requiredFlag(invocation, 'power-result');
   const powerConfigHash = await fileHash(powerConfigPath);
+  const powerApprovalHash = await fileHash(powerApprovalPath);
   const powerResult = PowerResultV1.parse(await readJson(powerResultPath));
   if (
     powerConfigHash !== proposed.artifactHashes.powerConfig ||
     powerResult.configHash !== powerConfigHash ||
+    powerApprovalHash !== proposed.artifactHashes.powerApproval ||
     (await fileHash(powerResultPath)) !== proposed.artifactHashes.powerResult ||
     powerResult.nPower !== proposed.nPower ||
     powerResult.nFinal !== proposed.nFinal ||
@@ -273,8 +296,18 @@ export const freeze = async (invocation: CliInvocation): Promise<unknown> => {
   const prices = parsePrices(
     await readJson(requiredFlag(invocation, 'prices')),
   );
+  validatePriceCoverage(prices, [
+    { model: proposed.primaryModel.model, kind: 'completion' },
+    { model: proposed.replication.candidate.model, kind: 'completion' },
+    { model: proposed.embedder.model, kind: 'embedding' },
+    { model: proposed.reranker, kind: 'rerank' },
+  ]);
   if (pricesHash(prices) !== proposed.artifactHashes.prices) {
     throw new Error('frozen price hash mismatch');
+  }
+  const index = await loadProductionIndex(requiredFlag(invocation, 'index'));
+  if (index.indexHash !== proposed.artifactHashes.retrievalIndex) {
+    throw new Error('frozen retrieval index hash mismatch');
   }
   const localHashes = await localInstrumentHashes();
   for (const name of Object.keys(localHashes) as (keyof typeof localHashes)[]) {

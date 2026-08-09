@@ -23,8 +23,13 @@ const ArtifactHashesV1 = z
     prices: Hash,
     seeds: Hash,
     calibration: Hash,
+    calibrationAudit: Hash,
+    confirmatoryAudit: Hash,
+    costApproval: Hash,
     powerConfig: Hash,
+    powerApproval: Hash,
     powerResult: Hash,
+    retrievalIndex: Hash,
     analysis: Hash,
     renvLock: Hash,
   })

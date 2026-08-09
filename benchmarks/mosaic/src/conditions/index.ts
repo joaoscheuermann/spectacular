@@ -6,3 +6,4 @@ export * from './matrix.js';
 export * from './mosaic.js';
 export * from './prompts.js';
 export * from './provider.js';
+export * from './retrieval.js';

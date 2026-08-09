@@ -1,33 +1,13 @@
-import type { Case } from '../schemas/index.js';
-import { CaseV1 } from '../schemas/index.js';
 import {
   SKILLS,
   type CatalogDomain,
   type MicroSkill,
 } from '../catalog/index.js';
-import { TOOL_NAMES, type ToolName } from '../config/index.js';
-import { artifactHash } from '../core/hash.js';
+import { type ToolName } from '../config/index.js';
 import type { JsonValue } from '../core/json.js';
-import { executeTool } from '../runtime/tools.js';
-import { createWorld, worldHash } from '../runtime/world.js';
+import { compileCaseDrafts } from './case-compiler.js';
 
 const CLASSES = ['A', 'B', 'C', 'D', 'E', 'F'] as const;
-const MUTATING_TOOLS: readonly ToolName[] = [
-  'write',
-  'artifact_publish',
-  'message_send',
-];
-
-const subjectFor = (skill: MicroSkill, number: number): string => {
-  void number;
-  const subject = {
-    'documents-finance': 'invoice-001 and ledger-001 in world-v1',
-    software: 'the reconcile symbol and api component in world-v1',
-    artifacts: 'the report template in world-v1',
-    communication: 'alice and msg-000 in world-v1',
-  } satisfies Record<CatalogDomain, string>;
-  return subject[skill.domain];
-};
 
 const related = (
   skill: MicroSkill,
@@ -43,18 +23,10 @@ const supportSkills = (skill: MicroSkill): readonly MicroSkill[] => {
       (relation) =>
         relation.kind === 'equivalent' || relation.kind === 'overlap',
     )
-    .map((relation) =>
-      SKILLS.find((candidate) => candidate.id === relation.skillId),
-    )
-    .filter((candidate): candidate is MicroSkill => candidate !== undefined);
-  const blocked = new Set(
-    skill.relations
-      .filter(
-        (relation) =>
-          relation.kind === 'conflict' || relation.kind === 'distractor',
-      )
-      .map((relation) => relation.skillId),
-  );
+    .flatMap((relation) =>
+      SKILLS.filter((candidate) => candidate.id === relation.skillId),
+    );
+  const blocked = new Set(related(skill, ['conflict', 'distractor']));
   const domain = SKILLS.filter(
     (candidate) =>
       candidate.domain === skill.domain &&
@@ -63,10 +35,14 @@ const supportSkills = (skill: MicroSkill): readonly MicroSkill[] => {
   );
   const selected: MicroSkill[] = [skill];
   for (const candidate of [...peers, ...domain]) {
-    if (!selected.some((entry) => entry.id === candidate.id))
+    if (!selected.some(({ id }) => id === candidate.id))
       selected.push(candidate);
-    const tools = new Set(selected.flatMap((entry) => entry.allowedTools));
-    if (selected.length >= 2 && tools.size >= 2) return selected;
+    if (
+      selected.length >= 2 &&
+      new Set(selected.flatMap(({ allowedTools }) => allowedTools)).size >= 2
+    ) {
+      return selected;
+    }
   }
   throw new Error(`domain cannot satisfy class F composition: ${skill.domain}`);
 };
@@ -74,53 +50,39 @@ const supportSkills = (skill: MicroSkill): readonly MicroSkill[] => {
 const compositionFor = (skill: MicroSkill, index: number) => {
   const compositionClass = CLASSES[index % CLASSES.length];
   const support = supportSkills(skill);
-  const declaredTools = [
-    ...new Set(support.flatMap((entry) => entry.allowedTools)),
+  const declared = [
+    ...new Set(support.flatMap(({ allowedTools }) => allowedTools)),
   ];
   const optionalBase =
     Math.floor(index / CLASSES.length) % 2 === 0 ? [] : ['read' as const];
   const values = {
-    A: {
-      skills: [] as readonly MicroSkill[],
-      tools: [] as readonly ToolName[],
-      toolRequirement: 'none' as const,
-    },
-    B: {
-      skills: [] as readonly MicroSkill[],
-      tools: ['read'] as readonly ToolName[],
-      toolRequirement: 'base' as const,
-    },
-    C: {
-      skills: [skill] as readonly MicroSkill[],
-      tools: [] as readonly ToolName[],
-      toolRequirement: 'none' as const,
-    },
-    D: {
-      skills: [skill] as readonly MicroSkill[],
-      tools: [skill.allowedTools[0] as ToolName],
-      toolRequirement: 'declared' as const,
-    },
-    E: {
-      skills: support.slice(0, 2),
-      tools: optionalBase,
-      toolRequirement:
-        optionalBase.length === 0 ? ('none' as const) : ('base' as const),
-    },
-    F: {
-      skills: support,
-      tools: declaredTools.slice(0, 2),
-      toolRequirement: 'declared' as const,
-    },
-  };
+    A: { skills: [], tools: [] },
+    B: { skills: [], tools: ['read' as const] },
+    C: { skills: [skill], tools: [] },
+    D: { skills: [skill], tools: [skill.allowedTools[0] as ToolName] },
+    E: { skills: support.slice(0, 2), tools: optionalBase },
+    F: { skills: support, tools: declared.slice(0, 2) },
+  } satisfies Readonly<
+    Record<
+      (typeof CLASSES)[number],
+      {
+        readonly skills: readonly MicroSkill[];
+        readonly tools: readonly ToolName[];
+      }
+    >
+  >;
   return { compositionClass, ...values[compositionClass] };
 };
 
-const toolInput = (name: ToolName, marker: string): JsonValue =>
+const toolInput = (name: ToolName, ordinal: string): JsonValue =>
   (
     ({
       list: { prefix: 'notes' },
       read: { path: 'notes/request.md' },
-      write: { path: `outputs/${marker}.md`, content: `${marker} world-v1` },
+      write: {
+        path: `outputs/pilot-${ordinal}.md`,
+        content: 'Invoice invoice-001 differs from ledger-001 by USD 5.',
+      },
       search: { query: 'world-v1' },
       calculate: { operation: 'subtract', values: [125, 120] },
       json_query: { path: 'data/settings.json', query: 'currency' },
@@ -137,159 +99,169 @@ const toolInput = (name: ToolName, marker: string): JsonValue =>
       template_get: { name: 'report' },
       schema_validate: {
         name: 'report',
-        value: { title: marker, summary: 'world-v1' },
+        value: { title: 'Reconciliation', summary: 'USD 5 variance' },
       },
       render_preview: {
         format: 'markdown',
-        value: { title: marker, summary: 'world-v1' },
+        value: { title: 'Reconciliation', summary: 'USD 5 variance' },
       },
-      artifact_publish: { value: { title: marker, summary: 'world-v1' } },
+      artifact_publish: {
+        value: { title: 'Reconciliation', summary: 'USD 5 variance' },
+      },
       channel_list: {},
       recipient_resolve: { query: 'alice' },
       message_send: {
         recipientId: 'person-alice',
         channelId: 'direct',
-        body: `${marker} world-v1`,
+        body: 'Invoice invoice-001 has a USD 5 reconciliation variance.',
       },
       message_status: { id: 'msg-000' },
     }) satisfies Readonly<Record<ToolName, JsonValue>>
   )[name];
 
-const describeInput = (value: JsonValue): string => {
-  if (Array.isArray(value)) return `[${value.map(describeInput).join(', ')}]`;
+const describe = (value: JsonValue): string => {
+  if (Array.isArray(value)) return `[${value.map(describe).join(', ')}]`;
   if (typeof value === 'object' && value !== null) {
     const fields = Object.entries(value).map(
-      ([key, entry]) => `${key}=${describeInput(entry)}`,
+      ([key, entry]) => `${key}=${describe(entry)}`,
     );
     return fields.length === 0 ? 'no arguments' : fields.join(', ');
   }
   return typeof value === 'string' ? `"${value}"` : String(value);
 };
 
-const operationInstruction = (name: ToolName, marker: string): string =>
-  `Use ${name} exactly once with ${describeInput(toolInput(name, marker))}.`;
+const TASKS = {
+  'documents-finance': {
+    statement:
+      'Reconcile invoice invoice-001 at USD 125 with ledger record ledger-001 at USD 120.',
+    answer: {
+      invoiceId: 'invoice-001',
+      ledgerId: 'ledger-001',
+      differenceUsd: 5,
+    },
+    instruction:
+      'Set answer to invoiceId, ledgerId, and the numeric differenceUsd.',
+  },
+  software: {
+    statement:
+      'Summarize the stated API relationship: component api depends on core and exports reconcile.',
+    answer: {
+      component: 'api',
+      dependency: 'core',
+      exportedSymbol: 'reconcile',
+    },
+    instruction: 'Set answer to component, dependency, and exportedSymbol.',
+  },
+  artifacts: {
+    statement:
+      'Define the required report artifact whose template needs title and summary fields.',
+    answer: { template: 'report', requiredFields: ['title', 'summary'] },
+    instruction: 'Set answer to template and the ordered requiredFields array.',
+  },
+  communication: {
+    statement:
+      'Prepare the exact direct destination for Alice, whose recipient identifier is person-alice.',
+    answer: { recipientId: 'person-alice', channelId: 'direct' },
+    instruction: 'Set answer to recipientId and channelId.',
+  },
+} satisfies Readonly<
+  Record<
+    CatalogDomain,
+    {
+      readonly statement: string;
+      readonly answer: JsonValue;
+      readonly instruction: string;
+    }
+  >
+>;
 
-const expectedExecution = (tools: readonly ToolName[], marker: string) => {
-  let world = createWorld();
-  const toolEvidence = tools.map((name) => {
-    const input = toolInput(name, marker);
-    const execution = executeTool(world, name, input);
-    world = execution.world;
-    return {
-      name,
-      input,
-      evidenceHash: artifactHash({ name, input, output: execution.output }),
-    };
-  });
-  return { worldHash: worldHash(world), toolEvidence };
-};
+const task = (domain: CatalogDomain) => TASKS[domain];
 
-const requestFor = (
-  skill: MicroSkill,
-  index: number,
-  composition: ReturnType<typeof compositionFor>,
-  marker: string,
-): string => {
-  const subject = subjectFor(skill, index + 1);
-  const secondary = composition.skills[1]?.description;
-  const operations = composition.tools
-    .map((name) => operationInstruction(name, marker))
-    .join(' ');
-  const requests = {
-    A: `Return the identifier world-v1 from this request. Do not use a skill or tool.`,
-    B: `Report the exact fixture identifier from notes/request.md. No specialized skill is needed. ${operations}`,
-    C: `Using the supplied procedure only, explain how to achieve this outcome without external evidence: ${skill.description}`,
-    D: `${skill.description} Use ${subject}. ${operations}`,
-    E: `Coordinate both supplied procedures: ${skill.description} ${secondary ?? ''} ${operations}`,
-    F: `Coordinate the supplied procedures for ${subject}: ${skill.description} ${secondary ?? ''} ${operations}`,
-  } as const;
-  return `${requests[composition.compositionClass]} Preserve fixture identifiers and report every required criterion.`;
-};
-
-const materialize = (skill: MicroSkill, index: number): Case => {
+const draftFor = (skill: MicroSkill, index: number) => {
   const composition = compositionFor(skill, index);
-  const { compositionClass } = composition;
   const ordinal = String(index + 1).padStart(2, '0');
-  const deliveryMarker = `pilot-${ordinal}-complete`;
-  const requiresExternalEffect = composition.tools.some((tool) =>
-    MUTATING_TOOLS.includes(tool),
-  );
+  const tools = composition.tools.map((name, toolIndex) => ({
+    id: `tool.${toolIndex + 1}.${name}`,
+    name,
+    input: toolInput(name, ordinal),
+  }));
+  const semantic = task(skill.domain);
+  const operations = tools
+    .map(
+      (tool) =>
+        `Use ${tool.name} exactly once with ${describe(tool.input)} and preserve its exact JSON output under observations["${tool.id}"].`,
+    )
+    .join(' ');
+  const secondary = composition.skills[1]?.description;
+  const procedures =
+    composition.skills.length === 0
+      ? 'No specialized procedure is required.'
+      : `Apply the supplied procedures: ${skill.description}${secondary === undefined ? '' : ` ${secondary}`}`;
   const requiresRevision =
-    index % 5 === 0 && composition.tools.length > 0 && !requiresExternalEffect;
-  const expected = expectedExecution(composition.tools, deliveryMarker);
+    index % 5 === 0 &&
+    tools.length > 0 &&
+    !tools.some(({ name }) =>
+      ['write', 'artifact_publish', 'message_send'].includes(name),
+    );
+  const request = `${semantic.statement} ${procedures} ${operations} Return exactly one JSON object with fixtureId, answer, and observations. ${semantic.instruction} Set fixtureId from the isolated fixture and include every requested observation; use an empty observations object when no operation is requested.${requiresRevision ? ' Treat the first tool observation as a structural invalidation: request one localized revision after inspecting it, then complete the revised goal.' : ''}`;
   const relevantSkills = composition.skills.flatMap((entry) => [
     entry.id,
     ...related(entry, ['equivalent', 'overlap']),
   ]);
-  const requiredToolSet = new Set<ToolName>(composition.tools);
-  const base = {
-    schemaVersion: 1 as const,
+  return {
+    schemaVersion: 1,
     id: `pilot.case.${ordinal}`,
     familyId: `pilot.family.${ordinal}`,
-    phase: 'pilot' as const,
+    phase: 'pilot',
     title: `Pilot ${ordinal}: ${skill.title}`,
     domain: skill.domain,
-    compositionClass,
+    compositionClass: composition.compositionClass,
     focusGoalRole: 'goal.primary',
-    composition: {
-      skillCount:
-        composition.skills.length === 0
-          ? (0 as const)
-          : composition.skills.length === 1
-            ? (1 as const)
-            : ('many' as const),
-      toolRequirement: composition.toolRequirement,
-      toolCount:
-        composition.tools.length === 0
-          ? (0 as const)
-          : composition.tools.length === 1
-            ? (1 as const)
-            : ('many' as const),
-      requiresRevision,
-      requiresExternalEffect,
-    },
     adaptive: requiresRevision || index % 4 === 0,
-    request: `${requestFor(skill, index, composition, deliveryMarker)}${requiresRevision ? ' Treat the first tool observation as a structural invalidation: request one localized revision after inspecting it, then complete the revised goal.' : ''} The final delivery must include ${deliveryMarker} and world-v1.`,
+    request,
     fixtureIds: ['world-v1'],
-    tags: ['pilot', `domain.${skill.domain}`, `class.${compositionClass}`],
-    gold: {
-      criteria: [
-        {
-          id: 'uses-required-tools',
-          description:
-            'Uses only the required deterministic evidence operations.',
-        },
-        {
-          id: 'reports-outcome',
-          description:
-            'Reports the requested outcome with fixture identifiers.',
-        },
-      ],
-      requiredSkills: composition.skills.map((entry) => entry.id),
-      relevantSkills: [...new Set(relevantSkills)],
-      forbiddenSkills:
-        composition.skills.length === 0
-          ? SKILLS.map((entry) => entry.id)
-          : related(skill, ['distractor', 'conflict']),
-      requiredTools: [...composition.tools],
-      forbiddenTools: TOOL_NAMES.filter((tool) => !requiredToolSet.has(tool)),
-      expectedState: {
-        fixtureId: 'world-v1',
-        worldHash: expected.worldHash,
-        toolEvidence: expected.toolEvidence,
-        requiredEffects: composition.tools.filter((tool) =>
-          MUTATING_TOOLS.includes(tool),
-        ),
+    tags: [
+      'pilot',
+      `domain.${skill.domain}`,
+      `class.${composition.compositionClass}`,
+    ],
+    criteria: [
+      {
+        id: 'task-evidence',
+        description:
+          'The substantive requested answer and operations are correct.',
+        evidenceRefs: ['delivery.answer', ...tools.map(({ id }) => id)],
       },
-      expectedDelivery: { contains: [deliveryMarker, 'world-v1'] },
-      requiresRevision,
-    },
+      {
+        id: 'reports-outcome',
+        description:
+          'The canonical delivery reports the fixture and observations.',
+        evidenceRefs: [
+          'delivery.fixture',
+          ...tools.map(({ id }) => `delivery.${id}`),
+        ],
+      },
+    ],
+    requiredSkills: composition.skills.map(({ id }) => id),
+    relevantSkills: [...new Set(relevantSkills)],
+    forbiddenSkills: related(skill, ['distractor', 'conflict']),
+    tools,
+    expectedAnswer: semantic.answer,
+    requiresRevision,
   };
-
-  return CaseV1.parse({ ...base, contentHash: artifactHash(base) });
 };
 
+const compiled = compileCaseDrafts({
+  schemaVersion: 1,
+  cases: SKILLS.map(draftFor),
+});
+if (!compiled.valid || compiled.cases.length !== 60) {
+  throw new Error(
+    `pilot case compilation failed: ${JSON.stringify(compiled.issues)}`,
+  );
+}
+
 /** Sixty pilot families balanced 15/domain and 10/composition class. */
-export const PILOT_CASES: readonly Case[] = SKILLS.map(materialize);
+export const PILOT_CASES = compiled.cases;
 
 export * from './case-validation.js';

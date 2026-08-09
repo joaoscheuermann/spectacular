@@ -441,39 +441,58 @@ requests. Não use valores estimados ou zeros fictícios.
 {
   "schemaVersion": 1,
   "currency": "USD",
-  "capturedAt": "2026-08-08T00:00:00.000Z",
-  "source": "https://provider.example/pricing",
   "models": {
     "openai/gpt-5.6-luna": {
-      "inputPerMillion": 0,
-      "outputPerMillion": 0,
-      "cachedInputPerMillion": 0,
-      "perRequest": 0
+      "kind": "completion",
+      "capturedAt": "2026-08-09T00:00:00.000Z",
+      "source": "https://provider.example/pricing/luna",
+      "charges": [
+        { "unit": "input-token", "quantity": 1000000, "priceUsd": 1.25 },
+        {
+          "unit": "cached-input-token",
+          "quantity": 1000000,
+          "priceUsd": 0.125
+        },
+        { "unit": "output-token", "quantity": 1000000, "priceUsd": 10 }
+      ]
     },
     "qwen/qwen3.7-flash": {
-      "inputPerMillion": 0,
-      "outputPerMillion": 0,
-      "cachedInputPerMillion": 0,
-      "perRequest": 0
+      "kind": "completion",
+      "capturedAt": "2026-08-09T00:00:00.000Z",
+      "source": "https://provider.example/pricing/configured-candidate",
+      "charges": [
+        { "unit": "input-token", "quantity": 1000000, "priceUsd": 0.4 },
+        { "unit": "output-token", "quantity": 1000000, "priceUsd": 1.2 }
+      ]
     },
     "voyageai/voyage-4-large": {
-      "inputPerMillion": 0,
-      "outputPerMillion": 0,
-      "perRequest": 0
+      "kind": "embedding",
+      "capturedAt": "2026-08-09T00:00:00.000Z",
+      "source": "https://provider.example/pricing/voyage-4-large",
+      "charges": [
+        {
+          "unit": "embedding-input-token",
+          "quantity": 1000000,
+          "priceUsd": 0.12
+        }
+      ]
     },
     "voyageai/rerank-2.5-lite": {
-      "inputPerMillion": 0,
-      "outputPerMillion": 0,
-      "perRequest": 0
+      "kind": "rerank",
+      "capturedAt": "2026-08-09T00:00:00.000Z",
+      "source": "https://provider.example/pricing/rerank-2.5-lite",
+      "charges": [
+        { "unit": "rerank-input-token", "quantity": 1000000, "priceUsd": 0.05 }
+      ]
     }
   }
 }
 ```
 
-O exemplo acima mostra o shape, não preços válidos. Substitua todos os zeros
-pelos valores exatos aplicáveis. Se um provedor cobra por request, preencha
-`perRequest`; se cobra por tokens, preencha os campos por milhão. A CLI falha
-se encontrar um modelo sem preço.
+O exemplo acima mostra o shape e valores ilustrativos, não preços válidos.
+Cada modelo possui fonte e timestamp próprios. Use somente unidades realmente
+cobradas; tiers devem cobrir uma faixa contígua de zero até infinito. Preço
+zero, unidade incompatível, moeda diferente de USD e fonte incompleta falham.
 
 Valide o arquivo:
 
@@ -482,10 +501,43 @@ node "$MOSAIC_CLI" validate \
   --prices "$MOSAIC_STUDY_ROOT/inputs/prices.json"
 ```
 
+### 8.1 Preflight pago e índice reutilizável
+
+Depois que as checagens gratuitas e a autorização de custo passarem, construa
+uma única vez o índice de setup. Os dois acknowledgements separam os probes
+pagos da mera validação de metadata:
+
+```sh
+node "$MOSAIC_CLI" index \
+  --artifacts "$MOSAIC_STUDY_ROOT/setup" \
+  --prices "$MOSAIC_STUDY_ROOT/inputs/prices.json" \
+  --candidate-model 'qwen/qwen3.7-flash' \
+  --yes-paid-probes \
+  --yes-paid-setup \
+  > "$MOSAIC_STUDY_ROOT/setup/index-command.json"
+```
+
+Preserve `result.path`, `result.indexHash` e `result.setupUsage`. O hash liga
+catálogo, views, bytes indexados, embedder, dimensão, algoritmo e vetores. Uma
+reexecução reutiliza o artefato sem novas embeddings. Uma chamada paga
+reservada sem resultado durável interrompe o fluxo para recuperação auditada;
+ela nunca é repetida silenciosamente. Passe o mesmo `result.path` como
+`--index` a todo `run`, `validate` e `freeze`.
+
+```sh
+export MOSAIC_INDEX_PATH='/caminho/absoluto/exato/de/result.path'
+```
+
 ## 9. Piloto
 
 O piloto usa os 60 casos internos e as seis condições B0, B1, B2, B3, M0 e M1,
 com cinco repetições pareadas: 1.800 runs.
+
+Controles não experimentais são comuns e fazem parte de
+`ConditionFactorsV1`: 16 turnos por execução e dois retries de reparo
+estruturado em todas as seis condições. B1–B3, M0 e M1 usam a mesma fronteira,
+corpus, embedder, reranker e `maxCandidates: 5`; somente a regra declarada de
+bundle reduz o ranking para uma skill, top-3 fixo ou seleção seletiva.
 
 ### 9.1 Gerar o schedule
 
@@ -516,6 +568,7 @@ node "$MOSAIC_CLI" run \
   --schedule "$MOSAIC_STUDY_ROOT/pilot/schedule.json" \
   --artifacts "$MOSAIC_STUDY_ROOT/pilot/artifacts" \
   --prices "$MOSAIC_STUDY_ROOT/inputs/prices.json" \
+  --index "$MOSAIC_INDEX_PATH" \
   > "$MOSAIC_STUDY_ROOT/pilot/run-summary.json"
 ```
 
@@ -528,6 +581,7 @@ node "$MOSAIC_CLI" run \
   --schedule "$MOSAIC_STUDY_ROOT/pilot/schedule.json" \
   --artifacts "$MOSAIC_STUDY_ROOT/pilot/artifacts" \
   --prices "$MOSAIC_STUDY_ROOT/inputs/prices.json" \
+  --index "$MOSAIC_INDEX_PATH" \
   --resume \
   > "$MOSAIC_STUDY_ROOT/pilot/run-resume-summary.json"
 ```
@@ -644,21 +698,30 @@ O primeiro candidato configurado é:
 
 ### 10.1 Autorar os casos
 
-Crie exatamente 60 casos independentes em
-`inputs/calibration-cases.json`, todos com `phase: "calibration"` e válidos
-contra `schemas/v1/CaseV1.schema.json`. Eles não podem reutilizar famílias nem
+Escreva exatamente 60 drafts semânticos independentes e compile-os em
+`inputs/calibration-cases.json` com `scripts/cases.mjs compile`. Todos devem
+usar `phase: "calibration"` e o resultado deve ser válido contra
+`schemas/v1/CaseV1.schema.json`. Eles não podem reutilizar famílias nem
 conteúdo do piloto. A validação também exige a distribuição do instrumento:
 
 - 15 casos por domínio;
 - 10 casos por classe A–F;
 - 60 IDs e 60 `familyId` únicos;
 - `contentHash`, evidência de tools e world hash reproduzíveis;
-- `gold.expectedDelivery.contains` não vazio.
+- documento JSON canônico e fields de delivery ligados a cada critério por
+  `evidenceRefs`.
+
+Valide o arquivo compilado sem chamadas pagas:
+
+```sh
+node benchmarks/mosaic/scripts/cases.mjs validate \
+  --calibration-cases inputs/calibration-cases.json
+```
 
 Faça auditoria humana antes de observar os resultados para verificar
 neutralidade entre famílias de modelo e ausência de duplicatas semânticas. A
-validação automática detecta violações estruturais e clones exatos, não toda
-similaridade semântica.
+validação automática detecta violações estruturais e clones exatos, não
+certifica neutralidade, dificuldade ou independência semântica.
 
 ### 10.2 Gerar dois schedules pareados
 
@@ -681,6 +744,13 @@ ter 180 runs M1 e os pares Luna/candidato devem compartilhar
 Essa preparação deve ser feita por um script preservado com o estudo. Não
 duplique ou edite seeds manualmente.
 
+No contrato V1, `ScheduleInput.seed` determina somente a ordem das condições
+em cada bloco e deriva o `RunSpec.seed` consumido por hooks determinísticos
+(por exemplo, o shuffle de A2). Nenhuma dessas seeds é enviada ao provider ou
+controla sampling do modelo. O pareamento estatístico é definido por
+`caseId`, `repetition` e `pairedBlock`; não pressuponha respostas modelares
+idênticas entre condições ou reruns.
+
 ### 10.3 Executar e pontuar Luna
 
 ```sh
@@ -689,6 +759,7 @@ node "$MOSAIC_CLI" run \
   --cases "$MOSAIC_STUDY_ROOT/inputs/calibration-cases.json" \
   --artifacts "$MOSAIC_STUDY_ROOT/calibration/luna/artifacts" \
   --prices "$MOSAIC_STUDY_ROOT/inputs/prices.json" \
+  --index "$MOSAIC_INDEX_PATH" \
   > "$MOSAIC_STUDY_ROOT/calibration/luna/run-summary.json"
 
 node "$MOSAIC_CLI" score \
@@ -711,6 +782,7 @@ node "$MOSAIC_CLI" run \
   --cases "$MOSAIC_STUDY_ROOT/inputs/calibration-cases.json" \
   --artifacts "$MOSAIC_STUDY_ROOT/calibration/candidate/artifacts" \
   --prices "$MOSAIC_STUDY_ROOT/inputs/prices.json" \
+  --index "$MOSAIC_INDEX_PATH" \
   > "$MOSAIC_STUDY_ROOT/calibration/candidate/run-summary.json"
 
 node "$MOSAIC_CLI" score \
@@ -898,9 +970,14 @@ node "$MOSAIC_CLI" validate \
   --n-final "$MOSAIC_N_FINAL" \
   --schedule "$MOSAIC_STUDY_ROOT/inputs/confirmatory-schedule.prefreeze.json" \
   --prices "$MOSAIC_STUDY_ROOT/inputs/prices.json" \
+  --index "$MOSAIC_INDEX_PATH" \
   --pilot-scores "$MOSAIC_STUDY_ROOT/pilot/scores.json" \
   --calibration "$MOSAIC_STUDY_ROOT/calibration/calibration.json" \
+  --calibration-audit "$MOSAIC_STUDY_ROOT/inputs/calibration-audit.json" \
+  --confirmatory-audit "$MOSAIC_STUDY_ROOT/inputs/confirmatory-audit.json" \
+  --cost-approval "$MOSAIC_STUDY_ROOT/inputs/cost-approval.json" \
   --power-config "$MOSAIC_STUDY_ROOT/inputs/power-config.json" \
+  --power-approval "$MOSAIC_STUDY_ROOT/inputs/power-approval.json" \
   --power-result "$MOSAIC_STUDY_ROOT/power/power-result.json" \
   > "$MOSAIC_STUDY_ROOT/freeze/validate-before-freeze.json"
 ```
@@ -969,8 +1046,13 @@ CLI o calcula:
     "prices": "sha256:SUBSTITUA",
     "seeds": "sha256:SUBSTITUA",
     "calibration": "sha256:SUBSTITUA",
+    "calibrationAudit": "sha256:SUBSTITUA",
+    "confirmatoryAudit": "sha256:SUBSTITUA",
+    "costApproval": "sha256:SUBSTITUA",
     "powerConfig": "sha256:SUBSTITUA",
+    "powerApproval": "sha256:SUBSTITUA",
     "powerResult": "sha256:SUBSTITUA",
+    "retrievalIndex": "sha256:SUBSTITUA",
     "analysis": "sha256:SUBSTITUA",
     "renvLock": "sha256:SUBSTITUA"
   },
@@ -1006,11 +1088,16 @@ node "$MOSAIC_CLI" freeze \
   --path "$MOSAIC_STUDY_ROOT/freeze/freeze.json" \
   --pilot-scores "$MOSAIC_STUDY_ROOT/pilot/scores.json" \
   --calibration "$MOSAIC_STUDY_ROOT/calibration/calibration.json" \
+  --calibration-audit "$MOSAIC_STUDY_ROOT/inputs/calibration-audit.json" \
+  --confirmatory-audit "$MOSAIC_STUDY_ROOT/inputs/confirmatory-audit.json" \
+  --cost-approval "$MOSAIC_STUDY_ROOT/inputs/cost-approval.json" \
   --power-config "$MOSAIC_STUDY_ROOT/inputs/power-config.json" \
+  --power-approval "$MOSAIC_STUDY_ROOT/inputs/power-approval.json" \
   --power-result "$MOSAIC_STUDY_ROOT/power/power-result.json" \
   --cases "$MOSAIC_STUDY_ROOT/inputs/confirmatory-cases.json" \
   --schedule "$MOSAIC_STUDY_ROOT/inputs/confirmatory-schedule.prefreeze.json" \
   --prices "$MOSAIC_STUDY_ROOT/inputs/prices.json" \
+  --index "$MOSAIC_INDEX_PATH" \
   --image "$MOSAIC_ANALYSIS_IMAGE" \
   > "$MOSAIC_STUDY_ROOT/freeze/command.json"
 ```
@@ -1049,7 +1136,8 @@ Preserve model, phase, conditions, seeds, blocos e ordem. Salve como
 
 Use a mesma grade pareada e preserve os campos que compõem o seed ledger:
 `studyId`, `caseId`, `conditionId`, `repetition`, `seed`, `pairedBlock` e
-`order`. Defina:
+`order`. Nesse ledger, `seed` significa exclusivamente a seed de hooks
+determinísticos; sampling do provider permanece não semeado. Defina:
 
 ```text
 phase          = replication
@@ -1110,6 +1198,7 @@ node "$MOSAIC_CLI" run \
   --cases "$MOSAIC_STUDY_ROOT/inputs/confirmatory-cases.json" \
   --artifacts "$MOSAIC_STUDY_ROOT/primary/artifacts" \
   --prices "$MOSAIC_STUDY_ROOT/inputs/prices.json" \
+  --index "$MOSAIC_INDEX_PATH" \
   --freeze "$MOSAIC_STUDY_ROOT/freeze/freeze.json" \
   > "$MOSAIC_STUDY_ROOT/primary/run-summary.json"
 ```
@@ -1144,6 +1233,7 @@ node "$MOSAIC_CLI" run \
   --cases "$MOSAIC_STUDY_ROOT/inputs/confirmatory-cases.json" \
   --artifacts "$MOSAIC_STUDY_ROOT/replication/artifacts" \
   --prices "$MOSAIC_STUDY_ROOT/inputs/prices.json" \
+  --index "$MOSAIC_INDEX_PATH" \
   --freeze "$MOSAIC_STUDY_ROOT/freeze/freeze.json" \
   > "$MOSAIC_STUDY_ROOT/replication/run-summary.json"
 
@@ -1172,6 +1262,7 @@ node "$MOSAIC_CLI" run \
   --cases "$MOSAIC_STUDY_ROOT/inputs/confirmatory-cases.json" \
   --artifacts "$MOSAIC_STUDY_ROOT/sensitivity/artifacts" \
   --prices "$MOSAIC_STUDY_ROOT/inputs/prices.json" \
+  --index "$MOSAIC_INDEX_PATH" \
   --freeze "$MOSAIC_STUDY_ROOT/freeze/freeze.json" \
   > "$MOSAIC_STUDY_ROOT/sensitivity/run-summary.json"
 

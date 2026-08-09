@@ -167,11 +167,31 @@
           "type": "string",
           "pattern": "^sha256:[a-f0-9]{64}$"
         },
+        "calibrationAudit": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "confirmatoryAudit": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "costApproval": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
         "powerConfig": {
           "type": "string",
           "pattern": "^sha256:[a-f0-9]{64}$"
         },
+        "powerApproval": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
         "powerResult": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "retrievalIndex": {
           "type": "string",
           "pattern": "^sha256:[a-f0-9]{64}$"
         },
@@ -197,8 +217,13 @@
         "prices",
         "seeds",
         "calibration",
+        "calibrationAudit",
+        "confirmatoryAudit",
+        "costApproval",
         "powerConfig",
+        "powerApproval",
         "powerResult",
+        "retrievalIndex",
         "analysis",
         "renvLock"
       ],

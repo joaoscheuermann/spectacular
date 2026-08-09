@@ -15,6 +15,7 @@ import {
 } from './mosaic-adapters.js';
 import { evaluationHooks } from './mosaic-hooks.js';
 import { isProviderError } from './provider.js';
+import type { SkillRetrieval } from './retrieval.js';
 
 export * from './mosaic-adapters.js';
 export * from './mosaic-hooks.js';
@@ -117,15 +118,47 @@ const observedDependencies = (
   },
 });
 
+const observedSkillRetrieval = (
+  context: RunContext,
+  retrieval: SkillRetrieval,
+  model: string,
+): SkillRetrieval => ({
+  models: retrieval.models,
+  search: async (query, topK) => {
+    const observed = observedRetriever(
+      context,
+      {
+        search: async (value: string, limit: number) =>
+          (await retrieval.search(value, limit)).map((data) => ({
+            data,
+            score: data.score,
+          })),
+      },
+      model,
+    );
+    return (await observed.search(query, topK)).map(({ data }) => data);
+  },
+  rerank: retrieval.rerank,
+});
+
 /** Executes M0/M1 and diagnostic variants through the public evaluation entrypoint. */
 export const executeMosaic = async (
   context: RunContext,
   dependencies: MosaicDependencies,
+  retrieval?: SkillRetrieval,
 ): Promise<EngineResult> => {
   const observed = observedDependencies(context, dependencies);
   const factory = observed.factory ?? createMosaic;
   const correlations = createToolCorrelations();
-  const options = mosaicOptions(context, observed, correlations);
+  const shared =
+    retrieval === undefined
+      ? undefined
+      : observedSkillRetrieval(
+          context,
+          retrieval,
+          observed.retrieverModels?.skills ?? observed.base.models.embedder,
+        );
+  const options = mosaicOptions(context, observed, correlations, shared);
   const hooks = evaluationHooks(
     context.condition,
     context.benchmarkCase,

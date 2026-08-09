@@ -44,7 +44,7 @@
       "options": {
         "commands": [
           "tsc -p benchmarks/mosaic/tsconfig.spec.json",
-          "node --test benchmarks/mosaic/dist-tests/tests/*.test.js",
+          "node --test --test-concurrency=4 benchmarks/mosaic/dist-tests/tests/*.test.js",
           "node --test benchmarks/mosaic/tests/*.test.mjs"
         ],
         "parallel": false

@@ -16,6 +16,7 @@ import {
   loadConditionPrompts,
   type BaselineModel,
   type MosaicDependencies,
+  type SkillRetrieval,
 } from '../src/conditions/index.js';
 import { TOOL_NAMES } from '../src/config/index.js';
 import type { HarnessJsonValue } from '../src/core/index.js';
@@ -24,10 +25,12 @@ import {
   createEventStore,
   createRecordStore,
   executeRun,
+  recoverInterruptedRun,
   type CrashBoundary,
 } from '../src/runtime/index.js';
 import {
   PILOT_CASES,
+  canonicalDelivery,
   createSchedule,
   evaluateEvidence,
   resumeAction,
@@ -35,6 +38,12 @@ import {
 } from '../src/study/index.js';
 
 const temporary = () => mkdtemp(join(tmpdir(), 'mosaic-harness-test-'));
+
+const unusedRetrieval: SkillRetrieval = {
+  models: { embedder: 'unused', reranker: 'unused' },
+  search: async () => [],
+  rerank: async () => [],
+};
 
 test('event store validates IDs and serializes concurrent content-addressed appends', async () => {
   const directory = await temporary();
@@ -128,7 +137,7 @@ test('baseline model events expose only structural metadata unless IO capture is
   try {
     const benchmarkCase = PILOT_CASES[6]!;
     const prompts = await loadConditionPrompts();
-    const marker = benchmarkCase.gold.expectedDelivery.contains.join(' ');
+    const marker = canonicalDelivery(benchmarkCase);
     const model: BaselineModel = {
       plan: async () => ({
         value: { goals: [] },
@@ -158,7 +167,8 @@ test('baseline model events expose only structural metadata unless IO capture is
         const record = await executeRun(run, benchmarkCase, B0, {
           events,
           records,
-          execute: (context) => executeBaseline(context, model, prompts),
+          execute: (context) =>
+            executeBaseline(context, model, prompts, unusedRetrieval),
         });
         return JSON.stringify(
           (await events.read(run.id, record.attempt)).map(
@@ -172,9 +182,9 @@ test('baseline model events expose only structural metadata unless IO capture is
     assert.match(structure, /model\.response/u);
     assert.match(structure, /structured\.attempt/u);
     assert.match(structure, /durationMs/u);
-    assert.doesNotMatch(structure, /# Request|pilot-07-complete/u);
+    assert.doesNotMatch(structure, /# Request|differenceUsd/u);
     assert.match(io, /# Request/u);
-    assert.match(io, /pilot-07-complete/u);
+    assert.match(io, /differenceUsd/u);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -349,6 +359,8 @@ test('resume behavior is correct at every crash boundary', async () => {
     'after-first-model': 'skip-terminal',
     'after-tool': 'skip-terminal',
     'before-terminal': 'skip-terminal',
+    'after-trace': 'skip-terminal',
+    'before-record': 'skip-terminal',
     'after-terminal': 'skip-terminal',
   };
   for (const [boundary, expected] of Object.entries(expectations) as [
@@ -389,8 +401,18 @@ test('resume behavior is correct at every crash boundary', async () => {
           };
         },
       });
-      if (boundary === 'after-terminal') await assert.rejects(invocation);
-      else await invocation;
+      if (
+        boundary === 'after-trace' ||
+        boundary === 'before-record' ||
+        boundary === 'after-terminal'
+      ) {
+        await assert.rejects(invocation);
+      } else {
+        await invocation;
+      }
+      if (boundary === 'after-trace' || boundary === 'before-record') {
+        await recoverInterruptedRun(run, { events, records });
+      }
       const attempts = await records.read(run.id);
       assert.equal(attempts.length, 1, boundary);
       assert.equal(resumeAction(attempts), expected, boundary);
@@ -426,7 +448,7 @@ test('deterministic evidence evaluator combines trace delivery revision and worl
       execute: async () => ({
         value: {
           status: 'completed',
-          output: 'pilot-07-complete world-v1',
+          output: canonicalDelivery(benchmarkCase),
           toolCalls: [],
         },
         usage: { inputTokens: 1, outputTokens: 1, costUsd: 0 },
@@ -437,7 +459,8 @@ test('deterministic evidence evaluator combines trace delivery revision and worl
     const record = await executeRun(run, benchmarkCase, B0, {
       events,
       records,
-      execute: (context) => executeBaseline(context, model, prompts),
+      execute: (context) =>
+        executeBaseline(context, model, prompts, unusedRetrieval),
     });
     const evaluation = evaluateEvidence(
       benchmarkCase,
@@ -454,6 +477,8 @@ test('deterministic evidence evaluator combines trace delivery revision and worl
         ['tools', true],
         ['observations', true],
         ['revision', false],
+        ['criterion:task-evidence', true],
+        ['criterion:reports-outcome', true],
         ['delivery', true],
         ['world', true],
       ],
@@ -500,7 +525,7 @@ test('condition-internal skill and revision diagnostics do not gate end-to-end s
       (entry) =>
         entry.compositionClass === 'C' && entry.gold.requiresRevision === false,
     )!;
-    const marker = benchmarkCase.gold.expectedDelivery.contains.join(' ');
+    const marker = canonicalDelivery(benchmarkCase);
     const run = createSchedule({
       studyId: 'evidence.diagnostics',
       cases: [benchmarkCase],
@@ -572,7 +597,7 @@ test('retrieval evidence keeps the configured cutoff and accepts MOSAIC node IDs
           status: 'succeeded',
           outcome: {
             delivery: {
-              markdown: benchmarkCase.gold.expectedDelivery.contains.join(' '),
+              markdown: canonicalDelivery(benchmarkCase),
               parts: [],
             },
           },
@@ -618,7 +643,7 @@ test('revision evidence requires one correlated observation from the same node a
           goals: [
             {
               status: 'completed',
-              output: benchmarkCase.gold.expectedDelivery.contains.join(' '),
+              output: canonicalDelivery(benchmarkCase),
               toolNames: ['read'],
             },
           ],

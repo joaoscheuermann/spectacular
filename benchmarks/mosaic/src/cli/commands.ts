@@ -5,6 +5,7 @@ import { rejectUnknownFlags, requiredFlag } from './args.js';
 import { analyze, power } from './analysis.js';
 import { calibrate } from './calibration.js';
 import { freeze } from './freeze.js';
+import { buildIndex } from './index-command.js';
 import { objectValue, stringArray, stringValue } from './io.js';
 import { review } from './review.js';
 import { runProductionSchedule } from './run.js';
@@ -57,6 +58,8 @@ export const executeCommand = async (
     result = await power(invocation);
   } else if (invocation.command === 'freeze') {
     result = await freeze(invocation);
+  } else if (invocation.command === 'index') {
+    result = await buildIndex(invocation);
   } else if (invocation.command === 'run') {
     result = await runProductionSchedule(invocation);
   } else if (invocation.command === 'score') {

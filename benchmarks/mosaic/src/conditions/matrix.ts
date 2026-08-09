@@ -1,5 +1,5 @@
 import type { Condition } from '../schemas/index.js';
-import { ABLATIONS, M1 } from './definitions.js';
+import { ABLATIONS, B0, B1, B2, B3, M0, M1 } from './definitions.js';
 
 export type FactorName = keyof Condition['factors'];
 
@@ -35,3 +35,42 @@ export const validateAblationMatrix = (): readonly MatrixIssue[] =>
       ? []
       : [{ conditionId: entry.id, expected, actual }];
   });
+
+export interface ControlParityIssue {
+  readonly conditionId: string;
+  readonly control: 'maxCandidates' | 'maxTurns' | 'structuredRepairRetries';
+  readonly expected: number;
+  readonly actual: number | null;
+}
+
+/** Proves undeclared retrieval, turn, and repair controls remain common. */
+export const validatePrimaryControlParity =
+  (): readonly ControlParityIssue[] => {
+    const common = [B0, B1, B2, B3, M0, M1].flatMap((condition) =>
+      (['maxTurns', 'structuredRepairRetries'] as const).flatMap((control) =>
+        condition.factors[control] === M1.factors[control]
+          ? []
+          : [
+              {
+                conditionId: condition.id,
+                control,
+                expected: M1.factors[control]!,
+                actual: condition.factors[control],
+              },
+            ],
+      ),
+    );
+    const retrieval = [B1, B2, B3, M0, M1].flatMap((condition) =>
+      condition.factors.maxCandidates === M1.factors.maxCandidates
+        ? []
+        : [
+            {
+              conditionId: condition.id,
+              control: 'maxCandidates' as const,
+              expected: M1.factors.maxCandidates!,
+              actual: condition.factors.maxCandidates,
+            },
+          ],
+    );
+    return [...common, ...retrieval];
+  };

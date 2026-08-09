@@ -161,11 +161,22 @@
               "description": {
                 "type": "string",
                 "minLength": 1
+              },
+              "evidenceRefs": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                }
               }
             },
             "required": [
               "id",
-              "description"
+              "description",
+              "evidenceRefs"
             ],
             "additionalProperties": false
           }
@@ -233,6 +244,12 @@
               "items": {
                 "type": "object",
                 "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                  },
                   "name": {
                     "type": "string",
                     "minLength": 1,
@@ -248,6 +265,7 @@
                   }
                 },
                 "required": [
+                  "id",
                   "name",
                   "input",
                   "evidenceHash"
@@ -276,17 +294,47 @@
         "expectedDelivery": {
           "type": "object",
           "properties": {
-            "contains": {
+            "document": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "$ref": "#/$defs/__schema0"
+              }
+            },
+            "fields": {
               "minItems": 1,
               "type": "array",
               "items": {
-                "type": "string",
-                "minLength": 1
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                  },
+                  "path": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                },
+                "required": [
+                  "id",
+                  "path"
+                ],
+                "additionalProperties": false
               }
             }
           },
           "required": [
-            "contains"
+            "document",
+            "fields"
           ],
           "additionalProperties": false
         },

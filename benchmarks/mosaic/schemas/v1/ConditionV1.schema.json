@@ -68,6 +68,18 @@
             "oracle"
           ]
         },
+        "maxCandidates": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "maxSkills": {
           "anyOf": [
             {
@@ -112,6 +124,16 @@
         },
         "localizedRevision": {
           "type": "boolean"
+        },
+        "maxTurns": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "structuredRepairRetries": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
         }
       },
       "required": [
@@ -119,12 +141,15 @@
         "catalogFeedback",
         "skillView",
         "retrieval",
+        "maxCandidates",
         "maxSkills",
         "bundle",
         "bundleOrder",
         "menu",
         "baseTools",
-        "localizedRevision"
+        "localizedRevision",
+        "maxTurns",
+        "structuredRepairRetries"
       ],
       "additionalProperties": false
     },

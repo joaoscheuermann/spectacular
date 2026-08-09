@@ -18,14 +18,17 @@ import {
   B3,
   M1,
   createProviderBaselineModel,
+  createSkillRetrieval,
   createTestLexicalRetrievers,
   evaluationHooks,
   executeBaseline,
   executeMosaic,
   loadConditionPrompts,
   mosaicSkills,
+  skillDocument,
   type BaselineModel,
   type MosaicDependencies,
+  type SkillRetrieval,
 } from '../src/conditions/index.js';
 import { BASE_TOOL_NAMES } from '../src/config/index.js';
 import { artifactHash, type HarnessJsonValue } from '../src/core/index.js';
@@ -118,11 +121,30 @@ const terminalModel = (): BaselineModel => ({
   revise: async () => ({ value: plan.goals[0], usage }),
 });
 
+const testRetrieval = (): SkillRetrieval => ({
+  models: { embedder: 'embedder', reranker: 'reranker' },
+  search: async (_query, topK) =>
+    SKILLS.slice(0, topK).map((skill, index) => ({
+      skill,
+      score: 1 - index / Math.max(1, topK),
+    })),
+  rerank: async ({ documents }) =>
+    documents.map((_, index) => ({
+      index,
+      relevanceScore: 1 - index / Math.max(1, documents.length),
+    })),
+});
+
 test('baseline conditions expose the frozen skill and tool menus', async () => {
   const prompts = await loadConditionPrompts();
   for (const condition of [B0, B1, B2, B3]) {
     const fixture = contextFor(condition);
-    await executeBaseline(fixture.context, terminalModel(), prompts);
+    await executeBaseline(
+      fixture.context,
+      terminalModel(),
+      prompts,
+      testRetrieval(),
+    );
     const menu = fixture.events.find(
       (event) =>
         typeof event === 'object' &&
@@ -149,6 +171,48 @@ test('baseline conditions expose the frozen skill and tool menus', async () => {
       assert.ok(BASE_TOOL_NAMES.every((name) => toolNames.includes(name)));
     }
   }
+});
+
+test('shared retrieval preserves candidates and reranker inputs for equal queries', async () => {
+  const corpus = mosaicSkills();
+  const searches: { query: string; topK: number }[] = [];
+  const reranks: Parameters<LlmProvider['rerank']>[0][] = [];
+  const retrieval = createSkillRetrieval({
+    models: { embedder: 'embedder', reranker: 'reranker' },
+    search: async (query, topK) => {
+      searches.push({ query, topK });
+      return corpus
+        .slice(0, topK)
+        .map((data, index) => ({ data, score: 1 - index / topK }));
+    },
+    rerank: async (request) => {
+      reranks.push(request);
+      return request.documents.map((_, index) => ({
+        index,
+        relevanceScore: 1 - index / request.documents.length,
+      }));
+    },
+  });
+
+  const first = await retrieval.search('same query', 5);
+  const second = await retrieval.search('same query', 5);
+  const request = {
+    model: retrieval.models.reranker,
+    query: 'same query',
+    documents: first.map(({ skill }) => skillDocument(skill)),
+    topN: first.length,
+    flags: { sensitiveOutput: true },
+  } as const;
+  const firstRanking = await retrieval.rerank(request);
+  const secondRanking = await retrieval.rerank(request);
+
+  assert.deepEqual(second, first);
+  assert.deepEqual(secondRanking, firstRanking);
+  assert.deepEqual(searches, [
+    { query: 'same query', topK: 5 },
+    { query: 'same query', topK: 5 },
+  ]);
+  assert.deepEqual(reranks[1], reranks[0]);
 });
 
 test('baseline tool loop returns observations to the next model turn', async () => {
@@ -183,7 +247,12 @@ test('baseline tool loop returns observations to the next model turn', async () 
           };
     },
   };
-  const result = await executeBaseline(fixture.context, model, prompts);
+  const result = await executeBaseline(
+    fixture.context,
+    model,
+    prompts,
+    testRetrieval(),
+  );
   assert.equal(fixture.modelCalls(), 2);
   assert.equal(result.usage.inputTokens, 2);
   assert.equal(users[0]?.includes('Pilot request evidence'), false);
@@ -196,6 +265,37 @@ test('baseline tool loop returns observations to the next model turn', async () 
     /# Tool observations[\s\S]*Pilot request evidence for world-v1/u,
   );
   assert.equal(prompts.baseline, (await loadConditionPrompts()).baseline);
+});
+
+test('baseline execution stops after the frozen sixteen provider turns', async () => {
+  const prompts = await loadConditionPrompts();
+  const fixture = contextFor(B0);
+  const model: BaselineModel = {
+    plan: async () => ({ value: plan, usage }),
+    revise: async () => ({ value: plan.goals[0], usage }),
+    execute: async () => ({
+      value: {
+        status: 'completed',
+        output: '',
+        toolCalls: [{ name: 'read', input: { path: 'notes/request.md' } }],
+      },
+      usage,
+    }),
+  };
+
+  const result = await executeBaseline(
+    fixture.context,
+    model,
+    prompts,
+    testRetrieval(),
+  );
+
+  assert.equal(fixture.modelCalls(), 16);
+  assert.equal(result.status, 'failed');
+  assert.equal(
+    (result.outcome as { goals: { status: string }[] }).goals[0]?.status,
+    'blocked',
+  );
 });
 
 test('baseline planning derives criteria only from the visible request', async () => {
@@ -213,7 +313,7 @@ test('baseline planning derives criteria only from the visible request', async (
     }),
     revise: async () => ({ value: plan.goals[0], usage }),
   };
-  await executeBaseline(fixture.context, model, prompts);
+  await executeBaseline(fixture.context, model, prompts, testRetrieval());
   assert.match(planningUser, /# Request/u);
   assert.match(planningUser, /Derive observable completion criteria only/u);
   assert.doesNotMatch(
@@ -233,7 +333,7 @@ test('baseline model failures emit a sanitized terminal model event', async () =
     },
   };
   await assert.rejects(
-    executeBaseline(fixture.context, model, prompts),
+    executeBaseline(fixture.context, model, prompts, testRetrieval()),
     /credential-bearing provider failure/u,
   );
   const serialized = JSON.stringify(fixture.events);
@@ -241,19 +341,21 @@ test('baseline model failures emit a sanitized terminal model event', async () =
   assert.doesNotMatch(serialized, /credential-bearing provider failure/u);
 });
 
-test('baseline records a rejected structured attempt before translating a provider failure', async () => {
+test('baseline records two sanitized repairs before structured exhaustion', async () => {
   const prompts = await loadConditionPrompts();
   const fixture = contextFor(B0);
-  const failure = new ProviderErrorObject({
-    provider: 'fake',
-    code: 'invalid_structured_output',
-    message: 'private rejected payload and credential',
-    diagnostic: 'raw private provider diagnostic',
-  });
   const provider = {
-    complete: async () => {
-      throw failure;
+    metadata: {
+      id: 'fake',
+      name: 'Fake',
+      baseUrl: 'https://fake.invalid',
     },
+    complete: async () => ({
+      text: 'private rejected payload and credential',
+      finishReason: 'stop',
+      toolCalls: [],
+      usage: { inputTokens: 1, outputTokens: 1 },
+    }),
   } as unknown as LlmProvider;
   const model = createProviderBaselineModel({
     provider,
@@ -261,7 +363,7 @@ test('baseline records a rejected structured attempt before translating a provid
   });
 
   await assert.rejects(
-    executeBaseline(fixture.context, model, prompts),
+    executeBaseline(fixture.context, model, prompts, testRetrieval()),
     (error: unknown) =>
       error instanceof HarnessInfrastructureError &&
       error.stage === 'model' &&
@@ -282,8 +384,21 @@ test('baseline records a rejected structured attempt before translating a provid
       stage: 'execution',
       attempt: 1,
       runtimeAccepted: false,
+      feedbackSent: true,
+    },
+    {
+      type: 'structured.attempt',
+      stage: 'execution',
+      attempt: 2,
+      runtimeAccepted: false,
+      feedbackSent: true,
+    },
+    {
+      type: 'structured.attempt',
+      stage: 'execution',
+      attempt: 3,
+      runtimeAccepted: false,
       feedbackSent: false,
-      diagnostic: 'invalid_structured_output',
     },
     {
       type: 'model.failed',
@@ -291,14 +406,95 @@ test('baseline records a rejected structured attempt before translating a provid
       operation: 'execute',
       model: 'openai/gpt-5.6-luna',
       status: 'failed',
-      durationMs: lifecycle[1]?.['durationMs'],
+      durationMs: 0,
     },
   ]);
+  assert.equal(fixture.modelCalls(), 3);
   const serialized = JSON.stringify(fixture.events);
   assert.doesNotMatch(
     serialized,
     /private rejected payload|credential|raw private/u,
   );
+});
+
+test('baseline repairs one rejected submission and meters both provider calls', async () => {
+  const prompts = await loadConditionPrompts();
+  const fixture = contextFor(B0);
+  let calls = 0;
+  const provider = {
+    metadata: {
+      id: 'fake',
+      name: 'Fake',
+      baseUrl: 'https://fake.invalid',
+    },
+    complete: async (request: ProviderRequest<unknown>) => {
+      calls += 1;
+      if (calls === 1) {
+        return {
+          text: 'private invalid submission',
+          finishReason: 'stop' as const,
+          toolCalls: [],
+          usage: { inputTokens: 2, outputTokens: 1 },
+        };
+      }
+      const terminal = request.tools![0]!;
+      return {
+        text: '',
+        finishReason: 'tool_calls' as const,
+        toolCalls: [
+          {
+            id: 'terminal-2',
+            name: terminal.name,
+            arguments: JSON.stringify({
+              status: 'completed',
+              output: 'recovered',
+              toolCalls: [],
+            }),
+          },
+        ],
+        usage: { inputTokens: 3, outputTokens: 2 },
+      };
+    },
+  } as unknown as LlmProvider;
+  const model = createProviderBaselineModel({
+    provider,
+    model: 'openai/gpt-5.6-luna',
+  });
+
+  const result = await executeBaseline(
+    fixture.context,
+    model,
+    prompts,
+    testRetrieval(),
+  );
+
+  assert.equal(result.status, 'succeeded');
+  assert.equal(fixture.modelCalls(), 2);
+  assert.deepEqual(result.usage, {
+    inputTokens: 5,
+    outputTokens: 3,
+    cachedInputTokens: undefined,
+    reasoningTokens: undefined,
+    costUsd: 0,
+  });
+  const attempts = fixture.events.flatMap((event) => {
+    if (typeof event !== 'object' || event === null || Array.isArray(event))
+      return [];
+    const value = event as Readonly<Record<string, HarnessJsonValue>>;
+    return value['type'] === 'structured.attempt' ? [value] : [];
+  });
+  assert.deepEqual(
+    attempts.map(({ attempt, runtimeAccepted, feedbackSent }) => ({
+      attempt,
+      runtimeAccepted,
+      feedbackSent,
+    })),
+    [
+      { attempt: 1, runtimeAccepted: false, feedbackSent: true },
+      { attempt: 2, runtimeAccepted: true, feedbackSent: false },
+    ],
+  );
+  assert.doesNotMatch(JSON.stringify(fixture.events), /private invalid/u);
 });
 
 test('B3 includes localized-revision usage and re-execution', async () => {
@@ -329,8 +525,13 @@ test('B3 includes localized-revision usage and re-execution', async () => {
       usage: { inputTokens: 5, outputTokens: 5, costUsd: 0.05 },
     }),
   };
-  const result = await executeBaseline(fixture.context, model, prompts);
-  assert.equal(fixture.modelCalls(), 4);
+  const result = await executeBaseline(
+    fixture.context,
+    model,
+    prompts,
+    testRetrieval(),
+  );
+  assert.equal(fixture.modelCalls(), 8);
   assert.equal(result.usage.inputTokens, 8);
   assert.equal(result.usage.costUsd, 0.08);
 });
@@ -701,10 +902,28 @@ test('provider baseline adapter fixes medium effort and preserves Markdown promp
   const requests: Record<string, unknown>[] = [];
   const metered: EngineUsage[] = [];
   const provider = {
+    metadata: {
+      id: 'fake',
+      name: 'Fake',
+      baseUrl: 'https://fake.invalid',
+    },
     complete: async (request: Record<string, unknown>) => {
       requests.push(request);
+      const terminal = (request['tools'] as { name: string }[])[0]!;
       return {
-        structured: { status: 'completed', output: 'done', toolCalls: [] },
+        text: '',
+        finishReason: 'tool_calls',
+        toolCalls: [
+          {
+            id: 'terminal-1',
+            name: terminal.name,
+            arguments: JSON.stringify({
+              status: 'completed',
+              output: 'done',
+              toolCalls: [],
+            }),
+          },
+        ],
         usage: { inputTokens: 3, outputTokens: 2 },
       };
     },
@@ -723,7 +942,9 @@ test('provider baseline adapter fixes medium effort and preserves Markdown promp
   });
   assert.equal(requests[0]?.['effort'], 'medium');
   assert.match(
-    (requests[0]?.['messages'] as { content: string }[])[1]?.content!,
+    (requests[0]?.['messages'] as { role: string; content: string }[]).find(
+      ({ role }) => role === 'user',
+    )?.content!,
     /^# Request/u,
   );
   assert.deepEqual(answer.usage, {

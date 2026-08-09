@@ -4,6 +4,13 @@ import { CONDITIONS } from '../conditions/index.js';
 import { BASE_TOOL_NAMES, TOOL_NAMES } from '../config/index.js';
 import type { JsonValue } from '../core/json.js';
 import type { StoredEvent } from '../runtime/index.js';
+import { evaluateDelivery } from './delivery-evidence.js';
+
+export interface CriterionEvidenceEvaluation {
+  readonly id: string;
+  readonly evidenceRefs: readonly string[];
+  readonly passed: boolean;
+}
 
 export interface EvidenceEvaluation {
   readonly success: boolean;
@@ -13,7 +20,9 @@ export interface EvidenceEvaluation {
   readonly observationExact: boolean;
   readonly revisionExact: boolean;
   readonly deliveryExact: boolean;
+  readonly criteriaExact: boolean;
   readonly worldExact: boolean;
+  readonly criteria: readonly CriterionEvidenceEvaluation[];
   readonly selectedSkills: readonly string[];
   readonly calledTools: readonly string[];
   readonly retrievals?: readonly EvidenceRetrieval[];
@@ -239,11 +248,6 @@ const containsNone = (
   forbidden: readonly string[],
 ): boolean => forbidden.every((value) => !values.includes(value));
 
-const deliveryMarkers = (benchmarkCase: Case): readonly string[] => {
-  const delivery = object(benchmarkCase.gold.expectedDelivery);
-  return strings(delivery?.['contains']);
-};
-
 const expectedEvidence = (benchmarkCase: Case): readonly HashedObservation[] =>
   benchmarkCase.gold.expectedState.toolEvidence.map(
     ({ name, evidenceHash }) => ({ tool: name, output: evidenceHash }),
@@ -309,33 +313,29 @@ export const evaluateEvidence = (
         actual?.tool === expected.tool && actual.output === expected.output
       );
     });
+  const matchedRefs = new Set(
+    benchmarkCase.gold.expectedState.toolEvidence.flatMap((expected, index) => {
+      const actual = evidence.actualEvidence[index];
+      return actual?.tool === expected.name &&
+        actual.output === expected.evidenceHash
+        ? [expected.id]
+        : [];
+    }),
+  );
   const revisionExact =
     evidence.revised === benchmarkCase.gold.requiresRevision &&
     (!benchmarkCase.gold.requiresRevision || evidence.revisionSupported);
-  const outcome = object(record.outcome ?? null);
-  const delivery = object(outcome?.['delivery'] ?? null);
-  const partMarkdown = Array.isArray(delivery?.['parts'])
-    ? delivery['parts'].flatMap((part) => {
-        const value = object(part);
-        return typeof value?.['markdown'] === 'string'
-          ? [value['markdown']]
-          : [];
-      })
-    : [];
-  const goalOutputs = Array.isArray(outcome?.['goals'])
-    ? outcome['goals'].flatMap((goal) => {
-        const value = object(goal);
-        return typeof value?.['output'] === 'string' ? [value['output']] : [];
-      })
-    : [];
-  const deliveryText = [
-    typeof delivery?.['markdown'] === 'string' ? delivery['markdown'] : '',
-    ...partMarkdown,
-    ...goalOutputs,
-  ].join('\n');
-  const deliveryExact = deliveryMarkers(benchmarkCase).every((marker) =>
-    deliveryText.includes(marker),
-  );
+  const delivery = evaluateDelivery(benchmarkCase, record.outcome ?? null);
+  delivery.matchedRefs.forEach((reference) => matchedRefs.add(reference));
+  const criteria = benchmarkCase.gold.criteria.map((criterion) => ({
+    id: criterion.id,
+    evidenceRefs: criterion.evidenceRefs,
+    passed: criterion.evidenceRefs.every((reference) =>
+      matchedRefs.has(reference),
+    ),
+  }));
+  const criteriaExact = criteria.every(({ passed }) => passed);
+  const deliveryExact = delivery.exact;
   const worldExact =
     record.worldHash === benchmarkCase.gold.expectedState.worldHash;
   return {
@@ -344,6 +344,7 @@ export const evaluateEvidence = (
       toolsExact &&
       observationExact &&
       deliveryExact &&
+      criteriaExact &&
       worldExact,
     terminalExact,
     skillsExact,
@@ -351,7 +352,9 @@ export const evaluateEvidence = (
     observationExact,
     revisionExact,
     deliveryExact,
+    criteriaExact,
     worldExact,
+    criteria,
     selectedSkills: evidence.selectedSkills,
     calledTools: evidence.calledTools,
     ...(evidence.retrievals.length === 0
@@ -375,6 +378,11 @@ export const toScoreEvidence = (
     { id: 'tools', passed: evaluation.toolsExact, required: true },
     { id: 'observations', passed: evaluation.observationExact, required: true },
     { id: 'revision', passed: evaluation.revisionExact, required: false },
+    ...evaluation.criteria.map((criterion) => ({
+      id: `criterion:${criterion.id}`,
+      passed: criterion.passed,
+      required: true,
+    })),
     { id: 'delivery', passed: evaluation.deliveryExact, required: true },
     { id: 'world', passed: evaluation.worldExact, required: true },
   ] as const;

@@ -1,5 +1,6 @@
 import {
   ExecutionRecordV1,
+  type AttemptReservation,
   type Case,
   type Condition,
   type ExecutionRecord,
@@ -19,6 +20,8 @@ export type CrashBoundary =
   | 'after-first-model'
   | 'after-tool'
   | 'before-terminal'
+  | 'after-trace'
+  | 'before-record'
   | 'after-terminal';
 
 export type InfrastructureStage =
@@ -69,6 +72,13 @@ export interface EngineUsage {
   readonly outputTokens: number;
   readonly cachedInputTokens?: number;
   readonly reasoningTokens?: number;
+  readonly embeddingInputTokens?: number;
+  readonly rerankInputTokens?: number;
+  readonly rerankDocuments?: number;
+  readonly rerankSearchUnits?: number;
+  readonly completionRequests?: number;
+  readonly embeddingRequests?: number;
+  readonly rerankRequests?: number;
   readonly costUsd: number;
 }
 
@@ -105,6 +115,9 @@ export interface RunnerDependencies {
   readonly execute: (context: RunContext) => Promise<EngineResult>;
   /** Returns cumulative, allowlisted metering even when execution throws. */
   readonly usage?: () => EngineUsage;
+  readonly onAttemptReserved?: (
+    reservation: AttemptReservation,
+  ) => void | Promise<void>;
   readonly now?: () => Date;
   readonly crash?: (boundary: CrashBoundary) => void | Promise<void>;
 }
@@ -117,6 +130,39 @@ const failureDetails = (
     : { stage: 'unknown', code: 'unclassified' };
 
 const iso = (date: Date): string => date.toISOString();
+
+const operationUsage = (usage: EngineUsage | undefined) => ({
+  ...(usage?.embeddingInputTokens === undefined
+    ? {}
+    : { embeddingInputTokens: usage.embeddingInputTokens }),
+  ...(usage?.rerankInputTokens === undefined
+    ? {}
+    : { rerankInputTokens: usage.rerankInputTokens }),
+  ...(usage?.rerankDocuments === undefined
+    ? {}
+    : { rerankDocuments: usage.rerankDocuments }),
+  ...(usage?.rerankSearchUnits === undefined
+    ? {}
+    : { rerankSearchUnits: usage.rerankSearchUnits }),
+  ...(usage?.completionRequests === undefined
+    ? {}
+    : { completionRequests: usage.completionRequests }),
+  ...(usage?.embeddingRequests === undefined
+    ? {}
+    : { embeddingRequests: usage.embeddingRequests }),
+  ...(usage?.rerankRequests === undefined
+    ? {}
+    : { rerankRequests: usage.rerankRequests }),
+});
+
+const payloadType = (payload: JsonValue): string | undefined =>
+  typeof payload === 'object' &&
+  payload !== null &&
+  !Array.isArray(payload) &&
+  'type' in payload &&
+  typeof payload['type'] === 'string'
+    ? payload['type']
+    : undefined;
 
 const STRUCTURE_KEYS = new Set([
   'attempt',
@@ -237,11 +283,14 @@ export const executeRun = async (
     throw new TypeError('failure-only oracle requires a failed parent record');
   }
   const clock = dependencies.now ?? (() => new Date());
-  const priorAttempts = await dependencies.records.read(run.id).catch(() => {
-    throw new HarnessInfrastructureError('store', 'record_read_failed');
-  });
-  const attempt = priorAttempts.length + 1;
   const started = clock();
+  const reservation = await dependencies.records
+    .reserve(run, iso(started))
+    .catch(() => {
+      throw new HarnessInfrastructureError('store', 'record_append_failed');
+    });
+  const attempt = reservation.attempt;
+  await dependencies.onAttemptReserved?.(reservation);
   let world = createWorld();
   let firstModelCallStarted = false;
   let modelCalls = 0;
@@ -363,6 +412,7 @@ export const executeRun = async (
   const trace = await dependencies.events.derive(run.id, attempt).catch(() => {
     throw new HarnessInfrastructureError('store', 'trace_derive_failed');
   });
+  await crash('after-trace');
   const meteredUsage = dependencies.usage?.() ?? result?.usage;
   const usage = {
     inputTokens: meteredUsage?.inputTokens ?? 0,
@@ -373,6 +423,7 @@ export const executeRun = async (
     ...(meteredUsage?.reasoningTokens === undefined
       ? {}
       : { reasoningTokens: meteredUsage.reasoningTokens }),
+    ...operationUsage(meteredUsage),
     modelCalls,
     toolCalls,
     costUsd: meteredUsage?.costUsd ?? 0,
@@ -398,9 +449,87 @@ export const executeRun = async (
             beforeFirstModelCall: !firstModelCallStarted,
           },
   });
+  await crash('before-record');
   await dependencies.records.append(record).catch(() => {
     throw new HarnessInfrastructureError('store', 'record_append_failed');
   });
   await crash('after-terminal');
   return record;
+};
+
+export interface RecoveryDependencies {
+  readonly events: EventStore;
+  readonly records: RecordStore;
+  readonly now?: () => Date;
+  readonly usage?: (
+    reservation: AttemptReservation,
+  ) => Promise<EngineUsage | undefined>;
+}
+
+/** Finalizes every reserved attempt left without a terminal record by abrupt death. */
+export const recoverInterruptedRun = async (
+  run: RunSpec,
+  dependencies: RecoveryDependencies,
+): Promise<ExecutionRecord | undefined> => {
+  const pending = await dependencies.records.pending(run.id);
+  let recovered: ExecutionRecord | undefined;
+  for (const reservation of pending) {
+    if (artifactHash(reservation.run) !== artifactHash(run)) {
+      throw new Error('pending attempt differs from the scheduled run');
+    }
+    const stored = await dependencies.events.read(run.id, reservation.attempt);
+    const types = stored.map(({ payload }) => payloadType(payload));
+    const modelCalls = types.filter(
+      (type) => type === 'model.call.started',
+    ).length;
+    const toolCalls = types.filter(
+      (type) => type === 'tool.call.started',
+    ).length;
+    const firstModelCallStarted = modelCalls > 0;
+    await dependencies.events.append(run.id, reservation.attempt, {
+      type: 'run.recovered',
+      status: 'infrastructure',
+      infrastructure: 'interrupted',
+      modelCall: modelCalls,
+      count: toolCalls,
+    });
+    const trace = await dependencies.events.derive(run.id, reservation.attempt);
+    const metered = await dependencies.usage?.(reservation);
+    const finished = dependencies.now?.() ?? new Date();
+    const started = new Date(reservation.reservedAt);
+    recovered = ExecutionRecordV1.parse({
+      schemaVersion: 1,
+      attempt: reservation.attempt,
+      run,
+      status: 'infrastructure',
+      startedAt: reservation.reservedAt,
+      finishedAt: iso(finished),
+      durationMs: Math.max(0, finished.getTime() - started.getTime()),
+      firstModelCallStarted,
+      trace,
+      outcome: null,
+      worldHash: worldHash(createWorld()),
+      usage: {
+        inputTokens: metered?.inputTokens ?? 0,
+        outputTokens: metered?.outputTokens ?? 0,
+        ...(metered?.cachedInputTokens === undefined
+          ? {}
+          : { cachedInputTokens: metered.cachedInputTokens }),
+        ...(metered?.reasoningTokens === undefined
+          ? {}
+          : { reasoningTokens: metered.reasoningTokens }),
+        ...operationUsage(metered),
+        modelCalls,
+        toolCalls,
+        costUsd: metered?.costUsd ?? 0,
+      },
+      infrastructureFailure: {
+        stage: firstModelCallStarted ? 'model' : 'prepare',
+        code: 'interrupted',
+        beforeFirstModelCall: !firstModelCallStarted,
+      },
+    });
+    await dependencies.records.append(recovered);
+  }
+  return recovered;
 };

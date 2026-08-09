@@ -15,6 +15,7 @@ const hash = `sha256:${'0'.repeat(64)}`;
 test('exports every frozen V1 contract as JSON Schema', () => {
   assert.deepEqual(Object.keys(schemasV1).sort(), [
     'AnalysisResultV1',
+    'AttemptReservationV1',
     'CaseV1',
     'ConditionV1',
     'ExecutionRecordV1',
@@ -52,7 +53,13 @@ test('accepts a self-contained case and rejects private extra fields', () => {
     fixtureIds: ['fixture-001'],
     tags: ['reconciliation'],
     gold: {
-      criteria: [{ id: 'balanced', description: 'The totals balance.' }],
+      criteria: [
+        {
+          id: 'balanced',
+          description: 'The totals balance.',
+          evidenceRefs: ['delivery.balanced'],
+        },
+      ],
       requiredSkills: ['finance-reconciliation'],
       relevantSkills: ['finance-reconciliation'],
       forbiddenSkills: [],
@@ -63,6 +70,7 @@ test('accepts a self-contained case and rejects private extra fields', () => {
         worldHash: hash,
         toolEvidence: [
           {
+            id: 'tool.calculate',
             name: 'calculate',
             input: { expression: '1 + 1' },
             evidenceHash: hash,
@@ -70,7 +78,10 @@ test('accepts a self-contained case and rejects private extra fields', () => {
         ],
         requiredEffects: [],
       },
-      expectedDelivery: { contains: ['totals balance'] },
+      expectedDelivery: {
+        document: { balanced: true },
+        fields: [{ id: 'delivery.balanced', path: ['balanced'] }],
+      },
       requiresRevision: false,
     },
     contentHash: hash,
@@ -96,12 +107,15 @@ test('condition factors expose the exact ablation surface', () => {
       catalogFeedback: true,
       skillView: 'body',
       retrieval: 'top-k',
+      maxCandidates: 5,
       maxSkills: 5,
       bundle: 'selective',
       bundleOrder: 'ranked',
       menu: 'base-plus-bundle',
       baseTools: true,
       localizedRevision: true,
+      maxTurns: 16,
+      structuredRepairRetries: 2,
     },
     declaredChange: 'Full treatment.',
   });
@@ -145,8 +159,13 @@ test('freeze manifest records public provenance without credential slots', () =>
       prices: hash,
       seeds: hash,
       calibration: hash,
+      calibrationAudit: hash,
+      confirmatoryAudit: hash,
+      costApproval: hash,
       powerConfig: hash,
+      powerApproval: hash,
       powerResult: hash,
+      retrievalIndex: hash,
       analysis: hash,
       renvLock: hash,
     },
