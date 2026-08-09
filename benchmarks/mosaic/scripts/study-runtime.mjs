@@ -52,6 +52,8 @@ export const usage = `Usage:
 
 The analysis image must already exist by immutable digest. Calibration and
 confirmatory cases, prices, and the power config are human-authored inputs.
+The primary model is frozen as openai/gpt-5.6-luna at medium effort and is not
+configured here. candidate is the required non-OpenAI replication model.
 The command runs all deterministic gates, paid schedules, scoring, freeze,
 replication, sensitivity, and R analyses. It is resumable and never deletes
 an existing attempt. Blinded human review and publication packaging remain

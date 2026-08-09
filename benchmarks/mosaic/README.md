@@ -7,6 +7,12 @@ analysis protocol. Doric-targeted smokes are opt-in harness contracts and never
 enter the confirmatory analysis; they do not execute the dirty `agents/doric`
 composition root.
 
+> **Readiness status (2026-08-08): NO-GO for an official paid study.** The
+> remaining validity, recovery, metering, case-authoring, and operational work
+> is tracked in [READINESS.md](./READINESS.md). Passing the existing test suite
+> or `--validate-config` does not by itself mean that the instrument is ready.
+> Do not use `--yes-paid-study` until every P0 gate in that document is closed.
+
 ## Frozen runtime
 
 - Primary model: `openai/gpt-5.6-luna`, effort `medium`.

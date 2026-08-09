@@ -5,6 +5,13 @@ analisar e arquivar um estudo do benchmark MOSAIC. Ele foi escrito a partir da
 CLI e dos schemas atuais de `benchmarks/mosaic`; quando houver divergência, os
 schemas versionados e o código da CLI são a autoridade.
 
+> **Estado de prontidão em 2026-08-08: NO-GO.** Este manual descreve a operação
+> pretendida, mas ainda existem bloqueios de validade no outcome, paridade das
+> condições, metering e recuperação de crashes. Consulte
+> [READINESS.md](./READINESS.md) e não inicie chamadas pagas enquanto qualquer
+> item P0 estiver aberto. `--validate-config` valida o envelope, não certifica
+> que o estudo está pronto.
+
 O fluxo computacional pode ser executado por um único orquestrador retomável;
 as etapas humanas continuam explícitas. Um estudo completo passa por estas
 fases:
