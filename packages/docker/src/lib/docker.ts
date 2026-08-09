@@ -67,6 +67,7 @@ export const createDockerClient = (
         dropbearPath:
           options.dropbearPath ?? '/opt/doric/firecracker/dropbearmulti',
         statePath: options.statePath ?? '/var/lib/doric/docker',
+        platform: process.platform,
       }),
     async ping(control = {}) {
       await send({ method: 'GET', path: '/_ping', ...control }, 200);

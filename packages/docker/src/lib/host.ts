@@ -26,6 +26,7 @@ export type DockerHostConfig = {
   readonly connection: DockerConnection;
   readonly dropbearPath: string;
   readonly statePath: string;
+  readonly platform: NodeJS.Platform;
 };
 
 export type DockerHostResources = {
@@ -51,22 +52,11 @@ export const preflightDockerHost = async (
   network: NormalizedSandboxNetworkPolicy,
   config: DockerHostConfig,
 ): Promise<void> => {
+  const strategy = firewallStrategy(config.platform);
   if (network.mode !== 'egress') return;
-  if (process.platform !== 'linux' || config.connection.kind !== 'unix') {
-    throw new Error('Docker egress requires a local Linux Docker daemon');
+  if (strategy === 'nftables') {
+    await preflightLinuxFirewall(config);
   }
-  const [self, init] = await Promise.all([
-    stat('/proc/self/ns/net'),
-    stat('/proc/1/ns/net'),
-  ]);
-  if (self.dev !== init.dev || self.ino !== init.ino) {
-    throw new Error(
-      'Docker egress requires access to the host network namespace',
-    );
-  }
-  await command('nft', ['list', 'ruleset']).catch(() => {
-    throw new Error('Docker egress requires nftables CAP_NET_ADMIN access');
-  });
   if (network.ssh !== false) {
     await access(config.dropbearPath, constants.X_OK).catch(() => {
       throw new Error(
@@ -85,7 +75,9 @@ export const configureDockerHost = async (input: {
 }): Promise<DockerHostResources> => {
   const id = input.container.id;
   const directory = join(input.config.statePath, id);
-  await mkdir(directory, { recursive: true, mode: 0o700 });
+  if (input.network.ssh !== false) {
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+  }
   let table: string | undefined;
 
   try {
@@ -94,7 +86,10 @@ export const configureDockerHost = async (input: {
         'Docker did not assign the sandbox an inspectable IPv4 address',
       );
     }
-    if (input.network.mode === 'egress') {
+    if (
+      input.network.mode === 'egress' &&
+      firewallStrategy(input.config.platform) === 'nftables'
+    ) {
       table = `doric_docker_${id.replaceAll('-', '').slice(0, 12)}`;
       await command(
         'nft',
@@ -138,6 +133,34 @@ export const configureDockerHost = async (input: {
     await rm(directory, { recursive: true, force: true });
     throw cause;
   }
+};
+
+const preflightLinuxFirewall = async (
+  config: DockerHostConfig,
+): Promise<void> => {
+  if (config.connection.kind !== 'unix') {
+    throw new Error('Docker egress requires a local Linux Docker daemon');
+  }
+  const [self, init] = await Promise.all([
+    stat('/proc/self/ns/net'),
+    stat('/proc/1/ns/net'),
+  ]);
+  if (self.dev !== init.dev || self.ino !== init.ino) {
+    throw new Error(
+      'Docker egress requires access to the host network namespace',
+    );
+  }
+  await command('nft', ['list', 'ruleset']).catch(() => {
+    throw new Error('Docker egress requires nftables CAP_NET_ADMIN access');
+  });
+};
+
+export const firewallStrategy = (
+  platform: NodeJS.Platform,
+): 'nftables' | 'docker-desktop' => {
+  if (platform === 'linux') return 'nftables';
+  if (platform === 'darwin' || platform === 'win32') return 'docker-desktop';
+  throw new Error(`Docker egress is unsupported on platform: ${platform}`);
 };
 
 const configureSsh = async (

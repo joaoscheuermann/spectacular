@@ -1,6 +1,9 @@
 import { Buffer } from 'node:buffer';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import {
@@ -8,11 +11,17 @@ import {
   DockerRequestAbortedError,
   DockerRequestTimeoutError,
   createDockerClient,
+  type DockerClient,
   type DockerResponse,
   type DockerTransport,
   type DockerTransportRequest,
 } from '../src/index.js';
-import { renderDockerFirewall } from '../src/lib/host.js';
+import {
+  configureDockerHost,
+  firewallStrategy,
+  preflightDockerHost,
+  renderDockerFirewall,
+} from '../src/lib/host.js';
 
 const jsonResponse = (status: number, body: unknown): DockerResponse => ({
   status,
@@ -376,6 +385,77 @@ test('renders host-input and protected-destination Docker rules', () => {
   assert.ok(
     rules.indexOf('ip daddr 10.0.0.8/32 tcp dport { 443 } accept') <
       rules.indexOf('ip daddr 10.0.0.0/8 drop'),
+  );
+});
+
+test('selects nftables only on Linux and rejects unknown platforms', () => {
+  assert.equal(firewallStrategy('linux'), 'nftables');
+  assert.equal(firewallStrategy('darwin'), 'docker-desktop');
+  assert.equal(firewallStrategy('win32'), 'docker-desktop');
+  assert.throws(
+    () => firewallStrategy('aix'),
+    /Docker egress is unsupported on platform: aix/u,
+  );
+});
+
+test('leaves Docker Desktop firewall and bridge networking unchanged', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'doric-docker-host-'));
+  const client = new Proxy({} as DockerClient, {
+    get() {
+      throw new Error('Docker Desktop firewall setup must not use the client');
+    },
+  });
+
+  try {
+    for (const platform of ['darwin', 'win32'] as const) {
+      const config = {
+        connection:
+          platform === 'win32'
+            ? ({ kind: 'namedPipe' } as const)
+            : ({ kind: 'unix' } as const),
+        dropbearPath: '/unused',
+        statePath: directory,
+        platform,
+      };
+      await preflightDockerHost(
+        { mode: 'egress', ssh: false, dnsServers: ['1.1.1.1'] },
+        config,
+      );
+      const host = await configureDockerHost({
+        client,
+        container: { id: `sandbox-${platform}`, warnings: [] },
+        inspect: {
+          id: `sandbox-${platform}`,
+          ipAddress: '172.17.0.2',
+          ports: {},
+          raw: {},
+        },
+        network: {
+          mode: 'egress',
+          ssh: false,
+          dnsServers: ['1.1.1.1'],
+        },
+        config,
+      });
+      await host.dispose();
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('rejects unknown platforms before provisioning', async () => {
+  await assert.rejects(
+    preflightDockerHost(
+      { mode: 'disabled', ssh: false },
+      {
+        connection: { kind: 'unix' },
+        dropbearPath: '/unused',
+        statePath: '/unused',
+        platform: 'aix',
+      },
+    ),
+    /Docker egress is unsupported on platform: aix/u,
   );
 });
 

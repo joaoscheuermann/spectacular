@@ -605,12 +605,12 @@ it guards other operations. `packages/sandbox` owns the provider-neutral
 `SandboxProvider` and `SandboxRuntime` boundary plus workspace, Git, file, diff,
 network-policy normalization, and disposed-session behavior. Every sandbox has
 explicit CPU, memory, and writable-layer disk resources; networking is disabled
-by default, optional SSH is key-only and loopback-bound by default, and effective
-egress requires IP-literal DNS plus protected-destination filtering. Doric
-explicitly provisions its agent sandboxes from `node:22-bookworm`, which includes
-Git, with filtered egress and the `1.1.1.1` DNS resolver so selected Git skills
-can reach public remotes. Remote authentication remains runtime-provided and
-must never be placed in model-visible tool arguments.
+by default, optional SSH is key-only and loopback-bound by default, and
+effective egress requires IP-literal DNS. Doric explicitly provisions its agent
+sandboxes from the multi-architecture `node:22-bookworm` image, which includes
+Git, with the `1.1.1.1` DNS resolver so selected Git skills can reach public
+remotes. Remote authentication remains runtime-provided and must never be
+placed in model-visible tool arguments.
 
 `packages/docker` and `packages/firecracker` depend inward on Sandbox and expose
 providers. Docker is Doric's default; `DORIC_SANDBOX_PROVIDER=firecracker`
@@ -629,25 +629,29 @@ Docker maps CPU, memory, and writable-layer disk resources to daemon limits.
 It retries once without the writable-layer disk daemon limit only when the
 local storage driver explicitly rejects that option, so that fallback leaves
 the Docker writable layer unmetered; CPU and memory limits remain enforced.
-Use a quota-capable Docker host when disk isolation is required. Effective
-Docker egress requires a local Unix daemon, host-network-namespace access,
-nftables `CAP_NET_ADMIN`, and
-provider-owned rules keyed to the inspected container address. Both providers
+Use a quota-capable Docker host when disk isolation is required. On Linux,
+effective Docker egress requires a local Unix daemon,
+host-network-namespace access, nftables `CAP_NET_ADMIN`, and provider-owned
+rules keyed to the inspected container address. Linux Docker and Firecracker
 block new sandbox-to-host traffic and protected public-egress destinations,
-with only exact private CIDR/protocol/port exceptions. SSH is disabled by
-default, uses per-sandbox Ed25519 user and host keys, is key-only, and binds to
-loopback unless an advertised remote binding is explicit.
+with only exact private CIDR/protocol/port exceptions. On native macOS and
+Windows, the Docker provider deliberately skips custom firewall configuration
+and uses Docker Desktop bridge/NAT egress directly for local development;
+protected destinations that Linux blocks remain reachable there. Other host
+platforms reject Docker egress. SSH is disabled by default, uses per-sandbox
+Ed25519 user and host keys, is key-only, and binds to loopback unless an
+advertised remote binding is explicit.
 
 `agents/doric/.Dockerfile` reproducibly builds the agent and both built-in
 bundles, pinned Firecracker and jailer, Linux 6.18 guest kernel, static BusyBox
 and Dropbear bootstrap, initramfs, OCI/ext4 tooling, networking tools, and
-OpenSSH client. Its Linux-only
-Compose profiles provide either the Docker socket plus host-network firewall
-access or KVM/TUN/cgroup/state/cache access without a Docker socket. The
-privileged Firecracker profile is a development and e2e harness, not a
-production isolation boundary. Doric constructs one selected provider for its
-pool, acquires one pool lease per prompt, binds bundle tools to it, releases it
-after success or failure, and disposes the pool on shutdown.
+OpenSSH client. Its Linux-only Compose profiles provide either the Docker
+socket plus host-network firewall access or KVM/TUN/cgroup/state/cache access
+without a Docker socket. The privileged Firecracker profile is a development
+and e2e harness, not a production isolation boundary. Doric constructs one
+selected provider for its pool, acquires one pool lease per prompt, binds
+bundle tools to it, releases it after success or failure, and disposes the pool
+on shutdown.
 
 Doric initializes an otherwise unconfigured Express application and attaches
 a Socket.IO server to the same HTTP listener. The listener binds to
