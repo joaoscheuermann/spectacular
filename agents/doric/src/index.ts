@@ -43,9 +43,18 @@ async function main() {
     process.env.DORIC_SANDBOX_PROVIDER === 'firecracker'
       ? 'firecracker'
       : 'docker';
+  const sandboxSshEnabled = process.env.DORIC_SANDBOX_SSH === 'true';
   const startup = logger.child({ component: 'startup' });
 
-  startup.info({ host, port, sandboxProviderName }, 'Doric starting');
+  startup.info(
+    {
+      host,
+      port,
+      sandboxProviderName,
+      sshEnabled: sandboxSshEnabled,
+    },
+    'Doric starting',
+  );
   startupStage = 'database_client';
   startup.info('Initializing PostgreSQL client');
   const database = createDatabase(process.env.DORIC_DATABASE_URL ?? '');
@@ -70,7 +79,11 @@ async function main() {
     memoryMiB: 512,
     diskMiB: 4096,
   } as const;
-  const poolLimits = { minIdle: 1, maxSandboxes: 10 } as const;
+  const poolLimits = {
+    minIdle: 1,
+    maxSandboxes: 10,
+    maxCreateAttempts: 3,
+  } as const;
 
   const pool = createSandpool({
     ...poolLimits,
@@ -81,7 +94,11 @@ async function main() {
         image: sandboxImage,
         imagePullPolicy: 'if-not-present',
         resources: sandboxResources,
-        network: { mode: 'egress', dnsServers: ['1.1.1.1'] },
+        network: {
+          mode: 'egress',
+          ssh: sandboxSshEnabled,
+          dnsServers: ['1.1.1.1'],
+        },
       }),
   });
   startup.info(
@@ -91,6 +108,7 @@ async function main() {
       sandboxResources,
       ...poolLimits,
       networkMode: 'egress',
+      sshEnabled: sandboxSshEnabled,
     },
     'Sandbox pool configured',
   );
@@ -155,12 +173,19 @@ async function main() {
   });
 
   app.use(express.json());
-  app.use('/vms', createVmsRouter({ list: vms.list }));
+  app.use(
+    '/vms',
+    createVmsRouter({
+      list: vms.list,
+      find: vms.find,
+      ssh: service.sshForVm,
+    }),
+  );
   app.use('/mosaic/config', createConfigRouter(config));
   app.use('/mosaic/sessions', createSessionsRouter(service));
   app.use(handleHttpError);
   startup.info(
-    { restEndpointCount: 7, socketNamespace: '/mosaic' },
+    { restEndpointCount: 10, socketNamespace: '/mosaic' },
     'Network interfaces configured',
   );
 

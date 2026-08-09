@@ -32,6 +32,7 @@ type HeatWaiter = {
 
 type State = {
   readonly options: SandpoolOptions;
+  readonly maxCreateAttempts: number;
   readonly logger: Logger;
   readonly idle: SessionRecord[];
   readonly records: Set<SessionRecord>;
@@ -39,6 +40,8 @@ type State = {
   readonly heatWaiters: Set<HeatWaiter>;
   lifecycle: 'active' | 'disposing' | 'disposed';
   creating: number;
+  createFailures: number;
+  creationExhausted: boolean;
   creationBackoffMs: number;
   retryTimer: ReturnType<typeof setTimeout> | undefined;
   lastFailure: unknown | undefined;
@@ -49,6 +52,7 @@ type State = {
 
 const INITIAL_BACKOFF_MS = 250;
 const MAX_BACKOFF_MS = 5_000;
+const DEFAULT_MAX_CREATE_ATTEMPTS = 3;
 
 /** Creates a process-local pool and begins warming it in the background. */
 export const createSandpool = (options: SandpoolOptions): Sandpool => {
@@ -62,6 +66,7 @@ export const createSandpool = (options: SandpoolOptions): Sandpool => {
 
   const state: State = {
     options,
+    maxCreateAttempts: options.maxCreateAttempts ?? DEFAULT_MAX_CREATE_ATTEMPTS,
     logger,
     idle: [],
     records: new Set(),
@@ -69,6 +74,8 @@ export const createSandpool = (options: SandpoolOptions): Sandpool => {
     heatWaiters: new Set(),
     lifecycle: 'active',
     creating: 0,
+    createFailures: 0,
+    creationExhausted: false,
     creationBackoffMs: INITIAL_BACKOFF_MS,
     retryTimer: undefined,
     lastFailure: undefined,
@@ -101,6 +108,13 @@ const validateOptions = (options: SandpoolOptions): void => {
   if (options.minIdle > options.maxSandboxes) {
     throw new RangeError('minIdle must not exceed maxSandboxes');
   }
+  if (
+    options.maxCreateAttempts !== undefined &&
+    (!Number.isInteger(options.maxCreateAttempts) ||
+      options.maxCreateAttempts <= 0)
+  ) {
+    throw new RangeError('maxCreateAttempts must be a positive integer');
+  }
   if (typeof options.create !== 'function') {
     throw new TypeError('create must be a function');
   }
@@ -122,6 +136,7 @@ const waitUntilHeated = (
   if (isHeated(state)) {
     return Promise.resolve();
   }
+  resumeCreationAttempts(state);
   log(state, 'waiting for sandpool to heat');
 
   return new Promise<void>((resolve, reject) => {
@@ -137,6 +152,7 @@ const waitUntilHeated = (
     };
     state.heatWaiters.add(waiter);
     options.signal?.addEventListener('abort', waiter.onAbort, { once: true });
+    pump(state);
   });
 };
 
@@ -146,6 +162,7 @@ const acquire = (
 ): Promise<SandboxLease> => {
   ensureActive(state);
   ensureNotAborted(options.signal);
+  resumeCreationAttempts(state);
   return new Promise<SandboxLease>((resolve, reject) => {
     const waiter: AcquireWaiter = {
       resolve,
@@ -189,13 +206,15 @@ const pump = (state: State): void => {
 };
 
 const startRequiredCreations = (state: State): void => {
-  if (state.retryTimer !== undefined) return;
+  if (state.retryTimer !== undefined || state.creationExhausted) return;
 
   const known = state.records.size + state.creating;
   const capacity = state.options.maxSandboxes - known;
   const deficit =
     state.acquisitions.length + state.options.minIdle - state.idle.length;
-  const count = Math.max(0, Math.min(capacity, deficit));
+  const remainingAttempts =
+    state.maxCreateAttempts - state.createFailures - state.creating;
+  const count = Math.max(0, Math.min(capacity, deficit, remainingAttempts));
 
   for (let index = 0; index < count; index += 1) {
     state.creating += 1;
@@ -208,6 +227,8 @@ const createOne = async (state: State): Promise<void> => {
   try {
     const session = await state.options.create();
     state.creating -= 1;
+    state.createFailures = 0;
+    state.creationExhausted = false;
     state.creationBackoffMs = INITIAL_BACKOFF_MS;
     const record: SessionRecord = {
       session,
@@ -225,15 +246,49 @@ const createOne = async (state: State): Promise<void> => {
     }
   } catch (cause) {
     state.creating -= 1;
+    state.createFailures += 1;
     state.lastFailure = cause;
     log(state, 'sandbox creation failed', {
       reason: 'sandbox_factory_rejected',
       hint: 'Check sandbox provider availability, image access, and resource support.',
     });
-    scheduleCreationRetry(state);
+    if (
+      state.lifecycle === 'active' &&
+      state.createFailures >= state.maxCreateAttempts
+    ) {
+      exhaustCreationAttempts(state);
+    } else {
+      scheduleCreationRetry(state);
+    }
   }
 
   pump(state);
+};
+
+const exhaustCreationAttempts = (state: State): void => {
+  state.creationExhausted = true;
+  state.creationBackoffMs = INITIAL_BACKOFF_MS;
+  if (state.retryTimer !== undefined) {
+    clearTimeout(state.retryTimer);
+    state.retryTimer = undefined;
+  }
+  const fields = {
+    reason: 'sandbox_creation_attempts_exhausted',
+    hint: 'Retry the acquisition after restoring sandbox provider availability.',
+  } as const;
+  log(state, 'sandbox creation attempts exhausted', fields);
+  const cause = new Error(
+    `Sandpool could not create a sandbox after ${String(state.maxCreateAttempts)} attempts`,
+  );
+  rejectCreationWaiters(state, cause, fields);
+};
+
+const resumeCreationAttempts = (state: State): void => {
+  if (!state.creationExhausted) return;
+  state.creationExhausted = false;
+  state.createFailures = 0;
+  state.creationBackoffMs = INITIAL_BACKOFF_MS;
+  log(state, 'sandbox creation attempts resumed');
 };
 
 const scheduleCreationRetry = (state: State): void => {
@@ -396,6 +451,24 @@ const rejectWaiters = (state: State, cause: unknown): void => {
   state.heatWaiters.clear();
 };
 
+const rejectCreationWaiters = (
+  state: State,
+  cause: unknown,
+  fields: Readonly<Record<string, unknown>>,
+): void => {
+  state.acquisitions.splice(0).forEach((waiter) => {
+    waiter.signal?.removeEventListener('abort', waiter.onAbort);
+    log(state, 'sandbox acquisition failed', fields);
+    waiter.reject(cause);
+  });
+  [...state.heatWaiters].forEach((waiter) => {
+    waiter.signal?.removeEventListener('abort', waiter.onAbort);
+    log(state, 'sandpool heat failed', fields);
+    waiter.reject(cause);
+  });
+  state.heatWaiters.clear();
+};
+
 const resolveHeatWaiters = (state: State): void => {
   if (!isHeated(state)) return;
 
@@ -454,6 +527,8 @@ const log = (
       heated: isHeated(state),
       minIdle: state.options.minIdle,
       maxSandboxes: state.options.maxSandboxes,
+      createFailures: state.createFailures,
+      maxCreateAttempts: state.maxCreateAttempts,
       ...fields,
     },
     message,

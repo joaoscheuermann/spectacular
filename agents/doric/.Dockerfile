@@ -243,7 +243,8 @@ WORKDIR /workspace
 # interfaces makes the service reachable through Docker networking, while the
 # port remains overridable when Doric runs outside this image.
 ENV DORIC_HOST=0.0.0.0 \
-    DORIC_PORT=3000
+    DORIC_PORT=3000 \
+    DORIC_SANDBOX_SSH=true
 EXPOSE 3000
 
 # VM state and the persistent converted-rootfs cache contain keys and mutable

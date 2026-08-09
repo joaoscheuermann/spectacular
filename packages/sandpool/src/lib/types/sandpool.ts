@@ -6,6 +6,8 @@ export type SandpoolLifecycle = 'active' | 'disposing' | 'disposed';
 export type SandpoolOptions = {
   readonly minIdle: number;
   readonly maxSandboxes: number;
+  /** Consecutive failed factory calls allowed before pending waits fail. Defaults to 3. */
+  readonly maxCreateAttempts?: number;
   readonly create: () => Promise<SandboxSession>;
   readonly logger: Logger;
 };

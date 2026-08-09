@@ -16,10 +16,13 @@ expose Doric only inside a trusted network.
 | Method   | Path                             | Success | Description                                                  |
 | -------- | -------------------------------- | ------- | ------------------------------------------------------------ |
 | `GET`    | `/vms`                           | `200`   | Lists the currently running Docker or Firecracker sandboxes. |
+| `GET`    | `/vms/:id/ssh`                   | `200`   | Returns SSH access for a VM leased to an active session.     |
 | `GET`    | `/mosaic/config`                 | `200`   | Returns the active Mosaic configuration snapshot.            |
 | `PUT`    | `/mosaic/config`                 | `200`   | Validates and completely replaces the Mosaic configuration.  |
 | `POST`   | `/mosaic/sessions`               | `202`   | Creates and asynchronously starts one Mosaic session.        |
 | `GET`    | `/mosaic/sessions`               | `200`   | Lists sessions from newest to oldest with cursor pagination. |
+| `GET`    | `/mosaic/sessions/:id/ssh`       | `200`   | Polls the active session's SSH access.                       |
+| `GET`    | `/mosaic/sessions/:id/events`    | `200`   | Replays events after an optional sequence.                   |
 | `POST`   | `/mosaic/sessions/:id/terminate` | `200`   | Requests best-effort, idempotent session cancellation.       |
 | `DELETE` | `/mosaic/sessions/:id`           | `204`   | Deletes a terminal session and its persisted events.         |
 
@@ -40,6 +43,81 @@ Returns an array containing only sandboxes that are currently provisioned:
 ```
 
 `provider` is either `docker` or `firecracker`.
+
+#### SSH access
+
+The Doric runtime image and Compose profiles enable key-only SSH on a dynamic
+loopback port for every sandbox. Native source runs leave it disabled unless
+`DORIC_SANDBOX_SSH=true`, because the host must provide the pinned Dropbear
+binary at `/opt/doric/firecracker/dropbearmulti`. Credentials are returned only
+while the VM is leased to an active Mosaic session. The
+`POST /mosaic/sessions` response includes a stable polling link:
+
+```json
+{
+  "id": "018f47d2-e3b1-7b4f-8b2c-1f5a7fdf1601",
+  "state": "queued",
+  "ssh": {
+    "href": "/mosaic/sessions/018f47d2-e3b1-7b4f-8b2c-1f5a7fdf1601/ssh"
+  }
+}
+```
+
+While the session waits for a sandbox, `GET` on that link returns `202`, a
+`Retry-After: 1` header, and `{ "status": "pending" }`. Once the lease is
+ready, it returns:
+
+```json
+{
+  "status": "ready",
+  "vmId": "sandbox-id",
+  "href": "/vms/sandbox-id/ssh",
+  "ssh": {
+    "host": "127.0.0.1",
+    "port": 32768,
+    "username": "root",
+    "privateKey": "-----BEGIN OPENSSH PRIVATE KEY-----\n...",
+    "knownHosts": "[127.0.0.1]:32768 ssh-ed25519 ...",
+    "hostKeyFingerprint": "SHA256:..."
+  }
+}
+```
+
+`GET /vms/:id/ssh` returns the same `ssh` object together with `vm` and the
+owning `sessionId`. It returns `409 vm_ssh_unavailable` for an idle or releasing
+VM and `404 vm_not_found` after disposal. Session polling returns
+`409 session_ssh_unavailable` when SSH is disabled and
+`410 session_ssh_expired` after its lease is released. All SSH responses use
+`Cache-Control: no-store`.
+
+Write the returned identity and host entry to owner-only files before invoking
+the OpenSSH client on the Doric host:
+
+```sh
+curl -sS http://127.0.0.1:3000/mosaic/sessions/$SESSION_ID/ssh > ssh.json
+jq -r '.ssh.privateKey' ssh.json > id_ed25519
+jq -r '.ssh.knownHosts' ssh.json > known_hosts
+chmod 600 id_ed25519 known_hosts
+ssh -i ./id_ed25519 \
+  -p "$(jq -r '.ssh.port' ssh.json)" \
+  -o BatchMode=yes \
+  -o IdentitiesOnly=yes \
+  -o StrictHostKeyChecking=yes \
+  -o UserKnownHostsFile="$PWD/known_hosts" \
+  "$(jq -r '.ssh.username' ssh.json)@$(jq -r '.ssh.host' ssh.json)"
+```
+
+The returned host is loopback, so the SSH command must run on the same host as
+Doric. The unauthenticated HTTP API also returns the private key; keep the HTTP
+listener on its existing isolated trusted network. Firecracker access requires
+the Linux x86_64 Compose profile with KVM and TUN access. Docker and
+Firecracker both use the same response contract.
+
+Sandbox creation permits three consecutive factory failures per waiting batch.
+After the third failure, the pending acquisition is rejected and its Mosaic
+session transitions from `queued` to `failed` instead of waiting forever. A
+later session starts a fresh batch, allowing recovery after the provider is
+restored.
 
 #### `GET /mosaic/config`
 
@@ -121,11 +199,21 @@ their captured configuration revision.
 #### `POST /mosaic/sessions`
 
 Creates a queued session and returns its session representation with status
-`202`:
+`202`. The creation response alone adds the stable SSH polling link:
 
 ```json
 {
-  "prompt": "Implement the requested change."
+  "id": "018f47d2-e3b1-7b4f-8b2c-1f5a7fdf1601",
+  "prompt": "Implement the requested change.",
+  "state": "queued",
+  "configRevision": 1,
+  "result": null,
+  "lastSequence": 0,
+  "createdAt": "2026-08-09T12:00:00.000Z",
+  "updatedAt": "2026-08-09T12:00:00.000Z",
+  "ssh": {
+    "href": "/mosaic/sessions/018f47d2-e3b1-7b4f-8b2c-1f5a7fdf1601/ssh"
+  }
 }
 ```
 
@@ -152,6 +240,33 @@ The response is:
 
 `nextCursor` is omitted when no additional page exists. Invalid pagination
 returns `400 invalid_page`.
+
+#### `GET /mosaic/sessions/:id/events`
+
+Returns a point-in-time replay of the original Mosaic events persisted for the
+session. `afterSequence` is an optional non-negative integer and defaults to
+`0`; only events with a greater sequence are returned:
+
+```json
+{
+  "events": [
+    {
+      "schemaVersion": 2,
+      "runId": "018f47d2-e3b1-7b4f-8b2c-1f5a7fdf1601",
+      "sequence": 1,
+      "type": "stage.started",
+      "stage": "plan"
+    }
+  ],
+  "lastSequence": 1
+}
+```
+
+Events are ordered by `sequence`. Calls without `afterSequence` return the
+complete history; clients can pass the returned `lastSequence` to read only
+later events. An invalid cursor returns `400 invalid_event_cursor`, and an
+unknown or deleted session returns `404 session_not_found`. Responses use
+`Cache-Control: no-store`. Use Socket.IO when live delivery is required.
 
 #### Session representation
 

@@ -33,6 +33,7 @@ export function createMosaic(
           stage: 'run',
           ...(runtime.capture === 'io' ? { input } : {}),
         });
+
         const result = await machine.run({
           initial: 'plan',
           state: { graphs: [] },

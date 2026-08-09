@@ -35,6 +35,17 @@ test('validates pool limits synchronously', () => {
   assert.throws(() =>
     createSandpool({ minIdle: 2, maxSandboxes: 1, create, logger }),
   );
+  for (const maxCreateAttempts of [0, -1, 1.5, Number.POSITIVE_INFINITY]) {
+    assert.throws(() =>
+      createSandpool({
+        minIdle: 0,
+        maxSandboxes: 1,
+        maxCreateAttempts,
+        create,
+        logger,
+      }),
+    );
+  }
 });
 
 test('returns synchronously and warms the minimum idle sessions in parallel', async () => {
@@ -172,6 +183,36 @@ test('retries transient creation failures and preserves the last failure', async
   await pool.waitUntilHeated();
   assert.equal(attempts, 2);
   assert.equal(pool.status().lastFailure, failure);
+  await pool.dispose();
+});
+
+test('rejects pending acquisitions after the creation limit and allows a later retry batch', async () => {
+  const failure = new Error('factory unavailable');
+  let attempts = 0;
+  const pool = createSandpool({
+    minIdle: 1,
+    maxSandboxes: 2,
+    maxCreateAttempts: 3,
+    logger,
+    create: async () => {
+      attempts += 1;
+      if (attempts <= 3) throw failure;
+      return fake(`recovered-${String(attempts)}`).session;
+    },
+  });
+
+  const acquisition = pool.acquire();
+  const heating = pool.waitUntilHeated();
+  await assert.rejects(acquisition, /after 3 attempts/u);
+  await assert.rejects(heating, /after 3 attempts/u);
+  assert.equal(attempts, 3);
+  assert.equal(pool.status().queued, 0);
+  assert.equal(pool.status().lastFailure, failure);
+
+  const recovered = await pool.acquire();
+  assert.equal(attempts, 5);
+  assert.match(recovered.sandbox.id, /^recovered-[45]$/u);
+  await recovered.release();
   await pool.dispose();
 });
 

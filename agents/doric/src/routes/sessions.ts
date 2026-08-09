@@ -16,6 +16,9 @@ const listInput = z.object({
 });
 
 const idInput = z.object({ id: z.uuid() });
+const eventsInput = z.object({
+  afterSequence: z.coerce.number().int().safe().nonnegative().default(0),
+});
 
 /** Exposes durable Mosaic session commands and cursor-based history. */
 export const createSessionsRouter = (service: SessionService): Router => {
@@ -32,7 +35,11 @@ export const createSessionsRouter = (service: SessionService): Router => {
       );
       return;
     }
-    response.status(202).json(await service.create(parsed.data.prompt));
+    const session = await service.create(parsed.data.prompt);
+    response.status(202).json({
+      ...session,
+      ssh: { href: `/mosaic/sessions/${session.id}/ssh` },
+    });
   });
 
   router.get('/', async (request, response) => {
@@ -42,6 +49,93 @@ export const createSessionsRouter = (service: SessionService): Router => {
       return;
     }
     response.json(await service.list(parsed.data.limit, parsed.data.cursor));
+  });
+
+  router.get('/:id/ssh', async (request, response) => {
+    response.set('Cache-Control', 'no-store');
+    const parsed = idInput.safeParse(request.params);
+    if (!parsed.success) {
+      sendError(
+        response,
+        400,
+        'invalid_session_id',
+        'The session ID is invalid.',
+      );
+      return;
+    }
+
+    const access = await service.ssh(parsed.data.id);
+    if (access.status === 'pending') {
+      response.set('Retry-After', '1').status(202).json({ status: 'pending' });
+      return;
+    }
+    if (access.status === 'missing') {
+      sendError(
+        response,
+        404,
+        'session_not_found',
+        'The session was not found.',
+      );
+      return;
+    }
+    if (access.status === 'expired') {
+      sendError(
+        response,
+        410,
+        'session_ssh_expired',
+        'SSH access for this session has expired.',
+      );
+      return;
+    }
+    if (access.status === 'unavailable') {
+      sendError(
+        response,
+        409,
+        'session_ssh_unavailable',
+        'SSH is unavailable for this session.',
+      );
+      return;
+    }
+    response.json({
+      ...access,
+      href: `/vms/${encodeURIComponent(access.vmId)}/ssh`,
+    });
+  });
+
+  router.get('/:id/events', async (request, response) => {
+    response.set('Cache-Control', 'no-store');
+    const id = idInput.safeParse(request.params);
+    if (!id.success) {
+      sendError(
+        response,
+        400,
+        'invalid_session_id',
+        'The session ID is invalid.',
+      );
+      return;
+    }
+    const query = eventsInput.safeParse(request.query);
+    if (!query.success) {
+      sendError(
+        response,
+        400,
+        'invalid_event_cursor',
+        'The event cursor is invalid.',
+      );
+      return;
+    }
+
+    const events = await service.events(id.data.id, query.data.afterSequence);
+    if (events === undefined) {
+      sendError(
+        response,
+        404,
+        'session_not_found',
+        'The session was not found.',
+      );
+      return;
+    }
+    response.json(events);
   });
 
   router.post('/:id/terminate', async (request, response) => {

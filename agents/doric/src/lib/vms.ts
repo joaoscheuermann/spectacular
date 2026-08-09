@@ -10,6 +10,7 @@ export type RunningVm = {
 export type VmRegistry = {
   readonly provider: SandboxProvider;
   list(): readonly RunningVm[];
+  find(id: string): RunningVm | undefined;
 };
 
 /** Tracks successfully provisioned runtimes until their disposal completes. */
@@ -28,6 +29,7 @@ export const createVmRegistry = (
       },
     },
     list: () => [...running.values()],
+    find: (id) => running.get(id),
   };
 };
 

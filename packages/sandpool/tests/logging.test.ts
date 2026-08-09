@@ -157,6 +157,30 @@ test('logs cancellations, failures, and retries without causes', async () => {
   );
 });
 
+test('logs exhausted creation attempts without the factory cause', async () => {
+  const { logger, records } = capture();
+  const pool = createSandpool({
+    minIdle: 0,
+    maxSandboxes: 1,
+    maxCreateAttempts: 1,
+    logger,
+    create: async () => {
+      throw new Error('secret permanent failure');
+    },
+  });
+
+  await assert.rejects(pool.acquire());
+  await pool.dispose();
+
+  const exhausted = records.find(
+    ({ msg }) => msg === 'sandbox creation attempts exhausted',
+  );
+  assert.equal(exhausted?.reason, 'sandbox_creation_attempts_exhausted');
+  assert.equal(exhausted?.createFailures, 1);
+  assert.equal(exhausted?.maxCreateAttempts, 1);
+  assert.doesNotMatch(JSON.stringify(records), /secret permanent failure/u);
+});
+
 test('logs release and pool disposal only once when calls are repeated', async () => {
   const { logger, records } = capture();
   const pool = createSandpool({

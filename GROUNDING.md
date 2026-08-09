@@ -603,11 +603,17 @@ captures the active configuration generation and an immutable JSONB snapshot;
 later replacements affect only new sessions.
 
 `packages/sandpool` owns process-local `SandboxSession` capacity, FIFO leasing,
-background warming, replacement, and disposal. It accepts an injected sandbox
-factory, depends only on the public `sandbox` contract at runtime, never reuses
-released sessions, and has no provider-specific creation policy or persistence.
-Its capacity option is `maxSandboxes`, and a lease guards SSH access exactly as
-it guards other operations. `packages/sandbox` owns the provider-neutral
+background warming, bounded factory-attempt batches, replacement, and disposal.
+It accepts an injected sandbox factory, depends only on the public `sandbox`
+contract at runtime, never reuses released sessions, and has no
+provider-specific creation policy or persistence. A batch rejects pending FIFO
+acquisitions and heat waiters after `maxCreateAttempts` consecutive factory
+failures; the default is three, and later demand starts a fresh batch so a
+recovered provider can serve new work. Doric explicitly uses that three-attempt
+limit, allowing its existing execution failure path to move affected sessions
+from `queued` to `failed`. Its capacity option is `maxSandboxes`, and a lease
+guards SSH access exactly as it guards other operations. `packages/sandbox` owns
+the provider-neutral
 `SandboxProvider` and `SandboxRuntime` boundary plus workspace, Git, file, diff,
 network-policy normalization, and disposed-session behavior. Every sandbox has
 explicit CPU, memory, and writable-layer disk resources; networking is disabled
@@ -615,8 +621,12 @@ by default, optional SSH is key-only and loopback-bound by default, and
 effective egress requires IP-literal DNS. Doric explicitly provisions its agent
 sandboxes from the multi-architecture `node:22-bookworm` image, which includes
 Git, with the `1.1.1.1` DNS resolver so selected Git skills can reach public
-remotes. Remote authentication remains runtime-provided and must never be
-placed in model-visible tool arguments.
+remotes. `DORIC_SANDBOX_SSH=true` adds loopback-bound, dynamically allocated
+user SSH access so a trusted same-host user can inspect the active session
+sandbox. Native source runs default it off because provider SSH requires pinned
+host assets; the Doric runtime image and Compose profiles default it on and
+include those assets. Remote authentication remains runtime-provided and must
+never be placed in model-visible tool arguments.
 
 `packages/docker` and `packages/firecracker` depend inward on Sandbox and expose
 providers. Docker is Doric's default; `DORIC_SANDBOX_PROVIDER=firecracker`
@@ -664,15 +674,29 @@ a Socket.IO server to the same HTTP listener. The listener binds to
 `DORIC_HOST` and `DORIC_PORT`, defaulting to `0.0.0.0:3000`; the Doric image
 exposes port 3000. Its modular Express router exposes `GET /vms`, which returns
 the IDs and selected provider names of runtimes successfully provisioned by
-this Doric process and not yet successfully disposed. The registry wraps the
-provider at the composition boundary and does not expose keys, networking, or
-provider internals. REST additionally owns `GET`/`PUT /mosaic/config`, session
-creation and cursor listing, idempotent termination, and terminal-only deletion
-under `/mosaic/sessions`. Socket.IO namespace `/mosaic` owns subscription,
-snapshot, incremental replay, live `mosaic:event`, state update, and deletion
-notifications. The PostgreSQL database is the event source of truth: each event
-and the session's contiguous last sequence are committed together before live
-emission.
+this Doric process and not yet successfully disposed. `GET /vms/:id/ssh`
+returns the selected provider, owning live session ID, and complete
+`SandboxSshAccess` only while that VM is leased to an active Mosaic session;
+idle, releasing, and disposed VMs never expose access. The registry wraps the
+provider at the composition boundary and the session service owns the
+process-local lease association. `POST /mosaic/sessions` includes a stable
+session SSH subresource link while preserving asynchronous queued creation.
+That subresource reports pending acquisition, returns the active VM and SSH
+access, or reports unavailable or expired access after release. Private keys
+remain ephemeral provider-managed sandbox state and HTTP response data;
+provider disposal owns their key-file cleanup. They are never persisted in
+Doric's database, logged, included in lists, or emitted through Socket.IO. SSH
+HTTP responses prohibit caching. REST additionally owns configuration reads and
+replacements under `/mosaic/config`, session creation and cursor listing,
+ordered event replay with an optional exclusive `afterSequence`, idempotent
+termination, and terminal-only deletion under `/mosaic/sessions`. REST event
+replay returns the original stored Mosaic event objects and the last observed
+sequence, prohibits caching, and is a point-in-time read rather than a live
+subscription. Socket.IO namespace
+`/mosaic` owns subscription, snapshot, incremental replay, live `mosaic:event`,
+state update, and deletion notifications. The PostgreSQL database is the event
+source of truth: each event and the session's contiguous last sequence are
+committed together before live emission.
 
 `agents/doric` owns its Prisma ORM 7 schema, generated client configuration,
 and versioned PostgreSQL migrations. Production uses one adapter-pg Prisma
