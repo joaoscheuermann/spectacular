@@ -9,7 +9,7 @@ import { Server as SocketServer } from 'socket.io';
 import { loadBundles, type Skill } from 'bundle';
 import { createDockerClient } from 'docker';
 import { createFirecrackerClient } from 'firecracker';
-import { createFetchTransport, createOpenAiProvider } from 'llms';
+import { createFetchTransport, createUnifiedProvider } from 'llms';
 import mosaic from 'mosaic';
 import { createSandbox } from 'sandbox';
 import { createSandpool } from 'sandpool';
@@ -43,19 +43,19 @@ async function main() {
 
   new SocketServer(server);
 
-  const provider = createOpenAiProvider({
+  const provider = createUnifiedProvider({
     transport: createFetchTransport(),
     baseUrl: 'https://openrouter.ai/api/v1',
-    apiKey: process.env.OPENROUTER_API_KEY,
+    apiKey: process.env.OPENROUTER_API_KEY ?? '',
     logger,
   });
 
   const models = {
-    planning: { model: 'qwen/qwen3.8-max', effort: 'medium' },
-    revision: { model: 'z-ai/glm-5.2', effort: 'medium' },
+    planning: { model: 'qwen/qwen3.7-flash', effort: 'low' },
+    revision: { model: 'google/gemini-3.6-flash', effort: 'low' },
     execution: {
       model: 'deepseek/deepseek-v4-flash-0731',
-      effort: 'none',
+      effort: 'low',
     },
     reranker: 'voyageai/rerank-2.5-lite',
     embedder: 'voyageai/voyage-4-large',
@@ -192,52 +192,54 @@ async function main() {
 
       logger.info({ msg: 'indexed all tools' });
 
-      const prompt = `
-        Extend the existing MOSAIC catalog with a new reusable capability for publishing finalized messages to Slack.
+      // const prompt = `
+      //   Extend the existing MOSAIC catalog with a new reusable capability for publishing finalized messages to Slack.
 
-        The runtime currently has no Slack-specific operations. The capability must allow an agent to:
+      //   The runtime currently has no Slack-specific operations. The capability must allow an agent to:
 
-        1. discover available Slack channels;
-        2. resolve a channel from a human-readable name;
-        3. send a finalized message to the selected channel;
-        4. report the observable result of the operation.
+      //   1. discover available Slack channels;
+      //   2. resolve a channel from a human-readable name;
+      //   3. send a finalized message to the selected channel;
+      //   4. report the observable result of the operation.
 
-        Inspect the existing bundle before making changes. Determine whether this capability requires behavioral instructions, executable operations, or both. Create only the minimum coherent set of artifacts and do not duplicate capabilities that already exist.
+      //   Inspect the existing bundle before making changes. Determine whether this capability requires behavioral instructions, executable operations, or both. Create only the minimum coherent set of artifacts and do not duplicate capabilities that already exist.
 
-        Authoring requirements:
+      //   Authoring requirements:
 
-        - Write all artifact contents in English.
-        - Represent executable operations as JSON tool descriptors containing their names, descriptions, input schemas, and output schemas.
-        - Do not implement handlers or runtime logic.
-        - Represent reusable behavioral guidance as focused \`SKILL.md\` micro-skills.
-        - Keep each skill centered on one coherent behavioral concern.
-        - Do not create a monolithic “Slack agent” skill.
-        - Include clear applicability, non-applicability, procedure, and completion guidance in each skill body.
-        - Declare only the tools that the skill may actually require in \`allowed-tools\`.
-        - Do not create a skill that merely repeats a tool description.
-        - Register every new skill and tool in \`manifest.json\`.
-        - Use \`alwaysAvailable: false\` unless an artifact is genuinely required by almost every unrelated objective.
-        - Preserve the existing \`skills/*\`, \`tools/*\`, and \`manifest.json\` structure.
-        - Reuse the existing core file, search, editing, shell, and validation capabilities instead of recreating them.
+      //   - Write all artifact contents in English.
+      //   - Represent executable operations as JSON tool descriptors containing their names, descriptions, input schemas, and output schemas.
+      //   - Do not implement handlers or runtime logic.
+      //   - Represent reusable behavioral guidance as focused \`SKILL.md\` micro-skills.
+      //   - Keep each skill centered on one coherent behavioral concern.
+      //   - Do not create a monolithic “Slack agent” skill.
+      //   - Include clear applicability, non-applicability, procedure, and completion guidance in each skill body.
+      //   - Declare only the tools that the skill may actually require in \`allowed-tools\`.
+      //   - Do not create a skill that merely repeats a tool description.
+      //   - Register every new skill and tool in \`manifest.json\`.
+      //   - Use \`alwaysAvailable: false\` unless an artifact is genuinely required by almost every unrelated objective.
+      //   - Preserve the existing \`skills/*\`, \`tools/*\`, and \`manifest.json\` structure.
+      //   - Reuse the existing core file, search, editing, shell, and validation capabilities instead of recreating them.
 
-        Before completing the task, validate:
+      //   Before completing the task, validate:
 
-        - JSON syntax;
-        - YAML frontmatter;
-        - unique skill and tool names;
-        - manifest paths;
-        - resolution of every \`allowed-tools\` entry against the tool registry;
-        - absence of redundant or overlapping artifacts.
+      //   - JSON syntax;
+      //   - YAML frontmatter;
+      //   - unique skill and tool names;
+      //   - manifest paths;
+      //   - resolution of every \`allowed-tools\` entry against the tool registry;
+      //   - absence of redundant or overlapping artifacts.
 
-        The result is complete when the MOSAIC bundle contains the smallest valid set of reusable skills and tool descriptors required for Slack channel discovery and message publication, all entries are registered, and the catalog remains internally consistent.
+      //   The result is complete when the MOSAIC bundle contains the smallest valid set of reusable skills and tool descriptors required for Slack channel discovery and message publication, all entries are registered, and the catalog remains internally consistent.
 
-        Return a concise summary explaining:
+      //   Return a concise summary explaining:
 
-        - which files were created or modified;
-        - why each new artifact is a skill or a tool;
-        - why no additional artifacts were necessary;
-        - how the final capability should be composed during execution.
-        `;
+      //   - which files were created or modified;
+      //   - why each new artifact is a skill or a tool;
+      //   - why no additional artifacts were necessary;
+      //   - how the final capability should be composed during execution.
+      //   `;
+
+      const prompt = `Salve um compromisso no meu calendario para amanha as 15:00, o nome deve ser: "Prova de moto".`;
 
       const agent = mosaic({
         logger,
@@ -255,7 +257,7 @@ async function main() {
           maxSkills: 5,
         },
         execution: {
-          maxTurns: 16,
+          maxTurns: 32,
         },
         revision: {
           max: 3,

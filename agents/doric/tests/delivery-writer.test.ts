@@ -51,6 +51,8 @@ test('logs only status and node IDs for blocked and failed results', () => {
             id: 'safe-id',
             goal: 'private goal',
             doneWhen: ['private criterion'],
+            candidates: [],
+            bundle: null,
             status,
             outcome: status === 'failed' ? failedOutcome() : blockedOutcome(),
             termination: null,
