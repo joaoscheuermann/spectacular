@@ -19,7 +19,7 @@
       "executor": "nx:run-commands",
       "outputs": ["{projectRoot}/dist/bundles"],
       "options": {
-        "command": "nx build bundle-core"
+        "command": "nx run-many --target=build --projects=bundle-core,bundle-git --parallel=2"
       }
     },
     "run": {

@@ -1,6 +1,6 @@
 # Doric Grounding
 
-Last reviewed: 2026-08-08
+Last reviewed: 2026-08-09
 
 This is Doric's repository validity contract. Every agent working in this
 repository must read it before non-trivial planning, reviewing, artifact
@@ -53,7 +53,12 @@ Repository-owned executable bundles live as individual Nx packages immediately
 below `/bundles`; each bundle owns its package metadata, TypeScript build, and
 isolated output below `agents/doric/dist/bundles/<name>`. `/bundles/core` owns
 the built-in `edit`, `find`, `grep`, `terminal`, `tree`, `web`, and `write`
-tools. `packages/bundle` owns strict manifest validation and runtime loading.
+tools. `/bundles/git` owns the routable `git` tool plus focused skills for
+cloning, commit preparation, conflict resolution, rebasing, remote
+synchronization, and linked worktrees. The Git tool executes structured argv
+directly without shell interpretation, forces non-interactive Git behavior,
+bounds stdout and stderr, and exposes no dedicated credential input.
+`packages/bundle` owns strict manifest validation and runtime loading.
 Doric loads only immediate bundle directories, in lexical order, from its
 built `dist/bundles` artifact. Manifests explicitly order every resource and
 carry `alwaysAvailable` flags for tools and skills. Runtime tools are compiled
@@ -556,7 +561,11 @@ it guards other operations. `packages/sandbox` owns the provider-neutral
 network-policy normalization, and disposed-session behavior. Every sandbox has
 explicit CPU, memory, and writable-layer disk resources; networking is disabled
 by default, optional SSH is key-only and loopback-bound by default, and effective
-egress requires IP-literal DNS plus protected-destination filtering.
+egress requires IP-literal DNS plus protected-destination filtering. Doric
+explicitly provisions its agent sandboxes from `node:22-bookworm`, which includes
+Git, with filtered egress and the `1.1.1.1` DNS resolver so selected Git skills
+can reach public remotes. Remote authentication remains runtime-provided and
+must never be placed in model-visible tool arguments.
 
 `packages/docker` and `packages/firecracker` depend inward on Sandbox and expose
 providers. Docker is Doric's default; `DORIC_SANDBOX_PROVIDER=firecracker`
@@ -584,9 +593,10 @@ with only exact private CIDR/protocol/port exceptions. SSH is disabled by
 default, uses per-sandbox Ed25519 user and host keys, is key-only, and binds to
 loopback unless an advertised remote binding is explicit.
 
-`agents/doric/.Dockerfile` reproducibly builds the agent, pinned Firecracker and
-jailer, Linux 6.18 guest kernel, static BusyBox and Dropbear bootstrap,
-initramfs, OCI/ext4 tooling, networking tools, and OpenSSH client. Its Linux-only
+`agents/doric/.Dockerfile` reproducibly builds the agent and both built-in
+bundles, pinned Firecracker and jailer, Linux 6.18 guest kernel, static BusyBox
+and Dropbear bootstrap, initramfs, OCI/ext4 tooling, networking tools, and
+OpenSSH client. Its Linux-only
 Compose profiles provide either the Docker socket plus host-network firewall
 access or KVM/TUN/cgroup/state/cache access without a Docker socket. The
 privileged Firecracker profile is a development and e2e harness, not a

@@ -88,10 +88,10 @@ async function main() {
     create: () =>
       createSandbox({
         provider: vms.provider,
-        image: 'node:22-slim',
+        image: 'node:22-bookworm',
         imagePullPolicy: 'if-not-present',
         resources: { cpuCount: 1, memoryMiB: 512, diskMiB: 4096 },
-        network: { mode: 'disabled' },
+        network: { mode: 'egress', dnsServers: ['1.1.1.1'] },
       }),
   });
 

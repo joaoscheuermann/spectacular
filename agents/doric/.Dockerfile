@@ -4,14 +4,14 @@
 # Debian userspace even if the upstream tag later moves.
 ARG BASE_IMAGE=node:22-bookworm-slim@sha256:d649c27dae7ba0137b3cef5dd75baa422c08dc3d9e3fc0c23dfb172dc3cc6436
 
-# Build Doric and its built-in bundle in one stage so compilation is complete
+# Build Doric and its built-in bundles in one stage so compilation is complete
 # before the verified VMM and guest artifacts are assembled into the runtime.
 FROM ${BASE_IMAGE} AS agent-builder
 WORKDIR /workspace
 
 # Root metadata and the relevant workspace trees are all required before
 # installation: npm materializes workspace links and TypeScript follows project
-# references across package boundaries while compiling Doric and its bundle.
+# references across package boundaries while compiling Doric and its bundles.
 COPY package.json package-lock.json nx.json tsconfig.json tsconfig.base.json ./
 COPY agents ./agents
 COPY apps ./apps
@@ -27,11 +27,17 @@ COPY workflows ./workflows
 # non-TypeScript bundle resources are staged beside the compiled bundle.
 RUN npm ci --ignore-scripts \
  && node node_modules/nx/bin/post-install \
- && npx tsc --build agents/doric/tsconfig.lib.json bundles/core/tsconfig.json --force \
+ && npx tsc --build \
+      agents/doric/tsconfig.lib.json \
+      bundles/core/tsconfig.json \
+      bundles/git/tsconfig.json \
+      --force \
  && mkdir -p agents/doric/dist/src \
  && mv agents/doric/dist/index.* agents/doric/dist/src/ \
  && cp bundles/core/manifest.json bundles/core/package.json agents/doric/dist/bundles/core/ \
- && cp -R bundles/core/skills agents/doric/dist/bundles/core/
+ && cp -R bundles/core/skills agents/doric/dist/bundles/core/ \
+ && cp bundles/git/manifest.json bundles/git/package.json agents/doric/dist/bundles/git/ \
+ && cp -R bundles/git/skills agents/doric/dist/bundles/git/
 
 # Fetch the Firecracker VMM and jailer directly from the pinned upstream
 # release. The recorded checksum makes a changed or corrupted archive fail the
