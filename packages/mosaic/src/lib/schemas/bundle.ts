@@ -10,14 +10,33 @@ export const createBundleSelectionSchema = (
 
   return z
     .object({
-      goalId: z.literal(goalId),
+      goalId: z
+        .literal(goalId)
+        .describe(
+          "Required constant for the current node. Copy this field's `const` value exactly, including its complete prefix and suffix. Do not infer, shorten, rewrite, or substitute another node ID.",
+        ),
       evaluations: z
         .array(
           z
             .object({
-              skillName: z.enum(names),
-              selected: z.boolean(),
-              rationale: z.string().trim().min(1).max(500),
+              skillName: z
+                .enum(names)
+                .describe(
+                  "Required candidate name. Copy one of this field's `enum` values exactly. Do not infer, shorten, rewrite, or invent a skill name. Use each allowed value exactly once across `evaluations`.",
+                ),
+              selected: z
+                .boolean()
+                .describe(
+                  'Whether this exact candidate belongs to the smallest sufficient skill set.',
+                ),
+              rationale: z
+                .string()
+                .trim()
+                .min(1)
+                .max(500)
+                .describe(
+                  'Concise reason this exact candidate is selected or rejected for the current node.',
+                ),
             })
             .strict(),
         )
@@ -53,8 +72,21 @@ export const createBundleSelectionSchema = (
               message: `At most ${maxSkills} candidates may be selected.`,
             });
           }
-        }),
-      selectionRationale: z.string().trim().min(1).max(500),
+        })
+        .describe(
+          `Exactly ${candidates.length} candidate evaluations. Include every allowed \`skillName\` exactly once; do not omit, duplicate, rename, or add candidates. At most ${maxSkills} ${maxSkills === 1 ? 'evaluation' : 'evaluations'} may set \`selected\` to true.`,
+        ),
+      selectionRationale: z
+        .string()
+        .trim()
+        .min(1)
+        .max(500)
+        .describe(
+          'Concise reason the selected candidates form the smallest sufficient skill set for the current node.',
+        ),
     })
-    .strict();
+    .strict()
+    .describe(
+      'Complete skill-selection decision for exactly one current node and its complete candidate menu.',
+    );
 };

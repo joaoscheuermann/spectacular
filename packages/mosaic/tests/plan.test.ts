@@ -3,7 +3,11 @@ import test from 'node:test';
 
 import { AgentErrorObject } from 'agent';
 import type { Skill } from 'bundle';
-import type { LlmProvider, ProviderRequest } from 'llms';
+import {
+  structuredJsonSchema,
+  type LlmProvider,
+  type ProviderRequest,
+} from 'llms';
 
 import * as goalsPrompt from '../src/lib/prompts/goals.js';
 import * as hintsPrompt from '../src/lib/prompts/hints.js';
@@ -24,6 +28,18 @@ import { terminalFinish, terminalTool, userContent } from './structured.js';
 
 const skill = createSkill('planning-skill');
 const alternate = createSkill('alternate-skill');
+
+test('describes complete dependency IDs in the provider-facing planning schema', () => {
+  const schema = structuredJsonSchema('test', PlannedGraphSchema);
+  const serialized = JSON.stringify(schema);
+
+  assert.match(serialized, /complete value into `dependsOn`/u);
+  assert.match(
+    serialized,
+    /exactly match another node's `id` in this `nodes` array/u,
+  );
+  assert.match(serialized, /never `n01`/u);
+});
 
 test('creates P0 without catalog access and materializes runtime-owned fields', async () => {
   const planned = plannedGraph('initial');

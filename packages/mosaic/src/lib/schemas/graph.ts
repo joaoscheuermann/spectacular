@@ -25,7 +25,7 @@ const DependenciesSchema = z
 export const PlannedNodeSchema = z
   .object({
     id: NonEmptyStringSchema.describe(
-      'Unique stable node identifier. Use the following format: `n<step>:<description>` ex: n01:explore_workspace',
+      'Unique stable node identifier. Use `n<step>:<description>` (for example, `n01:explore_workspace`). Other nodes must copy this complete value into `dependsOn`; the `n01` prefix alone is not an ID.',
     ),
     goal: NonEmptyStringSchema.describe(
       'Observable result that must be true when the node completes.',
@@ -34,7 +34,9 @@ export const PlannedNodeSchema = z
       .array(NonEmptyStringSchema)
       .min(1)
       .describe('Non-empty observable completion criteria.'),
-    dependsOn: DependenciesSchema.describe('Direct prerequisite node IDs.'),
+    dependsOn: DependenciesSchema.describe(
+      "Complete `id` values of this node's direct prerequisites. Every value must exactly match another node's `id` in this `nodes` array, including the `:<description>` suffix (for example, `n01:explore_workspace`, never `n01`). Use `[]` when this node has no prerequisites.",
+    ),
     deliver: z.boolean().describe('Whether this terminal result is delivered.'),
   })
   .strict();
@@ -51,7 +53,16 @@ const withGraphValidation = <Schema extends z.ZodType>(schema: Schema) =>
 
 /** Strict model-owned planning output. Runtime scheduler fields are excluded. */
 export const PlannedGraphSchema = withGraphValidation(
-  z.object({ nodes: z.array(PlannedNodeSchema).min(1) }).strict(),
+  z
+    .object({
+      nodes: z
+        .array(PlannedNodeSchema)
+        .min(1)
+        .describe(
+          'Complete non-empty plan graph. Node IDs must be unique, every dependency must use a complete node ID from this array, and dependencies must be acyclic. Mark at least one node with no dependents as deliverable, and do not mark a node as deliverable when another node depends on it.',
+        ),
+    })
+    .strict(),
 );
 
 export const NodeSchema = PlannedNodeSchema.extend({

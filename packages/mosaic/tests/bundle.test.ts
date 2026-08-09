@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { Skill } from 'bundle';
-import type { LlmProvider, ProviderRequest } from 'llms';
+import {
+  structuredJsonSchema,
+  type LlmProvider,
+  type ProviderRequest,
+} from 'llms';
 import type { Tool } from 'tool';
 
 import { createBundleSelectionSchema } from '../src/lib/schemas/bundle.js';
@@ -285,6 +289,24 @@ test('binds the selection schema to the node candidates uniqueness and limit', (
     }).success,
     false,
   );
+});
+
+test('describes exact node and candidate constants in the provider-facing selection schema', () => {
+  const schema = structuredJsonSchema(
+    'test',
+    createBundleSelectionSchema(
+      'n01:explore_mosaic_catalog',
+      ['alpha', 'beta'],
+      1,
+    ),
+  );
+  const serialized = JSON.stringify(schema);
+
+  assert.match(serialized, /field's `const` value exactly/u);
+  assert.match(serialized, /"const":"n01:explore_mosaic_catalog"/u);
+  assert.match(serialized, /field's `enum` values exactly/u);
+  assert.match(serialized, /Include every allowed `skillName` exactly once/u);
+  assert.match(serialized, /At most 1 evaluation may set `selected` to true/u);
 });
 
 test('excludes required and stale indexed skills and never reads the tool retriever', async () => {
