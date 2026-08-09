@@ -236,11 +236,12 @@ const rerank = async ({
   candidates,
   runtime,
 }: CandidateSelection): Promise<RankedCandidate[]> => {
-  const { provider, models } = options;
+  const { providers, models } = options;
 
   // The reranker sees the full routing context and complete canonical skill bodies.
   const ranking = await (
-    runtime?.provider(provider, 'bundle', node.id, graph.revision) ?? provider
+    runtime?.provider(providers.reranker, 'bundle', node.id, graph.revision) ??
+    providers.reranker
   ).rerank({
     model: models.reranker,
     query: bundlePrompt.rerankQuery(input, node, graph),
@@ -274,7 +275,7 @@ const choose = async ({
   reranked,
   runtime,
 }: RankedSelection): Promise<RoutingTrace> => {
-  const { provider, models, routing } = options;
+  const { providers, models, routing } = options;
 
   // The node-bound schema rejects wrong goals, unknown names, duplicates, and overflow.
   const schema = createBundleSelectionSchema(
@@ -285,7 +286,7 @@ const choose = async ({
 
   // Candidate bodies and prior artifacts make this a sensitive structured call.
   const structured = await completeStructured({
-    provider,
+    provider: providers.planning,
     profile: models.planning,
     system: bundlePrompt.system(routing.maxSkills),
     input: bundlePrompt.user({

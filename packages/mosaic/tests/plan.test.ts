@@ -24,7 +24,12 @@ import { plan } from '../src/lib/states/plan/index.js';
 import type { Graph } from '../src/lib/types/graph.js';
 import type { MosaicOptions } from '../src/lib/types/mosaic-options.js';
 import type { WorkflowState } from '../src/lib/types/workflow.js';
-import { terminalFinish, terminalTool, userContent } from './structured.js';
+import {
+  mosaicProviders,
+  terminalFinish,
+  terminalTool,
+  userContent,
+} from './structured.js';
 
 const skill = createSkill('planning-skill');
 const alternate = createSkill('alternate-skill');
@@ -511,7 +516,7 @@ const createHarness = (input: HarnessInput) => {
   };
   const options: MosaicOptions = {
     logger: { info: () => undefined, debug: () => undefined } as never,
-    provider,
+    providers: mosaicProviders(provider),
     models: {
       planning: { model: 'default-model', effort: 'low' },
       revision: { model: 'default-model', effort: 'low' },

@@ -6,6 +6,7 @@ import mosaicDefault, {
   type MosaicAgent,
   type MosaicOptions,
 } from '../src/index.js';
+import { mosaicProviders } from './structured.js';
 
 test('exports the same factory as named and default with an async prompt', () => {
   assert.strictEqual(mosaicDefault, mosaic);
@@ -23,7 +24,7 @@ test('propagates the exact provider failure from graph generation', async () => 
   const failure = new Error('provider unavailable');
   const options: MosaicOptions = {
     logger: { info: () => undefined, debug: () => undefined } as never,
-    provider: {
+    providers: mosaicProviders({
       metadata: {
         id: 'fake',
         name: 'Fake',
@@ -32,7 +33,7 @@ test('propagates the exact provider failure from graph generation', async () => 
       complete: async () => {
         throw failure;
       },
-    } as never,
+    } as never),
     models: {
       planning: { model: 'default-model', effort: 'low' },
       revision: { model: 'default-model', effort: 'low' },

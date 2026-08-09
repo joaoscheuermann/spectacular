@@ -1,9 +1,16 @@
 import assert from 'node:assert/strict';
 
-import type { ProviderFinished, ProviderRequest } from 'llms';
+import type { LlmProvider, ProviderFinished, ProviderRequest } from 'llms';
 
 const terminalDescription =
   'Submit the final structured output and end the agent run.';
+
+export const mosaicProviders = (provider: LlmProvider) => ({
+  planning: provider,
+  revision: provider,
+  execution: provider,
+  reranker: provider,
+});
 
 export const terminalTool = (request: ProviderRequest<unknown>) => {
   const tool = request.tools?.find(

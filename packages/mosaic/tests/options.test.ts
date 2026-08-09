@@ -5,6 +5,7 @@ import type { Skill } from 'bundle';
 import type { Tool } from 'tool';
 
 import { mosaic, type MosaicOptions } from '../src/index.js';
+import { mosaicProviders } from './structured.js';
 
 test('preserves both search retrievers at the factory boundary', () => {
   const options = validOptions();
@@ -141,7 +142,7 @@ test('requires a model and reasoning effort for every model-backed stage', () =>
 
 const validOptions = (): MutableOptions => ({
   logger: {} as never,
-  provider: {} as never,
+  providers: mosaicProviders({} as never),
   models: {
     planning: { model: 'default-model', effort: 'low' },
     revision: { model: 'default-model', effort: 'low' },

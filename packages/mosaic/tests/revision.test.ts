@@ -14,7 +14,12 @@ import type { Graph, Node } from '../src/lib/types/graph.js';
 import type { MosaicOptions } from '../src/lib/types/mosaic-options.js';
 import type { Observation } from '../src/lib/types/revision.js';
 import type { WorkflowState } from '../src/lib/types/workflow.js';
-import { terminalFinish, terminalTool, userContent } from './structured.js';
+import {
+  mosaicProviders,
+  terminalFinish,
+  terminalTool,
+  userContent,
+} from './structured.js';
 
 test('preserves completed nodes and resets retained target runtime state', async () => {
   const completed = node('completed', 0, 'completed', false);
@@ -330,7 +335,7 @@ const createHarness = (plans: readonly unknown[], max = 3, failure?: Error) => {
   const requests: ProviderRequest<unknown>[] = [];
   const options: MosaicOptions = {
     logger: { info: () => undefined, debug: () => undefined } as never,
-    provider: {
+    providers: mosaicProviders({
       metadata: {
         id: 'fake',
         name: 'Fake',
@@ -343,7 +348,7 @@ const createHarness = (plans: readonly unknown[], max = 3, failure?: Error) => {
         const plan = plans[index++] ?? plans.at(-1);
         return terminalFinish(request, plan);
       },
-    } as unknown as LlmProvider,
+    } as unknown as LlmProvider),
     models: {
       planning: { model: 'default', effort: 'low' },
       revision: { model: 'default', effort: 'low' },

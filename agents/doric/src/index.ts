@@ -1,290 +1,200 @@
 import { createServer } from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { loadBundles } from 'bundle';
+import { createDockerClient } from 'docker';
 import express from 'express';
+import { createFirecrackerClient } from 'firecracker';
 import pino from 'pino';
 import pretty from 'pino-pretty';
-import { Server as SocketServer } from 'socket.io';
-
-import { loadBundles, type Skill } from 'bundle';
-import { createDockerClient } from 'docker';
-import { createFirecrackerClient } from 'firecracker';
-import { createFetchTransport, createUnifiedProvider } from 'llms';
-import mosaic from 'mosaic';
 import { createSandbox } from 'sandbox';
 import { createSandpool } from 'sandpool';
-import type { Tool } from 'tool';
-import {
-  createHybridSearch,
-  createLexicalIndex,
-  createVectorIndex,
-} from 'victor';
+import { Server as SocketServer } from 'socket.io';
 
+import { createConfigService } from './lib/config-service.js';
+import { createConfigStore } from './lib/config-store.js';
+import { createDatabase } from './lib/database.js';
+import { handleHttpError } from './lib/http.js';
+import { createSessionService } from './lib/session-service.js';
+import { createSessionStore } from './lib/sessions.js';
+import { createMosaicSocket } from './lib/socket.js';
 import { createVmRegistry } from './lib/vms.js';
-import { writeResult } from './lib/delivery-writer.js';
+import { createConfigRouter } from './routes/config.js';
+import { createSessionsRouter } from './routes/sessions.js';
 import { createVmsRouter } from './routes/vms.js';
 
-async function main() {
-  const logger = pino(
-    { level: 'debug' },
-    pino.multistream([
-      { level: 'info', stream: pretty() },
-      {
-        level: 'debug',
-        stream: pino.destination(process.env.DORIC_LOG_FILE ?? 'doric.log'),
-      },
-    ]),
-  );
+const logger = pino(
+  { level: 'debug' },
+  pino.multistream([
+    { level: 'info', stream: pretty() },
+    {
+      level: 'debug',
+      stream: pino.destination(process.env.DORIC_LOG_FILE ?? 'doric.log'),
+    },
+  ]),
+);
+let startupStage = 'bootstrap';
 
+async function main() {
   const host = process.env.DORIC_HOST ?? '0.0.0.0';
   const port = Number.parseInt(process.env.DORIC_PORT ?? '3000', 10);
-  const app = express();
-  const server = createServer(app);
-
-  new SocketServer(server);
-
-  const provider = createUnifiedProvider({
-    transport: createFetchTransport(),
-    baseUrl: 'https://openrouter.ai/api/v1',
-    apiKey: process.env.OPENROUTER_API_KEY ?? '',
-    logger,
-  });
-
-  const models = {
-    planning: { model: 'qwen/qwen3.7-flash', effort: 'low' },
-    revision: { model: 'google/gemini-3.6-flash', effort: 'low' },
-    execution: {
-      model: 'deepseek/deepseek-v4-flash-0731',
-      effort: 'low',
-    },
-    reranker: 'voyageai/rerank-2.5-lite',
-    embedder: 'voyageai/voyage-4-large',
-  } as const;
-  const embeddingDimensions = 2048;
-
-  logger.info({ msg: 'initializing' });
-
   const sandboxProviderName =
     process.env.DORIC_SANDBOX_PROVIDER === 'firecracker'
       ? 'firecracker'
       : 'docker';
+  const startup = logger.child({ component: 'startup' });
 
+  startup.info({ host, port, sandboxProviderName }, 'Doric starting');
+  startupStage = 'database_client';
+  startup.info('Initializing PostgreSQL client');
+  const database = createDatabase(process.env.DORIC_DATABASE_URL ?? '');
+  await database.$connect();
+  startup.info('PostgreSQL client initialized');
+
+  const app = express();
+  const server = createServer(app);
+  const io = new SocketServer(server);
+
+  startupStage = 'sandbox_pool';
+  startup.info({ sandboxProviderName }, 'Configuring sandbox pool');
   const sandboxProvider =
     sandboxProviderName === 'firecracker'
       ? createFirecrackerClient()
       : createDockerClient();
 
   const vms = createVmRegistry(sandboxProviderName, sandboxProvider);
-
-  app.use('/vms', createVmsRouter({ list: vms.list }));
-  server.listen(port, host);
-
-  logger.info({ component: 'sandbox', provider: sandboxProviderName });
+  const sandboxImage = 'node:22-bookworm';
+  const sandboxResources = {
+    cpuCount: 1,
+    memoryMiB: 512,
+    diskMiB: 4096,
+  } as const;
+  const poolLimits = { minIdle: 1, maxSandboxes: 10 } as const;
 
   const pool = createSandpool({
-    minIdle: 1,
-    maxSandboxes: 10,
+    ...poolLimits,
     logger,
     create: () =>
       createSandbox({
         provider: vms.provider,
-        image: 'node:22-bookworm',
+        image: sandboxImage,
         imagePullPolicy: 'if-not-present',
-        resources: { cpuCount: 1, memoryMiB: 512, diskMiB: 4096 },
+        resources: sandboxResources,
         network: { mode: 'egress', dnsServers: ['1.1.1.1'] },
       }),
   });
+  startup.info(
+    {
+      sandboxProviderName,
+      sandboxImage,
+      sandboxResources,
+      ...poolLimits,
+      networkMode: 'egress',
+    },
+    'Sandbox pool configured',
+  );
 
-  try {
-    const bundles = await loadBundles(
-      join(dirname(fileURLToPath(import.meta.url)), '..', 'bundles'),
+  startupStage = 'bundle_load';
+  startup.info('Loading bundles');
+  const bundles = await loadBundles(
+    join(dirname(fileURLToPath(import.meta.url)), '..', 'bundles'),
+  );
+  startup.info(
+    {
+      bundleCount: bundles.length,
+      skillCount: bundles.reduce(
+        (count, bundle) => count + bundle.skills.length,
+        0,
+      ),
+      toolCount: bundles.reduce(
+        (count, bundle) => count + bundle.tools.length,
+        0,
+      ),
+    },
+    'Bundles loaded',
+  );
+  startupStage = 'configuration_activation';
+  startup.info('Activating Mosaic configuration');
+  const config = await createConfigService({
+    store: createConfigStore(database),
+    bundles,
+    logger,
+  });
+  const snapshot = config.current().snapshot;
+  startup.info(
+    {
+      configRevision: snapshot.revision,
+      providerCount: snapshot.configuration.providers.length,
+      models: snapshot.configuration.models,
+      routing: snapshot.configuration.routing,
+      execution: snapshot.configuration.execution,
+      revision: snapshot.configuration.revision,
+    },
+    'Mosaic configuration activated',
+  );
+  startupStage = 'session_reconciliation';
+  startup.info('Reconciling persisted sessions');
+  const sessions = createSessionStore(database);
+  const interrupted = await sessions.reconcile();
+  if (interrupted === 0) {
+    startup.info({ interruptedSessionCount: interrupted }, 'Sessions ready');
+  } else {
+    startup.warn(
+      { interruptedSessionCount: interrupted },
+      'Interrupted sessions marked as failed',
     );
-
-    const lease = await pool.acquire();
-
-    logger.info({ msg: 'heating sandpool' });
-    await pool.waitUntilHeated();
-
-    try {
-      const bundleTools = bundles.flatMap((bundle) => bundle.tools);
-      const bundleSkills = bundles.flatMap((bundle) => bundle.skills);
-
-      const skills = bundleSkills.map(({ skill }) => skill);
-      const requiredSkillNames = new Set(
-        bundleSkills
-          .filter(({ alwaysAvailable }) => alwaysAvailable)
-          .map(({ skill }) => skill.name),
-      );
-      const routableSkills = skills.filter(
-        ({ name }) => !requiredSkillNames.has(name),
-      );
-      const tools = bundleTools.map(({ factory, alwaysAvailable }) => ({
-        tool: factory(lease.sandbox),
-        alwaysAvailable,
-      }));
-
-      const skillLexicalIndex = createLexicalIndex<Skill>({ logger });
-      const skillVectorIndex = createVectorIndex<Skill>({
-        dimensions: embeddingDimensions,
-        logger,
-        embedding: async (input) =>
-          provider.embedding({
-            model: models.embedder,
-            input,
-            dimensions: embeddingDimensions,
-          }),
-      });
-      const skillRetriever = createHybridSearch({
-        lexical: skillLexicalIndex,
-        semantic: skillVectorIndex,
-        key: ({ name }) => name,
-        logger,
-      });
-
-      const toolLexicalIndex = createLexicalIndex<Tool>({ logger });
-      const toolVectorIndex = createVectorIndex<Tool>({
-        dimensions: embeddingDimensions,
-        logger,
-        embedding: async (input) =>
-          provider.embedding({
-            model: models.embedder,
-            input,
-            dimensions: embeddingDimensions,
-          }),
-      });
-      const toolRetriever = createHybridSearch({
-        lexical: toolLexicalIndex,
-        semantic: toolVectorIndex,
-        key: ({ name }) => name,
-        logger,
-      });
-
-      logger.info({ msg: 'loaded bundles' });
-
-      logger.info({ msg: 'indexing skills' });
-
-      const skillText = (skill: Skill): string => skill.indexText;
-
-      for (const skill of routableSkills) {
-        logger.info({ msg: 'indexing skill', skill: skill.name });
-
-        await Promise.all([
-          skillLexicalIndex.add(skill, skillText),
-          skillVectorIndex.add(skill, skillText),
-        ]);
-      }
-
-      logger.info({ msg: 'indexed all skills' });
-
-      logger.info({ msg: 'indexing tools' });
-
-      const toolText = ({ name, description }: Tool): string =>
-        `${name} | ${description ?? ''}`;
-
-      for (const { tool } of tools) {
-        logger.info({ msg: 'indexing tool', tool: tool.name });
-
-        await Promise.all([
-          toolLexicalIndex.add(tool, toolText),
-          toolVectorIndex.add(tool, toolText),
-        ]);
-      }
-
-      logger.info({ msg: 'indexed all tools' });
-
-      // const prompt = `
-      //   Extend the existing MOSAIC catalog with a new reusable capability for publishing finalized messages to Slack.
-
-      //   The runtime currently has no Slack-specific operations. The capability must allow an agent to:
-
-      //   1. discover available Slack channels;
-      //   2. resolve a channel from a human-readable name;
-      //   3. send a finalized message to the selected channel;
-      //   4. report the observable result of the operation.
-
-      //   Inspect the existing bundle before making changes. Determine whether this capability requires behavioral instructions, executable operations, or both. Create only the minimum coherent set of artifacts and do not duplicate capabilities that already exist.
-
-      //   Authoring requirements:
-
-      //   - Write all artifact contents in English.
-      //   - Represent executable operations as JSON tool descriptors containing their names, descriptions, input schemas, and output schemas.
-      //   - Do not implement handlers or runtime logic.
-      //   - Represent reusable behavioral guidance as focused \`SKILL.md\` micro-skills.
-      //   - Keep each skill centered on one coherent behavioral concern.
-      //   - Do not create a monolithic “Slack agent” skill.
-      //   - Include clear applicability, non-applicability, procedure, and completion guidance in each skill body.
-      //   - Declare only the tools that the skill may actually require in \`allowed-tools\`.
-      //   - Do not create a skill that merely repeats a tool description.
-      //   - Register every new skill and tool in \`manifest.json\`.
-      //   - Use \`alwaysAvailable: false\` unless an artifact is genuinely required by almost every unrelated objective.
-      //   - Preserve the existing \`skills/*\`, \`tools/*\`, and \`manifest.json\` structure.
-      //   - Reuse the existing core file, search, editing, shell, and validation capabilities instead of recreating them.
-
-      //   Before completing the task, validate:
-
-      //   - JSON syntax;
-      //   - YAML frontmatter;
-      //   - unique skill and tool names;
-      //   - manifest paths;
-      //   - resolution of every \`allowed-tools\` entry against the tool registry;
-      //   - absence of redundant or overlapping artifacts.
-
-      //   The result is complete when the MOSAIC bundle contains the smallest valid set of reusable skills and tool descriptors required for Slack channel discovery and message publication, all entries are registered, and the catalog remains internally consistent.
-
-      //   Return a concise summary explaining:
-
-      //   - which files were created or modified;
-      //   - why each new artifact is a skill or a tool;
-      //   - why no additional artifacts were necessary;
-      //   - how the final capability should be composed during execution.
-      //   `;
-
-      const prompt = `Salve um compromisso no meu calendario para amanha as 15:00, o nome deve ser: "Prova de moto".`;
-
-      const agent = mosaic({
-        logger,
-        provider,
-        models: {
-          planning: models.planning,
-          revision: models.revision,
-          execution: models.execution,
-          reranker: models.reranker,
-          embedder: models.embedder,
-        },
-        routing: {
-          maxHintCandidates: 5,
-          maxRetrievedCandidates: 5,
-          maxSkills: 5,
-        },
-        execution: {
-          maxTurns: 32,
-        },
-        revision: {
-          max: 3,
-        },
-        skills: {
-          required: bundleSkills
-            .filter(({ alwaysAvailable }) => alwaysAvailable)
-            .map(({ skill }) => skill),
-          menu: skills,
-          retriever: skillRetriever,
-        },
-        tools: {
-          required: tools
-            .filter(({ alwaysAvailable }) => alwaysAvailable)
-            .map(({ tool }) => tool),
-          menu: tools.map(({ tool }) => tool),
-          retriever: toolRetriever,
-        },
-      });
-
-      writeResult(await agent.prompt(prompt), process.stdout, logger);
-    } finally {
-      await lease.release();
-    }
-  } finally {
-    await pool.dispose();
   }
+  const publisher = createMosaicSocket(io, sessions);
+  const service = createSessionService({
+    store: sessions,
+    config,
+    pool,
+    publisher,
+    logger,
+  });
+
+  app.use(express.json());
+  app.use('/vms', createVmsRouter({ list: vms.list }));
+  app.use('/mosaic/config', createConfigRouter(config));
+  app.use('/mosaic/sessions', createSessionsRouter(service));
+  app.use(handleHttpError);
+  startup.info(
+    { restEndpointCount: 7, socketNamespace: '/mosaic' },
+    'Network interfaces configured',
+  );
+
+  startupStage = 'network_binding';
+  startup.info({ host, port }, 'Binding HTTP listener');
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, host, resolve);
+  });
+  startup.info(
+    { host, port, sandboxProvider: sandboxProviderName, interrupted },
+    'Doric listening',
+  );
+  startupStage = 'ready';
+
+  let closing = false;
+  const close = async () => {
+    if (closing) return;
+    closing = true;
+    const closed = new Promise<void>((resolve) =>
+      server.close(() => resolve()),
+    );
+    io.close();
+    await closed;
+    await service.dispose();
+    await pool.dispose();
+    await database.$disconnect();
+  };
+  process.once('SIGINT', () => void close());
+  process.once('SIGTERM', () => void close());
 }
 
-main().then().catch();
+main().catch(() => {
+  logger.fatal({ stage: startupStage }, 'Doric failed to start');
+  logger.flush();
+  process.exit(1);
+});

@@ -25,7 +25,7 @@ export async function hints(
   runtime?: MosaicRuntime,
   hooks?: MosaicEvaluationHooks,
 ): Promise<SkillExtraction[]> {
-  const { provider, skills, models, routing } = options;
+  const { providers, skills, models, routing } = options;
 
   // Always-available skills are universal instructions, not planning signals.
   const required = new Set(skills.required.map(({ name }) => name));
@@ -89,7 +89,7 @@ export async function hints(
           }
           const viewed = { ...skill, body };
           const structured = await completeStructured({
-            provider,
+            provider: providers.planning,
             profile: models.planning,
             system: hintsPrompt.system(),
             input: hintsPrompt.user(input, graph, node, viewed),

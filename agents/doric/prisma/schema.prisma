@@ -1,0 +1,98 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ModelRole {
+  PLANNING
+  REVISION
+  EXECUTION
+  RERANKER
+  EMBEDDER
+}
+
+enum MosaicSessionState {
+  QUEUED
+  RUNNING
+  CANCELLING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model DoricConfiguration {
+  id                     Int                     @id @default(1)
+  revision               Int                     @default(1)
+  generation             String                  @db.Uuid
+  maxHintCandidates      Int                     @map("max_hint_candidates")
+  maxRetrievedCandidates Int                     @map("max_retrieved_candidates")
+  maxSkills              Int                     @map("max_skills")
+  maxTurns               Int                     @map("max_turns")
+  maxRevisions           Int                     @map("max_revisions")
+  updatedAt              DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  providers              ProviderConfiguration[]
+  models                 ModelConfiguration[]
+
+  @@map("doric_configuration")
+}
+
+model ProviderConfiguration {
+  configurationId Int                  @map("configuration_id")
+  id              String
+  baseUrl         String               @map("base_url")
+  apiKeyEnv       String               @map("api_key_env")
+  configuration   DoricConfiguration   @relation(fields: [configurationId], references: [id], onDelete: Cascade)
+  models          ModelConfiguration[]
+
+  @@id([configurationId, id])
+  @@map("provider_configuration")
+}
+
+model ModelConfiguration {
+  configurationId Int                   @map("configuration_id")
+  role            ModelRole
+  providerId      String                @map("provider_id")
+  model           String
+  effort          String?
+  dimensions      Int?
+  configuration   DoricConfiguration    @relation(fields: [configurationId], references: [id], onDelete: Cascade)
+  provider        ProviderConfiguration @relation(fields: [configurationId, providerId], references: [configurationId, id])
+
+  @@id([configurationId, role])
+  @@map("model_configuration")
+}
+
+model MosaicSession {
+  id             String             @id @default(uuid()) @db.Uuid
+  prompt         String
+  state          MosaicSessionState @default(QUEUED)
+  configRevision Int                @map("config_revision")
+  configSnapshot Json               @map("config_snapshot") @db.JsonB
+  result         Json?              @db.JsonB
+  errorCode      String?            @map("error_code")
+  lastSequence   Int                @default(0) @map("last_sequence")
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  startedAt      DateTime?          @map("started_at") @db.Timestamptz(3)
+  finishedAt     DateTime?          @map("finished_at") @db.Timestamptz(3)
+  events         MosaicEvent[]
+
+  @@index([createdAt, id])
+  @@map("mosaic_session")
+}
+
+model MosaicEvent {
+  sessionId String        @map("session_id") @db.Uuid
+  sequence  Int
+  type      String
+  event     Json          @db.JsonB
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  session   MosaicSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@id([sessionId, sequence])
+  @@map("mosaic_event")
+}

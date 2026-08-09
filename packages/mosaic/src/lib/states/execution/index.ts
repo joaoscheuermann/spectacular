@@ -147,11 +147,11 @@ const execute = async (
         const agent = createAgent({
           provider:
             runtime?.provider(
-              options.provider,
+              options.providers.execution,
               'execution',
               node.id,
               graph.revision,
-            ) ?? options.provider,
+            ) ?? options.providers.execution,
           tools: observedTools(tools, node.id, graph.revision, runtime),
           messages,
           system: executionPrompt.system(options.skills.required),
@@ -175,6 +175,7 @@ const execute = async (
                   onStructuredAttempt: (event) =>
                     runtime.emit({
                       type: 'structured.attempt',
+                      providerId: options.providers.execution.metadata.id,
                       stage: 'execution',
                       nodeId: node.id,
                       revision: graph.revision,
@@ -188,6 +189,7 @@ const execute = async (
                   onToolCallRepair: (event) =>
                     runtime.emit({
                       type: 'tool.repair',
+                      providerId: options.providers.execution.metadata.id,
                       stage: 'execution',
                       nodeId: node.id,
                       revision: graph.revision,

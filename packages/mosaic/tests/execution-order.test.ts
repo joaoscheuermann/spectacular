@@ -12,6 +12,7 @@ import type {
   WorkflowContext,
   WorkflowState,
 } from '../src/lib/types/workflow.js';
+import { mosaicProviders } from './structured.js';
 
 test('derives concurrent revision work in wave order rather than completion order', async () => {
   const first = node('first', 0, 'tool-first');
@@ -62,7 +63,7 @@ const context = (provider: LlmProvider, tools: Tool[]): WorkflowContext => ({
   input: 'Complete the request.',
   options: {
     logger: { info: () => undefined } as never,
-    provider,
+    providers: mosaicProviders(provider),
     models: {
       planning: { model: 'default', effort: 'low' },
       revision: { model: 'default', effort: 'low' },

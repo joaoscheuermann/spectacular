@@ -286,15 +286,17 @@ recovery hooks, or external side effects.
 `packages/mosaic` depends on `packages/state-machine` and owns the Doric
 goal-workflow policy: planning and revision, scheduling, skill retrieval and
 reranking, and per-node skill/tool menu composition. Its public
-factory accepts an injected provider, logger, independent planning, localized
-revision, and execution model profiles with explicit reasoning effort, plus a
-reranker and embedder model IDs without reasoning effort,
+factory accepts injected planning, localized-revision, execution, and reranker
+providers, a logger, independent planning, localized revision, and execution
+model profiles with explicit reasoning effort, plus reranker and embedder model
+IDs without reasoning effort,
 independent required positive safe-integer hint and execution candidate limits,
 a selected-skill limit, a required non-negative integer
 localized-revision limit, a required positive safe-integer per-node model-turn
-limit, bundle skills and executable tools, and both retrievers; it has no
-session option. Doric configures sixteen model turns per node and three localized
-revisions. The tool retriever remains part of this composition contract, but
+limit, bundle skills and executable tools, and both retrievers. Run options may
+carry a caller-owned UUID run ID and cancellation signal. Doric configures 32
+model turns per node and three localized revisions. The tool retriever remains
+part of this composition contract, but
 the bundle state does not query it or run an independent tool router. Model
 graph output owns only `id`,
 `goal`, `doneWhen`, `dependsOn`, and `deliver`; Mosaic deterministically assigns
@@ -465,9 +467,11 @@ The public Mosaic result contract remains unchanged. `MosaicOptions.models`
 separates planning, revision, and execution profiles and keeps reranking and
 embedding as non-reasoning model IDs. Each
 `MosaicAgent.prompt` additionally accepts run-local observation options with a
-serial awaited observer and either `structure` capture, the default, or `io`
-capture. Version-one Mosaic events carry one run ID and contiguous sequence,
-cover lifecycle, planning, retrieval/reranking, bundle/menu, scheduling waves,
+serial awaited observer, caller-supplied UUID run ID, cancellation signal, and
+either `structure` capture, the default, or `io` capture. Version-two Mosaic
+events carry one run ID and contiguous sequence; model events also carry the
+configured provider ID. They cover lifecycle, planning, retrieval/reranking,
+bundle/menu, scheduling waves,
 node execution and tools, decisions and runtime observations, revision, and
 delivery. Every delivered event is a detached deeply frozen copy. Observer
 latency is excluded from reported durations; the first observer failure aborts
@@ -494,8 +498,9 @@ revision 1 as a validated plan identical to P0.
 for the pinned SkillRouter checkpoint. Only its export target may fetch
 upstream model bytes. Its `artifact/` directory and ONNX sidecars are ignored,
 non-committed generated output; the converter source, pinned revision, and
-`uv.lock` provide provenance. It remains a standalone utility. Doric composes
-its unified OpenRouter provider with `qwen/qwen3.7-flash` at `low` for
+`uv.lock` provide provenance. It remains a standalone utility. Doric's default
+persisted configuration composes an OpenAI Responses-compatible OpenRouter
+provider with `qwen/qwen3.7-flash` at `low` for
 planning, `google/gemini-3.6-flash` at `low` for localized revision, and
 `deepseek/deepseek-v4-flash-0731` at `low` for node execution. Its per-node
 model-turn limit is 32. It uses
@@ -589,12 +594,13 @@ Doric evaluates decomposition hints for candidate skills concurrently. The
 hints method retains its existing inputs and `Set<SkillExtraction>` output,
 with successful extractions ordered by their candidate input order.
 
-`agents/doric` receives first-message config and later config replacements from
-`requestContext.userMessage.metadata.configuration`. Sandbox creation, Git
-setup, repository cloning, and initial workdir state are tied to session
-creation; later config replacement updates only the stored session config.
-GitHub repository config may include an optional `github.repo.branch` string,
-which is used only when initially cloning a sandbox repository.
+`agents/doric` receives complete singleton Mosaic configuration replacements
+through `PUT /mosaic/config`. It persists only provider IDs, HTTP(S) base URLs,
+credential environment-variable names ending in `_API_KEY`, model profiles,
+and bounded routing/execution/revision settings. Credential values remain
+process environment inputs. Each session created by `POST /mosaic/sessions`
+captures the active configuration generation and an immutable JSONB snapshot;
+later replacements affect only new sessions.
 
 `packages/sandpool` owns process-local `SandboxSession` capacity, FIFO leasing,
 background warming, replacement, and disposal. It accepts an injected sandbox
@@ -648,10 +654,10 @@ and Dropbear bootstrap, initramfs, OCI/ext4 tooling, networking tools, and
 OpenSSH client. Its Linux-only Compose profiles provide either the Docker
 socket plus host-network firewall access or KVM/TUN/cgroup/state/cache access
 without a Docker socket. The privileged Firecracker profile is a development
-and e2e harness, not a production isolation boundary. Doric constructs one
-selected provider for its pool, acquires one pool lease per prompt, binds
-bundle tools to it, releases it after success or failure, and disposes the pool
-on shutdown.
+and e2e harness, not a production isolation boundary. Doric acquires one pool
+lease per persisted Mosaic session, binds that session's bundle tools to its
+sandbox, propagates cancellation through acquisition and provider calls,
+releases the lease after success or failure, and disposes the pool on shutdown.
 
 Doric initializes an otherwise unconfigured Express application and attaches
 a Socket.IO server to the same HTTP listener. The listener binds to
@@ -660,8 +666,36 @@ exposes port 3000. Its modular Express router exposes `GET /vms`, which returns
 the IDs and selected provider names of runtimes successfully provisioned by
 this Doric process and not yet successfully disposed. The registry wraps the
 provider at the composition boundary and does not expose keys, networking, or
-provider internals. No other HTTP routes, middleware, Socket.IO events, or
-connection handlers are defined.
+provider internals. REST additionally owns `GET`/`PUT /mosaic/config`, session
+creation and cursor listing, idempotent termination, and terminal-only deletion
+under `/mosaic/sessions`. Socket.IO namespace `/mosaic` owns subscription,
+snapshot, incremental replay, live `mosaic:event`, state update, and deletion
+notifications. The PostgreSQL database is the event source of truth: each event
+and the session's contiguous last sequence are committed together before live
+emission.
+
+`agents/doric` owns its Prisma ORM 7 schema, generated client configuration,
+and versioned PostgreSQL migrations. Production uses one adapter-pg Prisma
+client per process and never applies migrations implicitly during HTTP startup.
+PostgreSQL stores the singleton configuration, normalized provider/model rows,
+session snapshots and outcomes, and ordered JSONB events. Startup marks every
+non-terminal session failed with the sanitized `process_interrupted` code;
+events remain replayable and explicit terminal deletion cascades to events.
+The local Compose surface pins PostgreSQL 18.4, mounts its PostgreSQL-18 volume
+at `/var/lib/postgresql`, runs migrations as a one-shot dependency, and starts
+either Doric sandbox profile only after the database is healthy and migrations
+complete.
+Doric startup emits safe structured `info` logs for its listener and sandbox
+selection, PostgreSQL client initialization, sandbox limits, bundle resource
+counts, active configuration revision and model profiles, session
+reconciliation, mounted interfaces, and listener readiness. Startup failures
+identify only the active bootstrap stage; they do not retain or emit database
+or provider URLs, credential environment names or values, prompts, caught
+diagnostics, causes, or thrown values.
+Mosaic configuration and session routes remain unauthenticated on the existing
+`0.0.0.0` listener. Provider base URLs and credential environment names are
+intentionally configurable through the open PUT, so deployments must keep this
+listener on an isolated trusted network. Sessions have no automatic expiry.
 
 Sandpool, each repository-owned LLM provider, and Victor require an injected
 `pino.Logger` and create their own component child logger. They emit only safe,
@@ -713,6 +747,10 @@ Rerank requests carry a model, query, non-empty document list, and optional
 positive `topN`; successful results expose each original document index and
 finite relevance score. Codex and LM Studio native support neither embeddings
 nor reranking.
+`packages/llms` also exposes a generic OpenAI Responses-compatible factory with
+caller-configured provider identity and base URL. Its `/responses`, `/models`,
+`/embeddings`, and `/rerank` operations preserve that identity in metadata,
+safe logs, stream events, and provider errors.
 Provider configs may include an optional `baseUrl` string to
 override provider endpoints that support it. Model configs may include an
 optional provider-neutral `effort` value of `none`, `minimal`, `low`,
@@ -841,15 +879,12 @@ Credentials and secrets must not be persisted, printed, logged, or committed.
 Prefer dependency injection and explicit configuration objects for sensitive
 runtime inputs.
 
-Doric runtime session replay state is process-local and in-memory. It records
-context IDs, latest task IDs, initial prompt text, visible task state, ordered
-A2A event history, and live subscribers for the custom
-`doric/sessions/list`, `doric/sessions/connect`, and `doric/sessions/kill`
-JSON-RPC methods. This replay state is not durable persistence. Session kill is
-best-effort: it cancels active A2A tasks when the SDK/runtime can do so,
-disposes known or in-flight sandbox sessions, removes in-memory session and
-runtime replay state, and suppresses late events from the killed context in the
-current process.
+Doric Mosaic session replay is durable in PostgreSQL. Sessions transition
+through queued, running, cancelling, completed, failed, and cancelled states;
+termination is best-effort and idempotent. One process-local map owns only live
+abort controllers and Socket.IO subscribers. It is not the replay source of
+truth, does not resume work after restart, and requires no distributed
+Socket.IO adapter because Doric currently supports one host instance.
 
 ## Hard Constraints
 

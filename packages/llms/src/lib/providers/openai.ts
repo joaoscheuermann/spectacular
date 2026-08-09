@@ -59,6 +59,13 @@ export type OpenAiProviderDeps = {
   readonly logger: Logger;
 };
 
+export type OpenAiCompatibleProviderDeps = OpenAiProviderDeps & {
+  readonly identity: {
+    readonly id: string;
+    readonly name: string;
+  };
+};
+
 export const openAiMetadata: ProviderMetadata = {
   id: 'openai',
   name: 'OpenAI',
@@ -80,16 +87,31 @@ export const openAiCapabilities: ProviderCapabilities = {
 export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider =>
   withProviderLogging(createOpenAiProviderCore(deps), deps.logger);
 
-export const createOpenAiProviderCore = (
-  deps: Omit<OpenAiProviderDeps, 'logger'>,
+/** Creates a Responses-compatible provider while preserving its configured identity. */
+export const createOpenAiCompatibleProvider = (
+  deps: OpenAiCompatibleProviderDeps,
 ): LlmProvider => {
   const baseUrl = deps.baseUrl ?? openAiMetadata.baseUrl;
+  const metadata = { ...deps.identity, baseUrl };
+  return withProviderLogging(
+    createOpenAiProviderCore(deps, metadata),
+    deps.logger,
+  );
+};
+
+export const createOpenAiProviderCore = (
+  deps: Omit<OpenAiProviderDeps, 'logger'>,
+  metadata: ProviderMetadata = openAiMetadata,
+): LlmProvider => {
+  const baseUrl = deps.baseUrl ?? metadata.baseUrl;
+  const providerId = metadata.id;
+  const providerName = metadata.name;
 
   const send = async (
     request: ProviderRequest<unknown>,
     body: Record<string, unknown>,
   ): Promise<Record<string, unknown>> => {
-    const auth = await authorization(deps);
+    const auth = await authorization(deps, providerId, providerName);
     const sensitiveOutput = request.flags?.sensitiveOutput === true;
 
     const response = await deps.transport.request({
@@ -106,14 +128,14 @@ export const createOpenAiProviderCore = (
 
     if (response.status >= 400) {
       throw httpError(
-        'openai',
+        providerId,
         response.status,
         response.body,
         sensitiveOutput,
       );
     }
 
-    return parseJsonBody('openai', response.body, sensitiveOutput);
+    return parseJsonBody(providerId, response.body, sensitiveOutput);
   };
 
   async function complete<Schema extends StructuredOutputSchema>(
@@ -127,17 +149,17 @@ export const createOpenAiProviderCore = (
   async function complete<Output = JsonValue>(
     request: ProviderRequest<Output>,
   ): Promise<ProviderFinished<Output>> {
-    requireRequestInput('openai', request);
-    const body = openAiBody(request, false);
+    requireRequestInput(providerId, request);
+    const body = openAiBody(request, false, providerId);
     return parseStructuredOutput(
-      'openai',
+      providerId,
       request,
       parseFinished(await send(request, body)),
     );
   }
 
   return {
-    metadata: openAiMetadata,
+    metadata,
     capabilities: openAiCapabilities,
 
     complete,
@@ -145,19 +167,19 @@ export const createOpenAiProviderCore = (
     async *stream<Output = JsonValue>(
       request: ProviderRequest<Output>,
     ): AsyncIterable<ProviderStreamEvent<Output>> {
-      requireRequestInput('openai', request);
+      requireRequestInput(providerId, request);
       const sensitiveOutput = request.flags?.sensitiveOutput === true;
-      const body = openAiBody(request, true);
+      const body = openAiBody(request, true, providerId);
       const text: string[] = [];
       const reasoning: string[] = [];
       const refusals: string[] = [];
       const textSnapshots = createTextSnapshots();
       const calls = new Map<number, ProviderToolCall>();
-      const auth = await authorization(deps);
+      const auth = await authorization(deps, providerId, providerName);
 
       yield {
         type: 'response.started',
-        provider: 'openai',
+        provider: providerId,
         model: body.model as string,
       };
 
@@ -181,10 +203,10 @@ export const createOpenAiProviderCore = (
         let payload: Record<string, unknown>;
 
         try {
-          payload = parseJsonBody('openai', event.data, sensitiveOutput);
+          payload = parseJsonBody(providerId, event.data, sensitiveOutput);
         } catch {
           yield streamErrorEvent(
-            'openai',
+            providerId,
             'malformed_stream_event',
             event.data,
             undefined,
@@ -215,7 +237,7 @@ export const createOpenAiProviderCore = (
         if (payload.type === 'response.completed') {
           const response = recordField(payload, 'response') ?? payload;
           const finish = parseStructuredOutput(
-            'openai',
+            providerId,
             request,
             parseFinished(
               response,
@@ -238,9 +260,9 @@ export const createOpenAiProviderCore = (
 
         if (payload.type === 'response.failed') {
           yield streamErrorEvent(
-            'openai',
+            providerId,
             'provider_error',
-            'OpenAI stream failed.',
+            `${providerName} stream failed.`,
             undefined,
             sensitiveOutput,
           );
@@ -251,7 +273,7 @@ export const createOpenAiProviderCore = (
       yield {
         type: 'response.finished',
         finish: parseStructuredOutput(
-          'openai',
+          providerId,
           request,
           {
             text: streamText(text, textSnapshots) ?? '',
@@ -268,8 +290,8 @@ export const createOpenAiProviderCore = (
     async embedding(
       request: ProviderEmbeddingRequest,
     ): Promise<readonly number[]> {
-      requireEmbeddingInput('openai', request);
-      const auth = await authorization(deps);
+      requireEmbeddingInput(providerId, request);
+      const auth = await authorization(deps, providerId, providerName);
       const sensitiveOutput = request.flags?.sensitiveOutput === true;
       const body = {
         model: request.model,
@@ -291,7 +313,7 @@ export const createOpenAiProviderCore = (
       });
       if (response.status >= 400) {
         throw httpError(
-          'openai',
+          providerId,
           response.status,
           response.body,
           sensitiveOutput,
@@ -299,16 +321,16 @@ export const createOpenAiProviderCore = (
       }
 
       return parseEmbedding(
-        'openai',
-        parseJsonBody('openai', response.body, sensitiveOutput),
+        providerId,
+        parseJsonBody(providerId, response.body, sensitiveOutput),
       );
     },
 
     async rerank(
       request: ProviderRerankRequest,
     ): Promise<readonly ProviderRerankResult[]> {
-      requireRerankInput('openai', request);
-      const auth = await authorization(deps);
+      requireRerankInput(providerId, request);
+      const auth = await authorization(deps, providerId, providerName);
       const sensitiveOutput = request.flags?.sensitiveOutput === true;
       const body = {
         model: request.model,
@@ -329,7 +351,7 @@ export const createOpenAiProviderCore = (
       });
       if (response.status >= 400) {
         throw httpError(
-          'openai',
+          providerId,
           response.status,
           response.body,
           sensitiveOutput,
@@ -337,13 +359,13 @@ export const createOpenAiProviderCore = (
       }
 
       return parseRerank(
-        'openai',
-        parseJsonBody('openai', response.body, sensitiveOutput),
+        providerId,
+        parseJsonBody(providerId, response.body, sensitiveOutput),
       );
     },
 
     async models(signal?: AbortSignal): Promise<readonly Model[]> {
-      const auth = await authorization(deps);
+      const auth = await authorization(deps, providerId, providerName);
       const response = await deps.transport.request({
         method: 'GET',
         url: `${baseUrl}/models`,
@@ -355,10 +377,10 @@ export const createOpenAiProviderCore = (
       });
 
       if (response.status >= 400) {
-        throw httpError('openai', response.status, response.body);
+        throw httpError(providerId, response.status, response.body);
       }
 
-      return arrayField(parseJsonBody('openai', response.body), 'data')
+      return arrayField(parseJsonBody(providerId, response.body), 'data')
         .map(asRecord)
         .filter(
           (model): model is Record<string, unknown> => model !== undefined,
@@ -366,7 +388,7 @@ export const createOpenAiProviderCore = (
         .map((model) => ({
           id: stringField(model, 'id') ?? '',
           name: stringField(model, 'id'),
-          provider: 'openai',
+          provider: providerId,
           raw: model,
         }))
         .filter((model) => model.id !== '');
@@ -379,9 +401,9 @@ export const createOpenAiProviderCore = (
 
       if (found === undefined) {
         throw new ProviderErrorObject({
-          provider: 'openai',
+          provider: providerId,
           code: 'missing_model',
-          message: `OpenAI model is not available: ${model}`,
+          message: `${providerName} model is not available: ${model}`,
         });
       }
 

@@ -56,6 +56,7 @@ export const completeStructured = async <
           onStructuredAttempt: (event) =>
             runtime.emit({
               type: 'structured.attempt',
+              providerId: provider.metadata.id,
               stage,
               ...(nodeId === undefined ? {} : { nodeId }),
               ...(revision === undefined ? {} : { revision }),
@@ -69,6 +70,7 @@ export const completeStructured = async <
           onToolCallRepair: (event) =>
             runtime.emit({
               type: 'tool.repair',
+              providerId: provider.metadata.id,
               stage,
               ...(nodeId === undefined ? {} : { nodeId }),
               ...(revision === undefined ? {} : { revision }),

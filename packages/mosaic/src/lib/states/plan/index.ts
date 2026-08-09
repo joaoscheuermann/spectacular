@@ -51,7 +51,7 @@ export const plan: WorkflowHandler = async (
             { request: input },
             ({ request }) =>
               completeStructured({
-                provider: options.provider,
+                provider: options.providers.planning,
                 profile: options.models.planning,
                 system: goalsPrompt.system(),
                 input: goalsPrompt.user(request),
@@ -66,7 +66,7 @@ export const plan: WorkflowHandler = async (
             { request: input, graph: active },
             async ({ request, graph }) =>
               completeStructured({
-                provider: options.provider,
+                provider: options.providers.planning,
                 profile: options.models.planning,
                 system: revisionPrompt.system(),
                 input: revisionPrompt.user(

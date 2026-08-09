@@ -117,7 +117,7 @@ export const revision: WorkflowHandler = async (
         { request: input, graph: active, target, retiredIds },
         ({ request, graph, target, retiredIds }) =>
           completeStructured({
-            provider: options.provider,
+            provider: options.providers.revision,
             profile: options.models.revision,
             system: revisionPrompt.localizedSystem(),
             input: revisionPrompt.localizedUser(

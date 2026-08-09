@@ -10,7 +10,7 @@ export type MosaicStage =
   | 'delivery';
 
 type EventBase = {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
   readonly runId: string;
   readonly sequence: number;
 };
@@ -50,6 +50,7 @@ type LifecycleEvent =
 type ModelEvent =
   | {
       readonly type: 'tool.repair';
+      readonly providerId: string;
       readonly stage: MosaicStage;
       readonly nodeId?: string;
       readonly revision?: number;
@@ -58,6 +59,7 @@ type ModelEvent =
     }
   | {
       readonly type: 'structured.attempt';
+      readonly providerId: string;
       readonly stage: MosaicStage;
       readonly nodeId?: string;
       readonly revision?: number;
@@ -68,6 +70,7 @@ type ModelEvent =
     }
   | {
       readonly type: 'model.request';
+      readonly providerId: string;
       readonly stage: MosaicStage;
       readonly nodeId?: string;
       readonly revision?: number;
@@ -79,6 +82,7 @@ type ModelEvent =
     }
   | {
       readonly type: 'model.response';
+      readonly providerId: string;
       readonly stage: MosaicStage;
       readonly nodeId?: string;
       readonly revision?: number;
@@ -235,6 +239,8 @@ export type MosaicEvent = EventBase &
 export type MosaicObserver = (event: MosaicEvent) => void | Promise<void>;
 
 export interface MosaicRunOptions {
+  readonly runId?: string;
+  readonly signal?: AbortSignal;
   readonly observer?: MosaicObserver;
   readonly capture?: MosaicCapture;
 }

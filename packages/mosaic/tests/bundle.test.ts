@@ -14,7 +14,12 @@ import { bundle } from '../src/lib/states/bundle/index.js';
 import type { Graph, Node } from '../src/lib/types/graph.js';
 import type { MosaicOptions } from '../src/lib/types/mosaic-options.js';
 import type { WorkflowState } from '../src/lib/types/workflow.js';
-import { terminalFinish, terminalTool, userContent } from './structured.js';
+import {
+  mosaicProviders,
+  terminalFinish,
+  terminalTool,
+  userContent,
+} from './structured.js';
 
 test('routes with transitive ancestor artifacts and omits unrelated branches', async () => {
   const root = node('root', 'completed', 'root artifact');
@@ -435,7 +440,7 @@ const createHarness = (input: HarnessInput) => {
       debug: (bindings: unknown, message: string) =>
         logs.push({ bindings, message }),
     } as never,
-    provider: {
+    providers: mosaicProviders({
       metadata: {
         id: 'fake',
         name: 'Fake',
@@ -471,7 +476,7 @@ const createHarness = (input: HarnessInput) => {
             input.selectionRationale ?? 'The selected bundle is sufficient.',
         });
       },
-    } as unknown as LlmProvider,
+    } as unknown as LlmProvider),
     models: {
       planning: { model: 'default-model', effort: 'low' },
       revision: { model: 'default-model', effort: 'low' },

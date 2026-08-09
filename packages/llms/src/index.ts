@@ -6,10 +6,12 @@ export * from './lib/providers/lmstudio-openai.js';
 export * from './lib/providers/lmstudio.js';
 export {
   createOpenAiProvider,
+  createOpenAiCompatibleProvider,
   openAiBody,
   openAiCapabilities,
   openAiMetadata,
   type OpenAiProviderDeps,
+  type OpenAiCompatibleProviderDeps,
   type SecretSource,
 } from './lib/providers/openai.js';
 export * from './lib/providers/openrouter.js';

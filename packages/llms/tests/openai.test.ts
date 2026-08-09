@@ -4,7 +4,62 @@ import test from 'node:test';
 import { createToolStorage, defineTool } from 'tool';
 import { z } from 'zod';
 
-import { ProviderErrorObject, openAiBody } from '../src/index.js';
+import {
+  createOpenAiCompatibleProvider,
+  ProviderErrorObject,
+  openAiBody,
+} from '../src/index.js';
+import { fakeTransport, response, silentLogger } from './fakes.js';
+
+test('preserves configured identity in compatible metadata and errors', async () => {
+  const provider = createOpenAiCompatibleProvider({
+    transport: fakeTransport({ responses: [response({}, 503)] }),
+    baseUrl: 'https://compatible.invalid/v1',
+    identity: { id: 'configured', name: 'Configured' },
+    apiKey: 'private-token',
+    logger: silentLogger,
+  });
+
+  assert.deepEqual(provider.metadata, {
+    id: 'configured',
+    name: 'Configured',
+    baseUrl: 'https://compatible.invalid/v1',
+  });
+  await assert.rejects(
+    provider.complete({
+      model: 'model',
+      messages: [{ role: 'user', content: 'request' }],
+    }),
+    (error: unknown) =>
+      error instanceof ProviderErrorObject &&
+      error.data.provider === 'configured',
+  );
+  await assert.rejects(
+    provider.complete({ model: '', messages: [] }),
+    (error: unknown) =>
+      error instanceof ProviderErrorObject &&
+      error.data.provider === 'configured',
+  );
+});
+
+test('preserves compatible identity in credential validation errors', async () => {
+  const provider = createOpenAiCompatibleProvider({
+    transport: fakeTransport({}),
+    baseUrl: 'https://compatible.invalid/v1',
+    identity: { id: 'configured', name: 'Configured' },
+    apiKey: 'private-token',
+    authorization: 'Bearer private-token',
+    logger: silentLogger,
+  });
+
+  await assert.rejects(
+    provider.models(),
+    (error: unknown) =>
+      error instanceof ProviderErrorObject &&
+      error.data.provider === 'configured' &&
+      error.data.message.startsWith('Configured provider'),
+  );
+});
 
 test('maps OpenAI Responses DTO with instructions tools reasoning and fast service tier', () => {
   const body = openAiBody(

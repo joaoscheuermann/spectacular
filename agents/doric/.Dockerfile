@@ -27,6 +27,7 @@ COPY workflows ./workflows
 # non-TypeScript bundle resources are staged beside the compiled bundle.
 RUN npm ci --ignore-scripts \
  && node node_modules/nx/bin/post-install \
+ && npx prisma generate --config agents/doric/prisma.config.ts \
  && npx tsc --build \
       agents/doric/tsconfig.lib.json \
       bundles/core/tsconfig.json \
@@ -34,6 +35,10 @@ RUN npm ci --ignore-scripts \
       --force \
  && mkdir -p agents/doric/dist/src \
  && mv agents/doric/dist/index.* agents/doric/dist/src/ \
+ && mv agents/doric/dist/generated \
+       agents/doric/dist/lib \
+       agents/doric/dist/routes \
+       agents/doric/dist/src/ \
  && cp bundles/core/manifest.json bundles/core/package.json agents/doric/dist/bundles/core/ \
  && cp -R bundles/core/skills agents/doric/dist/bundles/core/ \
  && cp bundles/git/manifest.json bundles/git/package.json agents/doric/dist/bundles/git/ \

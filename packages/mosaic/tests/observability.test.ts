@@ -6,15 +6,19 @@ import type { LlmProvider, ProviderRequest } from 'llms';
 import type { Tool } from 'tool';
 import { z } from 'zod';
 
-import { terminalFinish } from './structured.js';
+import { mosaicProviders, terminalFinish } from './structured.js';
 import { createRuntime } from '../src/lib/observability.js';
 
 test('observer delivery is awaited, serial, immutable, and ordered', async () => {
   const harness = createHarness();
   const events: MosaicEvent[] = [];
+  const runId = '018f47d2-e3b1-7b4f-8b2c-1f5a7fdf1601';
+  const controller = new AbortController();
   let active = false;
 
   const result = await mosaic(harness.options).prompt('private request', {
+    runId,
+    signal: controller.signal,
     capture: 'io',
     observer: async (event) => {
       assert.equal(active, false);
@@ -35,6 +39,30 @@ test('observer delivery is awaited, serial, immutable, and ordered', async () =>
   );
   assert.equal(events[0]?.type, 'run.started');
   assert.equal(events.at(-1)?.type, 'run.finished');
+  assert.equal(
+    events.every((event) => event.schemaVersion === 2),
+    true,
+  );
+  assert.equal(
+    events.every((event) => event.runId === runId),
+    true,
+  );
+  assert.equal(
+    events
+      .filter(
+        (event) =>
+          event.type === 'model.request' ||
+          event.type === 'model.response' ||
+          event.type === 'structured.attempt' ||
+          event.type === 'tool.repair',
+      )
+      .every((event) => event.providerId === 'fake'),
+    true,
+  );
+  assert.equal(
+    harness.requests.every((request) => request.signal === controller.signal),
+    true,
+  );
   assert.equal(
     events.filter(({ type }) => type === 'structured.attempt').length,
     3,
@@ -321,7 +349,7 @@ const createHarness = (lookup?: Tool) => {
   } as unknown as LlmProvider;
   const options: MosaicOptions = {
     logger: { info: () => undefined, debug: () => undefined } as never,
-    provider,
+    providers: mosaicProviders(provider),
     models: {
       planning: { model: 'default-model', effort: 'low' },
       revision: { model: 'default-model', effort: 'low' },

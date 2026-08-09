@@ -5,7 +5,7 @@ import { mosaic as publicMosaic, type MosaicOptions } from '../src/index.js';
 import { mosaic as evaluationMosaic } from '../src/evaluation.js';
 import type { LlmProvider, ProviderRequest } from 'llms';
 
-import { terminalFinish } from './structured.js';
+import { mosaicProviders, terminalFinish } from './structured.js';
 
 test('evaluation adapter without hooks is behaviorally neutral', async () => {
   const first = createHarness();
@@ -127,7 +127,7 @@ const createHarness = (withSearch = false) => {
   } as unknown as LlmProvider;
   const options: MosaicOptions = {
     logger: { info: () => undefined, debug: () => undefined } as never,
-    provider,
+    providers: mosaicProviders(provider),
     models: {
       planning: { model: 'default-model', effort: 'low' },
       revision: { model: 'default-model', effort: 'low' },

@@ -29,6 +29,7 @@ export type Timer = {
 
 export interface MosaicRuntime {
   readonly capture: MosaicCapture;
+  readonly signal?: AbortSignal;
   readonly hasFailed: boolean;
   readonly failure: unknown;
   emit(event: MosaicEventInput): Promise<void>;
@@ -51,7 +52,10 @@ export const createRuntime = (
     throw new TypeError('Mosaic capture must be structure or io.');
   }
 
-  const runId = randomUUID();
+  const runId = options.runId ?? randomUUID();
+  if (!uuid.test(runId)) {
+    throw new TypeError('Mosaic runId must be a UUID.');
+  }
   const observer = options.observer;
   let sequence = 0;
   let observedMs = 0;
@@ -60,11 +64,12 @@ export const createRuntime = (
   let queue = Promise.resolve();
 
   const emit = async (input: MosaicEventInput): Promise<void> => {
+    options.signal?.throwIfAborted();
     if (failed) throw failure;
     if (observer === undefined) return;
 
     const event = immutable({
-      schemaVersion: 1 as const,
+      schemaVersion: 2 as const,
       runId,
       sequence: ++sequence,
       ...input,
@@ -88,6 +93,7 @@ export const createRuntime = (
 
   const runtime: MosaicRuntime = {
     capture,
+    signal: options.signal,
     get hasFailed() {
       return failed;
     },
@@ -112,6 +118,9 @@ export const createRuntime = (
 
   return runtime;
 };
+
+const uuid =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 const observedProvider = (
   provider: LlmProvider,
@@ -144,11 +153,21 @@ const complete =
   async <Output = JsonValue>(
     request: ProviderRequest<Output>,
   ): Promise<ProviderFinished<Output>> => {
-    await requestEvent(runtime, request, 'complete', stage, nodeId, revision);
+    const current = withSignal(request, runtime.signal);
+    await requestEvent(
+      runtime,
+      provider.metadata.id,
+      current,
+      'complete',
+      stage,
+      nodeId,
+      revision,
+    );
     const timer = runtime.timer();
-    const response = await provider.complete(request);
+    const response = await provider.complete(current);
     await responseEvent(
       runtime,
+      provider.metadata.id,
       request.model,
       response,
       'complete',
@@ -168,12 +187,22 @@ const stream = (
   revision?: number,
 ) =>
   async function* <Output = JsonValue>(request: ProviderRequest<Output>) {
-    await requestEvent(runtime, request, 'stream', stage, nodeId, revision);
+    const current = withSignal(request, runtime.signal);
+    await requestEvent(
+      runtime,
+      provider.metadata.id,
+      current,
+      'stream',
+      stage,
+      nodeId,
+      revision,
+    );
     const timer = runtime.timer();
-    for await (const event of provider.stream(request)) {
+    for await (const event of provider.stream(current)) {
       if (event.type === 'response.finished') {
         await responseEvent(
           runtime,
+          provider.metadata.id,
           request.model,
           event.finish,
           'stream',
@@ -196,21 +225,24 @@ const rerank =
     revision?: number,
   ) =>
   async (request: ProviderRerankRequest) => {
+    const current = withSignal(request, runtime.signal);
     await runtime.emit({
       type: 'model.request',
+      providerId: provider.metadata.id,
       stage,
       operation: 'rerank',
-      model: request.model,
+      model: current.model,
       ...(nodeId === undefined ? {} : { nodeId }),
       ...(revision === undefined ? {} : { revision }),
       ...(runtime.capture === 'io'
-        ? { content: { query: request.query, documents: request.documents } }
+        ? { content: { query: current.query, documents: current.documents } }
         : {}),
     });
     const timer = runtime.timer();
-    const response = await provider.rerank(request);
+    const response = await provider.rerank(current);
     await runtime.emit({
       type: 'model.response',
+      providerId: provider.metadata.id,
       stage,
       operation: 'rerank',
       model: request.model,
@@ -224,6 +256,7 @@ const rerank =
 
 const requestEvent = async (
   runtime: MosaicRuntime,
+  providerId: string,
   request: ProviderRequest,
   operation: 'complete' | 'stream',
   stage: MosaicStage,
@@ -232,6 +265,7 @@ const requestEvent = async (
 ): Promise<void> => {
   await runtime.emit({
     type: 'model.request',
+    providerId,
     stage,
     operation,
     model: request.model,
@@ -245,6 +279,7 @@ const requestEvent = async (
 
 const responseEvent = async (
   runtime: MosaicRuntime,
+  providerId: string,
   model: string,
   response: ProviderFinished<unknown>,
   operation: 'complete' | 'stream',
@@ -255,6 +290,7 @@ const responseEvent = async (
 ): Promise<void> => {
   await runtime.emit({
     type: 'model.response',
+    providerId,
     stage,
     operation,
     model,
@@ -265,6 +301,14 @@ const responseEvent = async (
     ...(runtime.capture === 'io' ? { content: visibleResponse(response) } : {}),
   });
 };
+
+const withSignal = <Request extends { readonly signal?: AbortSignal }>(
+  request: Request,
+  signal: AbortSignal | undefined,
+): Request =>
+  signal === undefined || request.signal !== undefined
+    ? request
+    : ({ ...request, signal } as Request);
 
 const visibleRequest = (request: ProviderRequest): unknown => ({
   messages: request.messages,

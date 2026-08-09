@@ -17,10 +17,11 @@ const structuredOutputName = 'structured_output';
 export const openAiBody = (
   request: ProviderRequest<unknown>,
   stream: boolean,
+  provider = 'openai',
 ): Record<string, unknown> => {
-  requireRequestInput('openai', request);
-  const schema = structuredJsonSchema('openai', request.schema);
-  const messages = messagesWithStructuredSchema('openai', request, schema);
+  requireRequestInput(provider, request);
+  const schema = structuredJsonSchema(provider, request.schema);
+  const messages = messagesWithStructuredSchema(provider, request, schema);
   const alias = fastAlias(request.model);
   const system = messages
     .filter((message) => message.role === 'system')

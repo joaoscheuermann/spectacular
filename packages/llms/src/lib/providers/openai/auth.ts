@@ -9,16 +9,17 @@ export type AuthDeps = {
 
 export const authorization = async (
   deps: AuthDeps,
+  provider = 'openai',
+  name = 'OpenAI',
 ): Promise<string | undefined> => {
   const apiKey = await secret(deps.apiKey);
   const auth = await secret(deps.authorization);
 
   if (apiKey !== undefined && auth !== undefined) {
     throw new ProviderErrorObject({
-      provider: 'openai',
+      provider,
       code: 'auth_ambiguous',
-      message:
-        'OpenAI provider accepts either apiKey or authorization, not both.',
+      message: `${name} provider accepts either apiKey or authorization, not both.`,
     });
   }
 

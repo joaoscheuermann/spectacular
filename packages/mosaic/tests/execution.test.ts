@@ -12,6 +12,7 @@ import type {
   WorkflowContext,
   WorkflowState,
 } from '../src/lib/types/workflow.js';
+import { mosaicProviders } from './structured.js';
 
 test('fails without executing workflow work when no graph exists', async () => {
   const action = await execution(
@@ -464,7 +465,7 @@ function createHarness(
         info: (bindings: unknown, message: string) =>
           logs.push({ bindings, message }),
       } as never,
-      provider: fake.provider,
+      providers: mosaicProviders(fake.provider),
       models: {
         planning: { model: 'default-model', effort: 'low' },
         revision: { model: 'default-model', effort: 'low' },

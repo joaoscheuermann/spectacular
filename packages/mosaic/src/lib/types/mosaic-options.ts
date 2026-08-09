@@ -6,7 +6,12 @@ import type { Search } from 'victor';
 
 export interface MosaicOptions {
   readonly logger: Logger;
-  readonly provider: LlmProvider;
+  readonly providers: {
+    readonly planning: LlmProvider;
+    readonly revision: LlmProvider;
+    readonly execution: LlmProvider;
+    readonly reranker: LlmProvider;
+  };
   readonly models: {
     readonly planning: MosaicModelProfile;
     readonly revision: MosaicModelProfile;
