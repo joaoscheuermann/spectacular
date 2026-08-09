@@ -198,8 +198,10 @@ root for all input and output: manually authored scenario definitions under
 `evolution.history.jsonl` files under each target model ID. The config, default
 prompt, and scenario definitions are read-only during evolution. The CLI
 composes configured target models, one optimizer, and one binary judge through
-any provider integration exported by `packages/llms`: OpenAI, OpenRouter, LM
-Studio native, LM Studio OpenAI compatibility, or Codex.
+any raw provider integration exported by `packages/llms`: OpenAI, OpenRouter,
+LM Studio native, LM Studio OpenAI compatibility, or Codex. The unified
+OpenRouter provider is a Doric composition policy rather than an Evolution
+config variant.
 Non-secret provider and model settings live in the passed JSON config;
 credential values are resolved only at runtime from configured
 environment-variable names and are never persisted or logged. Each target
@@ -488,9 +490,10 @@ for the pinned SkillRouter checkpoint. Only its export target may fetch
 upstream model bytes. Its `artifact/` directory and ONNX sidecars are ignored,
 non-committed generated output; the converter source, pinned revision, and
 `uv.lock` provide provenance. It remains a standalone utility. Doric composes
-its OpenAI provider against OpenRouter with `qwen/qwen3.8-max` at `medium` for
-planning, `z-ai/glm-5.2` at `high` for localized revision, and
-`deepseek/deepseek-v4-flash-0731` at `low` for node execution. It uses
+its unified OpenRouter provider with `qwen/qwen3.7-flash` at `low` for
+planning, `google/gemini-3.6-flash` at `low` for localized revision, and
+`deepseek/deepseek-v4-flash-0731` at `low` for node execution. Its per-node
+model-turn limit is 32. It uses
 `voyageai/rerank-2.5-lite` for reranking and
 `voyageai/voyage-4-large` for 2,048-dimensional embeddings. Doric fails when
 the configured endpoint is unavailable, rejects the request, or returns no
@@ -610,8 +613,30 @@ URLs, headers, diagnostics, causes, or thrown values. A provider request with
 pass their existing logger to these dependencies; private OKF provider calls
 use a disabled Pino logger.
 
-Doric supports OpenAI, OpenRouter, LM Studio native, LM Studio OpenAI
-compatibility, and Codex as separate provider integrations. LM Studio native
+Doric supports OpenAI, raw OpenRouter, unified OpenRouter, LM Studio native,
+LM Studio OpenAI compatibility, and Codex as provider integrations. The unified
+provider uses stable OpenRouter Chat Completions, a 15-minute live model
+capability cache with stale-on-error fallback, and curated profiles for OpenAI,
+Anthropic, Gemini, Gemma, DeepSeek, Kimi, Mistral, Qwen, Llama, xAI, GLM,
+Cohere, and MiniMax. It maps tool choice and sequential controls, forwards only
+already-compatible strict tool schemas, and preserves ordered opaque
+`reasoning_details` for replay. It sends `parallel_tool_calls` only when the
+live model catalog advertises that parameter; otherwise it omits the transport
+control, reinforces sequential requests with a model-facing instruction, and
+relies on the Agent's atomic tool-batch validation before execution. Direct
+tool-free schemas select advertised JSON Schema, JSON object mode, or a
+deterministic schema prompt, then validate with the original Zod schema and
+allow at most two correction attempts. Structured streams emit only after
+buffered validation. Tools plus a direct provider schema and other
+non-emulatable combinations fail explicitly before completion.
+The opt-in paid unified-provider conformance runner reserves stdout for its
+final JSON report, permits up to 1,024 output tokens per request, and emits Pino
+progress to stderr. Failures identify the exact structured-output, tool-call,
+or tool-replay stage and expose only the sanitized provider error fields already
+retained by the LLM boundary. An empty non-sensitive structured response
+diagnostic identifies its finish reason and available output/reasoning token
+counts instead of returning an empty string.
+LM Studio native
 uses its native REST API at `http://localhost:1234` by default. LM Studio
 OpenAI compatibility uses the OpenAI-compatible API at
 `http://localhost:1234/v1` by default and sends structured-output requests
@@ -669,8 +694,8 @@ existing loop. The terminal tool call must be the only call in its response;
 the agent parses and validates its JSON arguments with the original schema,
 converts it to a tool-free structured finish, and never executes it or stores a
 tool result for it. Missing, malformed, schema-invalid, duplicate, or mixed
-terminal submissions are repairable. The agent discards each invalid response
-without persisting it or executing any included call, then may make three
+terminal submissions are repairable. The agent stores each invalid response
+for provider replay without executing any included call, then may make two
 correction attempts after the initial invalid submission. Each next request
 receives one transient system correction naming the terminal tool, explaining
 the failure, directing the model to correct every issue without stringifying
