@@ -10,11 +10,13 @@ import {
   createLmStudioProvider as createLmStudioProviderBase,
   createOpenAiProvider as createOpenAiProviderBase,
   createOpenRouterProvider as createOpenRouterProviderBase,
+  createUnifiedProvider as createUnifiedProviderBase,
   type CodexProviderDeps,
   type LmStudioOpenAiProviderDeps,
   type LmStudioProviderDeps,
   type OpenAiProviderDeps,
   type OpenRouterProviderDeps,
+  type UnifiedProviderDeps,
 } from '../src/index.js';
 import pino, { type Logger } from 'pino';
 
@@ -32,6 +34,12 @@ export const createOpenRouterProvider = (
   deps: TestDeps<OpenRouterProviderDeps>,
 ) =>
   createOpenRouterProviderBase({
+    ...deps,
+    logger: deps.logger ?? silentLogger,
+  });
+
+export const createUnifiedProvider = (deps: TestDeps<UnifiedProviderDeps>) =>
+  createUnifiedProviderBase({
     ...deps,
     logger: deps.logger ?? silentLogger,
   });

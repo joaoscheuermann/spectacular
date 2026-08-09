@@ -394,6 +394,36 @@ export const messagesWithStructuredSchema = (
   return [...system, { role: 'system', content }, ...nonSystem];
 };
 
+/** Returns whether a JSON Schema meets the strict object rules used by APIs. */
+export const isStrictCompatible = (value: JsonValue): boolean => {
+  if (Array.isArray(value)) {
+    return value.every(isStrictCompatible);
+  }
+
+  const record = asRecord(value);
+
+  if (record === undefined) {
+    return true;
+  }
+
+  const childrenAreStrict = Object.values(record).every((child) =>
+    isStrictCompatible(child as JsonValue),
+  );
+  const properties = asRecord(record.properties);
+
+  if (record.type !== 'object' || properties === undefined) {
+    return childrenAreStrict;
+  }
+
+  const required = Array.isArray(record.required) ? record.required : [];
+
+  return (
+    record.additionalProperties === false &&
+    Object.keys(properties).every((key) => required.includes(key)) &&
+    childrenAreStrict
+  );
+};
+
 const structuredSchemaPrompt = (schema: JsonObject): string => {
   const json = JSON.stringify(schema, null, 2);
   const fence = commonMarkFence(json);
@@ -452,7 +482,7 @@ export const parseStructuredOutput = <Output = JsonValue>(
       message: `${provider} returned invalid structured output.`,
       ...(sensitiveOutput
         ? {}
-        : { diagnostic: diagnosticExcerpt(finish.text) }),
+        : { diagnostic: structuredOutputDiagnostic(finish) }),
     };
     throw sensitiveOutput
       ? new ProviderErrorObject(data)
@@ -470,6 +500,25 @@ export const parseStructuredOutput = <Output = JsonValue>(
   };
 
   return structured;
+};
+
+const structuredOutputDiagnostic = (
+  finish: ProviderFinished<unknown>,
+): string => {
+  if (finish.text.trim() !== '') {
+    return diagnosticExcerpt(finish.text);
+  }
+
+  return [
+    'response text was empty',
+    `finishReason=${finish.finishReason}`,
+    ...(finish.usage?.outputTokens === undefined
+      ? []
+      : [`outputTokens=${finish.usage.outputTokens}`]),
+    ...(finish.usage?.reasoningTokens === undefined
+      ? []
+      : [`reasoningTokens=${finish.usage.reasoningTokens}`]),
+  ].join('; ');
 };
 
 const validateStructuredOutput = <Schema extends StructuredOutputSchema>(

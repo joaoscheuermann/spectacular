@@ -18,6 +18,18 @@ test('streams OpenRouter deltas usage finish and accumulated tool calls', async 
         [
           sse({ choices: [{ delta: { content: 'Hi' } }] }),
           sse({ choices: [{ delta: { reasoning: 'why' } }] }),
+          sse({
+            choices: [
+              {
+                delta: {
+                  reasoning_details: [
+                    { type: 'reasoning.encrypted', data: 'opaque-1' },
+                    { type: 'reasoning.text', text: 'hidden' },
+                  ],
+                },
+              },
+            ],
+          }),
           sse({ choices: [{ delta: { refusal: 'no' } }] }),
           sse({
             choices: [
@@ -121,6 +133,10 @@ test('streams OpenRouter deltas usage finish and accumulated tool calls', async 
 
   assert.equal(finished.finish.text, 'Hi');
   assert.deepEqual(finished.finish.reasoning, { text: 'why' });
+  assert.deepEqual(finished.finish.replay, [
+    { type: 'reasoning.encrypted', data: 'opaque-1' },
+    { type: 'reasoning.text', text: 'hidden' },
+  ]);
   assert.equal(finished.finish.refusal, 'no');
   assert.equal(finished.finish.finishReason, 'tool_calls');
   assert.deepEqual(finished.finish.toolCalls, expectedToolCalls);

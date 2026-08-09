@@ -28,6 +28,13 @@
         ],
         "parallel": false
       }
+    },
+    "conformance-live": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "node packages/llms/scripts/conformance-live.mjs"
+      }
     }
   },
   "tags": []

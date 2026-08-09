@@ -1,5 +1,6 @@
 import type {
   ProviderFinished,
+  ProviderReplayItem,
   ProviderStreamEvent,
   ProviderToolCall,
 } from '../../types/provider.js';
@@ -17,6 +18,7 @@ export type StreamState = {
   readonly reasoning: string[];
   readonly refusal: string[];
   readonly calls: Map<number, ProviderToolCall>;
+  readonly replay: ProviderReplayItem[];
   usage?: ProviderFinished['usage'];
   finishReason?: ProviderFinished['finishReason'];
 };
@@ -26,6 +28,7 @@ export const createStreamState = (): StreamState => ({
   reasoning: [],
   refusal: [],
   calls: new Map(),
+  replay: [],
 });
 
 export const parseFinished = (
@@ -38,6 +41,7 @@ export const parseFinished = (
     stringField(message, 'reasoning') ??
     stringField(message, 'reasoning_content');
   const refusal = stringField(message, 'refusal');
+  const replay = replayItems(message);
   const toolCalls = arrayField(message, 'tool_calls')
     .map(asRecord)
     .filter(isRecord)
@@ -59,6 +63,7 @@ export const parseFinished = (
     reasoning: reasoning === undefined ? undefined : { text: reasoning },
     refusal,
     toolCalls,
+    ...(replay.length === 0 ? {} : { replay }),
   };
 };
 
@@ -89,6 +94,8 @@ export const streamEvents = (
       stringField(delta, 'reasoning') ??
       stringField(delta, 'reasoning_content');
     const refusal = stringField(delta, 'refusal');
+
+    state.replay.push(...replayItems(delta));
 
     if (content !== undefined) {
       state.text.push(content);
@@ -148,7 +155,15 @@ export const streamFinish = (state: StreamState): ProviderFinished => ({
   finishReason: state.finishReason ?? 'unknown',
   usage: state.usage,
   toolCalls: streamToolCalls(state),
+  ...(state.replay.length === 0 ? {} : { replay: state.replay }),
 });
+
+const replayItems = (
+  value: Record<string, unknown>,
+): readonly ProviderReplayItem[] =>
+  arrayField(value, 'reasoning_details')
+    .map(asRecord)
+    .filter(isRecord) as readonly ProviderReplayItem[];
 
 const isRecord = (
   value: Record<string, unknown> | undefined,

@@ -15,6 +15,7 @@ test('maps OpenRouter chat completions DTO with messages tools and reasoning', (
         {
           role: 'assistant',
           content: 'Use tool',
+          replay: [{ type: 'reasoning.encrypted', data: 'opaque' }],
           toolCalls: [
             { id: 'call_1', name: 'lookup', arguments: '{}', index: 0 },
           ],
@@ -22,8 +23,20 @@ test('maps OpenRouter chat completions DTO with messages tools and reasoning', (
         { role: 'tool', toolCallId: 'call_1', content: 'Result' },
       ],
       tools: [
-        { name: 'lookup', inputSchema: { type: 'object' }, outputSchema: {} },
+        {
+          name: 'lookup',
+          inputSchema: {
+            type: 'object',
+            properties: {},
+            required: [],
+            additionalProperties: false,
+          },
+          outputSchema: {},
+          strict: true,
+        },
       ],
+      toolChoice: { name: 'lookup' },
+      parallelToolCalls: false,
       temperature: 0.1,
       maxOutputTokens: 32,
       flags: { reasoning: { effort: 'medium' } },
@@ -35,12 +48,23 @@ test('maps OpenRouter chat completions DTO with messages tools and reasoning', (
   assert.equal(body.stream, false);
   assert.equal(body.max_tokens, 32);
   assert.deepEqual(body.reasoning, { effort: 'medium' });
+  assert.deepEqual(body.tool_choice, {
+    type: 'function',
+    function: { name: 'lookup' },
+  });
+  assert.equal(body.parallel_tool_calls, false);
   assert.deepEqual(body.tools, [
     {
       type: 'function',
       function: {
         name: 'lookup',
-        parameters: { type: 'object' },
+        parameters: {
+          type: 'object',
+          properties: {},
+          required: [],
+          additionalProperties: false,
+        },
+        strict: true,
       },
     },
   ]);
@@ -49,6 +73,7 @@ test('maps OpenRouter chat completions DTO with messages tools and reasoning', (
     {
       role: 'assistant',
       content: 'Use tool',
+      reasoning_details: [{ type: 'reasoning.encrypted', data: 'opaque' }],
       tool_calls: [
         {
           id: 'call_1',
@@ -60,6 +85,34 @@ test('maps OpenRouter chat completions DTO with messages tools and reasoning', (
     { role: 'tool', content: 'Result', tool_call_id: 'call_1' },
   ]);
   assert.equal('response_format' in body, false);
+});
+
+test('supports conservative OpenRouter structured-output fallbacks', () => {
+  const request = {
+    model: 'mistralai/mistral-small',
+    messages: [{ role: 'user' as const, content: 'Return JSON.' }],
+    schema: z.object({ answer: z.string() }),
+  };
+
+  const jsonObject = openRouterBody(request, false, {
+    structuredOutput: 'json_object',
+    requireParameters: true,
+  });
+  const promptOnly = openRouterBody(request, false, {
+    structuredOutput: 'prompt',
+  });
+
+  assert.deepEqual(jsonObject.response_format, { type: 'json_object' });
+  assert.deepEqual(jsonObject.provider, { require_parameters: true });
+  assert.equal(
+    (jsonObject.messages as readonly { readonly role: string }[])[0]?.role,
+    'system',
+  );
+  assert.equal('response_format' in promptOnly, false);
+  assert.equal(
+    (promptOnly.messages as readonly { readonly role: string }[])[0]?.role,
+    'system',
+  );
 });
 
 test('maps top-level OpenRouter effort before legacy reasoning effort', () => {
@@ -212,6 +265,9 @@ test('parses OpenRouter completion and redacts auth failures', async () => {
             message: {
               content: 'Hello',
               reasoning: 'Because',
+              reasoning_details: [
+                { type: 'reasoning.encrypted', data: 'opaque' },
+              ],
               refusal: 'No',
               tool_calls: [
                 {
@@ -247,6 +303,9 @@ test('parses OpenRouter completion and redacts auth failures', async () => {
   assert.equal(result.text, 'Hello');
   assert.equal(result.finishReason, 'tool_calls');
   assert.deepEqual(result.reasoning, { text: 'Because' });
+  assert.deepEqual(result.replay, [
+    { type: 'reasoning.encrypted', data: 'opaque' },
+  ]);
   assert.equal(result.refusal, 'No');
   assert.deepEqual(result.toolCalls, [
     { id: 'call_1', name: 'lookup', arguments: '{"q":"x"}', index: 0 },
@@ -389,6 +448,43 @@ test('rejects schema-invalid OpenRouter structured JSON', async () => {
       error instanceof ProviderErrorObject &&
       error.data.code === 'invalid_structured_output' &&
       error.data.diagnostic?.includes('answer') === true,
+  );
+});
+
+test('describes an empty structured response without exposing response data', async () => {
+  const provider = createOpenRouterProvider({
+    transport: fakeTransport({
+      responses: [
+        response({
+          choices: [
+            {
+              finish_reason: 'length',
+              message: { content: '' },
+            },
+          ],
+          usage: {
+            completion_tokens: 128,
+            completion_tokens_details: { reasoning_tokens: 128 },
+          },
+        }),
+      ],
+    }),
+    apiKey: 'key',
+  });
+
+  await assert.rejects(
+    provider.complete({
+      model: 'qwen/qwen3.7-flash',
+      messages: [{ role: 'user', content: 'Hi' }],
+      schema: z.object({ answer: z.string() }),
+    }),
+    (error: unknown) =>
+      error instanceof ProviderErrorObject &&
+      error.data.code === 'invalid_structured_output' &&
+      error.data.diagnostic?.includes('response text was empty') === true &&
+      error.data.diagnostic.includes('finishReason=length') &&
+      error.data.diagnostic.includes('outputTokens=128') &&
+      error.data.diagnostic.includes('reasoningTokens=128'),
   );
 });
 

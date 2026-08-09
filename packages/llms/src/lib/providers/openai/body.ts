@@ -1,12 +1,11 @@
 import type {
   JsonObject,
-  JsonValue,
   ProviderMessage,
   ProviderRequest,
   ProviderToolCall,
 } from '../../types/provider.js';
-import { asRecord } from '../../utils/json.js';
 import {
+  isStrictCompatible,
   messageText,
   messagesWithStructuredSchema,
   requireRequestInput,
@@ -131,35 +130,6 @@ const reasoningRequest = (
     effort: request.effort ?? value.effort,
     summary: value.summary,
   }) as JsonObject;
-};
-
-const isStrictCompatible = (value: JsonValue): boolean => {
-  if (Array.isArray(value)) {
-    return value.every(isStrictCompatible);
-  }
-
-  const record = asRecord(value);
-
-  if (record === undefined) {
-    return true;
-  }
-
-  const childrenAreStrict = Object.values(record).every((child) =>
-    isStrictCompatible(child as JsonValue),
-  );
-  const properties = asRecord(record.properties);
-
-  if (record.type !== 'object' || properties === undefined) {
-    return childrenAreStrict;
-  }
-
-  const required = Array.isArray(record.required) ? record.required : [];
-
-  return (
-    record.additionalProperties === false &&
-    Object.keys(properties).every((key) => required.includes(key)) &&
-    childrenAreStrict
-  );
 };
 
 const toolChoice = (

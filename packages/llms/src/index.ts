@@ -13,6 +13,7 @@ export {
   type SecretSource,
 } from './lib/providers/openai.js';
 export * from './lib/providers/openrouter.js';
+export * from './lib/providers/unified.js';
 export * from './lib/types/http.js';
 export * from './lib/types/provider.js';
 export * from './lib/utils/diagnostics.js';

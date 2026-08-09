@@ -4,6 +4,27 @@ Provider-neutral model and streaming boundaries for Doric's TypeScript
 agent core. The package keeps provider credentials and HTTP injected so tests
 can use fakes and host surfaces can own sensitive behavior.
 
+## Unified OpenRouter provider
+
+Use `createUnifiedProvider` for heterogeneous OpenRouter models. It discovers
+the selected model's live capabilities, applies the curated laboratory policy,
+preserves opaque reasoning replay, normalizes tool controls, and validates or
+repairs direct structured output locally.
+
+```ts
+import pino from 'pino';
+import { createFetchTransport, createUnifiedProvider } from 'llms';
+
+const provider = createUnifiedProvider({
+  transport: createFetchTransport(),
+  apiKey: process.env.OPENROUTER_API_KEY ?? '',
+  logger: pino(),
+});
+```
+
+See [MODEL_COMPATIBILITY.md](./MODEL_COMPATIBILITY.md) for the behavioral
+matrix, fallback rules, primary sources, and paid live-conformance command.
+
 ## OpenRouter with an API key
 
 ```ts
