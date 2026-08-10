@@ -1,51 +1,51 @@
 {
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "name": "mosaic-benchmark",
-  "projectType": "library",
+  "projectType": "application",
   "sourceRoot": "benchmarks/mosaic/src",
   "targets": {
     "build": {
-      "executor": "@nx/js:tsc",
+      "executor": "nx:run-commands",
       "dependsOn": ["^build"],
       "outputs": ["{projectRoot}/dist"],
       "options": {
-        "outputPath": "benchmarks/mosaic/dist",
-        "main": "benchmarks/mosaic/src/index.ts",
-        "tsConfig": "benchmarks/mosaic/tsconfig.lib.json",
-        "clean": false,
-        "assets": [
-          {
-            "input": "benchmarks/mosaic",
-            "glob": "prompts/**/*.md",
-            "output": "."
-          }
-        ]
+        "command": "esbuild benchmarks/mosaic/src/cli.ts --bundle --platform=node --format=esm --target=node22 --conditions=@org/source --legal-comments=none --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=benchmarks/mosaic/dist/mosaic-bench-acp.mjs"
       }
     },
-    "analysis-test": {
-      "executor": "nx:run-commands",
-      "cache": false,
-      "options": {
-        "command": "Rscript benchmarks/mosaic/analysis/test-analysis.R"
-      }
-    },
-    "schemas": {
+    "run": {
       "executor": "nx:run-commands",
       "dependsOn": ["build"],
-      "outputs": ["{projectRoot}/schemas/v1"],
+      "cache": false,
       "options": {
-        "command": "node benchmarks/mosaic/dist/src/generate-schemas.js benchmarks/mosaic/schemas/v1"
+        "command": "node benchmarks/mosaic/dist/mosaic-bench-acp.mjs",
+        "forwardAllArgs": true
+      }
+    },
+    "release": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "cache": false,
+      "outputs": ["{projectRoot}/dist/mosaic-bench-acp.mjs.sha256"],
+      "options": {
+        "command": "node benchmarks/mosaic/dist/mosaic-bench-acp.mjs release"
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "tsc -p benchmarks/mosaic/tsconfig.app.json --noEmit"
       }
     },
     "test": {
       "executor": "nx:run-commands",
-      "dependsOn": ["build", "^build"],
+      "dependsOn": ["build"],
       "outputs": ["{projectRoot}/dist-tests"],
       "options": {
         "commands": [
+          "node -e \"require('node:fs').rmSync('benchmarks/mosaic/dist-tests',{recursive:true,force:true})\"",
           "tsc -p benchmarks/mosaic/tsconfig.spec.json",
-          "node --test --test-concurrency=4 benchmarks/mosaic/dist-tests/tests/*.test.js",
-          "node --test benchmarks/mosaic/tests/*.test.mjs"
+          "node --test --test-concurrency=4 benchmarks/mosaic/dist-tests/tests/*.test.js"
         ],
         "parallel": false
       }

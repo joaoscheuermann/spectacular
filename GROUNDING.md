@@ -509,77 +509,51 @@ model-turn limit is 32. It uses
 the configured endpoint is unavailable, rejects the request, or returns no
 embedding.
 
-`benchmarks/mosaic` is the user-approved private Nx project for the empirical
-MOSAIC study. It owns versioned experimental schemas, condition and case
-catalogs, deterministic simulated tools over an isolated in-memory world,
-content-addressed append-only traces, scoring and blinded-review utilities,
-and the offline R analysis/container surface. It is an evaluation instrument,
-not a product package, and its Doric smokes remain opt-in and outside the
-confirmatory analysis. Benchmark tools have no host filesystem, shell, or
-network authority. Model credentials remain runtime-only inputs and are never
-written to cases, freeze manifests, traces, scores, reviews, or reports. Its
-command-line surface reserves stdout for one JSON result and renders progress
-only on stderr.
+`benchmarks/mosaic` is the user-approved private Nx application for the minimal
+public-benchmark comparison of MOSAIC. The former custom empirical study is
+archived at the annotated tag and GitHub release
+`mosaic-validation-v0.2-archive`; it is no longer an active repository surface.
+The application exposes only Nx-managed build, run, typecheck, test, and
+release targets. Its sole `.mjs` file is a generated standalone ACP bundle for
+benchmark containers that do not contain this workspace or its dependencies.
 
-Benchmark case sources are human-authored drafts compiled without a model into
-frozen `CaseV1` artifacts. The compiler derives tool evidence, expected world
-state, required effects, canonical delivery fields, composition, and all
-content hashes from the deterministic fixture and tool catalogs. Every gold
-criterion names observable evidence, and delivery succeeds only when one
-non-contradictory JSON document equals the canonical expected document; skill
-selection, bundle shape, and revision behavior remain diagnostics rather than
-delivery requirements. Structural compilation can reject inconsistent cases,
-but neutrality, difficulty, independence, and answer leakage remain explicit
-human audit responsibilities.
+The benchmark publishes two BenchFlow ACP agents: a direct agent and a MOSAIC
+agent. Both receive the same task prompt, mounted task skills, terminal tool,
+OpenAI Responses-compatible proxy, model, and low reasoning effort. The MOSAIC
+arm uses the ordinary public `mosaic` entrypoint and observes runs through
+`MosaicRunOptions.observer` with `capture: 'io'`; it does not use benchmark
+interception hooks from `mosaic/evaluation`. IO events may expose model-visible
+content and terminal inputs and outputs to the benchmark trajectory, but never
+private reasoning or credentials. The terminal is benchmark-only authority
+inside the task sandbox and does not add command execution to a product package
+or Doric host surface. Loaded skill bodies identify their canonical mounted
+directory so references to bundled scripts and supporting files resolve the
+same way in both arms.
 
-All primary benchmark conditions share the frozen maximum turn count and two
-structured-repair retries, and skill-bearing conditions consume the same
-body-aware hybrid retrieval and reranking boundary. Condition factors record
-those controls and the remaining declared treatment differences. Study seeds
-determine schedules, order, deterministic shuffles, and benchmark hooks only;
-they are not claimed to control provider-side sampling. Each paid execution
-reserves an immutable run attempt before its first side effect. Reservations,
-metered response usage, hash-chained events, derived traces, and terminal
-records are durable artifacts, and resume deterministically converts an
-interrupted reserved attempt into an infrastructure outcome before deciding
-whether the run may be retried.
+The BenchFlow launcher transfers its ephemeral proxy credential through a
+mode-0600 file, removes credential values from the Node process environment,
+and the provider reads and unlinks that file while constructing the ACP app,
+before any prompt or terminal exists. Terminal subprocesses additionally drop
+credential-shaped environment names. The generated bundle, its published
+checksum sidecar, and both launch manifests are fixed campaign inputs. Both
+manifests pin the bundle SHA-256 literally and pin the official Node archive
+SHA-256 per supported architecture; a paid campaign repeats the free preflight
+and refuses any local, manifest, or published bundle hash mismatch.
 
-The study builds its production retrieval index once as an immutable,
-content-addressed setup artifact bound to the exact catalog views, embedder,
-dimension, and algorithm. The freeze manifest pins that index hash and each run
-refuses mismatched bytes. Setup embedding usage is journaled and reported
-separately; per-run embedding, rerank, and completion usage is captured from
-authenticated provider responses before it is reduced to public provider
-results. Frozen USD price snapshots declare model kind, capture time, source,
-positive unit charges, quantities, and contiguous context tiers where
-applicable. Missing or zero price coverage for any active model is invalid.
-Capabilities provable from free model metadata are rejected before paid work;
-remaining capability probes are explicit, opt-in, metered setup calls and are
-never silently repeated after an unresolved paid boundary.
-
-The executable `benchmarks/mosaic/scripts/study.mjs` is the resumable official
-computational-study orchestrator. Its `--prepare` mode pins byte-exact authored
-inputs, verifies the repository, instrument, container, capabilities, prices,
-case corpus, approvals, resource envelope, and isolation gates, builds the
-index, and runs only the pilot, calibration, and resumable power analysis. It
-then stops with an immutable preparation result and final sample size. A
-separate `--continue` config under the same study identity must supply exactly
-that many independently authored and audited confirmatory cases before freeze,
-primary, replication, sensitivity, scoring, and R analysis may run. Both paid
-modes require an external artifact root, an immutable analysis-image digest,
-runtime-only OpenRouter credentials, and explicit `--yes-paid-study`
-acknowledgement. Human corpus, price/cost, and power approvals are
-content-hash-bound inputs and are never synthesized by the orchestrator. The
-no-cost `--check-readiness` mode aggregates independent implementation, human,
-and operational blockers instead of stopping at the first failure. Stages
-resume only from a valid CLI receipt plus every declared output; orphan or
-changed artifacts stop the study. Failure-only oracles, the two-pass blinded
-human review, and publication-package selection remain explicit post-study
-protocols.
-The version-one study contract retains one model and effort per run; the
-benchmark adapter maps that same profile to all three Mosaic stages and keeps
-the frozen `medium` effort, so production model specialization does not alter
-the experimental estimand or generated schemas.
+SkillsBench v1.1, pinned to commit
+`b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af`, is the primary benchmark.
+Terminal-Bench 2, pinned to
+`2fd12b88aafdd04a52c298e3940bcb189f9766d6`, is a secondary confirmation only
+after a valid SkillsBench comparison report, which is an explicit input to a
+paid Terminal-Bench campaign. A comparison is valid only when both arms match
+the closed benchmark source, task manifests, model, skill policy, and adapter
+assets; their recorded BenchFlow run configuration and health artifacts must
+match the campaign contract and their recorded hashes. Every task is scored
+without runtime or verifier errors and has trusted positive usage and cost
+telemetry. The single decision gate is a strict Pareto win: MOSAIC must have
+both a higher mean public-benchmark reward and a lower total model cost than the
+direct agent. Paid smoke and full campaigns require explicit `--yes-paid-run`;
+credentials remain runtime-only and are never persisted or logged.
 
 CLI streamed A2A event output is visible console rendering through
 `pino`/`pino-pretty`. Redaction must be applied to message text and structured

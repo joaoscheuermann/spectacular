@@ -1,16 +1,15 @@
 {
-  "extends": "./tsconfig.json",
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "composite": false,
-    "declaration": false,
-    "declarationMap": false,
-    "emitDeclarationOnly": false,
-    "outDir": "dist-tests",
+    "baseUrl": ".",
     "rootDir": ".",
-    "tsBuildInfoFile": "dist-tests/tsconfig.spec.tsbuildinfo",
+    "outDir": "dist-types",
+    "tsBuildInfoFile": "dist-types/tsconfig.app.tsbuildinfo",
+    "emitDeclarationOnly": false,
+    "forceConsistentCasingInFileNames": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts"],
+  "include": ["src/**/*.ts"],
   "references": [
     { "path": "../../packages/agent/tsconfig.lib.json" },
     { "path": "../../packages/bundle/tsconfig.lib.json" },

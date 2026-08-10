@@ -255,11 +255,11 @@ status-and-node-ID log.
 
 The normative architecture is MOSAIC 0.2, available as the revised
 [PDF](docs/revised/mosaic_0_2/mosaic_0_2.pdf) and editable
-[LaTeX source](docs/revised/mosaic_0_2/mosaic_0_2.tex). Its companion empirical
-validation protocol is also available as a revised
-[PDF](docs/revised/mosaic_validation_protocol_0_2/mosaic_validation_protocol_0_2.pdf)
-and [LaTeX source](docs/revised/mosaic_validation_protocol_0_2/mosaic_validation_protocol_0_2.tex).
-The supplied MOSAIC 0.1 editions remain unchanged under `docs/original/`.
+[LaTeX source](docs/revised/mosaic_0_2/mosaic_0_2.tex). The companion empirical
+protocol 0.2 is historical and archived; it is not the active evaluation
+surface. The current minimal public-benchmark comparison lives in
+[`benchmarks/mosaic`](../../benchmarks/mosaic). The supplied MOSAIC 0.1 editions
+remain unchanged under `docs/original/`.
 
 | Runtime concept               | MOSAIC 0.2 definition                                                                                                                               |
 | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |

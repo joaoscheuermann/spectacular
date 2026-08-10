@@ -1,235 +1,220 @@
-# MOSAIC empirical benchmark
+# MOSAIC benchmark
 
-`mosaic-benchmark` is the private, offline-first evaluation instrument for
-`packages/mosaic`. It contains the frozen catalog, deterministic in-memory
-world, condition executors, append-only traces, scoring, blind review, and R
-analysis protocol. Doric-targeted smokes are opt-in harness contracts and never
-enter the confirmatory analysis; they do not execute the dirty `agents/doric`
-composition root.
+This private benchmark compares `mosaic-direct` and `mosaic` on the same public
+tasks. A result is successful only on a strict Pareto win: MOSAIC must have a
+higher mean reward and a lower total model cost. SkillsBench is the primary
+benchmark; Terminal-Bench 2 is a secondary confirmation that may run only
+after a valid SkillsBench comparison.
 
-> **Readiness status (2026-08-08): NO-GO for an official paid study.** The
-> remaining validity, recovery, metering, case-authoring, and operational work
-> is tracked in [READINESS.md](./READINESS.md). Passing the existing test suite
-> or `--validate-config` does not by itself mean that the instrument is ready.
-> Do not use `--yes-paid-study` until every P0 gate in that document is closed.
+The former empirical protocol 0.2 is historical. Its complete sources and
+artifacts are preserved in the
+[mosaic-validation-v0.2-archive release](https://github.com/joaoscheuermann/spectacular/releases/tag/mosaic-validation-v0.2-archive).
 
-## Frozen runtime
+## What SkillsBench establishes
 
-- Primary model: `openai/gpt-5.6-luna`, effort `medium`.
-- Reranker: `voyageai/rerank-2.5-lite`.
-- Embedding: `voyageai/voyage-4-large`, 2,048 dimensions.
-- Five paired repetitions.
-- Sixty English pilot micro-skills and exactly 24 deterministic tools.
+The primary question is deliberately narrow:
 
-The production runner uses OpenRouter through `OPENROUTER_API_KEY`. The key is
-read only from the process environment and is never accepted by a schema,
-manifest, trace, or command argument. The model provider is wrapped so every
-completion uses `medium` effort even if the public MOSAIC package has a
-different local default.
-The V1 study contract still owns one model profile per run. The runner maps
-that same model and effort to MOSAIC planning, revision, and execution so the
-new production API does not change the frozen experimental estimand.
+> With the same model on the same tasks and under the same conditions, does
+> MOSAIC improve result quality while reducing model cost?
 
-## Build and gates
+SkillsBench compares two arms:
 
-```sh
-npx nx sync
-npx nx show projects
-npx nx build mosaic-benchmark
-npx nx test mosaic-benchmark
-npx nx run mosaic-benchmark:schemas
-node benchmarks/mosaic/dist/src/cli.js validate
-node benchmarks/mosaic/dist/src/cli.js conformance
-```
+| Arm             | Agent behavior                                                         |
+| --------------- | ---------------------------------------------------------------------- |
+| `mosaic-direct` | A minimal direct model-and-terminal agent loop                         |
+| `mosaic`        | The same model and tools with MOSAIC planning, revision, and execution |
 
-`analysis-test` is intentionally opt-in because it requires the frozen R
-environment. It never pulls or builds an image:
+Both arms receive the same 87 public SkillsBench tasks, task prompt, required
+task skills, terminal and sandbox, provider, model, low reasoning effort,
+single-shot policy, and zero retries. The treatment being measured is the
+MOSAIC orchestration. Each task is graded by its official SkillsBench verifier,
+while BenchFlow records trusted model usage and cost.
 
-```sh
-npx nx run mosaic-benchmark:analysis-test
-```
-
-## Automated computational study
-
-After the human-authored inputs and immutable analysis image are ready, the
-study orchestrator runs the complete computational path: gates, pilot,
-calibration, power, freeze, primary/replication/sensitivity runs, scoring, and
-the three R analyses. It pins the input bytes below the external study root and
-resumes only stages that have a valid immutable receipt.
-
-```sh
-node benchmarks/mosaic/scripts/study.mjs --print-config > /tmp/study.json
-# Fill every placeholder and point root outside the repository.
-node benchmarks/mosaic/scripts/study.mjs --validate-config /tmp/study.json
-
-export OPENROUTER_API_KEY='from-your-secret-manager'
-node benchmarks/mosaic/scripts/study.mjs \
-  --config /tmp/study.json \
-  --yes-paid-study
-```
-
-Rerun the same final command after an interruption; the runner uses the stored
-attempts and receipts rather than deleting work. The explicit paid flag is
-mandatory because the pilot alone contains 1,800 model runs. Blinded human
-review, optional failure-only oracles, and the audited publication package
-remain separate post-study steps described in [STUDY.md](./STUDY.md).
-
-## CLI
-
-Every command emits exactly one JSON document to stdout. Progress and R output
-go to stderr. Output artifacts use exclusive creation and are never replaced.
+The comparison has one decision gate:
 
 ```text
-mosaic-benchmark validate [--cases confirmatory-cases.json --n-final <N>] \
-  [--schedule schedule.json] [--prices prices.json] [--index index.json] \
-  [--pilot-scores pilot-scores.json] [--calibration calibration.json] \
-  [--power-config power-config.json --power-approval approval.json \
-   --power-result power-result.json]
-mosaic-benchmark conformance
-mosaic-benchmark pilot --study-id <id> --seed <seed> [--output schedule.json]
-mosaic-benchmark calibrate-models --input calibration-input.json \
-  [--output calibration.json]
-mosaic-benchmark power --config power-config.json \
-  --image '<repository>@sha256:<digest>' --work-dir verification \
-  --result power.json
-mosaic-benchmark index --artifacts setup-root --prices prices.json \
-  --candidate-model <model-id> --yes-paid-probes --yes-paid-setup
-mosaic-benchmark freeze --input freeze-input.json --path freeze.json \
-  --pilot-scores pilot-scores.json --calibration calibration.json \
-  --calibration-audit calibration-audit.json \
-  --confirmatory-audit confirmatory-audit.json --cost-approval cost.json \
-  --power-config power-config.json --power-approval approval.json \
-  --power-result power-result.json \
-  --cases confirmatory-cases.json --schedule confirmatory-schedule.json \
-  --prices prices.json --index index.json \
-  --image '<repository>@sha256:<digest>'
-mosaic-benchmark run --schedule schedule.json --artifacts artifacts \
-  --prices prices.json --index index.json \
-  [--cases cases.json] [--freeze freeze.json] [--resume]
-mosaic-benchmark score --schedule schedule.json --artifacts artifacts \
-  --family exploratory|primary|replication|sensitivity \
-  [--cases cases.json] [--freeze freeze.json] \
-  [--output scores.json] [--csv scores.csv]
-mosaic-benchmark review prepare --input review-plan.json \
-  --assignments assignments.json --key private-key.json
-mosaic-benchmark review ingest --input review-ingest.json [--output reviews.json]
-mosaic-benchmark review status --input review-status.json
-mosaic-benchmark analyze --scores scores.csv --config analysis-config.json \
-  --freeze freeze.json --image '<repository>@sha256:<digest>' \
-  --work-dir verification --result result.json [--report report.md]
-mosaic-benchmark package --input package-plan.json
+mean_reward(mosaic) > mean_reward(mosaic-direct)
+AND
+total_model_cost(mosaic) < total_model_cost(mosaic-direct)
 ```
 
-`validate` returns the canonical hashes for the local protocol, schemas,
-catalog, tools, pilot cases, conditions, prompts, R implementation, and
-`renv.lock`. With study artifacts supplied, it also validates and returns the
-confirmatory-case, paired-seed, price, retrieval-index, pilot-score,
-calibration, approvals, power-config, and power-result hashes required by the
-freeze. `--power-config`, `--power-approval`, and `--power-result` are an
-inseparable triple.
+Before applying that gate, the comparator rejects evidence unless both arms
+have the exact same task set and neutral configuration, valid run and health
+artifacts, no runtime or verifier errors, finite rewards, and trusted positive
+usage and cost telemetry. Missing tasks, mismatched settings, or incomplete
+telemetry therefore cannot produce a MOSAIC win.
 
-`calibrate-models` accepts one independent 60-case calibration corpus plus the
-complete 180-row M1 score sets for Luna and the candidate. It verifies the
-three paired repetitions, models, case metadata, canonical score provenance
-fields, and separation from pilot families before deriving the bootstrap
-observations; free-form success observations are not accepted.
+A passing campaign establishes an observed strict Pareto improvement on the
+pinned SkillsBench campaign. It does not by itself establish statistical
+significance or universal superiority across models, benchmarks, or repeated
+stochastic runs. If the gate passes, the supported claim is correspondingly
+scoped:
 
-The frozen price input has this shape. The numeric values below are
-illustrative only: replace every value with the exact price captured from the
-named source at freeze time. Zero or guessed prices are not acceptable study
-data.
+> On SkillsBench v1.1, using `openai/gpt-5.6-luna` with low reasoning effort,
+> MOSAIC achieved a higher mean reward and a lower total model cost than the
+> equivalent direct agent.
 
-```json
-{
-  "schemaVersion": 1,
-  "currency": "USD",
-  "models": {
-    "openai/gpt-5.6-luna": {
-      "kind": "completion",
-      "capturedAt": "2026-08-09T00:00:00.000Z",
-      "source": "https://provider.example/pricing/luna",
-      "charges": [
-        { "unit": "input-token", "quantity": 1000000, "priceUsd": 1.25 },
-        {
-          "unit": "cached-input-token",
-          "quantity": 1000000,
-          "priceUsd": 0.125
-        },
-        { "unit": "output-token", "quantity": 1000000, "priceUsd": 10 }
-      ]
-    },
-    "voyageai/voyage-4-large": {
-      "kind": "embedding",
-      "capturedAt": "2026-08-09T00:00:00.000Z",
-      "source": "https://provider.example/pricing/voyage-4-large",
-      "charges": [
-        {
-          "unit": "embedding-input-token",
-          "quantity": 1000000,
-          "priceUsd": 0.12
-        }
-      ]
-    },
-    "voyageai/rerank-2.5-lite": {
-      "kind": "rerank",
-      "capturedAt": "2026-08-09T00:00:00.000Z",
-      "source": "https://provider.example/pricing/rerank-2.5-lite",
-      "charges": [
-        { "unit": "rerank-input-token", "quantity": 1000000, "priceUsd": 0.05 }
-      ]
-    }
-  }
-}
+Terminal-Bench 2 is a secondary confirmation of whether that result transfers
+beyond the skill-oriented primary benchmark; it can run only after a valid
+SkillsBench comparison.
+
+## Layout
+
+```text
+agents/       BenchFlow manifests for mosaic-direct and mosaic
+src/          ACP adapters, campaign domain, comparison, and CLI host
+tests/        Isolated Node.js tests
+dist/         Generated standalone ACP bundle
+results/      Ignored, fresh paid-campaign artifacts
 ```
 
-`index` performs free metadata checks first and runs no paid probe without both
-acknowledgements. Its immutable setup attempt records exact usage and cost;
-resuming reuses completed vectors, while an unresolved paid boundary stops for
-audited recovery. `run` requires that content-addressed index and meters only
-queries/reranks in each run.
+The `.mjs` file in `dist/` is generated only for benchmark containers that do
+not contain this workspace or its dependencies. It is not source code and is
+not the normal local execution path.
 
-`run --resume` retries only a technical failure before the first model call.
-Once any model call begins, an interruption is terminal and remains in the
-dataset. Confirmatory and replication schedules additionally require a clean
-worktree and a matching immutable freeze manifest. Use `--doric-smoke` only
-for a schedule containing exclusively the six smoke cases.
+## Commands
 
-`score` never accepts caller-authored assertions. It resolves the terminal
-attempt, verifies the per-attempt hash chain and derived trace, evaluates the
-frozen state/tool/delivery oracle, and then writes `ScoreRowV1`. Primary,
-replication, and sensitivity scoring require the matching freeze.
+Run from the repository root. Every command below uses the Nx target; do not
+invoke the generated bundle directly.
 
-`freeze` recomputes the complete 1,800-row pilot grid, the success/cost/ID
-baseline tie-break, the p95 budget, calibration bootstrap, power provenance,
-independent confirmatory corpus, complete paired schedule, prices, local
-instrument hashes, OCI digest, and current Git commit. Its input must omit
-`manifestHash`; the command computes it and creates the manifest exactly once.
-The schedule supplied to `freeze` may still carry `freezeHash: null`; because
-the seed ledger intentionally excludes that field, stamp the returned
-`manifestHash` into the otherwise unchanged run schedule before `run`.
+```sh
+# Free preflight: uvx, Docker, Git, release assets, manifests, and pinned refs.
+npx nx run mosaic-benchmark:run -- campaign skillsbench check
 
-`power` and `analyze` invoke only the local OCI image named by an immutable
-digest. Each command runs twice with no network and publishes a result only
-after byte-identical outputs; the verification directory and checksum hash
-remain in the command result.
+# Paid one-task smoke. Explicit confirmation is required.
+npx nx run mosaic-benchmark:run -- campaign skillsbench smoke --yes-paid-run
 
-## Study sequence
+# Paid primary campaign: SkillsBench v1.1, 87 tasks.
+npx nx run mosaic-benchmark:run -- campaign skillsbench run --yes-paid-run
 
-1. Run `validate` and `conformance`.
-2. Generate and execute the 1,800-run pilot schedule (`60 × 6 × 5`).
-3. Score all terminal records and freeze the best B0–B3 baseline by success,
-   mean cost including failures, then lexical condition ID.
-4. Run the 60-case, three-repetition M1 calibration for Luna and the candidate
-   family. Freeze is blocked unless the paired bootstrap interval remains in
-   `[-0.05, 0.05]`.
-5. Run the 10,000-simulation power analysis, author at least 240 independent
-   confirmatory families at the calculated 120-case boundary, validate the
-   balanced 6-by-4 corpus and complete paired schedule, then write the freeze
-   once from a clean recorded commit.
-6. Execute primary and replication schedules separately. Run failure-only
-   oracles only for failed parents.
-7. Analyze each model family separately in the pinned container and verify two
-   byte-identical results.
+# Paid secondary confirmation: Terminal-Bench 2, 89 tasks.
+npx nx run mosaic-benchmark:run -- campaign terminalbench run \
+  --yes-paid-run \
+  --skillsbench-report benchmarks/mosaic/results/<skillsbench-campaign>/compare.json
 
-Costs are descriptive and never gate end-to-end success. No paid run is
-started by build, test, validation, schema generation, or analysis targets.
+# Compare the two arm directories from one campaign.
+npx nx run mosaic-benchmark:run -- compare \
+  --direct benchmarks/mosaic/results/<campaign>/mosaic-direct \
+  --mosaic benchmarks/mosaic/results/<campaign>/mosaic \
+  --report benchmarks/mosaic/results/<campaign>/compare.json
+
+# Build the standalone ACP bundle and write its SHA-256 sidecar.
+npx nx run mosaic-benchmark:release
+```
+
+## Paid execution checklist
+
+Complete every item below before running either `smoke` or `run`:
+
+- [ ] Run from the repository root on the benchmark revision intended for the
+      campaign.
+- [ ] Confirm `uvx`, Docker, Git, and curl are installed, and that the trusted
+      Docker daemon is running.
+- [ ] Provide `OPENAI_API_KEY` through the process environment. Never place the
+      credential in a manifest, command argument, committed file, or result
+      directory.
+- [ ] Validate the exact adapter source and generated standalone bundle:
+
+  ```sh
+  npx nx run mosaic-benchmark:typecheck --skip-nx-cache
+  npx nx run mosaic-benchmark:test --skip-nx-cache
+  npx nx run mosaic-benchmark:release
+  ```
+
+- [ ] Confirm the public `mosaic-benchmark-v0.1.0` release contains exactly
+      `mosaic-bench-acp.mjs` and `mosaic-bench-acp.mjs.sha256`. The generated
+      bundle hash, published sidecar, and `BF_BUNDLE_SHA256` in both agent
+      manifests must be identical.
+- [ ] Run the free preflight for the benchmark being purchased and inspect its
+      JSON output. Every individual check and the top-level `ok` field must be
+      `true`:
+
+  ```sh
+  npx nx run mosaic-benchmark:run -- campaign skillsbench check
+  # Or, before a Terminal-Bench campaign:
+  npx nx run mosaic-benchmark:run -- campaign terminalbench check
+  ```
+
+- [ ] Review the fixed treatment before approving spend: model
+      `openai/gpt-5.6-luna`, low reasoning effort, two sequential arms, required
+      usage tracking, zero retries, and one task/build worker at a time.
+- [ ] Confirm the available provider budget. `--yes-paid-run` is the explicit
+      acknowledgement that the command may incur model and container costs; it
+      does not bypass any preflight check.
+
+For a paid smoke, run exactly one task in each arm:
+
+```sh
+npx nx run mosaic-benchmark:run -- \
+  campaign skillsbench smoke --yes-paid-run
+```
+
+The smoke is operational evidence only. It confirms that both agents install,
+launch, use the provider, execute the task, and produce BenchFlow artifacts; it
+does not establish the full-benchmark result. Do not start the full campaign
+until the smoke command exits successfully and both arm directories exist in
+the newly created campaign directory under `results/`.
+
+For a full paid SkillsBench run, execute all 87 tasks in each arm:
+
+```sh
+npx nx run mosaic-benchmark:run -- \
+  campaign skillsbench run --yes-paid-run
+```
+
+After either paid action, compare the two arm directories from that same
+campaign. A completed campaign command only means that both arms exited
+successfully; the comparison determines whether the evidence is valid and
+whether MOSAIC won the strict Pareto gate:
+
+```sh
+npx nx run mosaic-benchmark:run -- compare \
+  --direct benchmarks/mosaic/results/<campaign>/mosaic-direct \
+  --mosaic benchmarks/mosaic/results/<campaign>/mosaic \
+  --report benchmarks/mosaic/results/<campaign>/compare.json
+```
+
+Comparison exit code `0` means valid evidence and a Pareto win, `1` means valid
+evidence without a win, and `2` means invalid or incomplete evidence. Never
+combine arms from different campaign directories. A paid Terminal-Bench run
+additionally requires the valid comparison report from a full 87-task
+SkillsBench campaign; a one-task smoke report is not sufficient.
+
+`check` is free and never calls a model. `smoke` and `run` stop before spawning
+anything unless `--yes-paid-run` is present, and they repeat the free preflight
+before creating results. A paid Terminal-Bench command also requires a report
+from a valid SkillsBench comparison. Campaigns always create a new directory
+below `results/`; their two arms use separate jobs, task manifest, run config,
+health summary, and non-secret metadata.
+
+SkillsBench is pinned to
+`b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af` and uses `with-skill` mode. Its
+smoke task is `edit-pdf`. Terminal-Bench 2 is pinned to
+`2fd12b88aafdd04a52c298e3940bcb189f9766d6`, uses `no-skill` mode, and its
+smoke task is `regex-log`. Both arms use `openai/gpt-5.6-luna`, low reasoning
+effort, Docker, single-task/build concurrency, single-shot looping, zero
+retries, and required usage tracking.
+
+## Environment and safety
+
+BenchFlow resolves the host's OpenAI credential and maps its proxy URL, key,
+and fixed model into `MOSAIC_PROVIDER_BASE_URL`, `MOSAIC_PROVIDER_API_KEY`, and
+`MOSAIC_MODEL` inside the task container. The launcher transfers the proxy key
+through a mode-0600 temporary file, removes it from the Node environment, and
+the provider unlinks the file before accepting prompts. Terminal subprocesses
+also receive an environment with credential-shaped names removed. Never place
+credentials in manifests, command arguments, metadata, task artifacts, or
+commits.
+Both manifests pin the generated bundle SHA-256 literally and verify the
+official Node archive checksum for the selected architecture. The free
+preflight requires the local bundle, manifest pins, and published sidecar to
+agree before any paid run.
+`BENCHFLOW_AGENTS_DIR` is set internally to `agents/` for each paid run. Docker
+executes untrusted benchmark tasks, so use a trusted local daemon and inspect
+the free preflight before approving cost.
+
+Comparison validates identical neutral treatment metadata, task manifests and
+bundle digest, exact task sets, error-free verifier results, finite rewards,
+trusted positive usage/cost telemetry, and non-negative tool-call telemetry.
+Its exit code is `0` for a Pareto win, `1` for a valid non-win, and `2` for
+invalid evidence.
