@@ -9,8 +9,13 @@ type SupportResolver = (
   signal?: AbortSignal,
 ) => Promise<OpenRouterModelSupport>;
 
+const curatedSupport: OpenRouterModelSupport = {
+  known: false,
+  parameters: new Set(),
+};
+
 export const createUnifiedRequestPreparer =
-  (resolve: SupportResolver) =>
+  (resolve: SupportResolver, upstreamModel?: string) =>
   async (
     request: ProviderRequest<unknown>,
   ): Promise<PreparedOpenRouterRequest> => {
@@ -26,10 +31,11 @@ export const createUnifiedRequestPreparer =
     }
 
     const needsSupport = hasTools || request.schema !== undefined;
-    const support = needsSupport
-      ? await resolve(request.model, request.signal)
-      : { known: false, parameters: new Set<string>() };
-    const profile = unifiedProfileForModel(request.model);
+    const support =
+      needsSupport && upstreamModel === undefined
+        ? await resolve(request.model, request.signal)
+        : curatedSupport;
+    const profile = unifiedProfileForModel(upstreamModel ?? request.model);
 
     requireToolSupport(request, support, profile.tools);
     requireCompatibleChoice(request, support, profile);

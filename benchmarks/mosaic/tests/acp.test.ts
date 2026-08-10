@@ -10,6 +10,7 @@ import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { ProviderErrorObject } from 'llms';
 
 import { acp, sessionUpdate } from '../src/acp.js';
 import type { RunRequest, Runner } from '../src/run.js';
@@ -184,6 +185,59 @@ test('ACP cancellation aborts the session controller and returns cancelled', asy
       assert.equal((await response).stopReason, 'cancelled');
     },
   );
+});
+
+test('ACP reports an authentic provider error code without its diagnostic message', async () => {
+  const failure = new ProviderErrorObject({
+    provider: 'unified',
+    code: 'unsupported_model_feature',
+    message: 'sensitive provider diagnostic',
+  });
+  const application = acp({
+    mode: 'direct',
+    randomUUID: () => 'session-failure',
+    createRunner: () => ({
+      run: async () => {
+        throw failure;
+      },
+    }),
+  });
+  const write = process.stderr.write;
+  let output = '';
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    output += chunk.toString();
+    return true;
+  }) as typeof process.stderr.write;
+
+  try {
+    await client({ name: 'test-client' }).connectWith(
+      application,
+      async (context) => {
+        await context.request(methods.agent.initialize, {
+          protocolVersion: PROTOCOL_VERSION,
+        });
+        const created = await context.request(methods.agent.session.new, {
+          cwd: '/workspace',
+          mcpServers: [],
+        });
+
+        await assert.rejects(
+          context.request(methods.agent.session.prompt, {
+            sessionId: created.sessionId,
+            prompt: [{ type: 'text', text: 'fail' }],
+          }),
+        );
+      },
+    );
+  } finally {
+    process.stderr.write = write;
+  }
+
+  assert.equal(
+    output,
+    'MOSAIC benchmark prompt failed: unsupported_model_feature.\n',
+  );
+  assert.doesNotMatch(output, /sensitive provider diagnostic/u);
 });
 
 test('ACP mapping represents status and each tool terminal state', () => {

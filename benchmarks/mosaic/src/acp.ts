@@ -8,6 +8,7 @@ import {
 } from '@agentclientprotocol/sdk';
 import { randomUUID } from 'node:crypto';
 import { Readable, Writable } from 'node:stream';
+import { ProviderErrorObject } from 'llms';
 
 import { direct } from './direct.js';
 import { mosaic } from './mosaic.js';
@@ -45,7 +46,7 @@ export const acp = (options: AcpOptions): AgentApp => {
           ? params.protocolVersion
           : PROTOCOL_VERSION,
       agentCapabilities: { loadSession: false },
-      agentInfo: { name: 'mosaic-benchmark', version: '0.1.2' },
+      agentInfo: { name: 'mosaic-benchmark', version: '0.1.3' },
     }))
     .onRequest(methods.agent.session.new, ({ params }) => {
       const sessionId = identifier();
@@ -162,6 +163,8 @@ const terminalStatus = (status: string): boolean =>
 const defaultRunner = (mode: RunMode): Runner =>
   mode === 'direct' ? direct() : mosaic();
 
-const defaultFailureReporter = (): void => {
-  process.stderr.write('MOSAIC benchmark prompt failed.\n');
+const defaultFailureReporter = (error: unknown): void => {
+  const code =
+    error instanceof ProviderErrorObject ? `: ${error.data.code}` : '';
+  process.stderr.write(`MOSAIC benchmark prompt failed${code}.\n`);
 };

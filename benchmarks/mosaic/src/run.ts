@@ -113,6 +113,7 @@ export const createProvider = (
       ...(baseUrl === undefined ? {} : { baseUrl }),
       apiKey: () => apiKey,
       logger,
+      upstreamModel: defaultModel,
     }),
   };
 };

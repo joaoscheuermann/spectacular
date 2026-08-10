@@ -523,12 +523,15 @@ OpenRouter-backed OpenAI Completions-compatible proxy, model, and low reasoning
 effort. Both compose the shared `createUnifiedProvider`; BenchFlow selects
 OpenRouter with `openrouter/openai/gpt-5.6-luna` and resolves the host's
 `OPENROUTER_API_KEY`, while the agents receive only the proxy endpoint, alias,
-and ephemeral proxy credential. The generated adapter owns the fixed `low`
-effort for both arms and the campaign omits BenchFlow's ACP reasoning-effort
-option because the external manifest contract cannot declare its required
-config-option identifier. The persisted BenchFlow run configuration must record
-that harness-owned effort as null. The MOSAIC arm uses the ordinary public
-`mosaic` entrypoint and observes runs through
+and ephemeral proxy credential. The adapter sends that alias to LiteLLM while
+the unified provider uses the fixed original `openai/gpt-5.6-luna` identifier
+for curated capability policy; it does not treat LiteLLM's compatibility-only
+model listing as an OpenRouter capability catalog. The generated adapter owns
+the fixed `low` effort for both arms and the campaign omits BenchFlow's ACP
+reasoning-effort option because the external manifest contract cannot declare
+its required config-option identifier. The persisted BenchFlow run
+configuration must record that harness-owned effort as null. The MOSAIC arm
+uses the ordinary public `mosaic` entrypoint and observes runs through
 `MosaicRunOptions.observer` with `capture: 'io'`; it does not use benchmark
 interception hooks from `mosaic/evaluation`. IO events may expose model-visible
 content and terminal inputs and outputs to the benchmark trajectory, but never
@@ -536,7 +539,9 @@ private reasoning or credentials. The terminal is benchmark-only authority
 inside the task sandbox and does not add command execution to a product package
 or Doric host surface. Loaded skill bodies identify their canonical mounted
 directory so references to bundled scripts and supporting files resolve the
-same way in both arms.
+same way in both arms. ACP prompt failures write only an authentic provider
+error code when available, or a fixed generic line otherwise; provider
+messages, diagnostics, causes, and thrown values are never written.
 
 The BenchFlow launcher transfers its ephemeral proxy credential through a
 mode-0600 `OPENROUTER_API_KEY_FILE`, removes credential values from the Node
@@ -725,6 +730,10 @@ already-compatible strict tool schemas, and preserves ordered opaque
 live model catalog advertises that parameter; otherwise it omits the transport
 control, reinforces sequential requests with a model-facing instruction, and
 relies on the Agent's atomic tool-batch validation before execution. Direct
+proxy compositions may provide one original upstream model identifier while
+sending a different request model alias; those requests use the original's
+curated profile and skip live capability discovery because an OpenAI-compatible
+proxy model listing is not an OpenRouter capability catalog. Direct
 tool-free schemas select advertised JSON Schema, JSON object mode, or a
 deterministic schema prompt, then validate with the original Zod schema and
 allow at most two correction attempts. Structured streams emit only after

@@ -193,6 +193,50 @@ test('allows an unknown laboratory only when live capabilities prove tools and f
   assert.equal(finish.toolCalls[0]?.name, 'lookup');
 });
 
+test('uses the upstream profile when an OpenAI-compatible proxy replaces the model id', async () => {
+  const transport = fakeTransport({
+    responses: [
+      response({
+        choices: [{ finish_reason: 'stop', message: { content: 'done' } }],
+      }),
+    ],
+  });
+  const provider = createUnifiedProvider({
+    transport,
+    apiKey: 'key',
+    upstreamModel: 'openai/gpt-5.6-luna',
+  });
+
+  await provider.complete({
+    model: 'benchflow-openrouter-openai-gpt-5.6-luna',
+    messages: [{ role: 'user', content: 'Use a tool if needed.' }],
+    tools: [
+      { name: 'lookup', inputSchema: { type: 'object' }, outputSchema: {} },
+    ],
+  });
+  const body = JSON.parse(transport.requests[0]?.body ?? '{}') as {
+    readonly model?: string;
+    readonly provider?: unknown;
+  };
+
+  assert.equal(transport.requests.length, 1);
+  assert.match(transport.requests[0]?.url ?? '', /chat\/completions$/u);
+  assert.equal(body.model, 'benchflow-openrouter-openai-gpt-5.6-luna');
+  assert.deepEqual(body.provider, { require_parameters: true });
+});
+
+test('rejects a blank upstream model before provider activity', () => {
+  assert.throws(
+    () =>
+      createUnifiedProvider({
+        transport: fakeTransport({}),
+        apiKey: 'key',
+        upstreamModel: '  ',
+      }),
+    /upstreamModel must not be blank/u,
+  );
+});
+
 test('emulates sequential tools when the model does not advertise parallel control', async () => {
   const transport = fakeTransport({
     responses: [

@@ -126,7 +126,7 @@ Complete every item below before running either `smoke` or `run`:
   npx nx run mosaic-benchmark:release
   ```
 
-- [ ] Confirm the public `mosaic-benchmark-v0.1.2` release contains exactly
+- [ ] Confirm the public `mosaic-benchmark-v0.1.3` release contains exactly
       `mosaic-bench-acp.mjs` and `mosaic-bench-acp.mjs.sha256`. The generated
       bundle hash, published sidecar, and `BF_BUNDLE_SHA256` in both agent
       manifests must be identical.

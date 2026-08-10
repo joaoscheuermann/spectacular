@@ -71,6 +71,43 @@ test('provider composition defaults to the OpenRouter endpoint', async () => {
   assert.equal(url, 'https://openrouter.ai/api/v1/models');
 });
 
+test('provider composition sends the proxy alias using the fixed upstream model profile', async () => {
+  const requests: { readonly url: string; readonly body?: string }[] = [];
+  const profile = createProvider({
+    environment: {
+      OPENROUTER_API_KEY: 'secret',
+      OPENROUTER_BASE_URL: 'https://proxy.invalid/v1',
+      OPENROUTER_MODEL: 'benchflow-openrouter-openai-gpt-5.6-luna',
+    },
+    transport: {
+      request: async (request) => {
+        requests.push(request);
+        return {
+          status: 200,
+          headers: {},
+          body: '{"choices":[{"finish_reason":"stop","message":{"content":"done"}}]}',
+        };
+      },
+      stream: async function* () {},
+    },
+  });
+
+  await profile.provider.complete({
+    model: profile.model,
+    messages: [{ role: 'user', content: 'Use a tool if needed.' }],
+    tools: [
+      { name: 'terminal', inputSchema: { type: 'object' }, outputSchema: {} },
+    ],
+  });
+  const body = JSON.parse(requests[0]?.body ?? '{}') as {
+    readonly model?: string;
+  };
+
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0]?.url, 'https://proxy.invalid/v1/chat/completions');
+  assert.equal(body.model, 'benchflow-openrouter-openai-gpt-5.6-luna');
+});
+
 test('reads, deletes, and caches the process credential file', async () => {
   const root = await mkdtemp(join(tmpdir(), 'mosaic-provider-'));
   const path = join(root, 'credential');
