@@ -23,18 +23,20 @@ const skill: Skill = {
   indexText: 'inspect',
 };
 
-test('provider composition uses BenchFlow identity and proxy environment', async () => {
+test('provider composition uses Unified OpenRouter with the BenchFlow proxy', async () => {
   let authorization: string | undefined;
+  let url: string | undefined;
   const environment = {
-    MOSAIC_PROVIDER_BASE_URL: 'https://proxy.invalid/v1',
-    MOSAIC_PROVIDER_API_KEY: 'secret',
-    MOSAIC_MODEL: 'proxy/model',
+    OPENROUTER_BASE_URL: 'https://proxy.invalid/v1',
+    OPENROUTER_API_KEY: 'secret',
+    OPENROUTER_MODEL: 'proxy/model',
   };
   const profile = createProvider({
     environment,
     transport: {
       request: async (request) => {
         authorization = request.headers?.authorization;
+        url = request.url;
         return { status: 200, headers: {}, body: '{"data":[]}' };
       },
       stream: async function* () {},
@@ -43,13 +45,30 @@ test('provider composition uses BenchFlow identity and proxy environment', async
 
   await profile.provider.models();
 
-  assert.equal(profile.provider.metadata.id, 'benchflow');
-  assert.equal(profile.provider.metadata.baseUrl, 'https://proxy.invalid/v1');
+  assert.equal(profile.provider.metadata.id, 'unified');
   assert.equal(profile.model, 'proxy/model');
   assert.equal(defaultModel, 'openai/gpt-5.6-luna');
   assert.equal(authorization, 'Bearer secret');
-  assert.equal(profile.provider.metadata.baseUrl, 'https://proxy.invalid/v1');
-  assert.equal(environment.MOSAIC_PROVIDER_API_KEY, 'secret');
+  assert.equal(url, 'https://proxy.invalid/v1/models');
+  assert.equal(environment.OPENROUTER_API_KEY, 'secret');
+});
+
+test('provider composition defaults to the OpenRouter endpoint', async () => {
+  let url: string | undefined;
+  const profile = createProvider({
+    environment: { OPENROUTER_API_KEY: 'secret' },
+    transport: {
+      request: async (request) => {
+        url = request.url;
+        return { status: 200, headers: {}, body: '{"data":[]}' };
+      },
+      stream: async function* () {},
+    },
+  });
+
+  await profile.provider.models();
+
+  assert.equal(url, 'https://openrouter.ai/api/v1/models');
 });
 
 test('reads, deletes, and caches the process credential file', async () => {
@@ -60,18 +79,18 @@ test('reads, deletes, and caches the process credential file', async () => {
       name,
     ),
   );
-  const baseUrl = process.env.MOSAIC_PROVIDER_BASE_URL;
-  const model = process.env.MOSAIC_MODEL;
+  const baseUrl = process.env.OPENROUTER_BASE_URL;
+  const model = process.env.OPENROUTER_MODEL;
   const authorizations: string[] = [];
 
   try {
     await writeFile(path, 'file-secret', { mode: 0o600 });
-    process.env.MOSAIC_PROVIDER_API_KEY_FILE = path;
-    process.env.MOSAIC_PROVIDER_API_KEY = 'direct-secret';
+    process.env.OPENROUTER_API_KEY_FILE = path;
+    process.env.OPENROUTER_API_KEY = 'direct-secret';
     process.env.BENCHFLOW_PROVIDER_API_KEY = 'benchflow-secret';
     process.env.BENCHFLOW_LITELLM_MASTER_KEY = 'master-secret';
-    process.env.MOSAIC_PROVIDER_BASE_URL = 'https://proxy.invalid/v1';
-    process.env.MOSAIC_MODEL = 'proxy/model';
+    process.env.OPENROUTER_BASE_URL = 'https://proxy.invalid/v1';
+    process.env.OPENROUTER_MODEL = 'proxy/model';
     const profile = createProvider({
       transport: {
         request: async (request) => {
@@ -90,10 +109,10 @@ test('reads, deletes, and caches the process credential file', async () => {
       'Bearer file-secret',
     ]);
     await assert.rejects(stat(path));
-    assert.equal(process.env.MOSAIC_PROVIDER_API_KEY, undefined);
+    assert.equal(process.env.OPENROUTER_API_KEY, undefined);
     assert.equal(process.env.BENCHFLOW_PROVIDER_API_KEY, undefined);
     assert.equal(process.env.BENCHFLOW_LITELLM_MASTER_KEY, undefined);
-    assert.equal(process.env.MOSAIC_PROVIDER_API_KEY_FILE, undefined);
+    assert.equal(process.env.OPENROUTER_API_KEY_FILE, undefined);
   } finally {
     for (const name of Object.keys(process.env)) {
       if (
@@ -105,10 +124,10 @@ test('reads, deletes, and caches the process credential file', async () => {
       }
     }
     for (const [name, value] of sensitive) process.env[name] = value;
-    if (baseUrl === undefined) delete process.env.MOSAIC_PROVIDER_BASE_URL;
-    else process.env.MOSAIC_PROVIDER_BASE_URL = baseUrl;
-    if (model === undefined) delete process.env.MOSAIC_MODEL;
-    else process.env.MOSAIC_MODEL = model;
+    if (baseUrl === undefined) delete process.env.OPENROUTER_BASE_URL;
+    else process.env.OPENROUTER_BASE_URL = baseUrl;
+    if (model === undefined) delete process.env.OPENROUTER_MODEL;
+    else process.env.OPENROUTER_MODEL = model;
     await rm(root, { recursive: true, force: true });
   }
 });
@@ -121,15 +140,15 @@ test('rejects a direct process credential after scrubbing it', () => {
   );
 
   try {
-    process.env.MOSAIC_PROVIDER_API_KEY = 'direct-secret';
+    process.env.OPENROUTER_API_KEY = 'direct-secret';
     process.env.BENCHFLOW_LITELLM_MASTER_KEY = 'master-secret';
-    delete process.env.MOSAIC_PROVIDER_API_KEY_FILE;
+    delete process.env.OPENROUTER_API_KEY_FILE;
 
     assert.throws(
       () => createProvider(),
-      /MOSAIC_PROVIDER_API_KEY_FILE is required/u,
+      /OPENROUTER_API_KEY_FILE is required/u,
     );
-    assert.equal(process.env.MOSAIC_PROVIDER_API_KEY, undefined);
+    assert.equal(process.env.OPENROUTER_API_KEY, undefined);
     assert.equal(process.env.BENCHFLOW_LITELLM_MASTER_KEY, undefined);
   } finally {
     for (const name of Object.keys(process.env)) {
@@ -146,16 +165,16 @@ test('rejects a direct process credential after scrubbing it', () => {
 });
 
 test('runners capture their default provider profile at construction', async () => {
-  const previous = process.env.MOSAIC_MODEL;
+  const previous = process.env.OPENROUTER_MODEL;
   const root = await mkdtemp(join(tmpdir(), 'mosaic-runner-profile-'));
   const directModels: string[] = [];
   const mosaicModels: string[] = [];
 
   try {
-    process.env.MOSAIC_MODEL = 'model-at-construction';
+    process.env.OPENROUTER_MODEL = 'model-at-construction';
     const directCredential = join(root, 'direct-credential');
     await writeFile(directCredential, 'file-secret', { mode: 0o600 });
-    process.env.MOSAIC_PROVIDER_API_KEY_FILE = directCredential;
+    process.env.OPENROUTER_API_KEY_FILE = directCredential;
     const directRunner = direct({
       loadSkills: async () => [],
       createTerminal: () => terminal,
@@ -166,7 +185,7 @@ test('runners capture their default provider profile at construction', async () 
     });
     const mosaicCredential = join(root, 'mosaic-credential');
     await writeFile(mosaicCredential, 'file-secret', { mode: 0o600 });
-    process.env.MOSAIC_PROVIDER_API_KEY_FILE = mosaicCredential;
+    process.env.OPENROUTER_API_KEY_FILE = mosaicCredential;
     const mosaicRunner = mosaic({
       loadSkills: async () => [],
       createTerminal: () => terminal,
@@ -176,7 +195,7 @@ test('runners capture their default provider profile at construction', async () 
       },
     });
 
-    process.env.MOSAIC_MODEL = 'model-at-prompt';
+    process.env.OPENROUTER_MODEL = 'model-at-prompt';
     await directRunner.run({ prompt: 'one', cwd: '/work' }, () => undefined);
     await directRunner.run({ prompt: 'two', cwd: '/work' }, () => undefined);
     await mosaicRunner.run({ prompt: 'one', cwd: '/work' }, () => undefined);
@@ -191,9 +210,9 @@ test('runners capture their default provider profile at construction', async () 
       'model-at-construction',
     ]);
   } finally {
-    if (previous === undefined) delete process.env.MOSAIC_MODEL;
-    else process.env.MOSAIC_MODEL = previous;
-    delete process.env.MOSAIC_PROVIDER_API_KEY_FILE;
+    if (previous === undefined) delete process.env.OPENROUTER_MODEL;
+    else process.env.OPENROUTER_MODEL = previous;
+    delete process.env.OPENROUTER_API_KEY_FILE;
     await rm(root, { recursive: true, force: true });
   }
 });

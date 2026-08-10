@@ -50,7 +50,7 @@ significance or universal superiority across models, benchmarks, or repeated
 stochastic runs. If the gate passes, the supported claim is correspondingly
 scoped:
 
-> On SkillsBench v1.1, using `openai/gpt-5.6-luna` with low reasoning effort,
+> On SkillsBench v1.1, using `openrouter/openai/gpt-5.6-luna` with low reasoning effort,
 > MOSAIC achieved a higher mean reward and a lower total model cost than the
 > equivalent direct agent.
 
@@ -110,7 +110,7 @@ Complete every item below before running either `smoke` or `run`:
       campaign.
 - [ ] Confirm `uvx`, Docker, Git, and curl are installed, and that the trusted
       Docker daemon is running.
-- [ ] Provide `OPENAI_API_KEY` through the process environment. Never place the
+- [ ] Provide `OPENROUTER_API_KEY` through the process environment. Never place the
       credential in a manifest, command argument, committed file, or result
       directory.
 - [ ] Validate the exact adapter source and generated standalone bundle:
@@ -121,7 +121,7 @@ Complete every item below before running either `smoke` or `run`:
   npx nx run mosaic-benchmark:release
   ```
 
-- [ ] Confirm the public `mosaic-benchmark-v0.1.0` release contains exactly
+- [ ] Confirm the public `mosaic-benchmark-v0.1.1` release contains exactly
       `mosaic-bench-acp.mjs` and `mosaic-bench-acp.mjs.sha256`. The generated
       bundle hash, published sidecar, and `BF_BUNDLE_SHA256` in both agent
       manifests must be identical.
@@ -136,7 +136,7 @@ Complete every item below before running either `smoke` or `run`:
   ```
 
 - [ ] Review the fixed treatment before approving spend: model
-      `openai/gpt-5.6-luna`, low reasoning effort, two sequential arms, required
+      `openrouter/openai/gpt-5.6-luna`, low reasoning effort, two sequential arms, required
       usage tracking, zero retries, and one task/build worker at a time.
 - [ ] Confirm the available provider budget. `--yes-paid-run` is the explicit
       acknowledgement that the command may incur model and container costs; it
@@ -191,20 +191,23 @@ SkillsBench is pinned to
 `b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af` and uses `with-skill` mode. Its
 smoke task is `edit-pdf`. Terminal-Bench 2 is pinned to
 `2fd12b88aafdd04a52c298e3940bcb189f9766d6`, uses `no-skill` mode, and its
-smoke task is `regex-log`. Both arms use `openai/gpt-5.6-luna`, low reasoning
+smoke task is `regex-log`. Both arms use `openrouter/openai/gpt-5.6-luna`, low reasoning
 effort, Docker, single-task/build concurrency, single-shot looping, zero
 retries, and required usage tracking.
 
 ## Environment and safety
 
-BenchFlow resolves the host's OpenAI credential and maps its proxy URL, key,
-and fixed model into `MOSAIC_PROVIDER_BASE_URL`, `MOSAIC_PROVIDER_API_KEY`, and
-`MOSAIC_MODEL` inside the task container. The launcher transfers the proxy key
-through a mode-0600 temporary file, removes it from the Node environment, and
-the provider unlinks the file before accepting prompts. Terminal subprocesses
-also receive an environment with credential-shaped names removed. Never place
-credentials in manifests, command arguments, metadata, task artifacts, or
-commits.
+BenchFlow resolves the host's `OPENROUTER_API_KEY`, routes the explicit
+`openrouter/openai/gpt-5.6-luna` model through its LiteLLM proxy, and maps the
+proxy URL, ephemeral key, and model alias into `OPENROUTER_BASE_URL`,
+`OPENROUTER_API_KEY`, and `OPENROUTER_MODEL` inside the task container. Both
+arms compose `createUnifiedProvider`; without a proxy URL it defaults to
+`https://openrouter.ai/api/v1`. The launcher transfers only the ephemeral proxy
+key through a mode-0600 temporary file, removes it from the Node environment,
+and the provider unlinks the file before accepting prompts. The host credential
+never enters the agent container. Terminal subprocesses also receive an
+environment with credential-shaped names removed. Never place credentials in
+manifests, command arguments, metadata, task artifacts, or commits.
 Both manifests pin the generated bundle SHA-256 literally and verify the
 official Node archive checksum for the selected architecture. The free
 preflight requires the local bundle, manifest pins, and published sidecar to

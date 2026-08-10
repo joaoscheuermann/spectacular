@@ -46,7 +46,7 @@ const writeArm = async (
     schema_version: 1,
     eval: {
       agent,
-      model: 'openai/gpt-5.6-luna',
+      model: 'openrouter/openai/gpt-5.6-luna',
       reasoning_effort: 'low',
       environment: 'docker',
       concurrency: 1,
@@ -100,7 +100,7 @@ const writeArm = async (
     },
     expectedTasks: 1,
     agent,
-    model: 'openai/gpt-5.6-luna',
+    model: 'openrouter/openai/gpt-5.6-luna',
     effort: 'low',
     sandbox: 'docker',
     concurrency: 1,
@@ -121,7 +121,7 @@ const writeArm = async (
     task_name: 'edit-pdf',
     agent,
     agent_name: 'mosaic-benchmark',
-    model: 'openai/gpt-5.6-luna',
+    model: 'openrouter/openai/gpt-5.6-luna',
     skill_mode: 'with-skill',
     loop: { strategy: 'single-shot' },
     usage_tracking: {
@@ -443,7 +443,7 @@ test('rejects task names that diverge from the manifest despite coherent health'
         task_name: 'other-task',
         agent: 'mosaic',
         agent_name: 'mosaic-benchmark',
-        model: 'openai/gpt-5.6-luna',
+        model: 'openrouter/openai/gpt-5.6-luna',
         skill_mode: 'with-skill',
         loop: { strategy: 'single-shot' },
         usage_tracking: {

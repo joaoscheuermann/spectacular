@@ -2,13 +2,13 @@ contract_version = "1.0"
 name = "mosaic"
 description = "Mosaic benchmark ACP agent."
 protocol = "acp"
-api_protocol = "openai-responses"
+api_protocol = "openai-completions"
 install_cmd = '''set -eu
 BF_NODE_DIR=/opt/benchflow/node
 BF_NODE_VERSION=22.20.0
 BF_MOSAIC_DIR=/opt/benchflow/mosaic
-BF_RELEASE=mosaic-benchmark-v0.1.0
-BF_BUNDLE_SHA256=2917e4e5b1aaced5e33b7d82527e61db36623f6adc256e271633ba58f6894d2b
+BF_RELEASE=mosaic-benchmark-v0.1.1
+BF_BUNDLE_SHA256=6a586640e0546311f737c012cfd2dcdc7c823e9e32760f8ede75d21c80cbc729
 if ! command -v curl >/dev/null 2>&1 || ! command -v tar >/dev/null 2>&1 || ! command -v xz >/dev/null 2>&1 || ! command -v sha256sum >/dev/null 2>&1; then
   if command -v apt-get >/dev/null 2>&1; then
     apt-get update -qq
@@ -69,17 +69,17 @@ umask 077
 key_file=$(mktemp)
 cleanup() { rm -f "$key_file"; }
 trap cleanup 0 HUP INT TERM
-printf '%s' "${MOSAIC_PROVIDER_API_KEY:?MOSAIC_PROVIDER_API_KEY is required}" > "$key_file"
+printf '%s' "${OPENROUTER_API_KEY:?OPENROUTER_API_KEY is required}" > "$key_file"
 chmod 600 "$key_file"
-unset MOSAIC_PROVIDER_API_KEY BENCHFLOW_PROVIDER_API_KEY BENCHFLOW_LITELLM_MASTER_KEY
-export MOSAIC_PROVIDER_API_KEY_FILE="$key_file"
+unset OPENROUTER_API_KEY BENCHFLOW_PROVIDER_API_KEY BENCHFLOW_LITELLM_MASTER_KEY
+export OPENROUTER_API_KEY_FILE="$key_file"
 exec /opt/benchflow/node/bin/node /opt/benchflow/mosaic/mosaic-bench-acp.mjs serve mosaic'''
 supports_acp_set_model = false
-default_model = "openai/gpt-5.6-luna"
+default_model = "openrouter/openai/gpt-5.6-luna"
 skill_paths = ["$HOME/.agents/skills"]
 home_dirs = [".agents"]
 
 [env_mapping]
-BENCHFLOW_PROVIDER_BASE_URL = "MOSAIC_PROVIDER_BASE_URL"
-BENCHFLOW_PROVIDER_API_KEY = "MOSAIC_PROVIDER_API_KEY"
-BENCHFLOW_PROVIDER_MODEL = "MOSAIC_MODEL"
+BENCHFLOW_PROVIDER_BASE_URL = "OPENROUTER_BASE_URL"
+BENCHFLOW_PROVIDER_API_KEY = "OPENROUTER_API_KEY"
+BENCHFLOW_PROVIDER_MODEL = "OPENROUTER_MODEL"

@@ -80,7 +80,7 @@ type ArmCampaign = {
 };
 
 const empty: Metrics = { score: 0, costUsd: 0, totalTokens: 0, tasks: 0 };
-const model = 'openai/gpt-5.6-luna';
+const model = 'openrouter/openai/gpt-5.6-luna';
 const digestNames = [
   'taskManifest',
   'runConfig',

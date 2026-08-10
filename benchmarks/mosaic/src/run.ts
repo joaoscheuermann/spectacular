@@ -1,6 +1,6 @@
 import {
   createFetchTransport,
-  createOpenAiCompatibleProvider,
+  createUnifiedProvider,
   type HttpTransport,
   type LlmProvider,
 } from 'llms';
@@ -65,11 +65,11 @@ const scrub = (environment: NodeJS.ProcessEnv): void => {
 };
 
 const credentialFromFile = (environment: NodeJS.ProcessEnv): string => {
-  const path = environment.MOSAIC_PROVIDER_API_KEY_FILE;
+  const path = environment.OPENROUTER_API_KEY_FILE;
 
   if (path === undefined || path.trim() === '') {
     throw new Error(
-      'MOSAIC_PROVIDER_API_KEY_FILE is required when using process.env.',
+      'OPENROUTER_API_KEY_FILE is required when using process.env.',
     );
   }
 
@@ -84,7 +84,7 @@ const credential = (
   environment: NodeJS.ProcessEnv,
   usesProcessEnvironment: boolean,
 ): string => {
-  if (!usesProcessEnvironment) return environment.MOSAIC_PROVIDER_API_KEY ?? '';
+  if (!usesProcessEnvironment) return environment.OPENROUTER_API_KEY ?? '';
 
   try {
     return credentialFromFile(environment);
@@ -93,7 +93,7 @@ const credential = (
   }
 };
 
-/** Composes the benchmark's credential-safe OpenAI-compatible provider profile. */
+/** Composes the benchmark's credential-safe Unified OpenRouter profile. */
 export const createProvider = (
   options: ProviderOptions = {},
 ): ProviderProfile => {
@@ -102,17 +102,16 @@ export const createProvider = (
     environment,
     options.environment === undefined || options.environment === process.env,
   );
-  const model = environment.MOSAIC_MODEL?.trim() || defaultModel;
-  const baseUrl = environment.MOSAIC_PROVIDER_BASE_URL?.trim() || undefined;
+  const model = environment.OPENROUTER_MODEL?.trim() || defaultModel;
+  const baseUrl = environment.OPENROUTER_BASE_URL?.trim() || undefined;
   const logger = options.logger ?? pino({ enabled: false });
 
   return {
     model,
-    provider: createOpenAiCompatibleProvider({
+    provider: createUnifiedProvider({
       transport: options.transport ?? createFetchTransport(),
       ...(baseUrl === undefined ? {} : { baseUrl }),
       apiKey: () => apiKey,
-      identity: { id: 'benchflow', name: 'benchflow' },
       logger,
     }),
   };

@@ -132,7 +132,7 @@ const createRelease = async (
   const checksum = `${asset}.sha256`;
   await writeFile(checksum, `${digest}  mosaic-bench-acp.mjs\n`, 'utf8');
   writeJson(stdout, {
-    version: '0.1.0',
+    version: '0.1.1',
     asset,
     checksum,
     sha256: digest,

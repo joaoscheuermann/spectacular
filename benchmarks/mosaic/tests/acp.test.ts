@@ -25,12 +25,12 @@ test('ACP consumes the credential when constructing its built-in runner', async 
 
   try {
     await writeFile(path, 'file-secret', { mode: 0o600 });
-    process.env.MOSAIC_PROVIDER_API_KEY_FILE = path;
+    process.env.OPENROUTER_API_KEY_FILE = path;
 
     acp({ mode: 'direct' });
 
     await assert.rejects(stat(path));
-    assert.equal(process.env.MOSAIC_PROVIDER_API_KEY_FILE, undefined);
+    assert.equal(process.env.OPENROUTER_API_KEY_FILE, undefined);
   } finally {
     for (const name of Object.keys(process.env)) {
       if (

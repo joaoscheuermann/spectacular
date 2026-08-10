@@ -31,24 +31,24 @@ const load = async (name: (typeof paths)[number]): Promise<Manifest> =>
   ) as unknown as Manifest;
 
 const mapping = {
-  BENCHFLOW_PROVIDER_BASE_URL: 'MOSAIC_PROVIDER_BASE_URL',
-  BENCHFLOW_PROVIDER_API_KEY: 'MOSAIC_PROVIDER_API_KEY',
-  BENCHFLOW_PROVIDER_MODEL: 'MOSAIC_MODEL',
+  BENCHFLOW_PROVIDER_BASE_URL: 'OPENROUTER_BASE_URL',
+  BENCHFLOW_PROVIDER_API_KEY: 'OPENROUTER_API_KEY',
+  BENCHFLOW_PROVIDER_MODEL: 'OPENROUTER_MODEL',
 };
 
 const assertContract = (manifest: Manifest): void => {
   assert.equal(manifest.contract_version, '1.0');
   assert.equal(manifest.protocol, 'acp');
-  assert.equal(manifest.api_protocol, 'openai-responses');
+  assert.equal(manifest.api_protocol, 'openai-completions');
   assert.equal(manifest.supports_acp_set_model, false);
-  assert.equal(manifest.default_model, 'openai/gpt-5.6-luna');
+  assert.equal(manifest.default_model, 'openrouter/openai/gpt-5.6-luna');
   assert.deepEqual(manifest.skill_paths, ['$HOME/.agents/skills']);
   assert.deepEqual(manifest.home_dirs, ['.agents']);
   assert.deepEqual(manifest.env_mapping, mapping);
   assert.match(manifest.install_cmd, /BF_NODE_VERSION=22\.20\.0/);
   assert.match(manifest.install_cmd, /x86_64\|amd64\) node_arch=x64/);
   assert.match(manifest.install_cmd, /aarch64\|arm64\) node_arch=arm64/);
-  assert.match(manifest.install_cmd, /mosaic-benchmark-v0\.1\.0/);
+  assert.match(manifest.install_cmd, /mosaic-benchmark-v0\.1\.1/);
   assert.match(manifest.install_cmd, /BF_BUNDLE_SHA256=[a-f0-9]{64}/);
   assert.match(
     manifest.install_cmd,
@@ -78,11 +78,11 @@ const assertContract = (manifest: Manifest): void => {
   assert.match(manifest.launch_cmd, /trap cleanup 0 HUP INT TERM/);
   assert.match(
     manifest.launch_cmd,
-    /unset MOSAIC_PROVIDER_API_KEY BENCHFLOW_PROVIDER_API_KEY BENCHFLOW_LITELLM_MASTER_KEY/,
+    /unset OPENROUTER_API_KEY BENCHFLOW_PROVIDER_API_KEY BENCHFLOW_LITELLM_MASTER_KEY/,
   );
   assert.match(
     manifest.launch_cmd,
-    /export MOSAIC_PROVIDER_API_KEY_FILE="\$key_file"/,
+    /export OPENROUTER_API_KEY_FILE="\$key_file"/,
   );
 };
 

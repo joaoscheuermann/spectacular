@@ -101,8 +101,8 @@ test('cancels the detached process group when its signal aborts', async () => {
 test('does not expose sensitive parent environment variables to commands', async () => {
   const root = await createRoot();
   const secrets = {
-    MOSAIC_PROVIDER_API_KEY: 'mosaic-test-key',
-    MOSAIC_PROVIDER_API_KEY_FILE: '/tmp/mosaic-test-credential',
+    OPENROUTER_API_KEY: 'openrouter-test-key',
+    OPENROUTER_API_KEY_FILE: '/tmp/openrouter-test-credential',
     BENCHFLOW_PROVIDER_API_KEY: 'benchflow-test-key',
     BENCHFLOW_LITELLM_MASTER_KEY: 'benchflow-master-key',
     TEST_TOKEN: 'test-token',

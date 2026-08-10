@@ -519,8 +519,12 @@ benchmark containers that do not contain this workspace or its dependencies.
 
 The benchmark publishes two BenchFlow ACP agents: a direct agent and a MOSAIC
 agent. Both receive the same task prompt, mounted task skills, terminal tool,
-OpenAI Responses-compatible proxy, model, and low reasoning effort. The MOSAIC
-arm uses the ordinary public `mosaic` entrypoint and observes runs through
+OpenRouter-backed OpenAI Completions-compatible proxy, model, and low reasoning
+effort. Both compose the shared `createUnifiedProvider`; BenchFlow selects
+OpenRouter with `openrouter/openai/gpt-5.6-luna` and resolves the host's
+`OPENROUTER_API_KEY`, while the agents receive only the proxy endpoint, alias,
+and ephemeral proxy credential. The MOSAIC arm uses the ordinary public
+`mosaic` entrypoint and observes runs through
 `MosaicRunOptions.observer` with `capture: 'io'`; it does not use benchmark
 interception hooks from `mosaic/evaluation`. IO events may expose model-visible
 content and terminal inputs and outputs to the benchmark trajectory, but never
@@ -531,10 +535,12 @@ directory so references to bundled scripts and supporting files resolve the
 same way in both arms.
 
 The BenchFlow launcher transfers its ephemeral proxy credential through a
-mode-0600 file, removes credential values from the Node process environment,
-and the provider reads and unlinks that file while constructing the ACP app,
-before any prompt or terminal exists. Terminal subprocesses additionally drop
-credential-shaped environment names. The generated bundle, its published
+mode-0600 `OPENROUTER_API_KEY_FILE`, removes credential values from the Node
+process environment, and the provider reads and unlinks that file while
+constructing the ACP app, before any prompt or terminal exists. Terminal
+subprocesses additionally drop credential-shaped environment names. The host's
+actual `OPENROUTER_API_KEY` never enters the agent container. The generated
+bundle, its published
 checksum sidecar, and both launch manifests are fixed campaign inputs. Both
 manifests pin the bundle SHA-256 literally and pin the official Node archive
 SHA-256 per supported architecture; a paid campaign repeats the free preflight

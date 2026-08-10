@@ -79,13 +79,14 @@ export type CampaignOptions = {
   readonly yesPaidRun?: boolean;
   readonly skillsbenchReport?: string;
   readonly runner?: CommandRunner;
+  readonly environment?: NodeJS.ProcessEnv;
 };
 
-const model = 'openai/gpt-5.6-luna';
+const model = 'openrouter/openai/gpt-5.6-luna';
 const agents = ['mosaic-direct', 'mosaic'] as const;
 const releaseAssets = [
-  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.0/mosaic-bench-acp.mjs',
-  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.0/mosaic-bench-acp.mjs.sha256',
+  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.1/mosaic-bench-acp.mjs',
+  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.1/mosaic-bench-acp.mjs.sha256',
 ] as const;
 
 const definitions: Record<
@@ -117,32 +118,35 @@ const definitions: Record<
   },
 };
 
-const processRunner: CommandRunner = ({ file, args, cwd, env }) =>
-  new Promise((resolveResult, reject) => {
-    const child = spawn(file, args as string[], {
-      cwd,
-      env: { ...process.env, ...env },
-      stdio: ['ignore', 'pipe', 'pipe'],
+const processRunner =
+  (environment: NodeJS.ProcessEnv): CommandRunner =>
+  ({ file, args, cwd, env }) =>
+    new Promise((resolveResult, reject) => {
+      const child = spawn(file, args as string[], {
+        cwd,
+        env: { ...environment, ...env },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (chunk: Buffer) => {
+        stdout += chunk.toString();
+      });
+      child.stderr.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
+      child.once('error', reject);
+      child.once('close', (code) =>
+        resolveResult({ code: code ?? 1, stdout, stderr }),
+      );
     });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString();
-    });
-    child.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString();
-    });
-    child.once('error', reject);
-    child.once('close', (code) =>
-      resolveResult({ code: code ?? 1, stdout, stderr }),
-    );
-  });
 
 /** Runs the free preflight or creates an explicitly approved paid campaign. */
 export const campaign = async (
   options: CampaignOptions,
 ): Promise<CampaignCheck | CampaignRun> => {
-  const runner = options.runner ?? processRunner;
+  const runner =
+    options.runner ?? processRunner(options.environment ?? process.env);
   return options.action === 'check'
     ? check(options, runner)
     : run(options, runner);
@@ -187,8 +191,21 @@ const check = async (
       join(root, 'dist', 'mosaic-bench-acp.mjs'),
     ),
   ]);
-  const checks = [...commands, ...files];
+  const checks = [
+    credentialCheck(options.environment ?? process.env),
+    ...commands,
+    ...files,
+  ];
   return { ok: checks.every((item) => item.ok), checks };
+};
+
+const credentialCheck = (environment: NodeJS.ProcessEnv): Check => {
+  const ok = (environment.OPENROUTER_API_KEY?.trim().length ?? 0) > 0;
+  return {
+    name: 'credential:OPENROUTER_API_KEY',
+    ok,
+    detail: ok ? 'set' : 'missing',
+  };
 };
 
 const executable = (name: string, runner: CommandRunner, cwd: string) =>

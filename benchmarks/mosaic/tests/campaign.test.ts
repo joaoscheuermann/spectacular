@@ -12,10 +12,18 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import test from 'node:test';
 
-import { campaign, type Command, type CommandResult } from '../src/campaign.js';
+import {
+  campaign as executeCampaign,
+  type CampaignOptions,
+  type Command,
+  type CommandResult,
+} from '../src/campaign.js';
 
 const skillsCommit = 'b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af';
 const terminalCommit = '2fd12b88aafdd04a52c298e3940bcb189f9766d6';
+const providerEnvironment = { OPENROUTER_API_KEY: 'test-key' };
+const campaign = (options: CampaignOptions) =>
+  executeCampaign({ environment: providerEnvironment, ...options });
 
 const setup = async (): Promise<string> => {
   const root = await mkdtemp(join(tmpdir(), 'mosaic-campaign-'));
@@ -93,7 +101,7 @@ const writeArtifacts = async (command: Command): Promise<void> => {
     schema_version: 1,
     eval: {
       agent,
-      model: 'openai/gpt-5.6-luna',
+      model: 'openrouter/openai/gpt-5.6-luna',
       reasoning_effort: 'low',
       environment: 'docker',
       concurrency: 1,
@@ -162,7 +170,7 @@ test('assembles both smoke arms after a verified preflight', async (t) => {
       '--agent',
       arm.arm,
       '--model',
-      'openai/gpt-5.6-luna',
+      'openrouter/openai/gpt-5.6-luna',
       '--reasoning-effort',
       'low',
       '--sandbox',
@@ -319,6 +327,30 @@ test('checks the actual runner, assets, checksum, local bundle, and remote commi
     result.checks.find((check) => check.name === 'release-checksum')?.ok,
     true,
   );
+  assert.equal(
+    result.checks.find(
+      (check) => check.name === 'credential:OPENROUTER_API_KEY',
+    )?.ok,
+    true,
+  );
+});
+
+test('rejects a paid campaign without OPENROUTER_API_KEY before creating results', async (t) => {
+  const root = await setup();
+  t.after(() => rm(root, { recursive: true, force: true }));
+
+  await assert.rejects(
+    executeCampaign({
+      benchmark: 'skillsbench',
+      action: 'smoke',
+      rootDir: root,
+      yesPaidRun: true,
+      environment: {},
+      runner: (command) => artifactRunner(root, command),
+    }),
+    /preflight/,
+  );
+  await assert.rejects(stat(join(root, 'results')));
 });
 
 test('rejects a release sidecar that does not match the local bundle', async (t) => {
