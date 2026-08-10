@@ -47,7 +47,7 @@ const writeArm = async (
     eval: {
       agent,
       model: 'openrouter/openai/gpt-5.6-luna',
-      reasoning_effort: 'low',
+      reasoning_effort: null,
       environment: 'docker',
       concurrency: 1,
       build_concurrency: 1,
@@ -286,6 +286,21 @@ test('rejects non-agent run-config differences between arms', async (t) => {
   const report = await compare({ directDir: direct, mosaicDir: mosaic });
   assert.equal(report.exitCode, 2);
   assert.match(report.reasons.join('\n'), /run configs differ/);
+});
+
+test('rejects BenchFlow-owned ACP reasoning effort', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'mosaic-compare-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const [direct, mosaic] = await Promise.all([
+    writeArm(root, 'mosaic-direct', 0.5, 2),
+    writeArm(root, 'mosaic', 0.8, 1),
+  ]);
+  await updateArtifact(mosaic, 'run-config.json', 'runConfig', (artifact) => {
+    (artifact.eval as Json).reasoning_effort = 'low';
+  });
+  const report = await compare({ directDir: direct, mosaicDir: mosaic });
+  assert.equal(report.exitCode, 2);
+  assert.match(report.reasons.join('\n'), /mosaic: invalid run config/);
 });
 
 test('rejects health evidence that diverges from public results', async (t) => {

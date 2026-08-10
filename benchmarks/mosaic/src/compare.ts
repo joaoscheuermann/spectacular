@@ -417,7 +417,7 @@ const runConfigIssues = (
     config.schema_version === 1 &&
     evalConfig.agent === campaign.metadata.agent &&
     evalConfig.model === model &&
-    evalConfig.reasoning_effort === 'low' &&
+    evalConfig.reasoning_effort === null &&
     evalConfig.environment === 'docker' &&
     evalConfig.concurrency === 1 &&
     evalConfig.build_concurrency === 1 &&

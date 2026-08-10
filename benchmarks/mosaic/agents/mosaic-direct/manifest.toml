@@ -7,8 +7,8 @@ install_cmd = '''set -eu
 BF_NODE_DIR=/opt/benchflow/node
 BF_NODE_VERSION=22.20.0
 BF_MOSAIC_DIR=/opt/benchflow/mosaic
-BF_RELEASE=mosaic-benchmark-v0.1.1
-BF_BUNDLE_SHA256=6a586640e0546311f737c012cfd2dcdc7c823e9e32760f8ede75d21c80cbc729
+BF_RELEASE=mosaic-benchmark-v0.1.2
+BF_BUNDLE_SHA256=f2826dafe37da9ec154efaa611bdf9c7697a277194fd18199ea8dd2624af0f42
 if ! command -v curl >/dev/null 2>&1 || ! command -v tar >/dev/null 2>&1 || ! command -v xz >/dev/null 2>&1 || ! command -v sha256sum >/dev/null 2>&1; then
   if command -v apt-get >/dev/null 2>&1; then
     apt-get update -qq

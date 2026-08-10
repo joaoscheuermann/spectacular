@@ -102,7 +102,7 @@ const writeArtifacts = async (command: Command): Promise<void> => {
     eval: {
       agent,
       model: 'openrouter/openai/gpt-5.6-luna',
-      reasoning_effort: 'low',
+      reasoning_effort: null,
       environment: 'docker',
       concurrency: 1,
       build_concurrency: 1,
@@ -171,8 +171,6 @@ test('assembles both smoke arms after a verified preflight', async (t) => {
       arm.arm,
       '--model',
       'openrouter/openai/gpt-5.6-luna',
-      '--reasoning-effort',
-      'low',
       '--sandbox',
       'docker',
       '--concurrency',

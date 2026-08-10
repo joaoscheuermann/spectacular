@@ -523,7 +523,11 @@ OpenRouter-backed OpenAI Completions-compatible proxy, model, and low reasoning
 effort. Both compose the shared `createUnifiedProvider`; BenchFlow selects
 OpenRouter with `openrouter/openai/gpt-5.6-luna` and resolves the host's
 `OPENROUTER_API_KEY`, while the agents receive only the proxy endpoint, alias,
-and ephemeral proxy credential. The MOSAIC arm uses the ordinary public
+and ephemeral proxy credential. The generated adapter owns the fixed `low`
+effort for both arms and the campaign omits BenchFlow's ACP reasoning-effort
+option because the external manifest contract cannot declare its required
+config-option identifier. The persisted BenchFlow run configuration must record
+that harness-owned effort as null. The MOSAIC arm uses the ordinary public
 `mosaic` entrypoint and observes runs through
 `MosaicRunOptions.observer` with `capture: 'io'`; it does not use benchmark
 interception hooks from `mosaic/evaluation`. IO events may expose model-visible

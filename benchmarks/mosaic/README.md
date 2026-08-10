@@ -30,6 +30,11 @@ single-shot policy, and zero retries. The treatment being measured is the
 MOSAIC orchestration. Each task is graded by its official SkillsBench verifier,
 while BenchFlow records trusted model usage and cost.
 
+The generated adapter fixes `low` effort in both arms. The campaign does not
+pass BenchFlow's ACP reasoning-effort option because the external manifest
+contract cannot declare the config-option identifier that BenchFlow requires;
+the closed comparator therefore requires the harness field to remain null.
+
 The comparison has one decision gate:
 
 ```text
@@ -121,7 +126,7 @@ Complete every item below before running either `smoke` or `run`:
   npx nx run mosaic-benchmark:release
   ```
 
-- [ ] Confirm the public `mosaic-benchmark-v0.1.1` release contains exactly
+- [ ] Confirm the public `mosaic-benchmark-v0.1.2` release contains exactly
       `mosaic-bench-acp.mjs` and `mosaic-bench-acp.mjs.sha256`. The generated
       bundle hash, published sidecar, and `BF_BUNDLE_SHA256` in both agent
       manifests must be identical.
