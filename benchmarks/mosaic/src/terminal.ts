@@ -22,7 +22,7 @@ const input = z
       .number()
       .int()
       .positive()
-      .max(OUTPUT_LIMIT_BYTES)
+      .max(Number.MAX_SAFE_INTEGER)
       .optional(),
   })
   .strict();
@@ -224,7 +224,10 @@ export const createTerminal = (options: {
       value.command,
       cwd,
       value.timeout_ms ?? DEFAULT_TIMEOUT_MS,
-      value.max_output_chars ?? OUTPUT_LIMIT_BYTES,
+      Math.min(
+        value.max_output_chars ?? OUTPUT_LIMIT_BYTES,
+        OUTPUT_LIMIT_BYTES,
+      ),
       options.signal,
     );
   },

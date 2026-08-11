@@ -89,7 +89,7 @@ test('ACP runs a fresh runner per prompt and forwards normalized updates', async
       protocolVersion: PROTOCOL_VERSION,
     });
     assert.equal(initialized.protocolVersion, PROTOCOL_VERSION);
-    assert.equal(initialized.agentInfo?.version, '0.1.5');
+    assert.equal(initialized.agentInfo?.version, '0.1.6');
 
     const created = await context.request(methods.agent.session.new, {
       cwd: '/workspace',

@@ -537,10 +537,10 @@ interception hooks from `mosaic/evaluation`. IO events may expose model-visible
 content and terminal inputs and outputs to the benchmark trajectory, but never
 private reasoning or credentials. The terminal is benchmark-only authority
 inside the task sandbox and does not add command execution to a product package
-or Doric host surface. Its strict input accepts an optional positive
-`max_output_chars` bounded by the fixed 12 KiB combined stdout/stderr ceiling,
-allowing the model to request a smaller capture without invalidating the tool
-call. Loaded skill bodies identify their canonical mounted
+or Doric host surface. Its strict input accepts an optional positive safe
+integer `max_output_chars`; the runtime clamps that request to the fixed 12 KiB
+combined stdout/stderr ceiling instead of rejecting larger requests. Loaded
+skill bodies identify their canonical mounted
 directory so references to bundled scripts and supporting files resolve the
 same way in both arms. ACP prompt failures write only an authentic provider
 error code when available, or a fixed generic line otherwise; provider
