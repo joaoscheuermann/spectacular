@@ -1,6 +1,10 @@
 export type Benchmark = 'skillsbench' | 'terminalbench';
 export type CampaignAction = 'check' | 'smoke' | 'pilot' | 'run';
 export type Arm = 'mosaic-direct' | 'mosaic';
+export const armOrder = [
+  'mosaic',
+  'mosaic-direct',
+] as const satisfies readonly Arm[];
 
 export type Command = {
   readonly file: string;

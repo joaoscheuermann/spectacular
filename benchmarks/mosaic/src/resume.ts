@@ -19,6 +19,7 @@ import {
   type Command,
   type CommandRunner,
 } from './campaign.js';
+import { armOrder } from './campaign-types.js';
 import { skillsbenchPilotTasks } from './pilot.js';
 import { createProcessRunner } from './process.js';
 import {
@@ -43,8 +44,6 @@ export type ResumeOptions = {
   readonly environment?: NodeJS.ProcessEnv;
   readonly progress?: (stage: string) => void;
 };
-
-const arms = ['mosaic-direct', 'mosaic'] as const;
 
 /** Resumes a validated SkillsBench pilot without changing its campaign identity. */
 export const resumeCampaign = async (
@@ -78,7 +77,7 @@ export const resumeCampaign = async (
     await requireResources(root, runner);
 
     const runs = [];
-    for (const arm of arms) {
+    for (const arm of armOrder) {
       options.progress?.(`running ${arm}`);
       const armRun = await resumeArm(root, evidence, arm, runner);
       runs.push(armRun);

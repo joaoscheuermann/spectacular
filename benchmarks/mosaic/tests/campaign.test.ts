@@ -189,6 +189,10 @@ test('assembles both smoke arms after a verified preflight', async (t) => {
   assert.equal('arms' in result, true);
   if (!('arms' in result)) return;
   assert.deepEqual(
+    result.arms.map((arm) => arm.arm),
+    ['mosaic', 'mosaic-direct'],
+  );
+  assert.deepEqual(
     paidCommands(commands).map((command) => command.args),
     result.arms.map((arm) => [
       '--from',
@@ -516,7 +520,7 @@ test('stops after a failed first paid arm', async (t) => {
   assert.equal('arms' in result, true);
   if (!('arms' in result)) return;
   assert.equal(result.arms.length, 1);
-  assert.equal(result.arms[0]?.arm, 'mosaic-direct');
+  assert.equal(result.arms[0]?.arm, 'mosaic');
   assert.equal(paidCommands(commands).length, 1);
 });
 

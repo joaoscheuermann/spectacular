@@ -9,17 +9,18 @@ import {
 } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 
-import type {
-  Arm,
-  ArmRun,
-  Benchmark,
-  CampaignCheck,
-  CampaignMetadata,
-  CampaignOptions,
-  CampaignRun,
-  Check,
-  Command,
-  CommandRunner,
+import {
+  armOrder,
+  type Arm,
+  type ArmRun,
+  type Benchmark,
+  type CampaignCheck,
+  type CampaignMetadata,
+  type CampaignOptions,
+  type CampaignRun,
+  type Check,
+  type Command,
+  type CommandRunner,
 } from './campaign-types.js';
 import { isValidSkillsbenchReport } from './compare.js';
 import { skillsbenchPilotTasks } from './pilot.js';
@@ -41,10 +42,9 @@ export type {
 } from './campaign-types.js';
 
 const model = 'openrouter/openai/gpt-5.6-luna';
-const agents = ['mosaic-direct', 'mosaic'] as const;
 const releaseAssets = [
-  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.8/mosaic-bench-acp.mjs',
-  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.8/mosaic-bench-acp.mjs.sha256',
+  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.9/mosaic-bench-acp.mjs',
+  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.9/mosaic-bench-acp.mjs.sha256',
 ] as const;
 
 const definitions: Record<
@@ -118,7 +118,7 @@ const check = async (
     releaseChecksum(root, runner),
   ]);
   const files = await Promise.all([
-    ...agents.map((arm) =>
+    ...armOrder.map((arm) =>
       fileCheck(`manifest:${arm}`, join(root, 'agents', arm, 'manifest.toml')),
     ),
     fileCheck(
@@ -209,7 +209,7 @@ const manifestBundleChecksum = async (
   root: string,
 ): Promise<string | undefined> => {
   const checksums = await Promise.all(
-    agents.map(async (arm) => {
+    armOrder.map(async (arm) => {
       try {
         const source = await readFile(
           join(root, 'agents', arm, 'manifest.toml'),
@@ -286,7 +286,7 @@ const run = async (
   const sourcePath =
     action === 'smoke' ? definition.smokePath : definition.fullPath;
   const arms: ArmRun[] = [];
-  for (const arm of agents) {
+  for (const arm of armOrder) {
     const armDirectory = join(directory, arm);
     await mkdir(join(armDirectory, 'jobs'), { recursive: true });
     const command = evalCommand(

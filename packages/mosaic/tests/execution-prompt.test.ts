@@ -21,6 +21,13 @@ test('defines precedence tools criteria and all terminal statuses', () => {
   assert.match(prompt, /One missing executable/u);
   assert.match(prompt, /zero-based criterionIndex/u);
   assert.match(prompt, /smallest set of observationIndices/u);
+  assert.match(prompt, /current node's observation ledger starts at index 0/u);
+  assert.match(prompt, /first returned tool result.*index 0/u);
+  assert.match(prompt, /Never use an ancestor's observation index/u);
+  assert.match(
+    prompt,
+    /less than the number[\s\S]*of tool results returned during the current node/u,
+  );
   assert.match(prompt, /exit_code.*stderr.*timed_out.*truncated/u);
   assert.match(
     prompt,
@@ -94,6 +101,8 @@ test('projects only cited transitive ancestor evidence and preserves skill order
   assert.match(prompt, /also cited direct output/u);
   assert.match(prompt, /Total Observation Count[\s\S]*3/u);
   assert.match(prompt, /Cited Observation Count[\s\S]*2/u);
+  assert.match(prompt, /Producer-local Observation Indices/u);
+  assert.match(prompt, /not valid references for the current node/u);
   assert.doesNotMatch(prompt, /unrelated artifact/u);
   assert.doesNotMatch(prompt, /uncited direct output|direct-call|root-call/u);
   assert.ok(prompt.indexOf('first body') < prompt.indexOf('second body'));

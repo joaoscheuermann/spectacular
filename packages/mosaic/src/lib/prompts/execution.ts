@@ -58,8 +58,8 @@ export const system = (required: readonly Skill[] = []): string =>
     '- One missing executable, failed command, or incomplete inspection is not',
     '  sufficient for blocked while an alternative action remains.',
     '- Never claim an action or observation without a supporting tool result.',
-    '- The runtime records every successful executable-tool return as ordered',
-    '  node-level evidence. Do not reproduce provider call IDs.',
+    '- The runtime records every returned executable-tool result from this node as',
+    '  ordered current-node evidence. Do not reproduce provider call IDs.',
     '- When a tool result exposes exit_code, stderr, timed_out, or truncated, inspect',
     '  those fields before completing the node.',
     '- A later successful command does not automatically resolve an earlier failure.',
@@ -68,6 +68,17 @@ export const system = (required: readonly Skill[] = []): string =>
     '  an intermediate failure cannot be hidden by a later success.',
     '- Inspect produced state directly when possible. An ancestor declaration alone',
     '  does not prove a semantic condition that the current node can inspect.',
+    '',
+    '# Observation indexing',
+    '',
+    "- The current node's observation ledger starts at index 0 independently of",
+    '  every ancestor and every other node.',
+    '- The first returned tool result during this node has index 0, the second has',
+    '  index 1, and each later returned result increments that current-node index.',
+    "- Never use an ancestor's observation index in observationIndices. Indices shown",
+    '  under Projected Ancestor Evidence belong only to the named producer node.',
+    '- Do not count ancestor observations, model responses, provider turns, or the',
+    '  terminal structured-output submission as current-node observations.',
     '',
     '# Terminal statuses',
     '',
@@ -85,6 +96,8 @@ export const system = (required: readonly Skill[] = []): string =>
     '- Ground each criterion evaluation in concise model-authored prose.',
     '- For tool-dependent criteria, cite the smallest set of observationIndices that',
     '  proves the evaluation. Indices are zero-based, unique, and increasing.',
+    '- Before submitting, verify that every observationIndex is less than the number',
+    '  of tool results returned during the current node.',
     '- Use an empty observationIndices array only when the proof comes entirely from',
     '  the request, a deterministic result, or projected ancestor evidence.',
     '- Write result.markdown in the language of the original request.',
@@ -152,6 +165,9 @@ const ancestors = (node: Node, graph: Graph): string => {
 
   return [
     '# Projected Ancestor Evidence',
+    'The indices below are local to each named producer node. They explain ancestor',
+    'evidence but are not valid references for the current node. When relying only on',
+    'projected ancestor evidence, use an empty current-node observationIndices array.',
     ...projected.flatMap((ancestor, index) => [
       `## Ancestor ${index + 1}`,
       section('Producer Node ID', ancestor.producerId),
@@ -162,7 +178,7 @@ const ancestors = (node: Node, graph: Graph): string => {
         section('Satisfied', String(criterion.satisfied)),
         section('Evidence', criterion.evidence),
         section(
-          'Observation Indices',
+          'Producer-local Observation Indices',
           criterion.observationIndices.length === 0
             ? 'None.'
             : criterion.observationIndices.join(', '),
@@ -177,7 +193,7 @@ const ancestors = (node: Node, graph: Graph): string => {
       ...(ancestor.observations.length === 0
         ? ['No tool observations are cited.']
         : ancestor.observations.flatMap(({ observationIndex, observation }) => [
-            `#### Observation ${observationIndex}`,
+            `#### Producer-local Observation ${observationIndex}`,
             section('Tool Name', observation.toolName),
             section('Input', observation.input),
             section('Output', observation.output),

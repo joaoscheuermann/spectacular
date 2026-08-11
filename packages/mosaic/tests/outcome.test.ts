@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { z } from 'zod';
 
 import {
   createNodeDecisionSchema,
@@ -197,6 +198,47 @@ test('rejects legacy observation reference fields and other unknown fields', () 
   );
   assert.equal(createNodeDecisionSchema(node).safeParse(extra).success, false);
 });
+
+test('describes every model-facing decision field without ambiguous index scope', () => {
+  const schema = z.toJSONSchema(createNodeDecisionSchema(node), {
+    target: 'draft-2020-12',
+  });
+
+  assertPropertiesAreDescribed(schema);
+  assert.match(
+    JSON.stringify(schema.properties?.criteria),
+    /current node's observation ledger only[\s\S]*ledger starts at 0/u,
+  );
+  assert.match(
+    JSON.stringify(schema.properties?.criteria),
+    /Never use indices displayed for ancestor nodes/u,
+  );
+  assert.match(
+    JSON.stringify(schema.properties?.criteria),
+    /position in the current node's doneWhen array/u,
+  );
+});
+
+function assertPropertiesAreDescribed(value: unknown): void {
+  if (Array.isArray(value)) {
+    value.forEach(assertPropertiesAreDescribed);
+    return;
+  }
+  if (typeof value !== 'object' || value === null) return;
+
+  const record = value as Record<string, unknown>;
+  const properties = record.properties;
+  if (typeof properties === 'object' && properties !== null) {
+    Object.entries(properties).forEach(([name, property]) => {
+      assert.equal(
+        typeof (property as Record<string, unknown>).description,
+        'string',
+        `${name} must have a JSON Schema description`,
+      );
+    });
+  }
+  Object.values(record).forEach(assertPropertiesAreDescribed);
+}
 
 function completed() {
   return {

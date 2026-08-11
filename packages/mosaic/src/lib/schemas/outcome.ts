@@ -16,17 +16,21 @@ export const CriterionSchema = z
       .number()
       .int()
       .nonnegative()
-      .describe('Zero-based index of the evaluated doneWhen criterion.'),
+      .describe(
+        "Exact zero-based position in the current node's doneWhen array; the first criteria entry must use 0, the second 1, and so on in source order.",
+      ),
     satisfied: z
       .boolean()
       .describe(
-        'Whether the criterion is satisfied by the available evidence.',
+        'True only when the available request, deterministic result, projected ancestor evidence, or cited current-node observations prove this criterion; completed requires true for every entry.',
       ),
     evidence: z
       .string()
       .trim()
       .min(1)
-      .describe('Concise evidence supporting this criterion evaluation.'),
+      .describe(
+        'Non-empty concise proof for this criterion evaluation; state what establishes the decision and use observationIndices separately for any cited current-node tool results.',
+      ),
     observationIndices: z
       .array(z.number().int().nonnegative())
       .superRefine((indices, context) => {
@@ -41,7 +45,7 @@ export const CriterionSchema = z
         });
       })
       .describe(
-        'Smallest set of unique increasing zero-based NodeOutcome observation indices supporting this criterion.',
+        "Smallest unique strictly increasing list of indices from the current node's observation ledger only. That ledger starts at 0 for every node: the first returned executable-tool result during this node is 0, the second is 1, and so on. Never use indices displayed for ancestor nodes. Use [] when proof requires no current-node tool result.",
       ),
   })
   .strict();
@@ -64,10 +68,14 @@ export const ResultSchema = z
     markdown: z
       .string()
       .min(1)
-      .describe('The node result in the language of the original request.'),
+      .describe(
+        'Non-empty final result produced by the current node, written in the language of the original request; provide it only with completed status.',
+      ),
     artifacts: z
       .array(ArtifactSchema)
-      .describe('Additional artifacts produced by the node.'),
+      .describe(
+        'Ordered additional artifacts produced by the current node; use [] when there are none.',
+      ),
   })
   .strict();
 
@@ -77,18 +85,30 @@ export const ResultSchema = z
  */
 const DecisionFieldsSchema = z
   .object({
-    status: z.enum(['completed', 'needs_revision', 'blocked', 'failed']),
+    status: z
+      .enum(['completed', 'needs_revision', 'blocked', 'failed'])
+      .describe(
+        'Terminal decision for the current node: completed when every criterion is satisfied; needs_revision when current-node evidence invalidates a planning assumption; blocked when completion is concretely impossible after reasonable alternatives; failed for an invalid result or terminal execution failure.',
+      ),
     criteria: z
       .array(CriterionSchema)
-      .describe('One evaluation per doneWhen criterion in its original order.'),
-    result: ResultSchema.nullable(),
-    revisionRequest: RevisionRequestSchema.nullable(),
+      .describe(
+        "Exactly one evaluation for each item in the current node's doneWhen array, preserving source order; criteria[i].criterionIndex must equal i.",
+      ),
+    result: ResultSchema.nullable().describe(
+      'Final current-node result: a result object only when status is completed; null for needs_revision, blocked, or failed.',
+    ),
+    revisionRequest: RevisionRequestSchema.nullable().describe(
+      'Requested structural plan change: a request object only when status is needs_revision; null for completed, blocked, or failed.',
+    ),
     reason: z
       .string()
       .trim()
       .min(1)
       .nullable()
-      .describe('Failure or non-completion reason; null only when completed.'),
+      .describe(
+        'Why the current node did not complete: null when status is completed; otherwise a non-empty reason specific to needs_revision, blocked, or failed.',
+      ),
   })
   .strict();
 
@@ -104,7 +124,11 @@ export type NodeDecision = z.output<typeof NodeDecisionSchema>;
 
 /** Complete runtime outcome: the model decision plus ordered observations. */
 export const NodeOutcomeSchema = DecisionFieldsSchema.extend({
-  observations: z.array(ObservationSchema),
+  observations: z
+    .array(ObservationSchema)
+    .describe(
+      'Runtime-owned ordered ledger of executable-tool results returned during this node; its zero-based positions are the only valid observationIndices.',
+    ),
 }).superRefine((outcome, context) => {
   validateStatus(undefined, outcome, context);
   validateObservationIndices(outcome, context);

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFile, readdir, realpath, stat } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 
-import type { Arm, CampaignMetadata } from './campaign-types.js';
+import { armOrder, type Arm, type CampaignMetadata } from './campaign-types.js';
 import { skillsbenchPilotTasks } from './pilot.js';
 
 export type Json = Record<string, unknown>;
@@ -55,27 +55,25 @@ export const loadEvidence = async (
   });
   if (dirname(directory) !== resultsDir)
     throw new Error('Resume campaign must be a direct child of results/.');
-  const direct = join(directory, 'mosaic-direct');
-  const candidate = await loadMetadata(join(direct, 'metadata.json'));
-  if (!validMetadata(candidate, basename(directory), 'mosaic-direct'))
+  const candidates = await Promise.all(
+    armOrder.map(async (arm) => {
+      const armDirectory = join(directory, arm);
+      if (!(await isDirectory(armDirectory))) return undefined;
+      const candidate = await loadMetadata(join(armDirectory, 'metadata.json'));
+      if (
+        !validMetadata(candidate, basename(directory), arm) ||
+        !(await validArtifacts(root, armDirectory, candidate)) ||
+        !(await validSelection(armDirectory, arm))
+      )
+        throw new Error('Campaign has invalid resume evidence.');
+      return candidate;
+    }),
+  );
+  const metadata = candidates.find(
+    (candidate): candidate is CampaignMetadata => candidate !== undefined,
+  );
+  if (metadata === undefined)
     throw new Error('Campaign has invalid resume evidence.');
-  const metadata = candidate;
-  if (
-    !(await validArtifacts(root, direct, metadata)) ||
-    !(await validSelection(direct, 'mosaic-direct'))
-  )
-    throw new Error('Campaign has invalid resume evidence.');
-
-  const mosaic = join(directory, 'mosaic');
-  if (await isDirectory(mosaic)) {
-    const mosaicMetadata = await loadMetadata(join(mosaic, 'metadata.json'));
-    if (
-      !validMetadata(mosaicMetadata, basename(directory), 'mosaic') ||
-      !(await validArtifacts(root, mosaic, mosaicMetadata)) ||
-      !(await validSelection(mosaic, 'mosaic'))
-    )
-      throw new Error('Campaign has invalid resume evidence.');
-  }
   return { directory, metadata };
 };
 

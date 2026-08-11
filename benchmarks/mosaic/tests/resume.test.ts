@@ -6,6 +6,7 @@ import {
   readFile,
   readdir,
   realpath,
+  rename,
   rm,
   stat,
   writeFile,
@@ -157,6 +158,35 @@ const setup = async (): Promise<{
   };
 };
 
+const keepOnlyMosaicEvidence = async (
+  root: string,
+  directory: string,
+): Promise<void> => {
+  const direct = join(directory, 'mosaic-direct');
+  const mosaic = join(directory, 'mosaic');
+  const runConfig = JSON.parse(
+    await readFile(join(direct, 'run-config.json'), 'utf8'),
+  );
+  runConfig.eval.agent = 'mosaic';
+  const runConfigText = JSON.stringify(runConfig);
+  const manifest = await readFile(
+    join(root, 'agents', 'mosaic', 'manifest.toml'),
+    'utf8',
+  );
+  const metadata = JSON.parse(
+    await readFile(join(direct, 'metadata.json'), 'utf8'),
+  );
+  metadata.agent = 'mosaic';
+  metadata.digests.runConfig = hash(runConfigText);
+  metadata.digests.agentManifest = hash(manifest);
+  await Promise.all([
+    writeFile(join(direct, 'run-config.json'), runConfigText),
+    writeFile(join(direct, 'agent-manifest.toml'), manifest),
+    writeFile(join(direct, 'metadata.json'), JSON.stringify(metadata)),
+  ]);
+  await rename(direct, mosaic);
+};
+
 const writeOutputs = async (command: Command): Promise<void> => {
   const agent = value(command, '--agent');
   const source = {
@@ -209,8 +239,11 @@ const writeOutputs = async (command: Command): Promise<void> => {
   ]);
 
   const job = join(value(command, '--jobs-dir'), '2026-08-10__21-24-13');
+  const existingJob = await stat(job)
+    .then(() => true)
+    .catch(() => false);
   const tasks =
-    agent === 'mosaic-direct'
+    agent === 'mosaic-direct' && existingJob
       ? skillsbenchPilotTasks.slice(8)
       : skillsbenchPilotTasks;
   await Promise.all(
@@ -261,7 +294,7 @@ const runner =
     return { code: 0, stdout: 'ok\n', stderr: '' };
   };
 
-test('resumes the existing direct jobs directory before starting Mosaic', async (t) => {
+test('runs Mosaic before resuming the existing direct jobs directory', async (t) => {
   const { root, directory, bundleHash } = await setup();
   t.after(() => rm(root, { recursive: true, force: true }));
   const commands: Command[] = [];
@@ -280,15 +313,15 @@ test('resumes the existing direct jobs directory before starting Mosaic', async 
   assert.equal(result.directory, directory);
   assert.deepEqual(
     result.arms.map((arm) => arm.arm),
-    ['mosaic-direct', 'mosaic'],
+    ['mosaic', 'mosaic-direct'],
   );
   assert.equal(
     value(paid[0]!, '--jobs-dir'),
-    join(directory, 'mosaic-direct', 'jobs'),
+    join(directory, 'mosaic', 'jobs'),
   );
   assert.equal(
     value(paid[1]!, '--jobs-dir'),
-    join(directory, 'mosaic', 'jobs'),
+    join(directory, 'mosaic-direct', 'jobs'),
   );
   assert.deepEqual(
     paid[0]!.args.flatMap((entry, index) =>
@@ -322,6 +355,28 @@ test('resumes the existing direct jobs directory before starting Mosaic', async 
     `${skillsbenchPilotTasks[8]}__8`,
     `${skillsbenchPilotTasks[9]}__9`,
   ]);
+});
+
+test('resumes from Mosaic-only evidence after the first arm failed', async (t) => {
+  const { root, directory, bundleHash } = await setup();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await keepOnlyMosaicEvidence(root, directory);
+  const commands: Command[] = [];
+
+  const result = await resumeCampaign({
+    benchmark: 'skillsbench',
+    campaignDir: directory,
+    rootDir: root,
+    yesPaidRun: true,
+    environment,
+    runner: runner(root, bundleHash, commands),
+  });
+
+  assert.deepEqual(
+    result.arms.map((arm) => arm.arm),
+    ['mosaic', 'mosaic-direct'],
+  );
+  await stat(join(directory, 'mosaic-direct', 'metadata.json'));
 });
 
 test('rejects a second resume while the campaign lock is active', async (t) => {
@@ -396,14 +451,19 @@ test('consolidates duplicate attempts when a resumed arm still fails', async (t)
     environment,
     runner: async (command) => {
       const completed = await execute(command);
-      return command.file === 'uvx' && command.args.includes('--from')
+      return command.file === 'uvx' &&
+        command.args.includes('--from') &&
+        value(command, '--agent') === 'mosaic-direct'
         ? { ...completed, code: 1 }
         : completed;
     },
   });
 
-  assert.equal(result.arms.length, 1);
-  assert.equal(result.arms[0]?.result.code, 1);
+  assert.equal(result.arms.length, 2);
+  assert.equal(result.arms[0]?.arm, 'mosaic');
+  assert.equal(result.arms[0]?.result.code, 0);
+  assert.equal(result.arms[1]?.arm, 'mosaic-direct');
+  assert.equal(result.arms[1]?.result.code, 1);
   assert.equal((await readdir(job)).length, skillsbenchPilotTasks.length);
   assert.equal(
     (

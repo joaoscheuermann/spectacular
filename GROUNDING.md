@@ -609,7 +609,10 @@ sandbox failure. Resume is not a new campaign action: it preserves the original
 closed metadata, artifact digests, exact task selection, released ACP bundle,
 and per-arm manifest, then reuses the existing BenchFlow `jobs/` directory.
 BenchFlow may reuse scored rollouts and reruns unscored tasks; MOSAIC starts or
-resumes only after Direct has no runtime errors. Resume requires explicit paid
+resumes first, and Direct starts or resumes only after MOSAIC has no runtime
+errors. Resume accepts closed, digest-matched evidence from either arm so both
+the current MOSAIC-first order and older Direct-first campaigns remain resumable.
+Resume requires explicit paid
 confirmation, an exclusive campaign lock, and Docker capacity of at least 8
 CPUs and 8 GiB. Before and after every returned arm attempt, duplicate and
 incomplete rollout directories are preserved under `attempts/`, while `jobs/`
