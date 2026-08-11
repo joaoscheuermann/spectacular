@@ -9,7 +9,11 @@
       "dependsOn": ["^build"],
       "outputs": ["{projectRoot}/dist"],
       "options": {
-        "command": "esbuild benchmarks/mosaic/src/cli.ts --bundle --platform=node --format=esm --target=node22 --conditions=@org/source --legal-comments=none --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=benchmarks/mosaic/dist/mosaic-bench-acp.mjs"
+        "commands": [
+          "esbuild benchmarks/mosaic/src/cli.ts --bundle --platform=node --format=esm --target=node22 --conditions=@org/source --legal-comments=none --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=benchmarks/mosaic/dist/mosaic-bench-acp.mjs",
+          "esbuild benchmarks/mosaic/src/host.ts --bundle --platform=node --format=esm --target=node22 --conditions=@org/source --legal-comments=none --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=benchmarks/mosaic/dist/mosaic-bench-host.mjs"
+        ],
+        "parallel": false
       }
     },
     "run": {
@@ -17,7 +21,7 @@
       "dependsOn": ["build"],
       "cache": false,
       "options": {
-        "command": "node benchmarks/mosaic/dist/mosaic-bench-acp.mjs",
+        "command": "node benchmarks/mosaic/dist/mosaic-bench-host.mjs",
         "forwardAllArgs": true
       }
     },

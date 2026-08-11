@@ -67,15 +67,16 @@ SkillsBench comparison.
 
 ```text
 agents/       BenchFlow manifests for mosaic-direct and mosaic
-src/          ACP adapters, campaign domain, comparison, and CLI host
+src/          ACP adapters, campaign domain, comparison, and Nx host
 tests/        Isolated Node.js tests
-dist/         Generated standalone ACP bundle
+dist/         Generated ACP and host bundles
 results/      Ignored, fresh paid-campaign artifacts
 ```
 
-The `.mjs` file in `dist/` is generated only for benchmark containers that do
-not contain this workspace or its dependencies. It is not source code and is
-not the normal local execution path.
+`mosaic-bench-acp.mjs` is the released agent bundle used inside benchmark
+containers. `mosaic-bench-host.mjs` is the generated local Nx dispatcher for
+host-only orchestration such as campaign resume. Neither file is source code;
+do not invoke either one directly.
 
 ## Commands
 
@@ -91,6 +92,11 @@ npx nx run mosaic-benchmark:run -- campaign skillsbench smoke --yes-paid-run
 
 # Paid diagnostic pilot: a fixed, varied subset of 10 tasks.
 npx nx run mosaic-benchmark:run -- campaign skillsbench pilot --yes-paid-run
+
+# Resume an interrupted or errored pilot in its existing campaign directory.
+npx nx run mosaic-benchmark:run -- campaign skillsbench resume \
+  --campaign benchmarks/mosaic/results/<skillsbench-pilot-campaign> \
+  --yes-paid-run
 
 # Paid primary campaign: SkillsBench v1.1, 87 tasks.
 npx nx run mosaic-benchmark:run -- campaign skillsbench run --yes-paid-run
@@ -179,6 +185,27 @@ Its comparison is valid only when the run config contains exactly those ten
 tasks. It neither replaces the 87-task primary campaign nor satisfies the
 SkillsBench evidence gate required for Terminal-Bench.
 
+If a pilot stops because one or more Direct tasks are unscored, fix the host
+problem and resume the existing campaign instead of starting another one:
+
+```sh
+npx nx run mosaic-benchmark:run -- \
+  campaign skillsbench resume \
+  --campaign benchmarks/mosaic/results/<skillsbench-pilot-campaign> \
+  --yes-paid-run
+```
+
+Resume is intentionally limited to SkillsBench pilots. It validates the exact
+campaign directory, recorded metadata and artifact hashes, fixed task set,
+released ACP bundle, and agent manifest before the paid preflight. It also
+requires Docker to expose at least 8 CPUs and 8 GiB. BenchFlow reuses scored
+Direct rollouts from the existing `jobs/` directory, reruns only unscored
+tasks, and starts or resumes MOSAIC only after Direct exits without errors. The
+operation preserves the original `campaignId` and `pilot` action and holds an
+exclusive campaign lock. After each successful arm, `jobs/` retains one result
+per task while replaced or incomplete rollout directories remain available
+under `attempts/`.
+
 For a full paid SkillsBench run, execute all 87 tasks in each arm:
 
 ```sh
@@ -204,12 +231,13 @@ combine arms from different campaign directories. A paid Terminal-Bench run
 additionally requires the valid comparison report from a full 87-task
 SkillsBench campaign; a one-task smoke report is not sufficient.
 
-`check` is free and never calls a model. `smoke`, `pilot`, and `run` stop before
-spawning anything unless `--yes-paid-run` is present, and they repeat the free
-preflight before creating results. A paid Terminal-Bench command also requires a report
-from a valid SkillsBench comparison. Campaigns always create a new directory
-below `results/`; their two arms use separate jobs, task manifest, run config,
-health summary, and non-secret metadata.
+`check` is free and never calls a model. `smoke`, `pilot`, `resume`, and `run`
+stop before spawning anything unless `--yes-paid-run` is present, and they
+repeat the free preflight before changing results. A paid Terminal-Bench
+command also requires a report from a valid SkillsBench comparison. New
+campaigns create a directory below `results/`; resume is the only operation
+that may continue an existing directory. The two arms use separate jobs, task
+manifest, run config, health summary, and non-secret metadata.
 
 SkillsBench is pinned to
 `b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af` and uses `with-skill` mode. Its

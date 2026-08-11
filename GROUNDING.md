@@ -567,6 +567,19 @@ The comparator requires that exact selection in the recorded run config.
 Pilot evidence is diagnostic only: it does not replace the full 87-task
 primary campaign and cannot satisfy the SkillsBench report gate for
 Terminal-Bench.
+The Nx benchmark host may resume an existing SkillsBench pilot after a host or
+sandbox failure. Resume is not a new campaign action: it preserves the original
+`pilot` action and `campaignId`, validates the direct-child `results/` path,
+closed metadata, artifact digests, exact task selection, released ACP bundle,
+and per-arm manifest, then reuses the existing BenchFlow `jobs/` directory.
+BenchFlow may reuse scored rollouts and reruns unscored tasks; MOSAIC starts or
+resumes only after Direct has no runtime errors. Resume requires explicit paid
+confirmation, an exclusive campaign lock, and Docker capacity of at least 8
+CPUs and 8 GiB. After a successful arm, exactly one result per pilot task
+remains under `jobs/`; replaced or incomplete rollout directories are preserved
+under `attempts/`. Host-only resume code is built into a separate generated Nx
+dispatcher so the released ACP bundle used by all rollouts remains
+byte-identical.
 Terminal-Bench 2, pinned to
 `2fd12b88aafdd04a52c298e3940bcb189f9766d6`, is a secondary confirmation only
 after a valid SkillsBench comparison report, which is an explicit input to a
