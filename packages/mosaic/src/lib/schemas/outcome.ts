@@ -27,8 +27,32 @@ export const CriterionSchema = z
       .trim()
       .min(1)
       .describe('Concise evidence supporting this criterion evaluation.'),
+    observationIndices: z
+      .array(z.number().int().nonnegative())
+      .superRefine((indices, context) => {
+        indices.forEach((index, position) => {
+          if (position === 0 || index > indices[position - 1]!) return;
+          context.addIssue({
+            code: 'custom',
+            path: [position],
+            message:
+              'Observation indices must be unique and strictly increasing.',
+          });
+        });
+      })
+      .describe(
+        'Smallest set of unique increasing zero-based NodeOutcome observation indices supporting this criterion.',
+      ),
   })
   .strict();
+
+type Criterion = z.output<typeof CriterionSchema>;
+
+export type CriterionEvaluation = Readonly<
+  Omit<Criterion, 'observationIndices'> & {
+    readonly observationIndices: readonly number[];
+  }
+>;
 
 /**
  * Promotes Markdown plus optional artifacts only from completed outcomes.
@@ -83,6 +107,7 @@ export const NodeOutcomeSchema = DecisionFieldsSchema.extend({
   observations: z.array(ObservationSchema),
 }).superRefine((outcome, context) => {
   validateStatus(undefined, outcome, context);
+  validateObservationIndices(outcome, context);
   if (
     outcome.status === 'needs_revision' &&
     outcome.observations.length === 0
@@ -143,6 +168,28 @@ const validateCriteria = (
       code: 'custom',
       path: ['criteria', index, 'criterionIndex'],
       message: `criterionIndex must be ${index}.`,
+    });
+  });
+};
+
+const validateObservationIndices = (
+  outcome: NodeOutcome,
+  context: RefinementContext,
+): void => {
+  outcome.criteria.forEach((criterion, criterionPosition) => {
+    criterion.observationIndices.forEach((observationIndex, indexPosition) => {
+      if (observationIndex < outcome.observations.length) return;
+
+      context.addIssue({
+        code: 'custom',
+        path: [
+          'criteria',
+          criterionPosition,
+          'observationIndices',
+          indexPosition,
+        ],
+        message: `Observation index ${observationIndex} is outside the node observation ledger.`,
+      });
     });
   });
 };

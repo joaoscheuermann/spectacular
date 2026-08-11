@@ -311,7 +311,12 @@ const plan = {
 const decision = {
   status: 'completed',
   criteria: [
-    { criterionIndex: 0, satisfied: true, evidence: 'Result produced.' },
+    {
+      criterionIndex: 0,
+      satisfied: true,
+      evidence: 'Result produced.',
+      observationIndices: [],
+    },
   ],
   result: { markdown: 'Done.', artifacts: [] },
   revisionRequest: null,

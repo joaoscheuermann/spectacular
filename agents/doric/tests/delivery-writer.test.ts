@@ -79,7 +79,14 @@ test('logs only status and node IDs for blocked and failed results', () => {
 
 const blockedOutcome = () => ({
   status: 'blocked' as const,
-  criteria: [{ criterionIndex: 0, satisfied: false, evidence: 'private' }],
+  criteria: [
+    {
+      criterionIndex: 0,
+      satisfied: false,
+      evidence: 'private',
+      observationIndices: [],
+    },
+  ],
   result: null,
   revisionRequest: null,
   reason: 'private',

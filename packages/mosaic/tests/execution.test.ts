@@ -110,6 +110,27 @@ test('automatically records one returned tool observation for a completed node',
   ]);
 });
 
+test('rejects out-of-ledger evidence after correlation without promoting artifacts', async () => {
+  const node = createNode('current', ['lookup']);
+  const graph: Graph = { revision: 1, nodes: [node] };
+  const decision = completed();
+  decision.criteria[0]!.observationIndices = [1];
+  const provider = createProvider([
+    toolFinish('call-1', 'lookup'),
+    terminalFinish(decision),
+  ]);
+  const harness = createHarness(graph, provider, [
+    tool('lookup', async () => ({ found: true })),
+  ]);
+
+  const action = await execution(state([graph]), harness.context, handlers());
+
+  assert.equal(action.type, 'fail');
+  assert.equal(node.outcome, null);
+  assert.deepEqual(node.artifacts, []);
+  assert.notEqual(node.status, 'completed');
+});
+
 test('automatically records every returned observation in tool-result order', async () => {
   const node = createNode('current', ['first', 'second']);
   const graph: Graph = { revision: 1, nodes: [node] };
@@ -549,7 +570,12 @@ function completed(overrides: Record<string, unknown> = {}) {
   return {
     status: 'completed',
     criteria: [
-      { criterionIndex: 0, satisfied: true, evidence: 'Criterion met.' },
+      {
+        criterionIndex: 0,
+        satisfied: true,
+        evidence: 'Criterion met.',
+        observationIndices: [] as number[],
+      },
     ],
     result: { markdown: 'Completed.', artifacts: [] },
     revisionRequest: null,
@@ -565,7 +591,12 @@ function nonCompleted(
   return {
     status,
     criteria: [
-      { criterionIndex: 0, satisfied: false, evidence: 'Criterion unmet.' },
+      {
+        criterionIndex: 0,
+        satisfied: false,
+        evidence: 'Criterion unmet.',
+        observationIndices: [],
+      },
     ],
     result: null,
     revisionRequest: null,

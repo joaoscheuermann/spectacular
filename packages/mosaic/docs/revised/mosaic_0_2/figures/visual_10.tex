@@ -14,10 +14,10 @@
 \node[mosaicbox, below=of call, text width=3.6cm] (observation)
   {Runtime cria \texttt{Observation}\\nome, entrada, saída e ordem};
 \node[mosaicbox, below right=of choice, text width=3.8cm] (decision)
-  {Modelo produz decisão semântica\\status, critérios, resultado,
+  {Modelo produz decisão semântica\\status, critérios com índices de evidência, resultado,
   revisão e razão};
 \node[mosaicbox, below=18mm of decision, text width=4.6cm] (outcome)
-  {Runtime materializa \texttt{NodeOutcome}\\decisão + todas as observações correlacionadas};
+  {Runtime materializa \texttt{NodeOutcome}\\decisão + ledger correlacionado; referências validadas};
 \node[mosaicbox, below left=of outcome, text width=3.4cm] (completed)
   {\texttt{completed}\\promove resultado};
 \node[mosaicbox, below=of outcome, text width=3.8cm] (revision)

@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createNodeDecisionSchema } from '../src/lib/schemas/outcome.js';
+import {
+  createNodeDecisionSchema,
+  createNodeOutcomeSchema,
+} from '../src/lib/schemas/outcome.js';
 import type { Node } from '../src/lib/types/graph.js';
 
 const node = createNode();
@@ -10,6 +13,50 @@ test('accepts a completed outcome with every criterion and a result', () => {
   const parsed = createNodeDecisionSchema(node).safeParse(completed());
 
   assert.equal(parsed.success, true);
+});
+
+test('accepts unique increasing observation indices including an empty proof set', () => {
+  const decision = completed();
+  decision.criteria[0]!.observationIndices = [0, 2];
+  decision.criteria[1]!.observationIndices = [];
+
+  assert.equal(
+    createNodeDecisionSchema(node).safeParse(decision).success,
+    true,
+  );
+});
+
+test('rejects negative duplicate or out-of-order observation indices', () => {
+  for (const observationIndices of [[-1], [0, 0], [1, 0]]) {
+    const decision = completed();
+    decision.criteria[0]!.observationIndices = observationIndices;
+
+    assert.equal(
+      createNodeDecisionSchema(node).safeParse(decision).success,
+      false,
+    );
+  }
+});
+
+test('rejects an observation index outside the materialized ledger', () => {
+  const decision = completed();
+  decision.criteria[0]!.observationIndices = [1];
+
+  assert.equal(
+    createNodeOutcomeSchema(node).safeParse({
+      ...decision,
+      observations: [
+        {
+          goalId: node.id,
+          toolName: 'inspect',
+          callId: 'call-1',
+          input: '{}',
+          output: '{}',
+        },
+      ],
+    }).success,
+    false,
+  );
 });
 
 test('rejects completed outcomes with an unsatisfied criterion or no result', () => {
@@ -155,8 +202,18 @@ function completed() {
   return {
     status: 'completed' as const,
     criteria: [
-      { criterionIndex: 0, satisfied: true, evidence: 'First proof.' },
-      { criterionIndex: 1, satisfied: true, evidence: 'Second proof.' },
+      {
+        criterionIndex: 0,
+        satisfied: true,
+        evidence: 'First proof.',
+        observationIndices: [] as number[],
+      },
+      {
+        criterionIndex: 1,
+        satisfied: true,
+        evidence: 'Second proof.',
+        observationIndices: [] as number[],
+      },
     ],
     result: {
       markdown: 'Completed result.',

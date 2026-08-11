@@ -136,6 +136,7 @@ const cloneNode = (node: Node): Node => ({
           ...node.outcome,
           criteria: node.outcome.criteria.map((criterion) => ({
             ...criterion,
+            observationIndices: [...criterion.observationIndices],
           })),
           result:
             node.outcome.result === null

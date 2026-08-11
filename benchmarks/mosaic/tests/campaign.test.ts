@@ -34,6 +34,28 @@ const pilotTasks = [
   'travel-planning',
   'xlsx-recover-data',
 ] as const;
+const fullTaskNames = Array.from(
+  { length: 87 },
+  (_, index) => `task-${index + 1}`,
+);
+const fullMetrics = (score: number, costUsd: number, totalTokens: number) => {
+  const reward = score * 87;
+  return {
+    score,
+    reward,
+    costUsd,
+    costPerRewardUsd: costUsd / reward,
+    totalTokens,
+    tasks: 87,
+  };
+};
+const fullPaired = (qualityWin: boolean) => ({
+  scoreDelta: qualityWin ? 0.3 : -0.3,
+  qualityWin,
+  mosaicWins: qualityWin ? fullTaskNames : [],
+  regressions: qualityWin ? [] : fullTaskNames,
+  ties: [],
+});
 const campaign = (options: CampaignOptions) =>
   executeCampaign({ environment: providerEnvironment, ...options });
 
@@ -59,8 +81,9 @@ const setup = async (): Promise<string> => {
       benchmark: 'skillsbench',
       valid: true,
       reasons: [],
-      direct: { score: 0.5, costUsd: 2, totalTokens: 8700, tasks: 87 },
-      mosaic: { score: 0.8, costUsd: 1, totalTokens: 8600, tasks: 87 },
+      direct: fullMetrics(0.5, 2, 8700),
+      mosaic: fullMetrics(0.8, 1, 8600),
+      paired: fullPaired(true),
       paretoWin: true,
       exitCode: 0,
     }),
@@ -559,8 +582,29 @@ test('rejects minimal and smoke SkillsBench reports before Terminal-Bench comman
         benchmark: 'skillsbench',
         valid: true,
         reasons: [],
-        direct: { score: 0.5, costUsd: 2, totalTokens: 100, tasks: 1 },
-        mosaic: { score: 0.8, costUsd: 1, totalTokens: 90, tasks: 1 },
+        direct: {
+          score: 0.5,
+          reward: 0.5,
+          costUsd: 2,
+          costPerRewardUsd: 4,
+          totalTokens: 100,
+          tasks: 1,
+        },
+        mosaic: {
+          score: 0.8,
+          reward: 0.8,
+          costUsd: 1,
+          costPerRewardUsd: 1.25,
+          totalTokens: 90,
+          tasks: 1,
+        },
+        paired: {
+          scoreDelta: 0.3,
+          qualityWin: true,
+          mosaicWins: ['task'],
+          regressions: [],
+          ties: [],
+        },
         paretoWin: true,
         exitCode: 0,
       }),
@@ -593,8 +637,9 @@ test('accepts a full valid non-Pareto SkillsBench report for Terminal-Bench', as
       benchmark: 'skillsbench',
       valid: true,
       reasons: [],
-      direct: { score: 0.8, costUsd: 1, totalTokens: 8700, tasks: 87 },
-      mosaic: { score: 0.5, costUsd: 2, totalTokens: 8600, tasks: 87 },
+      direct: fullMetrics(0.8, 1, 8700),
+      mosaic: fullMetrics(0.5, 2, 8600),
+      paired: fullPaired(false),
       paretoWin: false,
       exitCode: 1,
     }),

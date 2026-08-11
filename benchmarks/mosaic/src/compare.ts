@@ -7,9 +7,18 @@ import { skillsbenchPilotTasks } from './pilot.js';
 
 export type Metrics = {
   readonly score: number;
+  readonly reward: number;
   readonly costUsd: number;
+  readonly costPerRewardUsd: number | null;
   readonly totalTokens: number;
   readonly tasks: number;
+};
+export type PairedReadings = {
+  readonly scoreDelta: number;
+  readonly qualityWin: boolean;
+  readonly mosaicWins: readonly string[];
+  readonly regressions: readonly string[];
+  readonly ties: readonly string[];
 };
 export type CompareReport = {
   readonly benchmark: Benchmark | null;
@@ -17,6 +26,7 @@ export type CompareReport = {
   readonly reasons: readonly string[];
   readonly direct: Metrics;
   readonly mosaic: Metrics;
+  readonly paired: PairedReadings;
   readonly paretoWin: boolean;
   readonly exitCode: 0 | 1 | 2;
 };
@@ -33,17 +43,71 @@ export const isValidSkillsbenchReport = (
   const report = record(value);
   const direct = record(report.direct);
   const mosaic = record(report.mosaic);
-  const metricsValid = (metrics: Json): boolean =>
-    arraysEqual(sortedKeys(metrics), [
-      'costUsd',
-      'score',
-      'tasks',
-      'totalTokens',
+  const paired = record(report.paired);
+  const metricsValid = (metrics: Json): boolean => {
+    const reward = number(metrics.reward);
+    const cost = number(metrics.costUsd);
+    const costPerReward = number(metrics.costPerRewardUsd);
+    const score = number(metrics.score);
+    const tasks = number(metrics.tasks);
+    return (
+      arraysEqual(sortedKeys(metrics), [
+        'costPerRewardUsd',
+        'costUsd',
+        'reward',
+        'score',
+        'tasks',
+        'totalTokens',
+      ]) &&
+      unitInterval(metrics.score) &&
+      positive(metrics.costUsd) &&
+      positive(metrics.totalTokens) &&
+      tasks === 87 &&
+      reward !== undefined &&
+      reward >= 0 &&
+      reward <= tasks &&
+      score !== undefined &&
+      approximatelyEqual(score, reward / tasks) &&
+      (reward === 0
+        ? metrics.costPerRewardUsd === null
+        : cost !== undefined &&
+          costPerReward !== undefined &&
+          positive(costPerReward) &&
+          approximatelyEqual(costPerReward, cost / reward))
+    );
+  };
+  const mosaicWins = stringArray(paired.mosaicWins);
+  const regressions = stringArray(paired.regressions);
+  const ties = stringArray(paired.ties);
+  const pairedTasks = [
+    ...(mosaicWins ?? []),
+    ...(regressions ?? []),
+    ...(ties ?? []),
+  ];
+  const scoreDelta = number(paired.scoreDelta);
+  const directScore = number(direct.score);
+  const mosaicScore = number(mosaic.score);
+  const qualityWin =
+    scoreDelta !== undefined && scoreDelta > 0 && report.valid === true;
+  const pairedValid =
+    arraysEqual(sortedKeys(paired), [
+      'mosaicWins',
+      'qualityWin',
+      'regressions',
+      'scoreDelta',
+      'ties',
     ]) &&
-    unitInterval(metrics.score) &&
-    positive(metrics.costUsd) &&
-    positive(metrics.totalTokens) &&
-    metrics.tasks === 87;
+    scoreDelta !== undefined &&
+    directScore !== undefined &&
+    mosaicScore !== undefined &&
+    approximatelyEqual(scoreDelta, mosaicScore - directScore) &&
+    paired.qualityWin === qualityWin &&
+    mosaicWins !== undefined &&
+    regressions !== undefined &&
+    ties !== undefined &&
+    pairedTasks.every((task) => task.length > 0) &&
+    new Set(pairedTasks).size === 87 &&
+    pairedTasks.length === 87;
   const pareto =
     number(mosaic.score)! > number(direct.score)! &&
     number(mosaic.costUsd)! < number(direct.costUsd)!;
@@ -53,6 +117,7 @@ export const isValidSkillsbenchReport = (
       'direct',
       'exitCode',
       'mosaic',
+      'paired',
       'paretoWin',
       'reasons',
       'valid',
@@ -63,8 +128,9 @@ export const isValidSkillsbenchReport = (
     report.reasons.length === 0 &&
     metricsValid(direct) &&
     metricsValid(mosaic) &&
+    pairedValid &&
     report.paretoWin === pareto &&
-    report.exitCode === (pareto ? 0 : 1)
+    report.exitCode === (qualityWin ? 0 : 1)
   );
 };
 
@@ -80,7 +146,14 @@ type ArmCampaign = {
   readonly results: readonly Json[];
 };
 
-const empty: Metrics = { score: 0, costUsd: 0, totalTokens: 0, tasks: 0 };
+const empty: Metrics = {
+  score: 0,
+  reward: 0,
+  costUsd: 0,
+  costPerRewardUsd: null,
+  totalTokens: 0,
+  tasks: 0,
+};
 const model = 'openrouter/openai/gpt-5.6-luna';
 const digestNames = [
   'taskManifest',
@@ -90,7 +163,7 @@ const digestNames = [
   'agentManifest',
 ] as const;
 
-/** Validates completed campaign evidence and calculates the strict Pareto gate. */
+/** Validates paired evidence and reports quality, efficiency, and Pareto readings. */
 export const compare = async (
   options: CompareOptions,
 ): Promise<CompareReport> => {
@@ -107,6 +180,7 @@ export const compare = async (
   const directMetrics = metrics(direct.results);
   const mosaicMetrics = metrics(mosaic.results);
   const valid = reasons.length === 0;
+  const paired = pairedReadings(direct.results, mosaic.results, valid);
   const paretoWin =
     valid &&
     mosaicMetrics.score > directMetrics.score &&
@@ -117,8 +191,9 @@ export const compare = async (
     reasons,
     direct: directMetrics,
     mosaic: mosaicMetrics,
+    paired,
     paretoWin,
-    exitCode: valid ? (paretoWin ? 0 : 1) : 2,
+    exitCode: valid ? (paired.qualityWin ? 0 : 1) : 2,
   };
   if (options.reportPath)
     await writeFile(options.reportPath, `${JSON.stringify(report, null, 2)}\n`);
@@ -599,27 +674,69 @@ const pairIssues = (
   ];
 };
 
-const metrics = (items: readonly Json[]): Metrics =>
-  items.length === 0
-    ? empty
-    : {
-        score:
-          items.reduce(
-            (sum, result) => sum + (number(record(result.rewards).reward) ?? 0),
-            0,
-          ) / items.length,
-        costUsd: items.reduce(
-          (sum, result) =>
-            sum + (number(record(result.agent_result).cost_usd) ?? 0),
-          0,
-        ),
-        totalTokens: items.reduce(
-          (sum, result) =>
-            sum + (number(record(result.agent_result).total_tokens) ?? 0),
-          0,
-        ),
-        tasks: items.length,
-      };
+const metrics = (items: readonly Json[]): Metrics => {
+  if (items.length === 0) return empty;
+  const reward = items.reduce(
+    (sum, result) => sum + (number(record(result.rewards).reward) ?? 0),
+    0,
+  );
+  const costUsd = items.reduce(
+    (sum, result) => sum + (number(record(result.agent_result).cost_usd) ?? 0),
+    0,
+  );
+  return {
+    score: reward / items.length,
+    reward,
+    costUsd,
+    costPerRewardUsd: reward > 0 ? costUsd / reward : null,
+    totalTokens: items.reduce(
+      (sum, result) =>
+        sum + (number(record(result.agent_result).total_tokens) ?? 0),
+      0,
+    ),
+    tasks: items.length,
+  };
+};
+const pairedReadings = (
+  direct: readonly Json[],
+  mosaic: readonly Json[],
+  valid: boolean,
+): PairedReadings => {
+  const rewards = (items: readonly Json[]): ReadonlyMap<string, number> =>
+    new Map(
+      items.flatMap((result) => {
+        const task = string(result.task_name);
+        const reward = number(record(result.rewards).reward);
+        return task.length > 0 && reward !== undefined ? [[task, reward]] : [];
+      }),
+    );
+  const directRewards = rewards(direct);
+  const mosaicRewards = rewards(mosaic);
+  const tasks = sorted([
+    ...new Set([...directRewards.keys(), ...mosaicRewards.keys()]),
+  ]);
+  const mosaicWins: string[] = [];
+  const regressions: string[] = [];
+  const ties: string[] = [];
+  for (const task of tasks) {
+    const directReward = directRewards.get(task);
+    const mosaicReward = mosaicRewards.get(task);
+    if (directReward === undefined || mosaicReward === undefined) continue;
+    if (mosaicReward > directReward) mosaicWins.push(task);
+    else if (mosaicReward < directReward) regressions.push(task);
+    else ties.push(task);
+  }
+  const directMetrics = metrics(direct);
+  const mosaicMetrics = metrics(mosaic);
+  const scoreDelta = rounded(mosaicMetrics.score - directMetrics.score);
+  return {
+    scoreDelta,
+    qualityWin: valid && scoreDelta > 0,
+    mosaicWins,
+    regressions,
+    ties,
+  };
+};
 const normalizedRunConfig = (config: Json): Json => {
   const { jobs_dir: _jobsDir, eval: evalValue, ...rest } = config;
   const { agent: _agent, ...evalConfig } = record(evalValue);
@@ -669,6 +786,9 @@ const unitInterval = (value: unknown): boolean => {
   return candidate !== undefined && candidate >= 0 && candidate <= 1;
 };
 const positive = (value: unknown): boolean => (number(value) ?? 0) > 0;
+const approximatelyEqual = (left: number, right: number): boolean =>
+  Math.abs(left - right) <= 1e-12;
+const rounded = (value: number): number => Number(value.toFixed(12));
 const nonnegativeInteger = (value: unknown): boolean =>
   Number.isSafeInteger(value) && (value as number) >= 0;
 const positiveInteger = (value: unknown): boolean =>

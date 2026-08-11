@@ -25,8 +25,9 @@ Que ação concreta o runtime executa? \\
 Bundle & Sequência ordenada de skills ativadas para um objetivo. &
 Que instruções atuam em conjunto e em que ordem? \\
 \hline
-Decisão do nó & Saída semântica do modelo: status, critérios, resultado,
-pedido de revisão e razão. Não contém observações nem IDs do provedor. &
+Decisão do nó & Saída semântica do modelo: status, critérios com evidência e
+índices do ledger, resultado, pedido de revisão e razão. Não contém observações
+nem IDs do provedor. &
 O que o modelo concluiu semanticamente? \\
 \hline
 Observação & Registro criado pelo runtime para um retorno de tool executável,
@@ -41,7 +42,8 @@ Pedido de revisão & Descrição semântica da suposição invalidada e do efeit
 solicitado, associada automaticamente a todas as observações do nó. &
 Por que e com que efeito o plano deve mudar? \\
 \hline
-Estado projetado & Subconjunto causal do estado entregue ao objetivo atual. &
+Estado projetado & Critérios, observações citadas e artefatos dos ancestrais
+concluídos entregues ao objetivo atual, sem IDs do provedor. &
 Que resultados anteriores são relevantes para este nó? \\
 \hline
 Plano & DAG de nós de objetivo e dependências. &

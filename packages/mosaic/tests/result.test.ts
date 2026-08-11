@@ -213,7 +213,12 @@ const candidate = (skillName: string, score: number, rank: number) => ({
 });
 
 const criteria = (satisfied: boolean) => [
-  { criterionIndex: 0, satisfied, evidence: 'Complete evidence.' },
+  {
+    criterionIndex: 0,
+    satisfied,
+    evidence: 'Complete evidence.',
+    observationIndices: [],
+  },
 ];
 
 const completedOutcome = () => ({

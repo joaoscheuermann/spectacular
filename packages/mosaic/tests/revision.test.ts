@@ -401,7 +401,12 @@ const requestRevision = (
   target.outcome = {
     status: 'needs_revision',
     criteria: [
-      { criterionIndex: 0, satisfied: false, evidence: 'Not complete.' },
+      {
+        criterionIndex: 0,
+        satisfied: false,
+        evidence: 'Not complete.',
+        observationIndices: [],
+      },
     ],
     result: null,
     revisionRequest: {
@@ -436,7 +441,12 @@ const node = (
 const completedOutcome = (id: string) => ({
   status: 'completed' as const,
   criteria: [
-    { criterionIndex: 0, satisfied: true, evidence: `${id} complete.` },
+    {
+      criterionIndex: 0,
+      satisfied: true,
+      evidence: `${id} complete.`,
+      observationIndices: [],
+    },
   ],
   result: { markdown: `${id} result`, artifacts: [] },
   revisionRequest: null,

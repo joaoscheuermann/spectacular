@@ -140,7 +140,12 @@ const toolCall = (id: string, name: string): ProviderFinished<unknown> => ({
 const revisionOutcome = (goalId: string) => ({
   status: 'needs_revision',
   criteria: [
-    { criterionIndex: 0, satisfied: false, evidence: 'Criterion unmet.' },
+    {
+      criterionIndex: 0,
+      satisfied: false,
+      evidence: 'Criterion unmet.',
+      observationIndices: [],
+    },
   ],
   result: null,
   revisionRequest: {

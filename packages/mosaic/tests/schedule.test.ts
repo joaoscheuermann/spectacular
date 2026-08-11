@@ -65,7 +65,12 @@ test('blocks descendants causally and continues an independent branch', async ()
   blocked.outcome = {
     status: 'blocked',
     criteria: [
-      { criterionIndex: 0, satisfied: false, evidence: 'Unavailable.' },
+      {
+        criterionIndex: 0,
+        satisfied: false,
+        evidence: 'Unavailable.',
+        observationIndices: [],
+      },
     ],
     result: null,
     revisionRequest: null,
@@ -108,7 +113,12 @@ test('routes a node-owned localized revision to revision before scheduling work'
   target.outcome = {
     status: 'needs_revision',
     criteria: [
-      { criterionIndex: 0, satisfied: false, evidence: 'Not complete.' },
+      {
+        criterionIndex: 0,
+        satisfied: false,
+        evidence: 'Not complete.',
+        observationIndices: [],
+      },
     ],
     result: null,
     revisionRequest: {
@@ -216,7 +226,12 @@ const createNode = (
 const completedOutcome = (id: string) => ({
   status: 'completed' as const,
   criteria: [
-    { criterionIndex: 0, satisfied: true, evidence: `${id} is complete.` },
+    {
+      criterionIndex: 0,
+      satisfied: true,
+      evidence: `${id} is complete.`,
+      observationIndices: [],
+    },
   ],
   result: { markdown: `${id} result`, artifacts: [] },
   revisionRequest: null,

@@ -36,21 +36,21 @@
 \textit{MOSAIC 0.2 — Micro-skill Orchestration through Skill Activation and Instruction Composition:} \textit{a minimal architecture for composing micro-skills over general-purpose tools}
 
 
-\begin{center}\textbf{João Vitor Scheuermann}\\MOSAIC 0.2 — 8 de agosto de 2026 / 8 August 2026\end{center}
+\begin{center}\textbf{João Vitor Scheuermann}\\MOSAIC 0.2 — 11 de agosto de 2026 / 11 August 2026\end{center}
 
 \textit{Documento técnico de arquitetura. Esta versão especifica o núcleo conceitual e os contratos} \textit{mínimos do MOSAIC; não apresenta implementação executável, benchmark ou resultados} \textit{experimentais.}
 
 
 \section*{RESUMO}
 
-Este artigo especifica a MOSAIC 0.2 (Micro-skill Orchestration through Skill Activation and Instruction Composition), uma arquitetura mínima para agentes de linguagem que combinam micro skills, tools executáveis e a capacidade cognitiva do modelo. O planejamento é orientado a resultados; o roteamento usa o body integral de \texttt{SKILL.md}; o bundle ordenado contém zero, uma ou várias skills; e o menu combina tools base com aquelas declaradas pelo bundle. A revisão 0.2 separa explicitamente quatro objetos: a decisão semântica escrita pelo modelo, as \texttt{Observation} criadas pelo runtime, o \texttt{NodeOutcome} materializado pelo runtime ao anexar todas as observações ordenadas, e o pedido de revisão associado automaticamente ao conjunto completo de evidências do nó. Identificadores opacos do provedor servem apenas à correlação interna e nunca são reproduzidos pelo modelo nem enviados ao planner localizado. O perfil mantém catálogo canônico, feedback body-aware, execução orientada por estado, revisão localizada e composição final determinística, assumindo runtime confiável em modo YOLO. \textbf{Palavras-chave:} agentes de linguagem; micro skills; uso de ferramentas; planejamento; evidência de runtime; revisão localizada.
+Este artigo especifica a MOSAIC 0.2 (Micro-skill Orchestration through Skill Activation and Instruction Composition), uma arquitetura mínima para agentes de linguagem que combinam micro skills, tools executáveis e a capacidade cognitiva do modelo. O planejamento é orientado a resultados e mantém no mesmo nó escolhas cuja viabilidade precisa ser revista em conjunto; o roteamento usa o body integral de \texttt{SKILL.md}; o bundle ordenado contém zero, uma ou várias skills; e o menu combina tools base com aquelas declaradas pelo bundle. A revisão 0.2 separa explicitamente quatro objetos: a decisão semântica escrita pelo modelo, as \texttt{Observation} criadas pelo runtime, o \texttt{NodeOutcome} materializado pelo runtime ao anexar todas as observações ordenadas, e o pedido de revisão associado automaticamente ao conjunto completo de evidências do nó. Cada avaliação de critério cita por índice o menor subconjunto de observações que a comprova; o runtime valida essas referências e projeta aos descendentes apenas a evidência citada, além dos artefatos atuais. Identificadores opacos do provedor servem apenas à correlação interna e nunca são reproduzidos pelo modelo nem enviados ao planner localizado. O perfil mantém catálogo canônico, feedback body-aware, execução orientada por estado, revisão localizada e composição final determinística, assumindo runtime confiável em modo YOLO. \textbf{Palavras-chave:} agentes de linguagem; micro skills; uso de ferramentas; planejamento; evidência causal; revisão localizada.
 
 
 % Source PDF page 2
 
 \section*{ABSTRACT}
 
-This article specifies MOSAIC 0.2 (Micro-skill Orchestration through Skill Activation and Instruction Composition), a minimal architecture for language agents that combine micro-skills, executable tools, and the model's cognitive capability. Planning is outcome-oriented; routing reads the full \texttt{SKILL.md} body; an ordered bundle contains zero, one, or several skills; and the visible menu combines base tools with tools declared by that bundle. Version 0.2 explicitly separates four objects: the model-authored semantic decision, runtime-created \texttt{Observation} records, the runtime-materialized \texttt{NodeOutcome} that attaches every ordered observation, and a revision request automatically associated with the node's complete evidence set. Opaque provider identifiers are used only for internal correlation and are neither reproduced by the model nor exposed to the localized planner. The specification retains a canonical catalog, body-aware feedback, state-guided execution, localized revision, and deterministic final assembly under a trusted YOLO-mode runtime. \textbf{Keywords:} language agents; micro-skills; tool use; planning; runtime evidence; localized revision.
+This article specifies MOSAIC 0.2 (Micro-skill Orchestration through Skill Activation and Instruction Composition), a minimal architecture for language agents that combine micro-skills, executable tools, and the model's cognitive capability. Planning is outcome-oriented and keeps choices whose feasibility must be revised together within one node; routing reads the full \texttt{SKILL.md} body; an ordered bundle contains zero, one, or several skills; and the visible menu combines base tools with tools declared by that bundle. Version 0.2 explicitly separates four objects: the model-authored semantic decision, runtime-created \texttt{Observation} records, the runtime-materialized \texttt{NodeOutcome} that attaches every ordered observation, and a revision request automatically associated with the node's complete evidence set. Each criterion evaluation cites by index the smallest observation subset that supports it; the runtime validates those references and projects only cited evidence, plus current artifacts, to descendants. Opaque provider identifiers are used only for internal correlation and are neither reproduced by the model nor exposed to the localized planner. The specification retains a canonical catalog, body-aware feedback, state-guided execution, localized revision, and deterministic final assembly under a trusted YOLO-mode runtime. \textbf{Keywords:} language agents; micro-skills; tool use; planning; causal evidence; localized revision.
 
 
 \section*{1 INTRODUÇÃO}
@@ -182,6 +182,8 @@ Um objetivo descreve um resultado, não uma sequência de operações. A frase �
 
 A existência de uma tool ou de uma skill não é, sozinha, motivo para criar um nó. Listar arquivos, comparar nomes e ler um documento podem ocorrer dentro do mesmo objetivo. Da mesma forma, aplicar duas skills cognitivas ao mesmo conjunto de dados não exige dois objetivos.
 
+Uma parte só é independente quando pode ser concluída sem revisar escolhas feitas em outro nó. Restrições que determinam conjuntamente a viabilidade --- por exemplo, rota, hospedagem e orçamento --- permanecem no mesmo objetivo. Uma escolha upstream não pode ser concluída antes da validação de restrições downstream capazes de invalidá-la. Produção e verificação semântica final também permanecem no mesmo nó por padrão; a verificação torna-se outro nó somente quando constitui um resultado independente solicitado pelo usuário.
+
 
 % Source PDF page 9
 
@@ -284,6 +286,8 @@ Para o pedido financeiro, um plano inicial plausível é:
 
 O planner não precisa antecipar chamadas como\texttt{ list},\texttt{ read} ou\texttt{ calculator}. Essas decisões pertencem ao executor de cada nó.
 
+P0 e P1 obedecem à mesma fronteira semântica: toda afirmação relevante do campo \texttt{goal} deve aparecer explicitamente em ao menos um critério \texttt{doneWhen}; decisões acopladas não são separadas apenas porque podem usar operações diferentes; e nenhum nó upstream pode declarar conclusão antes de verificar restrições dependentes que possam invalidar sua escolha. O feedback body-aware pode corrigir uma divisão artificial, mas não autoriza replanejamento global durante a execução.
+
 
 % Source PDF page 13
 
@@ -340,10 +344,12 @@ O executor recebe somente o contexto necessário para o objetivo atual. A montag
 
 \noindent 1. instruções do runtime; 2. pedido original e restrições globais; 3. objetivo atual e seus critérios\texttt{ doneWhen}; 4. estado projetado; 5. bodies das skills do bundle, cada um entre delimitadores que contenham o nome canônico; 6. schemas das tools de T(g).\par
 
-Por padrão, o estado projetado de um objetivo contém:
+Por padrão, o estado projetado de um objetivo contém, para cada ancestral transitivo concluído:
 
 
-\noindent \textbullet{} saídas dos ancestrais transitivos do nó no DAG; \textbullet{} restrições globais do pedido; \textbullet{} artefatos necessários à execução, representados normativamente como conteúdo inline ou como referência opaca.\par
+\noindent \textbullet{} status e evidência de cada critério; \textbullet{} índices das observações citadas; \textbullet{} quantidade total e quantidade citada de observações; \textbullet{} nome, entrada e saída somente das observações citadas; \textbullet{} artefatos atuais, representados normativamente como conteúdo inline ou como referência opaca.\par
+
+Índices repetidos entre critérios são materializados uma única vez e as observações citadas preservam sua ordem original no ledger do ancestral. \texttt{callId}, observações não citadas e trajetórias de ramos sem relação causal permanecem fora do contexto. O resultado textual declarado pelo ancestral é evidência, mas não substitui a inspeção direta de um estado produzido quando o descendente dispõe de uma tool capaz de observá-lo.
 
 Todo artefato possui um discriminador \texttt{kind} e um MIME type não vazio. A variante \texttt{inline} contém \texttt{data}, que pode ser vazio; a variante \texttt{reference} contém uma string \texttt{reference} não vazia. A projeção preserva a ordem e apresenta referências como referências, nunca como se fossem conteúdo. O núcleo apenas valida e transporta a string opaca: resolução, checagem de existência, persistência, armazenamento e autorização permanecem fora do perfil.
 
@@ -354,7 +360,9 @@ Resultados de ramos sem dependência causal com o objetivo atual são omitidos, 
 
 \subsection*{4.9 Executor do nó}
 
-O modelo pode concluir diretamente ou chamar tools. Cada retorno bem-sucedido de tool executável volta ao mesmo nó e é convertido pelo runtime em uma \texttt{Observation}; a tool reservada para a saída estruturada terminal nunca é uma observação. A decisão final do modelo contém somente status, avaliações ordenadas de \texttt{doneWhen}, resultado, pedido semântico de revisão e razão. O runtime rejeita dados de chamada ou retorno ausentes, duplicados ou não correlacionados e então materializa o \texttt{NodeOutcome} ao combinar a decisão com todas as observações, na ordem dos resultados. A evidência escrita em cada avaliação de critério continua sendo prosa do modelo; a associação das observações ocorre no nível do nó. Se os critérios não foram satisfeitos e não há ação útil, o nó termina como \texttt{blocked}; saídas inválidas ou falhas terminais podem produzir \texttt{failed}.
+O modelo pode concluir diretamente ou chamar tools. Cada retorno bem-sucedido de tool executável volta ao mesmo nó e é convertido pelo runtime em uma \texttt{Observation}; a tool reservada para a saída estruturada terminal nunca é uma observação. A decisão final do modelo contém somente status, avaliações ordenadas de \texttt{doneWhen}, resultado, pedido semântico de revisão e razão. Cada avaliação contém \texttt{criterionIndex}, \texttt{satisfied}, evidência em prosa e \texttt{observationIndices}. Esses índices são zero-based, únicos, estritamente crescentes e citam o menor subconjunto de observações que comprova o critério. A lista vazia é válida quando a prova decorre somente do pedido, de um resultado determinístico ou de evidência ancestral.
+
+O runtime rejeita dados de chamada ou retorno ausentes, duplicados ou não correlacionados, cria o ledger ordenado e somente então valida se toda referência está dentro de seus limites. Uma referência inválida rejeita a decisão inteira antes do armazenamento do \texttt{NodeOutcome} ou da promoção de qualquer artefato. Uma decisão \texttt{completed} exige todos os critérios satisfeitos e resultado presente. Antes de concluí-la, o executor deve inspecionar, quando existirem, código de saída, stderr, timeout e truncamento. Um comando posterior bem-sucedido não resolve automaticamente uma falha anterior: uma nova observação deve comprovar o estado afetado. Quando todas as etapas de um comando shell composto são obrigatórias, a composição deve preservar falhas intermediárias, por exemplo com \texttt{set -e} ou \texttt{\&\&}.
 
 \(L_{\mathrm{node}}\) é um orçamento finito e positivo de turnos do modelo para cada nó, onde um turno corresponde a uma invocação do modelo, independentemente de ela produzir resposta direta, saída terminal, uma ou várias chamadas de tools ou uma tentativa de reparo de saída estruturada. A implementação deve declarar o valor usado. O limite fornece vivacidade local, uso limitado de recursos e uma condição de execução reproduzível: uma mesma configuração não pode continuar solicitando indefinidamente novos passos do modelo. Tools solicitadas no último turno permitido podem concluir e suas observações devem ser preservadas; o esgotamento é detectado antes de outra invocação.
 
@@ -375,7 +383,9 @@ as dependências estão \texttt{completed}. O scheduler o coloca em
 
 % Source PDF page 17
 
-decisão \texttt{needs\_revision} descreve a suposição estrutural invalidada e o efeito solicitado. Esse status exige ao menos uma observação correlacionada. O runtime associa automaticamente o pedido de revisão a todas as observações produzidas pelo nó, ainda que o planner conclua depois que algumas são irrelevantes. A ausência de ação útil ou o esgotamento de \(L_{\mathrm{node}}\) produz \texttt{blocked}; uma falha terminal produz \texttt{failed}.
+decisão \texttt{needs\_revision} descreve a suposição estrutural invalidada e o efeito solicitado. Esse status exige ao menos uma observação correlacionada. O runtime associa automaticamente o pedido de revisão a todas as observações produzidas pelo nó, ainda que o planner conclua depois que algumas são irrelevantes. Uma decisão semântica \texttt{blocked} exige evidência concreta de impossibilidade, alternativas razoáveis tentadas e consideração explícita de \texttt{needs\_revision}. A ausência de confirmação explícita não prova impossibilidade quando os dados admitem uma interpretação válida. Falhas de provider, tool, schema ou correlação permanecem falhas operacionais distintas; o esgotamento de \(L_{\mathrm{node}}\) continua sendo um bloqueio pertencente ao runtime.
+
+Um \texttt{blocked} válido continua sendo propagado pelo scheduler aos dependentes. Nós concluídos não são reabertos neste perfil; revisão de ancestrais e execução parcial depois de bloqueio exigiriam uma extensão declarada.
 
 
 \begin{figure}[H]
@@ -432,7 +442,8 @@ enquanto houver objetivo não terminal em P:
                                 S, K_retrieve)
     B <- selecionar_bundle_ordenado(C, K_max)
     T <- T_base união tools_declaradas(B)
-    contexto <- montar_contexto(q, g, projetar_estado(g, P, estado), B, T)
+    projecao <- projetar_criterios_e_evidencias_citadas(g, P, estado)
+    contexto <- montar_contexto(q, g, projecao, B, T)
 
     historico, decisao, limite_esgotado <- executar_ate_decisao(contexto, L_node)
     observacoes <- correlacionar_retornos_executaveis(historico)
@@ -442,6 +453,8 @@ enquanto houver objetivo não terminal em P:
       outcome <- bloquear_por_limite(observacoes)
     senão:
       outcome <- materializar(decisao, observacoes)
+      validar_indices_de_observacao(outcome)
+      // referência inválida falha antes de armazenar outcome ou promover artefato
 
   anexar observacoes ao estado na ordem da wave e dos retornos de cada nó
 
@@ -463,10 +476,10 @@ enquanto houver objetivo não terminal em P:
 retornar compor_resposta_deterministicamente(q, P, estado)
 \end{Verbatim}
 
-O algoritmo mantém oito invariantes de conformidade:
+O algoritmo mantém dez invariantes de conformidade:
 
 
-\noindent 1. objetivos descrevem resultados, não chamadas de tools nem nomes de skills; 2. o planner inicial não depende dos nomes das skills; 3. o bundle pode conter zero, uma ou várias skills e possui ordem observável; 4. tools gerais podem existir fora das skills por meio de \(T_{\mathrm{base}}\); 5. o body canônico é usado tanto no reranking quanto na execução; 6. toda operação cognitiva estruturada satisfaz o contrato completo do runtime antes de alterar plano ou estado; 7. toda observação executável é criada, correlacionada e ordenada pelo runtime, nunca pelo modelo; 8. uma revisão recebe o conjunto completo de observações, preserva nós concluídos e altera apenas o nó atual incompleto e a parte ainda não iniciada do plano.\par
+\noindent 1. objetivos descrevem resultados, não chamadas de tools nem nomes de skills; 2. decisões que precisam ser revistas em conjunto permanecem no mesmo objetivo; 3. o planner inicial não depende dos nomes das skills; 4. o bundle pode conter zero, uma ou várias skills e possui ordem observável; 5. tools gerais podem existir fora das skills por meio de \(T_{\mathrm{base}}\); 6. o body canônico é usado tanto no reranking quanto na execução; 7. toda operação cognitiva estruturada satisfaz o contrato completo do runtime antes de alterar plano ou estado; 8. toda observação executável é criada, correlacionada e ordenada pelo runtime, nunca pelo modelo; 9. cada critério cita referências válidas e a projeção causal contém somente evidência citada; 10. uma revisão recebe o conjunto completo de observações, preserva nós concluídos e altera apenas o nó atual incompleto e a parte ainda não iniciada do plano.\par
 
 Uma implementação que preserve esses invariantes e os contratos do Apêndice A pode variar livremente em modelo, índice, linguagem, formato de serialização e protocolo de tool calling.
 
@@ -772,7 +785,7 @@ O perfil não executa scripts nem carrega referências e assets. Skills que depe
 
 \subsection*{9.7 Revisão localizada}
 
-O pedido de revisão pressupõe que o executor reconheça quando uma evidência altera o plano, e que o planner preserve resultados concluídos. Capturar automaticamente todas as observações elimina seleção ou cópia incorreta de referências pelo modelo, mas não garante que ele formule corretamente a suposição invalidada nem que o planner atribua relevância às evidências certas.
+O pedido de revisão pressupõe que o executor reconheça quando uma evidência altera o plano, e que o planner preserve resultados concluídos. Capturar automaticamente todas as observações elimina a autoria do ledger pelo modelo, mas a seleção de \texttt{observationIndices} continua sendo semântica: o runtime verifica identidade, ordem e limites, não se o subconjunto citado é de fato suficiente. O perfil reduz esse risco com critérios explícitos e projeção causal compacta, sem introduzir verificador separado, reabertura automática de ancestrais ou replanejamento global.
 
 
 \subsection*{9.8 Contratos mínimos não substituem operação de produção}
@@ -785,7 +798,7 @@ Os contratos do perfil resolvem ambiguidade entre implementações, mas não esp
 A MOSAIC 0.2 parte de uma distinção simples: objetivos descrevem resultados; skills ensinam comportamentos; tools executam operações; o modelo toma decisões semânticas; e o runtime detém a evidência operacional. Para cada objetivo, o runtime recupera skills usando o body completo, seleciona um bundle ordenado de zero a várias instruções e monta um menu composto por \(T_{\mathrm{base}}\) e pelas tools declaradas no bundle. O planner recebe uma única passagem de feedback do catálogo antes da execução e, quando necessário, uma revisão localizada alimentada pelo conjunto completo de observações do nó.
 
 
-A revisão 0.2 torna explícitos os contratos de catálogo, plano, estado, bundle, contexto, decisão semântica, observação e resultado materializado do nó. Ela retira referências de observação da saída do modelo, mantém \texttt{callId} apenas na correlação interna, associa toda revisão às evidências completas do nó e preserva a projeção causal e a composição final única. Essas decisões aumentam a implementabilidade sem acrescentar subsistemas à tese. Não há compilador semântico obrigatório, tool router independente, camada de providers, resolvedor de recursos, solver de bundles, verificador separado ou protocolo operacional completo. A especificação assume execução YOLO e explicita seus limites. Com essa redução, a tese arquitetural pode ser enunciada de forma direta:
+A revisão 0.2 torna explícitos os contratos de catálogo, plano, estado, bundle, contexto, decisão semântica, observação e resultado materializado do nó. Ela mantém \texttt{callId} apenas na correlação interna, usa índices locais rastreáveis por critério, associa toda revisão às evidências completas do nó e projeta aos descendentes somente as observações citadas e os artefatos atuais. Essas decisões aumentam a implementabilidade sem acrescentar subsistemas à tese. Não há compilador semântico obrigatório, tool router independente, camada de providers, resolvedor de recursos, solver de bundles, verificador separado, reabertura automática de nós concluídos ou protocolo operacional completo. A especificação assume execução YOLO e explicita seus limites. Com essa redução, a tese arquitetural pode ser enunciada de forma direta:
 
 
 % Source PDF page 29
@@ -829,7 +842,7 @@ Antes da execução, o runtime deve verificar:
 
 % Source PDF page 31
 
-\noindent 5. aciclicidade do plano; 6. $T_{\mathrm{base}} \subseteq T_{\mathrm{registry}}$; 7. $0 \leq |B(g)| \leq K_{\max}$; 8. existência de pelo menos um resultado terminal entregável.\par
+\noindent 5. aciclicidade do plano; 6. $T_{\mathrm{base}} \subseteq T_{\mathrm{registry}}$; 7. $0 \leq |B(g)| \leq K_{\max}$; 8. existência de pelo menos um resultado terminal entregável; 9. cobertura explícita em \texttt{doneWhen} de toda afirmação semântica relevante do objetivo; 10. unicidade, ordem crescente e validade de cada índice de observação citado.\par
 
 \textbf{A.2 Semântica de revisão do nó atual}
 

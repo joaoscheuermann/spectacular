@@ -19,7 +19,8 @@ nome único; schemas disponíveis ao executor \\
 \texttt{GoalNode} &
 \texttt{id}, \texttt{goal}, \texttt{doneWhen[]}, \texttt{dependsOn[]},
 \texttt{status}, \texttt{deliver} &
-ID único; dependências válidas; status permitido; objetivo orientado a resultado \\
+ID único; dependências válidas; status permitido; decisões acopladas permanecem juntas;
+toda afirmação semântica aparece em \texttt{doneWhen} \\
 \hline
 \texttt{Plan} & \texttt{nodes[]}, \texttt{revision} &
 DAG acíclico; revisão inteira não negativa, contígua e atribuída pelo runtime;

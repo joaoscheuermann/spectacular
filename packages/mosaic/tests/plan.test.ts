@@ -34,6 +34,19 @@ import {
 const skill = createSkill('planning-skill');
 const alternate = createSkill('alternate-skill');
 
+test('keeps coupled feasibility and final semantic verification inside one node', () => {
+  for (const prompt of [goalsPrompt.system(), revisionPrompt.system()]) {
+    assert.match(
+      prompt,
+      /without revising choices made[\s\S]*in another node/u,
+    );
+    assert.match(prompt, /route, lodging,[\s\S]*and budget/u);
+    assert.match(prompt, /downstream constraint[\s\S]*invalidate/u);
+    assert.match(prompt, /production and final semantic verification/u);
+    assert.match(prompt, /semantic claim.*goal.*doneWhen/u);
+  }
+});
+
 test('describes complete dependency IDs in the provider-facing planning schema', () => {
   const schema = structuredJsonSchema('test', PlannedGraphSchema);
   const serialized = JSON.stringify(schema);
@@ -197,7 +210,12 @@ test('rejects every plan re-entry after the body-aware P1', async () => {
   target.outcome = {
     status: 'needs_revision',
     criteria: [
-      { criterionIndex: 0, satisfied: false, evidence: 'Not complete.' },
+      {
+        criterionIndex: 0,
+        satisfied: false,
+        evidence: 'Not complete.',
+        observationIndices: [],
+      },
     ],
     result: null,
     revisionRequest: {
@@ -607,7 +625,12 @@ const runtimeNode = (
 const completedOutcome = (id: string) => ({
   status: 'completed' as const,
   criteria: [
-    { criterionIndex: 0, satisfied: true, evidence: `${id} complete.` },
+    {
+      criterionIndex: 0,
+      satisfied: true,
+      evidence: `${id} complete.`,
+      observationIndices: [],
+    },
   ],
   result: { markdown: `${id} result`, artifacts: [] },
   revisionRequest: null,

@@ -1,10 +1,12 @@
 # MOSAIC benchmark
 
 This private benchmark compares `mosaic-direct` and `mosaic` on the same public
-tasks. A result is successful only on a strict Pareto win: MOSAIC must have a
-higher mean reward and a lower total model cost. SkillsBench is the primary
-benchmark; Terminal-Bench 2 is a secondary confirmation that may run only
-after a valid SkillsBench comparison.
+tasks. Its primary reading is the paired quality delta: MOSAIC wins when its
+mean reward is higher on valid evidence from the same tasks. Cost per reward
+unit is the efficiency reading, and a strict quality-up/cost-down Pareto win is
+retained as a stronger aspirational result. SkillsBench is the primary
+benchmark; Terminal-Bench 2 is a secondary confirmation that may run only after
+a valid SkillsBench comparison.
 
 The former empirical protocol 0.2 is historical. Its complete sources and
 artifacts are preserved in the
@@ -15,7 +17,7 @@ artifacts are preserved in the
 The primary question is deliberately narrow:
 
 > With the same model on the same tasks and under the same conditions, does
-> MOSAIC improve result quality while reducing model cost?
+> MOSAIC improve result quality, and what does each unit of reward cost?
 
 SkillsBench compares two arms:
 
@@ -35,29 +37,26 @@ pass BenchFlow's ACP reasoning-effort option because the external manifest
 contract cannot declare the config-option identifier that BenchFlow requires;
 the closed comparator therefore requires the harness field to remain null.
 
-The comparison has one decision gate:
+The primary decision and efficiency readings are:
 
 ```text
-mean_reward(mosaic) > mean_reward(mosaic-direct)
-AND
-total_model_cost(mosaic) < total_model_cost(mosaic-direct)
+quality_win = mean_reward(mosaic) > mean_reward(mosaic-direct)
+cost_per_reward = total_model_cost / sum(task_reward)
+pareto_win = quality_win AND total_model_cost(mosaic) < total_model_cost(direct)
 ```
 
-Before applying that gate, the comparator rejects evidence unless both arms
+The report also lists task-level MOSAIC wins, regressions, and ties. Before
+applying these readings, the comparator rejects evidence unless both arms
 have the exact same task set and neutral configuration, valid run and health
 artifacts, no runtime or verifier errors, finite rewards, and trusted positive
 usage and cost telemetry. Missing tasks, mismatched settings, or incomplete
 telemetry therefore cannot produce a MOSAIC win.
 
-A passing campaign establishes an observed strict Pareto improvement on the
-pinned SkillsBench campaign. It does not by itself establish statistical
-significance or universal superiority across models, benchmarks, or repeated
-stochastic runs. If the gate passes, the supported claim is correspondingly
-scoped:
-
-> On SkillsBench v1.1, using `openrouter/openai/gpt-5.6-luna` with low reasoning effort,
-> MOSAIC achieved a higher mean reward and a lower total model cost than the
-> equivalent direct agent.
+A quality win establishes an observed improvement on the pinned paired
+SkillsBench campaign. It does not by itself establish statistical significance
+or universal superiority across models, benchmarks, or repeated stochastic
+runs. A Pareto win supports the stronger additional claim that the observed
+quality improvement also used less total model cost.
 
 Terminal-Bench 2 is a secondary confirmation of whether that result transfers
 beyond the skill-oriented primary benchmark; it can run only after a valid
@@ -135,7 +134,7 @@ Complete every item below before running `smoke`, `pilot`, `resume`, or `run`:
   npx nx run mosaic-benchmark:release
   ```
 
-- [ ] Confirm the public `mosaic-benchmark-v0.1.7` release contains exactly
+- [ ] Confirm the public `mosaic-benchmark-v0.1.8` release contains exactly
       `mosaic-bench-acp.mjs` and `mosaic-bench-acp.mjs.sha256`. The generated
       bundle hash, published sidecar, and `BF_BUNDLE_SHA256` in both agent
       manifests must be identical.
@@ -221,8 +220,9 @@ npx nx run mosaic-benchmark:run -- \
 
 After any paid action, compare the two arm directories from that same
 campaign. A completed campaign command only means that both arms exited
-successfully; the comparison determines whether the evidence is valid and
-whether MOSAIC won the strict Pareto gate:
+successfully; the comparison determines whether the evidence is valid, whether
+MOSAIC improved paired quality, its cost per reward, and whether it also won the
+strict Pareto reading:
 
 ```sh
 npx nx run mosaic-benchmark:run -- compare \
@@ -231,8 +231,9 @@ npx nx run mosaic-benchmark:run -- compare \
   --report benchmarks/mosaic/results/<campaign>/compare.json
 ```
 
-Comparison exit code `0` means valid evidence and a Pareto win, `1` means valid
-evidence without a win, and `2` means invalid or incomplete evidence. Never
+Comparison exit code `0` means valid evidence and a paired quality win, `1`
+means valid evidence without a quality win, and `2` means invalid or incomplete
+evidence. `paretoWin` remains an independent stronger indicator. Never
 combine arms from different campaign directories. A paid Terminal-Bench run
 additionally requires the valid comparison report from a full 87-task
 SkillsBench campaign; a one-task smoke report is not sufficient.
@@ -278,5 +279,7 @@ the free preflight before approving cost.
 Comparison validates identical neutral treatment metadata, task manifests and
 bundle digest, exact task sets, error-free verifier results, finite rewards,
 trusted positive usage/cost telemetry, and non-negative tool-call telemetry.
-Its exit code is `0` for a Pareto win, `1` for a valid non-win, and `2` for
-invalid evidence.
+It reports aggregate reward, cost per reward unit, score delta, task-level wins,
+regressions, and ties. Its exit code is `0` for a paired quality win, `1` for a
+valid quality non-win, and `2` for invalid evidence; strict Pareto remains a
+separate aspirational flag.

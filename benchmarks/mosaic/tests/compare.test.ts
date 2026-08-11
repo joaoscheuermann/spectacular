@@ -230,6 +230,21 @@ test('reports a valid SkillsBench Pareto win with benchmark proof', async (t) =>
   ]);
   const report = await compare({ directDir: direct, mosaicDir: mosaic });
   assert.deepEqual(report.reasons, []);
+  assert.deepEqual(report.direct, {
+    score: 0.5,
+    reward: 0.5,
+    costUsd: 2,
+    costPerRewardUsd: 4,
+    totalTokens: 100,
+    tasks: 1,
+  });
+  assert.deepEqual(report.paired, {
+    scoreDelta: 0.3,
+    qualityWin: true,
+    mosaicWins: ['jax-computing-basics'],
+    regressions: [],
+    ties: [],
+  });
   assert.deepEqual(
     {
       benchmark: report.benchmark,
@@ -263,7 +278,7 @@ test('validates only the fixed ten-task SkillsBench pilot selection', async (t) 
   assert.match(report.reasons.join('\n'), /mosaic: invalid run config/);
 });
 
-test('reports a valid comparison without a Pareto win', async (t) => {
+test('treats a quality gain as a win without requiring strict Pareto', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'mosaic-compare-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const [direct, mosaic] = await Promise.all([
@@ -274,11 +289,30 @@ test('reports a valid comparison without a Pareto win', async (t) => {
   assert.deepEqual(
     {
       valid: report.valid,
+      qualityWin: report.paired.qualityWin,
       paretoWin: report.paretoWin,
       exitCode: report.exitCode,
     },
-    { valid: true, paretoWin: false, exitCode: 1 },
+    { valid: true, qualityWin: true, paretoWin: false, exitCode: 0 },
   );
+});
+
+test('returns a valid non-win when paired quality regresses', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'mosaic-compare-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const [direct, mosaic] = await Promise.all([
+    writeArm(root, 'mosaic-direct', 0.8, 1),
+    writeArm(root, 'mosaic', 0.5, 2),
+  ]);
+  const report = await compare({ directDir: direct, mosaicDir: mosaic });
+  assert.deepEqual(report.paired, {
+    scoreDelta: -0.3,
+    qualityWin: false,
+    mosaicWins: [],
+    regressions: ['jax-computing-basics'],
+    ties: [],
+  });
+  assert.equal(report.exitCode, 1);
 });
 
 test('rejects arms from different campaign IDs or actions', async (t) => {

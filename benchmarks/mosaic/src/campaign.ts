@@ -43,8 +43,8 @@ export type {
 const model = 'openrouter/openai/gpt-5.6-luna';
 const agents = ['mosaic-direct', 'mosaic'] as const;
 const releaseAssets = [
-  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.7/mosaic-bench-acp.mjs',
-  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.7/mosaic-bench-acp.mjs.sha256',
+  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.8/mosaic-bench-acp.mjs',
+  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.8/mosaic-bench-acp.mjs.sha256',
 ] as const;
 
 const definitions: Record<

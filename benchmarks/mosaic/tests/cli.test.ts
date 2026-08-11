@@ -81,8 +81,29 @@ test('returns the comparison decision exit code', async () => {
         benchmark: 'skillsbench',
         valid: true,
         reasons: [],
-        direct: { score: 0.5, costUsd: 2, totalTokens: 10, tasks: 1 },
-        mosaic: { score: 1, costUsd: 1, totalTokens: 9, tasks: 1 },
+        direct: {
+          score: 0.5,
+          reward: 0.5,
+          costUsd: 2,
+          costPerRewardUsd: 4,
+          totalTokens: 10,
+          tasks: 1,
+        },
+        mosaic: {
+          score: 1,
+          reward: 1,
+          costUsd: 1,
+          costPerRewardUsd: 1,
+          totalTokens: 9,
+          tasks: 1,
+        },
+        paired: {
+          scoreDelta: 0.5,
+          qualityWin: true,
+          mosaicWins: ['task'],
+          regressions: [],
+          ties: [],
+        },
         paretoWin: true,
         exitCode: 0,
       }),
@@ -128,7 +149,7 @@ test('creates the release checksum beside the generated bundle', async () => {
     const stdout = output();
 
     assert.equal(await runCli(['release'], { cwd: root, stdout }), 0);
-    assert.equal(JSON.parse(stdout.lines[0] ?? '{}').version, '0.1.7');
+    assert.equal(JSON.parse(stdout.lines[0] ?? '{}').version, '0.1.8');
     const checksum = await readFile(
       join(root, 'dist', 'mosaic-bench-acp.mjs.sha256'),
       'utf8',

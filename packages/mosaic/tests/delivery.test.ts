@@ -322,7 +322,12 @@ const terminal = (
 const terminalOutcome = (id: string, status: 'blocked' | 'failed') => ({
   status,
   criteria: [
-    { criterionIndex: 0, satisfied: false, evidence: `${id} incomplete.` },
+    {
+      criterionIndex: 0,
+      satisfied: false,
+      evidence: `${id} incomplete.`,
+      observationIndices: [],
+    },
   ],
   result: null,
   revisionRequest: null,
@@ -337,7 +342,12 @@ const completedOutcome = (
 ) => ({
   status: 'completed' as const,
   criteria: [
-    { criterionIndex: 0, satisfied: true, evidence: `${id} is complete.` },
+    {
+      criterionIndex: 0,
+      satisfied: true,
+      evidence: `${id} is complete.`,
+      observationIndices: [],
+    },
   ],
   result: { markdown, artifacts: [] },
   revisionRequest: null,

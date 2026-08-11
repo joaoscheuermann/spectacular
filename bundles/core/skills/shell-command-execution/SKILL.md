@@ -27,7 +27,7 @@ Execute one well-scoped shell operation and evaluate its observable result rathe
 1. Select the narrowest command that can produce the required observation or effect.
 2. Set the correct `working_directory`; do not rely on an assumed current directory.
 3. Use a finite `timeout_ms` appropriate to the command. Prefer targeted test files or packages before repository-wide commands.
-4. Keep unrelated operations separate so each exit code remains interpretable. Chain commands only when their dependency is intentional.
+4. Keep unrelated operations separate so each exit code remains interpretable. When every step in a compound command is required, use `set -e` or join steps with `&&`; otherwise a later successful step can hide an earlier failure in the final exit code.
 5. Inspect `success`, `exit_code`, stdout, stderr, diagnostics, duration, and truncation. A familiar-looking tail is not sufficient evidence of success.
 6. If output is truncated, rerun a narrower diagnostic command or use the raw reference when the runtime supports it.
 7. Do not modify files through ad hoc shell redirection when `edit` or `write` provides a clearer contract.

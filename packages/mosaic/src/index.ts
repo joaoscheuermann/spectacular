@@ -19,7 +19,11 @@ export {
   InlineArtifactSchema,
 } from './lib/schemas/artifact.js';
 export { FinalDeliverySchema } from './lib/schemas/delivery.js';
-export type { NodeDecision, NodeOutcome } from './lib/schemas/outcome.js';
+export type {
+  CriterionEvaluation,
+  NodeDecision,
+  NodeOutcome,
+} from './lib/schemas/outcome.js';
 export {
   NodeDecisionSchema,
   NodeOutcomeSchema,

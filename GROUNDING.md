@@ -1,6 +1,6 @@
 # Doric Grounding
 
-Last reviewed: 2026-08-09
+Last reviewed: 2026-08-11
 
 This is Doric's repository validity contract. Every agent working in this
 repository must read it before non-trivial planning, reviewing, artifact
@@ -307,7 +307,12 @@ Each materialized graph also receives a runtime-owned safe non-negative integer
 contiguously. The model-facing planning schema does not expose this field. Plans
 require non-empty nodes, IDs, goals, and criteria;
 unique existing dependencies; acyclicity; and at least one terminal deliverable,
-while every deliverable must be terminal. A routed node stores a complete
+while every deliverable must be terminal. A node is independent only when its
+completion cannot require revising choices made in another node. Joint
+feasibility constraints remain in one node, upstream choices validate
+downstream-invalidating constraints before completion, production owns final
+semantic verification by default, and every semantic goal claim is explicit in
+`doneWhen`. A routed node stores a complete
 `SkillCandidate` trace with canonical name, exact finite reranker score,
 contiguous one-based rank, and non-empty selector rationale for every accepted
 or rejected candidate. Its non-null `OrderedBundle` stores the matching goal
@@ -369,22 +374,33 @@ tool may be called in a later response after observing the result. The executor
 must continue while a reasonable corrective action remains: one failed command,
 missing executable, or incomplete inspection is not sufficient for a
 model-authored `blocked` decision. The model-facing decision owns only `status`, ordered criterion
-evaluations, `result`, `revisionRequest`, and `reason`; criterion `evidence` is
-model-authored prose, and the revision request owns only `goalId`,
+evaluations, `result`, `revisionRequest`, and `reason`; each criterion owns its
+zero-based index, satisfaction decision, model-authored evidence, and a unique
+increasing array of zero-based observation indices. The revision request owns only `goalId`,
 `invalidatedAssumption`, and `requestedEffect`. Unknown legacy reference fields
 are rejected. The agent exposes that decision schema as its reserved terminal
 tool, whether or not executable tools are present, rather than using
 provider-native structured output. The terminal structured-output tool is
 never an observation. Its collision-safe Markdown execution context contains
-the original request, current goal and ordered `doneWhen` criteria, only
-transitive-ancestor artifacts, selected skill bodies in bundle order, and tool
-names and descriptions without duplicating tool schemas.
+the original request, current goal and ordered `doneWhen` criteria, and compact
+evidence for every completed transitive ancestor: criterion status, evidence,
+observation indices and counts, cited observation names, inputs and outputs,
+and current artifacts. Shared references are rendered once in ledger order;
+uncited observations, call IDs, and unrelated branches are excluded. Selected
+skill bodies remain in bundle order, followed by tool names and descriptions
+without duplicated tool schemas. The executor directly inspects produced state
+when possible rather than treating an ancestor declaration alone as semantic
+proof.
 
 After the model decision terminates as `completed`, `needs_revision`,
 `blocked`, or `failed`, the runtime correlates every successfully returned
 executable-tool call from the node's isolated history. It creates one ordered
 `Observation` per tool result and materializes the internal node outcome from
-the decision and the complete observation sequence. `callId` exists only in an
+the decision and the complete observation sequence. Every criterion reference
+must be zero-based, unique, increasing, and within that ledger; an empty array
+is valid for proof based only on the request, deterministic results, or ancestor
+evidence. Invalid references reject execution before outcome storage or artifact
+promotion. `callId` exists only in an
 `Observation` for runtime correlation and is not exposed in execution or
 revision prompts. Missing, duplicate, or uncorrelated call/result data is a
 runtime failure. A completed decision is valid with zero, one, or multiple
@@ -394,6 +410,13 @@ scheduling. Model-authored `blocked` and `failed` decisions also resolve their
 wave normally. When every node is terminal, `delivery` performs stable
 topological assembly using original node-array position as its tie-breaker and
 finishes with `MosaicResult`.
+Before `completed`, the executor inspects available command exit, stderr,
+timeout, and truncation signals. A later successful command requires a new
+observation to prove that an earlier failed state was repaired. Required shell
+steps use failure-preserving composition. Semantic `blocked` requires concrete
+impossibility evidence, reasonable alternatives tried, and consideration of
+`needs_revision`; lack of explicit confirmation is not by itself impossibility,
+and operational failures remain distinct.
 Artifacts use one strict public discriminated union: inline artifacts contain
 `kind: 'inline'`, a normalized non-empty MIME type, and string data that may be
 empty; reference artifacts contain `kind: 'reference'`, a normalized non-empty
@@ -604,11 +627,15 @@ the closed benchmark source, task manifests, model, skill policy, and adapter
 assets; their recorded BenchFlow run configuration and health artifacts must
 match the campaign contract and their recorded hashes. Every task is scored
 without runtime or verifier errors and has trusted positive usage and cost
-telemetry. The single decision gate is a strict Pareto win: MOSAIC must have
-both a higher mean public-benchmark reward and a lower total model cost than the
-direct agent. Paid smoke, pilot, and full campaigns require explicit
-`--yes-paid-run`; credentials remain runtime-only and are never persisted or
-logged.
+telemetry. The comparison's primary decision is the paired quality delta:
+MOSAIC wins when it has a higher mean public-benchmark reward than the direct
+agent. The efficiency reading is total model cost per accumulated reward unit.
+Task-level MOSAIC wins, regressions, and ties are diagnostic evidence. A
+higher-reward/lower-total-cost strict Pareto win remains a separate aspirational
+indicator, not the sole useful result. Valid evidence with a quality win exits
+zero; valid evidence without a quality win exits one; invalid evidence exits
+two. Paid smoke, pilot, and full campaigns require explicit `--yes-paid-run`;
+credentials remain runtime-only and are never persisted or logged.
 
 CLI streamed A2A event output is visible console rendering through
 `pino`/`pino-pretty`. Redaction must be applied to message text and structured

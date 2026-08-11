@@ -73,7 +73,14 @@ const node = (id: string): Node => ({
 
 const completedOutcome = () => ({
   status: 'completed' as const,
-  criteria: [{ criterionIndex: 0, satisfied: true, evidence: 'Done.' }],
+  criteria: [
+    {
+      criterionIndex: 0,
+      satisfied: true,
+      evidence: 'Done.',
+      observationIndices: [],
+    },
+  ],
   result: { markdown: 'Done.', artifacts: [] },
   revisionRequest: null,
   reason: null,

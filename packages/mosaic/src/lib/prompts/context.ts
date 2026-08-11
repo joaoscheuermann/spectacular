@@ -1,15 +1,63 @@
 import type { Artifact } from '../types/artifact.js';
 import type { Graph, Node } from '../types/graph.js';
+import type { CriterionEvaluation, NodeOutcome } from '../schemas/outcome.js';
+import type { Observation } from '../types/revision.js';
 
 export type ProjectedArtifact = Artifact & {
   readonly producerId: string;
 };
 
+export type ProjectedAncestor = {
+  readonly producerId: string;
+  readonly status: 'completed';
+  readonly criteria: readonly CriterionEvaluation[];
+  readonly observationCount: number;
+  readonly citedObservationCount: number;
+  readonly observations: readonly {
+    readonly observationIndex: number;
+    readonly observation: Observation;
+  }[];
+  readonly artifacts: readonly Artifact[];
+};
+
+/** Returns completed transitive ancestors with only criterion-cited evidence. */
+export const projectedAncestors = (
+  node: Node,
+  graph: Graph,
+): readonly ProjectedAncestor[] =>
+  ancestors(node, graph).map((ancestor) => {
+    const outcome = completedOutcome(ancestor);
+    const cited = new Set(
+      outcome.criteria.flatMap(({ observationIndices }) => observationIndices),
+    );
+    const observations = outcome.observations.flatMap((observation, index) =>
+      cited.has(index) ? [{ observationIndex: index, observation }] : [],
+    );
+
+    return {
+      producerId: ancestor.id,
+      status: 'completed',
+      criteria: outcome.criteria,
+      observationCount: outcome.observations.length,
+      citedObservationCount: observations.length,
+      observations,
+      artifacts: ancestor.artifacts,
+    };
+  });
+
 /** Returns transitive-ancestor artifacts in stable graph and artifact order. */
 export const projectedArtifacts = (
   node: Node,
   graph: Graph,
-): readonly ProjectedArtifact[] => {
+): readonly ProjectedArtifact[] =>
+  ancestors(node, graph).flatMap((ancestor) =>
+    ancestor.artifacts.map((artifact) => ({
+      ...artifact,
+      producerId: ancestor.id,
+    })),
+  );
+
+const ancestors = (node: Node, graph: Graph): readonly Node[] => {
   const byId = new Map(
     graph.nodes.map((candidate) => [candidate.id, candidate]),
   );
@@ -27,14 +75,14 @@ export const projectedArtifacts = (
 
   collect(node);
 
-  return graph.nodes
-    .filter(({ id }) => ids.has(id))
-    .flatMap((ancestor) =>
-      ancestor.artifacts.map((artifact) => ({
-        ...artifact,
-        producerId: ancestor.id,
-      })),
-    );
+  return graph.nodes.filter(
+    (candidate) => ids.has(candidate.id) && candidate.status === 'completed',
+  );
+};
+
+const completedOutcome = (node: Node): NodeOutcome => {
+  if (node.outcome?.status === 'completed') return node.outcome;
+  throw new Error(`Completed ancestor ${node.id} is missing its outcome.`);
 };
 
 export const section = (heading: string, value: string): string =>
