@@ -1,18 +1,14 @@
-import { createHash } from 'node:crypto';
-import { spawn } from 'node:child_process';
 import {
   copyFile,
   mkdir,
   open,
   readFile,
-  readdir,
-  realpath,
   rename,
   stat,
   unlink,
   writeFile,
 } from 'node:fs/promises';
-import { basename, dirname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import {
   campaign,
@@ -24,6 +20,19 @@ import {
   type CommandRunner,
 } from './campaign.js';
 import { skillsbenchPilotTasks } from './pilot.js';
+import { createProcessRunner } from './process.js';
+import {
+  commit,
+  digest,
+  digestNames,
+  directoryNames,
+  isDirectory,
+  loadEvidence,
+  model,
+  pilotTaskNames,
+  readJson,
+  type ResumeEvidence,
+} from './resume-evidence.js';
 
 export type ResumeOptions = {
   readonly benchmark: Benchmark;
@@ -32,67 +41,10 @@ export type ResumeOptions = {
   readonly yesPaidRun?: boolean;
   readonly runner?: CommandRunner;
   readonly environment?: NodeJS.ProcessEnv;
+  readonly progress?: (stage: string) => void;
 };
 
-type Json = Record<string, unknown>;
-type Evidence = {
-  readonly directory: string;
-  readonly metadata: CampaignMetadata;
-};
-
-const model = 'openrouter/openai/gpt-5.6-luna';
-const commit = 'b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af';
 const arms = ['mosaic-direct', 'mosaic'] as const;
-const pilotTaskNames = new Set<string>(skillsbenchPilotTasks);
-const digestNames = [
-  'taskManifest',
-  'runConfig',
-  'health',
-  'bundle',
-  'agentManifest',
-] as const;
-const metadataNames = [
-  'action',
-  'agent',
-  'benchflowVersion',
-  'benchmark',
-  'buildConcurrency',
-  'campaignId',
-  'concurrency',
-  'digests',
-  'effort',
-  'expectedTasks',
-  'loopStrategy',
-  'model',
-  'retries',
-  'sandbox',
-  'skillMode',
-  'source',
-  'usageTracking',
-] as const;
-
-const processRunner =
-  (environment: NodeJS.ProcessEnv): CommandRunner =>
-  ({ file, args, cwd, env }) =>
-    new Promise((resolveResult, reject) => {
-      const child = spawn(file, args as string[], {
-        cwd,
-        env: { ...environment, ...env },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-      let stdout = '';
-      let stderr = '';
-      child.stdout.on('data', (chunk: Buffer) => {
-        stdout += chunk.toString();
-      });
-      child.stderr.on('data', (chunk: Buffer) => {
-        stderr += chunk.toString();
-      });
-      child.once('error', reject);
-      child.once('close', (code) =>
-        resolveResult({ code: code ?? 1, stdout, stderr }),
-      );
-    });
 
 /** Resumes a validated SkillsBench pilot without changing its campaign identity. */
 export const resumeCampaign = async (
@@ -106,11 +58,13 @@ export const resumeCampaign = async (
     );
 
   const root = resolve(options.rootDir);
+  options.progress?.('validating campaign evidence');
   const evidence = await loadEvidence(root, options.campaignDir);
   const release = await acquire(evidence.directory);
   try {
     const runner =
-      options.runner ?? processRunner(options.environment ?? process.env);
+      options.runner ?? createProcessRunner(options.environment ?? process.env);
+    options.progress?.('running preflight checks');
     const preflight = await campaign({
       benchmark: 'skillsbench',
       action: 'check',
@@ -120,12 +74,15 @@ export const resumeCampaign = async (
     });
     if (!('ok' in preflight) || !preflight.ok)
       throw new Error('Benchmark preflight failed.');
+    options.progress?.('checking Docker resources');
     await requireResources(root, runner);
 
     const runs = [];
     for (const arm of arms) {
+      options.progress?.(`running ${arm}`);
       const armRun = await resumeArm(root, evidence, arm, runner);
       runs.push(armRun);
+      options.progress?.(`${arm} exited with code ${armRun.result.code}`);
       if (armRun.result.code !== 0) break;
     }
     return { directory: evidence.directory, arms: runs };
@@ -166,174 +123,6 @@ const running = (pid: number): boolean => {
   }
 };
 
-const loadEvidence = async (
-  root: string,
-  campaignDir: string,
-): Promise<Evidence> => {
-  const [directory, resultsDir] = await Promise.all([
-    realpath(resolve(campaignDir)),
-    realpath(join(root, 'results')),
-  ]).catch(() => {
-    throw new Error('Campaign has invalid resume evidence.');
-  });
-  if (dirname(directory) !== resultsDir)
-    throw new Error('Resume campaign must be a direct child of results/.');
-  const direct = join(directory, 'mosaic-direct');
-  const candidate = await loadMetadata(join(direct, 'metadata.json'));
-  if (!validMetadata(candidate, basename(directory), 'mosaic-direct'))
-    throw new Error('Campaign has invalid resume evidence.');
-  const metadata = candidate;
-  if (
-    !(await validArtifacts(root, direct, metadata)) ||
-    !(await validSelection(direct, 'mosaic-direct'))
-  )
-    throw new Error('Campaign has invalid resume evidence.');
-
-  const mosaic = join(directory, 'mosaic');
-  if (await isDirectory(mosaic)) {
-    const mosaicMetadata = await loadMetadata(join(mosaic, 'metadata.json'));
-    if (
-      !validMetadata(mosaicMetadata, basename(directory), 'mosaic') ||
-      !(await validArtifacts(root, mosaic, mosaicMetadata)) ||
-      !(await validSelection(mosaic, 'mosaic'))
-    )
-      throw new Error('Campaign has invalid resume evidence.');
-  }
-  return { directory, metadata };
-};
-
-const loadMetadata = async (path: string): Promise<unknown> => {
-  try {
-    const value: unknown = JSON.parse(await readFile(path, 'utf8'));
-    return value;
-  } catch {
-    throw new Error('Campaign has invalid resume evidence.');
-  }
-};
-
-const validMetadata = (
-  candidate: unknown,
-  campaignId: string,
-  agent: Arm,
-): candidate is CampaignMetadata => {
-  const metadata = record(candidate);
-  const source = record(metadata.source);
-  return (
-    sameStrings(Object.keys(metadata).sort(), [...metadataNames].sort()) &&
-    sameStrings(Object.keys(source).sort(), ['path', 'ref', 'repo']) &&
-    metadata.action === 'pilot' &&
-    metadata.benchmark === 'skillsbench' &&
-    metadata.benchflowVersion === '0.6.5' &&
-    metadata.campaignId === campaignId &&
-    metadata.agent === agent &&
-    metadata.expectedTasks === skillsbenchPilotTasks.length &&
-    metadata.model === model &&
-    metadata.effort === 'low' &&
-    metadata.sandbox === 'docker' &&
-    metadata.concurrency === 1 &&
-    metadata.buildConcurrency === 1 &&
-    metadata.retries === 0 &&
-    metadata.loopStrategy === 'single-shot' &&
-    metadata.usageTracking === 'required' &&
-    metadata.skillMode === 'with-skill' &&
-    source.repo === 'benchflow-ai/skillsbench' &&
-    source.path === 'tasks' &&
-    source.ref === commit
-  );
-};
-
-const validArtifacts = async (
-  root: string,
-  directory: string,
-  metadata: CampaignMetadata,
-): Promise<boolean> => {
-  const paths = {
-    taskManifest: join(directory, 'task-manifest.json'),
-    runConfig: join(directory, 'run-config.json'),
-    health: join(directory, 'health.json'),
-    bundle: join(directory, 'bundle.mjs'),
-    agentManifest: join(directory, 'agent-manifest.toml'),
-  };
-  const expected = record(metadata.digests);
-  const actual = await Promise.all(
-    digestNames.map(async (name) => [name, await digest(paths[name])] as const),
-  );
-  const recorded =
-    sameStrings(Object.keys(expected).sort(), [...digestNames].sort()) &&
-    actual.every(
-      ([name, value]) => value !== undefined && expected[name] === value,
-    );
-  if (!recorded) return false;
-
-  const arm = metadata.agent as Arm;
-  const [localBundle, localManifest] = await Promise.all([
-    digest(join(root, 'dist', 'mosaic-bench-acp.mjs')),
-    digest(join(root, 'agents', arm, 'manifest.toml')),
-  ]);
-  return (
-    expected.bundle === localBundle && expected.agentManifest === localManifest
-  );
-};
-
-const validSelection = async (
-  directory: string,
-  agent: Arm,
-): Promise<boolean> => {
-  const [manifest, config, resultNames, jobCount] = await Promise.all([
-    json(join(directory, 'task-manifest.json')),
-    json(join(directory, 'run-config.json')),
-    results(join(directory, 'jobs')),
-    directories(join(directory, 'jobs')),
-  ]);
-  const tasks = Array.isArray(manifest.tasks)
-    ? manifest.tasks.map((task) => string(record(task).task_id))
-    : [];
-  const evaluation = record(config.eval);
-  const include = strings(evaluation.include_tasks);
-  const exclude = strings(evaluation.exclude_tasks);
-  const usage = record(evaluation.usage_tracking);
-  const manifestSource = record(manifest.source);
-  const configSource = record(evaluation.source_provenance);
-  const validResults =
-    new Set(resultNames).size === resultNames.length &&
-    resultNames.every((task) => pilotTaskNames.has(task));
-  return (
-    manifest.schema_version === 1 &&
-    manifest.total === skillsbenchPilotTasks.length &&
-    sameStrings(sorted(tasks), sorted(skillsbenchPilotTasks)) &&
-    sourceEvidence(manifestSource) &&
-    config.schema_version === 1 &&
-    config.retry_attempts === 0 &&
-    evaluation.agent === agent &&
-    evaluation.model === model &&
-    evaluation.reasoning_effort === null &&
-    evaluation.environment === 'docker' &&
-    evaluation.concurrency === 1 &&
-    evaluation.build_concurrency === 1 &&
-    evaluation.skill_mode === 'with-skill' &&
-    usage.requested === 'required' &&
-    sameStrings(strings(evaluation.agent_env_keys) ?? ['invalid'], []) &&
-    evaluation.skills_dir === null &&
-    include !== undefined &&
-    sameStrings(sorted(include), sorted(skillsbenchPilotTasks)) &&
-    exclude !== undefined &&
-    sameStrings(exclude, []) &&
-    evaluation.dataset_name === null &&
-    evaluation.dataset_version === null &&
-    sourceEvidence(configSource) &&
-    jobCount === 1 &&
-    validResults
-  );
-};
-
-const sourceEvidence = (source: Json): boolean =>
-  source.type === 'github' &&
-  source.repo === 'benchflow-ai/skillsbench' &&
-  source.requested_ref === commit &&
-  source.resolved_sha === commit &&
-  source.path === 'tasks' &&
-  source.dirty === false;
-
 const requireResources = async (
   root: string,
   runner: CommandRunner,
@@ -354,17 +143,18 @@ const requireResources = async (
 
 const resumeArm = async (
   root: string,
-  evidence: Evidence,
+  evidence: ResumeEvidence,
   arm: Arm,
   runner: CommandRunner,
 ) => {
   const directory = join(evidence.directory, arm);
   const existed = await isDirectory(directory);
   await mkdir(join(directory, 'jobs'), { recursive: true });
+  if (existed) await canonicalize(directory, false);
   const command = evalCommand(root, directory, arm);
   const result = await runner(command);
   if (!existed) await copyAssets(root, directory, arm);
-  if (result.code === 0) await canonicalize(directory);
+  await canonicalize(directory, result.code === 0);
   const metadata: CampaignMetadata = {
     ...evidence.metadata,
     agent: arm,
@@ -374,18 +164,22 @@ const resumeArm = async (
   return { arm, directory, command, result };
 };
 
-const canonicalize = async (directory: string): Promise<void> => {
+const canonicalize = async (
+  directory: string,
+  requireComplete: boolean,
+): Promise<void> => {
   const jobs = join(directory, 'jobs');
   const jobNames = await directoryNames(jobs);
-  if (jobNames.length !== 1)
+  if (jobNames.length !== 1 && requireComplete)
     throw new Error('Resumed arm did not retain one canonical job directory.');
+  if (jobNames.length !== 1) return;
   const jobName = jobNames[0]!;
   const job = join(jobs, jobName);
   const rollouts = await directoryNames(job);
   const records = await Promise.all(
     rollouts.map(async (name) => {
       const path = join(job, name, 'result.json');
-      const result = await json(path);
+      const result = await readJson(path);
       const details = await stat(path).catch(() => undefined);
       return {
         name,
@@ -405,7 +199,10 @@ const canonicalize = async (directory: string): Promise<void> => {
     )
       keep.set(record.task, record);
   }
-  if (!sameStrings(sorted([...keep.keys()]), sorted(skillsbenchPilotTasks)))
+  const tasks = [...keep.keys()];
+  const knownTasks = tasks.every((task) => pilotTaskNames.has(task));
+  const complete = sameStrings(sorted(tasks), sorted(skillsbenchPilotTasks));
+  if (!knownTasks || (requireComplete && !complete))
     throw new Error('Resumed arm did not produce one result per pilot task.');
 
   const retained = new Set([...keep.values()].map((record) => record.name));
@@ -511,81 +308,8 @@ const writeMetadata = async (
   );
 };
 
-const json = async (path: string): Promise<Json> => {
-  try {
-    const value: unknown = JSON.parse(await readFile(path, 'utf8'));
-    return record(value);
-  } catch {
-    return {};
-  }
-};
-
-const results = async (path: string): Promise<readonly string[]> => {
-  try {
-    const entries = await readdir(path, { withFileTypes: true });
-    const nested = await Promise.all(
-      entries.map(async (entry): Promise<readonly string[]> => {
-        const child = join(path, entry.name);
-        if (entry.isDirectory()) return results(child);
-        if (entry.name !== 'result.json') return [];
-        return [string((await json(child)).task_name)].filter(Boolean);
-      }),
-    );
-    return nested.flat();
-  } catch {
-    return [];
-  }
-};
-
-const directories = async (path: string): Promise<number> => {
-  try {
-    return (await readdir(path, { withFileTypes: true })).filter((entry) =>
-      entry.isDirectory(),
-    ).length;
-  } catch {
-    return 0;
-  }
-};
-
-const directoryNames = async (path: string): Promise<readonly string[]> => {
-  try {
-    return (await readdir(path, { withFileTypes: true }))
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => entry.name)
-      .sort();
-  } catch {
-    return [];
-  }
-};
-
-const digest = async (path: string): Promise<string | undefined> => {
-  try {
-    return createHash('sha256')
-      .update(await readFile(path))
-      .digest('hex');
-  } catch {
-    return undefined;
-  }
-};
-
-const isDirectory = async (path: string): Promise<boolean> => {
-  try {
-    return (await stat(path)).isDirectory();
-  } catch {
-    return false;
-  }
-};
-
-const record = (value: unknown): Json =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? (value as Json)
-    : {};
 const string = (value: unknown): string =>
   typeof value === 'string' ? value : '';
-const strings = (value: unknown): readonly string[] | undefined =>
-  Array.isArray(value) && value.every((item) => typeof item === 'string')
-    ? value
-    : undefined;
 const sorted = (values: readonly string[]): readonly string[] =>
   [...values].sort();
 const sameStrings = (

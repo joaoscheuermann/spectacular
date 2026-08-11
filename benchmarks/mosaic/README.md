@@ -118,7 +118,7 @@ npx nx run mosaic-benchmark:release
 
 ## Paid execution checklist
 
-Complete every item below before running `smoke`, `pilot`, or `run`:
+Complete every item below before running `smoke`, `pilot`, `resume`, or `run`:
 
 - [ ] Run from the repository root on the benchmark revision intended for the
       campaign.
@@ -135,7 +135,7 @@ Complete every item below before running `smoke`, `pilot`, or `run`:
   npx nx run mosaic-benchmark:release
   ```
 
-- [ ] Confirm the public `mosaic-benchmark-v0.1.4` release contains exactly
+- [ ] Confirm the public `mosaic-benchmark-v0.1.5` release contains exactly
       `mosaic-bench-acp.mjs` and `mosaic-bench-acp.mjs.sha256`. The generated
       bundle hash, published sidecar, and `BF_BUNDLE_SHA256` in both agent
       manifests must be identical.
@@ -202,9 +202,15 @@ requires Docker to expose at least 8 CPUs and 8 GiB. BenchFlow reuses scored
 Direct rollouts from the existing `jobs/` directory, reruns only unscored
 tasks, and starts or resumes MOSAIC only after Direct exits without errors. The
 operation preserves the original `campaignId` and `pilot` action and holds an
-exclusive campaign lock. After each successful arm, `jobs/` retains one result
-per task while replaced or incomplete rollout directories remain available
-under `attempts/`.
+exclusive campaign lock. Before and after each returned arm attempt, `jobs/`
+retains only the newest result per task while replaced or incomplete rollout
+directories remain available under `attempts/`. BenchFlow output and explicit
+host stages stream live to `stderr`; the final machine-readable result remains
+on `stdout`.
+
+Resume is release-bound: it refuses a campaign whose recorded bundle or
+manifest differs from the current release. After an adapter release, start a
+new pilot rather than mixing agent implementations in one comparison.
 
 For a full paid SkillsBench run, execute all 87 tasks in each arm:
 

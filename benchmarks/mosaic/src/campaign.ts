@@ -8,86 +8,43 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
-import { spawn } from 'node:child_process';
 
+import type {
+  Arm,
+  ArmRun,
+  Benchmark,
+  CampaignCheck,
+  CampaignMetadata,
+  CampaignOptions,
+  CampaignRun,
+  Check,
+  Command,
+  CommandRunner,
+} from './campaign-types.js';
 import { isValidSkillsbenchReport } from './compare.js';
 import { skillsbenchPilotTasks } from './pilot.js';
+import { createProcessRunner } from './process.js';
 
-export type Benchmark = 'skillsbench' | 'terminalbench';
-export type CampaignAction = 'check' | 'smoke' | 'pilot' | 'run';
-export type Arm = 'mosaic-direct' | 'mosaic';
-
-export type Command = {
-  readonly file: string;
-  readonly args: readonly string[];
-  readonly cwd: string;
-  readonly env?: Readonly<Record<string, string>>;
-};
-
-export type CommandResult = {
-  readonly code: number;
-  readonly stdout: string;
-  readonly stderr: string;
-};
-export type CommandRunner = (command: Command) => Promise<CommandResult>;
-
-export type Check = {
-  readonly name: string;
-  readonly ok: boolean;
-  readonly detail: string;
-};
-export type CampaignCheck = {
-  readonly ok: boolean;
-  readonly checks: readonly Check[];
-};
-export type CampaignMetadata = {
-  readonly action: 'smoke' | 'pilot' | 'run';
-  readonly benchmark: Benchmark;
-  readonly benchflowVersion: '0.6.5';
-  readonly campaignId: string;
-  readonly source: {
-    readonly repo: string;
-    readonly path: string;
-    readonly ref: string;
-  };
-  readonly expectedTasks: number;
-  readonly agent: Arm;
-  readonly model: string;
-  readonly effort: 'low';
-  readonly sandbox: 'docker';
-  readonly concurrency: 1;
-  readonly buildConcurrency: 1;
-  readonly retries: 0;
-  readonly loopStrategy: 'single-shot';
-  readonly usageTracking: 'required';
-  readonly skillMode: 'with-skill' | 'no-skill';
-  readonly digests: Readonly<Record<string, string>>;
-};
-export type ArmRun = {
-  readonly arm: Arm;
-  readonly directory: string;
-  readonly command: Command;
-  readonly result: CommandResult;
-};
-export type CampaignRun = {
-  readonly directory: string;
-  readonly arms: readonly ArmRun[];
-};
-export type CampaignOptions = {
-  readonly benchmark: Benchmark;
-  readonly action: CampaignAction;
-  readonly rootDir: string;
-  readonly yesPaidRun?: boolean;
-  readonly skillsbenchReport?: string;
-  readonly runner?: CommandRunner;
-  readonly environment?: NodeJS.ProcessEnv;
-};
+export type {
+  Arm,
+  ArmRun,
+  Benchmark,
+  CampaignAction,
+  CampaignCheck,
+  CampaignMetadata,
+  CampaignOptions,
+  CampaignRun,
+  Check,
+  Command,
+  CommandResult,
+  CommandRunner,
+} from './campaign-types.js';
 
 const model = 'openrouter/openai/gpt-5.6-luna';
 const agents = ['mosaic-direct', 'mosaic'] as const;
 const releaseAssets = [
-  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.4/mosaic-bench-acp.mjs',
-  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.4/mosaic-bench-acp.mjs.sha256',
+  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.5/mosaic-bench-acp.mjs',
+  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.5/mosaic-bench-acp.mjs.sha256',
 ] as const;
 
 const definitions: Record<
@@ -119,35 +76,12 @@ const definitions: Record<
   },
 };
 
-const processRunner =
-  (environment: NodeJS.ProcessEnv): CommandRunner =>
-  ({ file, args, cwd, env }) =>
-    new Promise((resolveResult, reject) => {
-      const child = spawn(file, args as string[], {
-        cwd,
-        env: { ...environment, ...env },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-      let stdout = '';
-      let stderr = '';
-      child.stdout.on('data', (chunk: Buffer) => {
-        stdout += chunk.toString();
-      });
-      child.stderr.on('data', (chunk: Buffer) => {
-        stderr += chunk.toString();
-      });
-      child.once('error', reject);
-      child.once('close', (code) =>
-        resolveResult({ code: code ?? 1, stdout, stderr }),
-      );
-    });
-
 /** Runs the free preflight or creates an explicitly approved paid campaign. */
 export const campaign = async (
   options: CampaignOptions,
 ): Promise<CampaignCheck | CampaignRun> => {
   const runner =
-    options.runner ?? processRunner(options.environment ?? process.env);
+    options.runner ?? createProcessRunner(options.environment ?? process.env);
   return options.action === 'check'
     ? check(options, runner)
     : run(options, runner);

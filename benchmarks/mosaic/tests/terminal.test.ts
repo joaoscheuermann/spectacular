@@ -79,6 +79,25 @@ test('marks output as truncated after the compact output limit', async () => {
   }
 });
 
+test('accepts a smaller per-call output limit', async () => {
+  const root = await createRoot();
+  try {
+    const terminal = createTerminal({ cwd: root });
+    const parsed = terminal.input.safeParse({
+      command: 'i=0; while [ "$i" -lt 200 ]; do printf x; i=$((i + 1)); done',
+      max_output_chars: 64,
+    });
+
+    assert.equal(parsed.success, true);
+    if (!parsed.success) return;
+    const result = await terminal.execute(parsed.data);
+    assert.equal(result.truncated, true);
+    assert.ok(result.stdout.length <= 64);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('cancels the detached process group when its signal aborts', async () => {
   const root = await createRoot();
   const controller = new AbortController();

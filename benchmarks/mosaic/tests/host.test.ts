@@ -14,6 +14,7 @@ const output = (): {
 
 test('dispatches campaign resume through the host command', async () => {
   const stdout = output();
+  const stderr = output();
   let received: ResumeOptions | undefined;
   const code = await runHost(
     [
@@ -28,24 +29,29 @@ test('dispatches campaign resume through the host command', async () => {
     ],
     {
       stdout,
+      stderr,
       resume: async (options) => {
         received = options;
+        (
+          options as ResumeOptions & {
+            readonly progress?: (stage: string) => void;
+          }
+        ).progress?.('running Direct');
         return { directory: options.campaignDir, arms: [] };
       },
     },
   );
 
   assert.equal(code, 0);
-  assert.deepEqual(received, {
-    benchmark: 'skillsbench',
-    campaignDir: '/bench/results/pilot',
-    rootDir: '/bench',
-    yesPaidRun: true,
-  });
+  assert.equal(received?.benchmark, 'skillsbench');
+  assert.equal(received?.campaignDir, '/bench/results/pilot');
+  assert.equal(received?.rootDir, '/bench');
+  assert.equal(received?.yesPaidRun, true);
   assert.equal(
     JSON.parse(stdout.lines[0] ?? '{}').directory,
     '/bench/results/pilot',
   );
+  assert.deepEqual(stderr.lines, ['[mosaic-benchmark] running Direct\n']);
 });
 
 test('delegates every non-resume command to the released CLI', async () => {

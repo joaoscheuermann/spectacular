@@ -371,6 +371,50 @@ test('rejects insufficient Docker resources before a paid command', async (t) =>
   );
 });
 
+test('consolidates duplicate attempts when a resumed arm still fails', async (t) => {
+  const { root, directory, bundleHash } = await setup();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const job = join(directory, 'mosaic-direct', 'jobs', '2026-08-10__21-24-13');
+  const duplicate = join(job, `${skillsbenchPilotTasks[8]}__duplicate`);
+  await mkdir(duplicate);
+  await writeFile(
+    join(duplicate, 'result.json'),
+    JSON.stringify({
+      task_name: skillsbenchPilotTasks[8],
+      rewards: null,
+      error: 'previous retry',
+    }),
+  );
+  const commands: Command[] = [];
+  const execute = runner(root, bundleHash, commands);
+
+  const result = await resumeCampaign({
+    benchmark: 'skillsbench',
+    campaignDir: directory,
+    rootDir: root,
+    yesPaidRun: true,
+    environment,
+    runner: async (command) => {
+      const completed = await execute(command);
+      return command.file === 'uvx' && command.args.includes('--from')
+        ? { ...completed, code: 1 }
+        : completed;
+    },
+  });
+
+  assert.equal(result.arms.length, 1);
+  assert.equal(result.arms[0]?.result.code, 1);
+  assert.equal((await readdir(job)).length, skillsbenchPilotTasks.length);
+  assert.equal(
+    (
+      await readdir(
+        join(directory, 'mosaic-direct', 'attempts', '2026-08-10__21-24-13'),
+      )
+    ).length,
+    3,
+  );
+});
+
 test('rejects campaign evidence changed after its recorded digest', async (t) => {
   const { root, directory } = await setup();
   t.after(() => rm(root, { recursive: true, force: true }));

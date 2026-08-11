@@ -537,7 +537,10 @@ interception hooks from `mosaic/evaluation`. IO events may expose model-visible
 content and terminal inputs and outputs to the benchmark trajectory, but never
 private reasoning or credentials. The terminal is benchmark-only authority
 inside the task sandbox and does not add command execution to a product package
-or Doric host surface. Loaded skill bodies identify their canonical mounted
+or Doric host surface. Its strict input accepts an optional positive
+`max_output_chars` bounded by the fixed 12 KiB combined stdout/stderr ceiling,
+allowing the model to request a smaller capture without invalidating the tool
+call. Loaded skill bodies identify their canonical mounted
 directory so references to bundled scripts and supporting files resolve the
 same way in both arms. ACP prompt failures write only an authentic provider
 error code when available, or a fixed generic line otherwise; provider
@@ -575,11 +578,14 @@ and per-arm manifest, then reuses the existing BenchFlow `jobs/` directory.
 BenchFlow may reuse scored rollouts and reruns unscored tasks; MOSAIC starts or
 resumes only after Direct has no runtime errors. Resume requires explicit paid
 confirmation, an exclusive campaign lock, and Docker capacity of at least 8
-CPUs and 8 GiB. After a successful arm, exactly one result per pilot task
-remains under `jobs/`; replaced or incomplete rollout directories are preserved
-under `attempts/`. Host-only resume code is built into a separate generated Nx
-dispatcher so the released ACP bundle used by all rollouts remains
-byte-identical.
+CPUs and 8 GiB. Before and after every returned arm attempt, duplicate and
+incomplete rollout directories are preserved under `attempts/`, while `jobs/`
+retains only the newest result per task; a successful arm additionally requires
+all ten tasks. Resume never crosses adapter releases, so every rollout in a
+campaign uses the same recorded bundle and manifests. The command mirrors
+BenchFlow stdout and stderr plus explicit host stages to host stderr while
+reserving stdout for the final JSON result. Host-only resume code is built into
+a separate generated Nx dispatcher.
 Terminal-Bench 2, pinned to
 `2fd12b88aafdd04a52c298e3940bcb189f9766d6`, is a secondary confirmation only
 after a valid SkillsBench comparison report, which is an explicit input to a

@@ -46,7 +46,7 @@ export const acp = (options: AcpOptions): AgentApp => {
           ? params.protocolVersion
           : PROTOCOL_VERSION,
       agentCapabilities: { loadSession: false },
-      agentInfo: { name: 'mosaic-benchmark', version: '0.1.4' },
+      agentInfo: { name: 'mosaic-benchmark', version: '0.1.5' },
     }))
     .onRequest(methods.agent.session.new, ({ params }) => {
       const sessionId = identifier();

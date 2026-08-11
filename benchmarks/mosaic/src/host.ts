@@ -36,7 +36,10 @@ export const runHost = async (
   const stderr = dependencies.stderr ?? process.stderr;
   try {
     const options = resumeOptions(args.slice(3), root);
-    const result = await (dependencies.resume ?? resumeCampaign)(options);
+    const result = await (dependencies.resume ?? resumeCampaign)({
+      ...options,
+      progress: (stage) => stderr.write(`[mosaic-benchmark] ${stage}\n`),
+    });
     stdout.write(`${JSON.stringify(result)}\n`);
     return result.arms.every((arm) => arm.result.code === 0) ? 0 : 1;
   } catch (error) {

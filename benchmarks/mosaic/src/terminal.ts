@@ -18,6 +18,12 @@ const input = z
     command: z.string(),
     working_directory: z.string().optional(),
     timeout_ms: z.number().int().positive().max(MAX_TIMEOUT_MS).optional(),
+    max_output_chars: z
+      .number()
+      .int()
+      .positive()
+      .max(OUTPUT_LIMIT_BYTES)
+      .optional(),
   })
   .strict();
 
@@ -80,8 +86,13 @@ const environment = (): NodeJS.ProcessEnv =>
     Object.entries(process.env).filter(([name]) => !sensitiveName.test(name)),
   );
 
-const append = (target: Capture, chunk: Buffer, used: number): void => {
-  const available = OUTPUT_LIMIT_BYTES - used;
+const append = (
+  target: Capture,
+  chunk: Buffer,
+  used: number,
+  limit: number,
+): void => {
+  const available = limit - used;
 
   if (available <= 0) {
     target.truncated = true;
@@ -114,6 +125,7 @@ const run = (
   command: string,
   cwd: string,
   timeoutMs: number,
+  outputLimit: number,
   signal: AbortSignal | undefined,
 ): Promise<TerminalOutput> =>
   new Promise((resolveRun, rejectRun) => {
@@ -167,10 +179,10 @@ const run = (
     }, timeoutMs);
 
     child.stdout.on('data', (chunk: Buffer) =>
-      append(stdout, chunk, stdout.size + stderr.size),
+      append(stdout, chunk, stdout.size + stderr.size, outputLimit),
     );
     child.stderr.on('data', (chunk: Buffer) =>
-      append(stderr, chunk, stdout.size + stderr.size),
+      append(stderr, chunk, stdout.size + stderr.size, outputLimit),
     );
     child.once('error', (error) => finish(() => rejectRun(error)));
     child.once('close', (code) =>
@@ -212,6 +224,7 @@ export const createTerminal = (options: {
       value.command,
       cwd,
       value.timeout_ms ?? DEFAULT_TIMEOUT_MS,
+      value.max_output_chars ?? OUTPUT_LIMIT_BYTES,
       options.signal,
     );
   },
