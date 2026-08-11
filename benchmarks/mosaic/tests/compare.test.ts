@@ -6,20 +6,41 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import { compare } from '../src/compare.js';
+import { skillsbenchPilotTasks } from '../src/pilot.js';
 
 type Json = Record<string, unknown>;
 
 const hash = (value: string): string =>
   createHash('sha256').update(value).digest('hex');
 const taskDigest = `sha256:${'a'.repeat(64)}`;
-const taskSource = {
+const source = (path: string, withFiles = true) => ({
   type: 'github',
   repo: 'benchflow-ai/skillsbench',
   requested_ref: 'b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af',
   resolved_sha: 'b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af',
-  path: 'tasks/edit-pdf',
+  path,
   dirty: false,
-  file_hashes: { 'task.md': `sha256:${'b'.repeat(64)}` },
+  file_hashes: withFiles ? { 'task.md': `sha256:${'b'.repeat(64)}` } : {},
+});
+const taskSource = source('tasks/edit-pdf');
+
+type Fixture = {
+  readonly action: 'smoke' | 'pilot';
+  readonly sourcePath: string;
+  readonly tasks: readonly string[];
+  readonly includeTasks: readonly string[];
+};
+const smokeFixture: Fixture = {
+  action: 'smoke',
+  sourcePath: 'tasks/edit-pdf',
+  tasks: ['edit-pdf'],
+  includeTasks: [],
+};
+const pilotFixture: Fixture = {
+  action: 'pilot',
+  sourcePath: 'tasks',
+  tasks: skillsbenchPilotTasks,
+  includeTasks: skillsbenchPilotTasks,
 };
 
 const writeArm = async (
@@ -27,20 +48,26 @@ const writeArm = async (
   agent: 'mosaic-direct' | 'mosaic',
   reward: number,
   cost: number,
+  fixture: Fixture = smokeFixture,
 ): Promise<string> => {
   const directory = join(root, agent);
-  await mkdir(join(directory, 'jobs', 'one'), { recursive: true });
+  await Promise.all(
+    fixture.tasks.map((_, index) =>
+      mkdir(join(directory, 'jobs', index === 0 ? 'one' : String(index + 1)), {
+        recursive: true,
+      }),
+    ),
+  );
+  const manifestSource = source(fixture.sourcePath, fixture.action === 'smoke');
   const taskManifest = JSON.stringify({
     schema_version: 1,
-    total: 1,
-    source: taskSource,
-    tasks: [
-      {
-        task_id: 'edit-pdf',
-        digest: taskDigest,
-        registry_digest_match: true,
-      },
-    ],
+    total: fixture.tasks.length,
+    source: manifestSource,
+    tasks: fixture.tasks.map((task) => ({
+      task_id: task,
+      digest: taskDigest,
+      registry_digest_match: true,
+    })),
   });
   const runConfig = JSON.stringify({
     schema_version: 1,
@@ -55,9 +82,9 @@ const writeArm = async (
       usage_tracking: { requested: 'required' },
       agent_env_keys: [],
       skills_dir: null,
-      include_tasks: [],
+      include_tasks: fixture.includeTasks,
       exclude_tasks: [],
-      source_provenance: taskSource,
+      source_provenance: manifestSource,
       dataset_name: null,
       dataset_version: null,
     },
@@ -65,40 +92,38 @@ const writeArm = async (
   });
   const health = JSON.stringify({
     schema_version: 1,
-    total_rows: 1,
-    scored_rows: 1,
+    total_rows: fixture.tasks.length,
+    scored_rows: fixture.tasks.length,
     unscored_rows: 0,
     missing_llm_trajectory: 0,
     malformed_llm_trajectory: 0,
     rows_with_tool_calls: 0,
-    zero_tool_rows: 1,
-    rows: [
-      {
-        task_id: 'edit-pdf',
-        scored: true,
-        error: null,
-        verifier_error: null,
-        reward,
-        tool_calls: 0,
-        has_llm_trajectory: true,
-        valid_llm_trajectory: true,
-        llm_trajectory_rows: 1,
-      },
-    ],
+    zero_tool_rows: fixture.tasks.length,
+    rows: fixture.tasks.map((task) => ({
+      task_id: task,
+      scored: true,
+      error: null,
+      verifier_error: null,
+      reward,
+      tool_calls: 0,
+      has_llm_trajectory: true,
+      valid_llm_trajectory: true,
+      llm_trajectory_rows: 1,
+    })),
   });
   const agentManifest = `name = "${agent}"\n`;
   const bundle = 'common generated bundle\n';
   const metadata = {
-    action: 'smoke',
+    action: fixture.action,
     benchmark: 'skillsbench',
     benchflowVersion: '0.6.5',
-    campaignId: 'skillsbench-smoke-fixture',
+    campaignId: `skillsbench-${fixture.action}-fixture`,
     source: {
       repo: 'benchflow-ai/skillsbench',
-      path: 'tasks/edit-pdf',
+      path: fixture.sourcePath,
       ref: 'b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af',
     },
-    expectedTasks: 1,
+    expectedTasks: fixture.tasks.length,
     agent,
     model: 'openrouter/openai/gpt-5.6-luna',
     effort: 'low',
@@ -117,8 +142,8 @@ const writeArm = async (
       agentManifest: hash(agentManifest),
     },
   };
-  const result = {
-    task_name: 'edit-pdf',
+  const result = (task: string) => ({
+    task_name: task,
     agent,
     agent_name: 'mosaic-benchmark',
     model: 'openrouter/openai/gpt-5.6-luna',
@@ -133,7 +158,9 @@ const writeArm = async (
     partial_trajectory: false,
     n_prompts: 1,
     task_digest: taskDigest,
-    source: taskSource,
+    source: source(
+      fixture.action === 'smoke' ? fixture.sourcePath : `tasks/${task}`,
+    ),
     rewards: { reward },
     n_tool_calls: 0,
     error: null,
@@ -145,7 +172,7 @@ const writeArm = async (
       total_tokens: 100,
       cost_usd: cost,
     },
-  };
+  });
   await Promise.all([
     writeFile(join(directory, 'metadata.json'), JSON.stringify(metadata)),
     writeFile(join(directory, 'task-manifest.json'), taskManifest),
@@ -153,9 +180,16 @@ const writeArm = async (
     writeFile(join(directory, 'health.json'), health),
     writeFile(join(directory, 'agent-manifest.toml'), agentManifest),
     writeFile(join(directory, 'bundle.mjs'), bundle),
-    writeFile(
-      join(directory, 'jobs', 'one', 'result.json'),
-      JSON.stringify(result),
+    ...fixture.tasks.map((task, index) =>
+      writeFile(
+        join(
+          directory,
+          'jobs',
+          index === 0 ? 'one' : String(index + 1),
+          'result.json',
+        ),
+        JSON.stringify(result(task)),
+      ),
     ),
   ]);
   return directory;
@@ -205,6 +239,28 @@ test('reports a valid SkillsBench Pareto win with benchmark proof', async (t) =>
     },
     { benchmark: 'skillsbench', valid: true, paretoWin: true, exitCode: 0 },
   );
+});
+
+test('validates only the fixed ten-task SkillsBench pilot selection', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'mosaic-compare-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const [direct, mosaic] = await Promise.all([
+    writeArm(root, 'mosaic-direct', 0.5, 2, pilotFixture),
+    writeArm(root, 'mosaic', 0.8, 1, pilotFixture),
+  ]);
+
+  let report = await compare({ directDir: direct, mosaicDir: mosaic });
+  assert.deepEqual(
+    [report.valid, report.direct.tasks, report.mosaic.tasks],
+    [true, 10, 10],
+  );
+
+  await updateArtifact(mosaic, 'run-config.json', 'runConfig', (artifact) => {
+    (artifact.eval as Json).include_tasks = skillsbenchPilotTasks.slice(1);
+  });
+  report = await compare({ directDir: direct, mosaicDir: mosaic });
+  assert.equal(report.exitCode, 2);
+  assert.match(report.reasons.join('\n'), /mosaic: invalid run config/);
 });
 
 test('reports a valid comparison without a Pareto win', async (t) => {

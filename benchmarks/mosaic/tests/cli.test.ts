@@ -54,6 +54,23 @@ test('keeps paid campaign execution behind the explicit flag', async () => {
   assert.equal(JSON.parse(stdout.lines[0] ?? '{}').directory, '/result');
 });
 
+test('dispatches the fixed SkillsBench pilot action', async () => {
+  let received: CampaignOptions | undefined;
+  const code = await runCli(
+    ['campaign', 'skillsbench', 'pilot', '--yes-paid-run', '--root', '/bench'],
+    {
+      stdout: output(),
+      campaign: async (options) => {
+        received = options;
+        return { directory: '/result', arms: [] };
+      },
+    },
+  );
+
+  assert.equal(code, 0);
+  assert.equal(received?.action, 'pilot');
+});
+
 test('returns the comparison decision exit code', async () => {
   const stdout = output();
   const code = await runCli(

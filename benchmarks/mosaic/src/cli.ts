@@ -132,7 +132,7 @@ const createRelease = async (
   const checksum = `${asset}.sha256`;
   await writeFile(checksum, `${digest}  mosaic-bench-acp.mjs\n`, 'utf8');
   writeJson(stdout, {
-    version: '0.1.3',
+    version: '0.1.4',
     asset,
     checksum,
     sha256: digest,
@@ -153,8 +153,14 @@ const parseBenchmark = (value: string | undefined): Benchmark => {
 };
 
 const parseAction = (value: string | undefined): CampaignAction => {
-  if (value === 'check' || value === 'smoke' || value === 'run') return value;
-  throw new Error('campaign requires one action: check, smoke, or run');
+  if (
+    value === 'check' ||
+    value === 'smoke' ||
+    value === 'pilot' ||
+    value === 'run'
+  )
+    return value;
+  throw new Error('campaign requires one action: check, smoke, pilot, or run');
 };
 
 const benchmarkRoot = async (cwd: string): Promise<string> => {
@@ -211,7 +217,8 @@ const usage = [
   'Usage:',
   '  npx nx run mosaic-benchmark:run -- serve <direct|mosaic>',
   '  npx nx run mosaic-benchmark:run -- campaign <skillsbench|terminalbench> check',
-  '  npx nx run mosaic-benchmark:run -- campaign <skillsbench|terminalbench> <smoke|run> --yes-paid-run',
+  '  npx nx run mosaic-benchmark:run -- campaign skillsbench <smoke|pilot|run> --yes-paid-run',
+  '  npx nx run mosaic-benchmark:run -- campaign terminalbench <smoke|run> --yes-paid-run --skillsbench-report <path>',
   '    Terminal-Bench also requires --skillsbench-report <valid-report.json>',
   '  npx nx run mosaic-benchmark:run -- compare --direct <dir> --mosaic <dir> [--report <file>]',
   '  npx nx run mosaic-benchmark:release',

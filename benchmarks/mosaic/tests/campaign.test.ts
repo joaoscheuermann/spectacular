@@ -22,6 +22,18 @@ import {
 const skillsCommit = 'b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af';
 const terminalCommit = '2fd12b88aafdd04a52c298e3940bcb189f9766d6';
 const providerEnvironment = { OPENROUTER_API_KEY: 'test-key' };
+const pilotTasks = [
+  'data-to-d3',
+  'earthquake-phase-association',
+  'edit-pdf',
+  'jax-computing-basics',
+  'organize-messy-files',
+  'pptx-reference-formatting',
+  'sec-financial-report',
+  'spring-boot-jakarta-migration',
+  'travel-planning',
+  'xlsx-recover-data',
+] as const;
 const campaign = (options: CampaignOptions) =>
   executeCampaign({ environment: providerEnvironment, ...options });
 
@@ -252,6 +264,69 @@ test('assembles both smoke arms after a verified preflight', async (t) => {
       stat(join(result.arms[0]!.directory, file)),
     ),
   );
+});
+
+test('assembles the fixed ten-task SkillsBench pilot for both arms', async (t) => {
+  const root = await setup();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const commands: Command[] = [];
+  const result = await campaign({
+    benchmark: 'skillsbench',
+    action: 'pilot',
+    rootDir: root,
+    yesPaidRun: true,
+    runner: async (command) => {
+      commands.push(command);
+      return artifactRunner(root, command);
+    },
+  });
+  assert.equal('arms' in result, true);
+  if (!('arms' in result)) return;
+
+  for (const command of paidCommands(commands)) {
+    const includeTasks = command.args.flatMap((value, index) =>
+      value === '--include' ? [command.args[index + 1]!] : [],
+    );
+    assert.equal(
+      command.args[command.args.indexOf('--source-path') + 1],
+      'tasks',
+    );
+    assert.equal(
+      command.args[command.args.indexOf('--expected-tasks') + 1],
+      '10',
+    );
+    assert.deepEqual(includeTasks, pilotTasks);
+  }
+  assert.equal(result.arms.length, 2);
+  const metadata = JSON.parse(
+    await readFile(join(result.arms[0]!.directory, 'metadata.json'), 'utf8'),
+  );
+  assert.deepEqual(
+    [metadata.action, metadata.source.path, metadata.expectedTasks],
+    ['pilot', 'tasks', 10],
+  );
+});
+
+test('rejects a Terminal-Bench pilot before commands or results', async (t) => {
+  const root = await setup();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  let calls = 0;
+  await assert.rejects(
+    campaign({
+      benchmark: 'terminalbench',
+      action: 'pilot',
+      rootDir: root,
+      yesPaidRun: true,
+      skillsbenchReport: join(root, 'skillsbench-report.json'),
+      runner: async () => {
+        calls += 1;
+        return { code: 0, stdout: '', stderr: '' };
+      },
+    }),
+    /only available for SkillsBench/,
+  );
+  assert.equal(calls, 0);
+  await assert.rejects(stat(join(root, 'results')));
 });
 
 test('rejects an unconfirmed paid run before every command', async (t) => {

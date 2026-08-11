@@ -557,6 +557,16 @@ and refuses any local, manifest, or published bundle hash mismatch.
 
 SkillsBench v1.1, pinned to commit
 `b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af`, is the primary benchmark.
+A diagnostic SkillsBench `pilot` action runs a predeclared, varied ten-task
+subset through both arms by using BenchFlow's repeated `--include` selection.
+The fixed set is `data-to-d3`, `earthquake-phase-association`, `edit-pdf`,
+`jax-computing-basics`, `organize-messy-files`,
+`pptx-reference-formatting`, `sec-financial-report`,
+`spring-boot-jakarta-migration`, `travel-planning`, and `xlsx-recover-data`.
+The comparator requires that exact selection in the recorded run config.
+Pilot evidence is diagnostic only: it does not replace the full 87-task
+primary campaign and cannot satisfy the SkillsBench report gate for
+Terminal-Bench.
 Terminal-Bench 2, pinned to
 `2fd12b88aafdd04a52c298e3940bcb189f9766d6`, is a secondary confirmation only
 after a valid SkillsBench comparison report, which is an explicit input to a
@@ -567,8 +577,9 @@ match the campaign contract and their recorded hashes. Every task is scored
 without runtime or verifier errors and has trusted positive usage and cost
 telemetry. The single decision gate is a strict Pareto win: MOSAIC must have
 both a higher mean public-benchmark reward and a lower total model cost than the
-direct agent. Paid smoke and full campaigns require explicit `--yes-paid-run`;
-credentials remain runtime-only and are never persisted or logged.
+direct agent. Paid smoke, pilot, and full campaigns require explicit
+`--yes-paid-run`; credentials remain runtime-only and are never persisted or
+logged.
 
 CLI streamed A2A event output is visible console rendering through
 `pino`/`pino-pretty`. Redaction must be applied to message text and structured

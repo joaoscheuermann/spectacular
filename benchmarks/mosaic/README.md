@@ -89,6 +89,9 @@ npx nx run mosaic-benchmark:run -- campaign skillsbench check
 # Paid one-task smoke. Explicit confirmation is required.
 npx nx run mosaic-benchmark:run -- campaign skillsbench smoke --yes-paid-run
 
+# Paid diagnostic pilot: a fixed, varied subset of 10 tasks.
+npx nx run mosaic-benchmark:run -- campaign skillsbench pilot --yes-paid-run
+
 # Paid primary campaign: SkillsBench v1.1, 87 tasks.
 npx nx run mosaic-benchmark:run -- campaign skillsbench run --yes-paid-run
 
@@ -109,7 +112,7 @@ npx nx run mosaic-benchmark:release
 
 ## Paid execution checklist
 
-Complete every item below before running either `smoke` or `run`:
+Complete every item below before running `smoke`, `pilot`, or `run`:
 
 - [ ] Run from the repository root on the benchmark revision intended for the
       campaign.
@@ -126,7 +129,7 @@ Complete every item below before running either `smoke` or `run`:
   npx nx run mosaic-benchmark:release
   ```
 
-- [ ] Confirm the public `mosaic-benchmark-v0.1.3` release contains exactly
+- [ ] Confirm the public `mosaic-benchmark-v0.1.4` release contains exactly
       `mosaic-bench-acp.mjs` and `mosaic-bench-acp.mjs.sha256`. The generated
       bundle hash, published sidecar, and `BF_BUNDLE_SHA256` in both agent
       manifests must be identical.
@@ -160,6 +163,22 @@ does not establish the full-benchmark result. Do not start the full campaign
 until the smoke command exits successfully and both arm directories exist in
 the newly created campaign directory under `results/`.
 
+For a diagnostic pilot, run the same two arms against this fixed, predeclared
+ten-task subset: `data-to-d3`, `earthquake-phase-association`, `edit-pdf`,
+`jax-computing-basics`, `organize-messy-files`,
+`pptx-reference-formatting`, `sec-financial-report`,
+`spring-boot-jakarta-migration`, `travel-planning`, and `xlsx-recover-data`.
+
+```sh
+npx nx run mosaic-benchmark:run -- \
+  campaign skillsbench pilot --yes-paid-run
+```
+
+The pilot is a varied diagnostic sample, not a statistical benchmark result.
+Its comparison is valid only when the run config contains exactly those ten
+tasks. It neither replaces the 87-task primary campaign nor satisfies the
+SkillsBench evidence gate required for Terminal-Bench.
+
 For a full paid SkillsBench run, execute all 87 tasks in each arm:
 
 ```sh
@@ -167,7 +186,7 @@ npx nx run mosaic-benchmark:run -- \
   campaign skillsbench run --yes-paid-run
 ```
 
-After either paid action, compare the two arm directories from that same
+After any paid action, compare the two arm directories from that same
 campaign. A completed campaign command only means that both arms exited
 successfully; the comparison determines whether the evidence is valid and
 whether MOSAIC won the strict Pareto gate:
@@ -185,16 +204,17 @@ combine arms from different campaign directories. A paid Terminal-Bench run
 additionally requires the valid comparison report from a full 87-task
 SkillsBench campaign; a one-task smoke report is not sufficient.
 
-`check` is free and never calls a model. `smoke` and `run` stop before spawning
-anything unless `--yes-paid-run` is present, and they repeat the free preflight
-before creating results. A paid Terminal-Bench command also requires a report
+`check` is free and never calls a model. `smoke`, `pilot`, and `run` stop before
+spawning anything unless `--yes-paid-run` is present, and they repeat the free
+preflight before creating results. A paid Terminal-Bench command also requires a report
 from a valid SkillsBench comparison. Campaigns always create a new directory
 below `results/`; their two arms use separate jobs, task manifest, run config,
 health summary, and non-secret metadata.
 
 SkillsBench is pinned to
 `b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af` and uses `with-skill` mode. Its
-smoke task is `edit-pdf`. Terminal-Bench 2 is pinned to
+smoke task is `edit-pdf`; its pilot task set is fixed in `src/pilot.ts`.
+Terminal-Bench 2 is pinned to
 `2fd12b88aafdd04a52c298e3940bcb189f9766d6`, uses `no-skill` mode, and its
 smoke task is `regex-log`. Both arms use `openrouter/openai/gpt-5.6-luna`, low reasoning
 effort, Docker, single-task/build concurrency, single-shot looping, zero

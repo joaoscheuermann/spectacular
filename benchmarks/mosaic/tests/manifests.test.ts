@@ -48,7 +48,7 @@ const assertContract = (manifest: Manifest): void => {
   assert.match(manifest.install_cmd, /BF_NODE_VERSION=22\.20\.0/);
   assert.match(manifest.install_cmd, /x86_64\|amd64\) node_arch=x64/);
   assert.match(manifest.install_cmd, /aarch64\|arm64\) node_arch=arm64/);
-  assert.match(manifest.install_cmd, /mosaic-benchmark-v0\.1\.3/);
+  assert.match(manifest.install_cmd, /mosaic-benchmark-v0\.1\.4/);
   assert.match(manifest.install_cmd, /BF_BUNDLE_SHA256=[a-f0-9]{64}/);
   assert.match(
     manifest.install_cmd,

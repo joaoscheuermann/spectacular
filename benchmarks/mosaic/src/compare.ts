@@ -3,6 +3,7 @@ import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import type { Benchmark } from './campaign.js';
+import { skillsbenchPilotTasks } from './pilot.js';
 
 export type Metrics = {
   readonly score: number;
@@ -261,6 +262,9 @@ const validSource = (
       source.ref === 'b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af' &&
       skillMode === 'with-skill' &&
       ((action === 'run' && source.path === 'tasks' && expected === 87) ||
+        (action === 'pilot' &&
+          source.path === 'tasks' &&
+          expected === skillsbenchPilotTasks.length) ||
         (action === 'smoke' &&
           source.path === 'tasks/edit-pdf' &&
           expected === 1))
@@ -413,6 +417,9 @@ const runConfigIssues = (
   const usage = record(evalConfig.usage_tracking);
   const manifestSource = record(campaign.taskManifest.value.source);
   const source = record(evalConfig.source_provenance);
+  const includeTasks = stringArray(evalConfig.include_tasks);
+  const expectedIncludeTasks =
+    campaign.metadata.action === 'pilot' ? skillsbenchPilotTasks : [];
   const valid =
     config.schema_version === 1 &&
     evalConfig.agent === campaign.metadata.agent &&
@@ -424,7 +431,8 @@ const runConfigIssues = (
     evalConfig.skill_mode === campaign.metadata.skillMode &&
     arraysEqual(evalConfig.agent_env_keys as readonly string[], []) &&
     evalConfig.skills_dir === null &&
-    arraysEqual(evalConfig.include_tasks as readonly string[], []) &&
+    includeTasks !== undefined &&
+    arraysEqual(sorted(includeTasks), sorted(expectedIncludeTasks)) &&
     arraysEqual(evalConfig.exclude_tasks as readonly string[], []) &&
     evalConfig.dataset_name === null &&
     evalConfig.dataset_version === null &&
@@ -665,8 +673,8 @@ const nonnegativeInteger = (value: unknown): boolean =>
   Number.isSafeInteger(value) && (value as number) >= 0;
 const positiveInteger = (value: unknown): boolean =>
   Number.isSafeInteger(value) && (value as number) > 0;
-const isCampaignAction = (value: unknown): value is 'smoke' | 'run' =>
-  value === 'smoke' || value === 'run';
+const isCampaignAction = (value: unknown): value is 'smoke' | 'pilot' | 'run' =>
+  value === 'smoke' || value === 'pilot' || value === 'run';
 const sha256Digest = (value: unknown): value is string =>
   typeof value === 'string' && /^sha256:[a-f0-9]{64}$/i.test(value);
 const hasNull = (value: Json, key: string): boolean =>
@@ -675,6 +683,10 @@ const sortedKeys = (value: Json): readonly string[] =>
   Object.keys(value).sort();
 const sorted = (values: readonly string[]): readonly string[] =>
   [...values].sort();
+const stringArray = (value: unknown): readonly string[] | undefined =>
+  Array.isArray(value) && value.every((item) => typeof item === 'string')
+    ? value
+    : undefined;
 const arraysEqual = (
   left: readonly string[],
   right: readonly string[],

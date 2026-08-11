@@ -11,9 +11,10 @@ import { basename, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 
 import { isValidSkillsbenchReport } from './compare.js';
+import { skillsbenchPilotTasks } from './pilot.js';
 
 export type Benchmark = 'skillsbench' | 'terminalbench';
-export type CampaignAction = 'check' | 'smoke' | 'run';
+export type CampaignAction = 'check' | 'smoke' | 'pilot' | 'run';
 export type Arm = 'mosaic-direct' | 'mosaic';
 
 export type Command = {
@@ -40,7 +41,7 @@ export type CampaignCheck = {
   readonly checks: readonly Check[];
 };
 export type CampaignMetadata = {
-  readonly action: 'smoke' | 'run';
+  readonly action: 'smoke' | 'pilot' | 'run';
   readonly benchmark: Benchmark;
   readonly benchflowVersion: '0.6.5';
   readonly campaignId: string;
@@ -85,8 +86,8 @@ export type CampaignOptions = {
 const model = 'openrouter/openai/gpt-5.6-luna';
 const agents = ['mosaic-direct', 'mosaic'] as const;
 const releaseAssets = [
-  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.3/mosaic-bench-acp.mjs',
-  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.3/mosaic-bench-acp.mjs.sha256',
+  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.4/mosaic-bench-acp.mjs',
+  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.4/mosaic-bench-acp.mjs.sha256',
 ] as const;
 
 const definitions: Record<
@@ -321,6 +322,8 @@ const run = async (
 ): Promise<CampaignRun> => {
   if (options.yesPaidRun !== true)
     throw new Error('Paid benchmark runs require yesPaidRun: true.');
+  if (options.action === 'pilot' && options.benchmark !== 'skillsbench')
+    throw new Error('Pilot campaigns are only available for SkillsBench.');
   if (options.benchmark === 'terminalbench')
     await requireSkillsbenchReport(options.skillsbenchReport);
   const preflight = await check(options, runner);
@@ -332,9 +335,20 @@ const run = async (
   const directory = await mkdtemp(
     join(resultsDir, `${options.benchmark}-${options.action}-${randomUUID()}-`),
   );
-  const action = options.action === 'smoke' ? 'smoke' : 'run';
+  const action =
+    options.action === 'smoke'
+      ? 'smoke'
+      : options.action === 'pilot'
+        ? 'pilot'
+        : 'run';
   const campaignId = basename(directory);
-  const expectedTasks = action === 'smoke' ? 1 : definition.expected;
+  const includeTasks = action === 'pilot' ? skillsbenchPilotTasks : [];
+  const expectedTasks =
+    action === 'smoke'
+      ? 1
+      : action === 'pilot'
+        ? skillsbenchPilotTasks.length
+        : definition.expected;
   const sourcePath =
     action === 'smoke' ? definition.smokePath : definition.fullPath;
   const arms: ArmRun[] = [];
@@ -348,6 +362,7 @@ const run = async (
       definition,
       sourcePath,
       expectedTasks,
+      includeTasks,
     );
     const result = await runner(command);
     await copyArmAssets(root, armDirectory, arm);
@@ -377,6 +392,7 @@ const evalCommand = (
   definition: (typeof definitions)[Benchmark],
   sourcePath: string,
   expectedTasks: number,
+  includeTasks: readonly string[],
 ): Command => ({
   file: 'uvx',
   args: [
@@ -409,6 +425,7 @@ const evalCommand = (
     'required',
     '--skill-mode',
     definition.skillMode,
+    ...includeTasks.flatMap((task) => ['--include', task]),
     '--jobs-dir',
     join(directory, 'jobs'),
     '--task-manifest-out',
@@ -425,7 +442,7 @@ const evalCommand = (
 });
 
 const metadata = (
-  action: 'smoke' | 'run',
+  action: 'smoke' | 'pilot' | 'run',
   campaignId: string,
   benchmark: Benchmark,
   definition: (typeof definitions)[Benchmark],
