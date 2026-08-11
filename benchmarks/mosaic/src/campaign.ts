@@ -43,8 +43,8 @@ export type {
 const model = 'openrouter/openai/gpt-5.6-luna';
 const agents = ['mosaic-direct', 'mosaic'] as const;
 const releaseAssets = [
-  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.6/mosaic-bench-acp.mjs',
-  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.6/mosaic-bench-acp.mjs.sha256',
+  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.7/mosaic-bench-acp.mjs',
+  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.7/mosaic-bench-acp.mjs.sha256',
 ] as const;
 
 const definitions: Record<
@@ -62,7 +62,7 @@ const definitions: Record<
     repo: 'benchflow-ai/skillsbench',
     ref: 'b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af',
     fullPath: 'tasks',
-    smokePath: 'tasks/edit-pdf',
+    smokePath: 'tasks/jax-computing-basics',
     expected: 87,
     skillMode: 'with-skill',
   },

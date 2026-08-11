@@ -9,7 +9,7 @@ const MAX_TIMEOUT_MS = 600_000;
 const OUTPUT_LIMIT_BYTES = 12 * 1024;
 const KILL_GRACE_MS = 100;
 const description =
-  'Executes a shell command in the benchmark session and returns compact output.';
+  'Executes a command through POSIX `sh -c` in the benchmark session and returns compact output. Bash-only syntax is not guaranteed; discover available executables when necessary.';
 const sensitiveName =
   /(?:master|private|api|access)[_-]?key|auth(?:orization)?|bearer|token|secret|password|credentials?|cookie/iu;
 

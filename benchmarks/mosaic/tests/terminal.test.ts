@@ -9,6 +9,14 @@ import { createTerminal } from '../src/terminal.js';
 const createRoot = (): Promise<string> =>
   mkdtemp(join(tmpdir(), 'mosaic-terminal-'));
 
+test('describes its POSIX shell contract to the model', () => {
+  const terminal = createTerminal({ cwd: '.' });
+  const description = terminal.definition.description ?? '';
+
+  assert.match(description, /POSIX `sh -c`/u);
+  assert.match(description, /Bash-only syntax/u);
+});
+
 test('uses the session directory and captures stdout, stderr, and exit codes', async () => {
   const root = await createRoot();
   try {

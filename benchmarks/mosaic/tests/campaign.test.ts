@@ -101,8 +101,8 @@ const writeArtifacts = async (command: Command): Promise<void> => {
   const agent = value('--agent');
   const skillMode = value('--skill-mode');
   const expected = Number(value('--expected-tasks'));
-  const task = command.args.includes('tasks/edit-pdf')
-    ? 'edit-pdf'
+  const task = command.args.includes('tasks/jax-computing-basics')
+    ? 'jax-computing-basics'
     : 'regex-log';
   const manifest = {
     schema_version: 1,
@@ -176,7 +176,7 @@ test('assembles both smoke arms after a verified preflight', async (t) => {
       '--source-repo',
       'benchflow-ai/skillsbench',
       '--source-path',
-      'tasks/edit-pdf',
+      'tasks/jax-computing-basics',
       '--source-ref',
       skillsCommit,
       '--agent',

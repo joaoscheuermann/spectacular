@@ -282,7 +282,7 @@ test('emulates sequential tools when the model does not advertise parallel contr
   assert.deepEqual(body.provider, { require_parameters: true });
   assert.match(
     body.messages?.find(({ role }) => role === 'system')?.content ?? '',
-    /at most one available tool/u,
+    /limit applies only to the current response, not to the task or node/u,
   );
 });
 

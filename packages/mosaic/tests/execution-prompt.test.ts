@@ -15,6 +15,10 @@ test('defines precedence tools criteria and all terminal statuses', () => {
 
   assert.match(prompt, /# Instruction precedence/u);
   assert.match(prompt, /# Tool use/u);
+  assert.match(prompt, /limit applies per response, not per node/u);
+  assert.match(prompt, /failed command is an observation/u);
+  assert.match(prompt, /another reasonable command or tool action/u);
+  assert.match(prompt, /One missing executable/u);
   assert.match(prompt, /zero-based criterionIndex/u);
   for (const status of ['completed', 'needs_revision', 'blocked', 'failed']) {
     assert.match(prompt, new RegExp(`- ${status}:`, 'u'));

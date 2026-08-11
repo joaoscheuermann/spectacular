@@ -135,7 +135,7 @@ Complete every item below before running `smoke`, `pilot`, `resume`, or `run`:
   npx nx run mosaic-benchmark:release
   ```
 
-- [ ] Confirm the public `mosaic-benchmark-v0.1.6` release contains exactly
+- [ ] Confirm the public `mosaic-benchmark-v0.1.7` release contains exactly
       `mosaic-bench-acp.mjs` and `mosaic-bench-acp.mjs.sha256`. The generated
       bundle hash, published sidecar, and `BF_BUNDLE_SHA256` in both agent
       manifests must be identical.
@@ -247,7 +247,7 @@ manifest, run config, health summary, and non-secret metadata.
 
 SkillsBench is pinned to
 `b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af` and uses `with-skill` mode. Its
-smoke task is `edit-pdf`; its pilot task set is fixed in `src/pilot.ts`.
+smoke task is `jax-computing-basics`; its pilot task set is fixed in `src/pilot.ts`.
 Terminal-Bench 2 is pinned to
 `2fd12b88aafdd04a52c298e3940bcb189f9766d6`, uses `no-skill` mode, and its
 smoke task is `regex-log`. Both arms use `openrouter/openai/gpt-5.6-luna`, low reasoning

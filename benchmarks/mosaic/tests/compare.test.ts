@@ -22,7 +22,7 @@ const source = (path: string, withFiles = true) => ({
   dirty: false,
   file_hashes: withFiles ? { 'task.md': `sha256:${'b'.repeat(64)}` } : {},
 });
-const taskSource = source('tasks/edit-pdf');
+const taskSource = source('tasks/jax-computing-basics');
 
 type Fixture = {
   readonly action: 'smoke' | 'pilot';
@@ -32,8 +32,8 @@ type Fixture = {
 };
 const smokeFixture: Fixture = {
   action: 'smoke',
-  sourcePath: 'tasks/edit-pdf',
-  tasks: ['edit-pdf'],
+  sourcePath: 'tasks/jax-computing-basics',
+  tasks: ['jax-computing-basics'],
   includeTasks: [],
 };
 const pilotFixture: Fixture = {

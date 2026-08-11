@@ -266,7 +266,7 @@ const validSource = (
           source.path === 'tasks' &&
           expected === skillsbenchPilotTasks.length) ||
         (action === 'smoke' &&
-          source.path === 'tasks/edit-pdf' &&
+          source.path === 'tasks/jax-computing-basics' &&
           expected === 1))
     );
   if (benchmark === 'terminalbench')

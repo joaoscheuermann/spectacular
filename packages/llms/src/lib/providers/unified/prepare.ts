@@ -170,7 +170,9 @@ const sequentialToolInstruction: ProviderMessage = {
   content: [
     '# Tool use',
     '',
-    'Call at most one available tool in this response. Wait for its result before selecting another tool.',
+    'Call at most one available tool in each response.',
+    'This limit applies only to the current response, not to the task or node.',
+    'After receiving the result, call another tool in a later response when more work or recovery is needed.',
   ].join('\n'),
 };
 

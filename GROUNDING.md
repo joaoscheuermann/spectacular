@@ -363,7 +363,12 @@ schema plus the required Mosaic turn limit. One turn is one provider
 invocation, including direct and terminal responses, tool-call responses, and
 structured-output repair attempts. Tools requested on the final permitted turn
 execute and their results are stored; exhaustion is raised before another
-provider invocation. The model-facing decision owns only `status`, ordered criterion
+provider invocation. When a provider requires sequential tool calls, its
+one-tool limit applies to each response rather than the node or task; another
+tool may be called in a later response after observing the result. The executor
+must continue while a reasonable corrective action remains: one failed command,
+missing executable, or incomplete inspection is not sufficient for a
+model-authored `blocked` decision. The model-facing decision owns only `status`, ordered criterion
 evaluations, `result`, `revisionRequest`, and `reason`; criterion `evidence` is
 model-authored prose, and the revision request owns only `goalId`,
 `invalidatedAssumption`, and `requestedEffect`. Unknown legacy reference fields
@@ -539,7 +544,9 @@ private reasoning or credentials. The terminal is benchmark-only authority
 inside the task sandbox and does not add command execution to a product package
 or Doric host surface. Its strict input accepts an optional positive safe
 integer `max_output_chars`; the runtime clamps that request to the fixed 12 KiB
-combined stdout/stderr ceiling instead of rejecting larger requests. Loaded
+combined stdout/stderr ceiling instead of rejecting larger requests. Commands
+run through POSIX `sh -c`; the model-facing description does not promise
+Bash-only syntax and directs agents to discover available executables. Loaded
 skill bodies identify their canonical mounted
 directory so references to bundled scripts and supporting files resolve the
 same way in both arms. ACP prompt failures write only an authentic provider
@@ -560,6 +567,9 @@ and refuses any local, manifest, or published bundle hash mismatch.
 
 SkillsBench v1.1, pinned to commit
 `b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af`, is the primary benchmark.
+A diagnostic one-task SkillsBench smoke uses `jax-computing-basics` in both
+arms because it exercises sequential command recovery without relying on the
+flaky `edit-pdf` verifier environment. Smoke evidence remains operational only.
 A diagnostic SkillsBench `pilot` action runs a predeclared, varied ten-task
 subset through both arms by using BenchFlow's repeated `--include` selection.
 The fixed set is `data-to-d3`, `earthquake-phase-association`, `edit-pdf`,
