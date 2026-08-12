@@ -68,14 +68,15 @@ SkillsBench comparison.
 agents/       BenchFlow manifests for mosaic-direct and mosaic
 src/          ACP adapters, campaign domain, comparison, and Nx host
 tests/        Isolated Node.js tests
-dist/         Generated ACP and host bundles
+dist/         Generated ACP, host, and Docker-launcher bundles
 results/      Ignored, fresh paid-campaign artifacts
 ```
 
 `mosaic-bench-acp.mjs` is the released agent bundle used inside benchmark
 containers. `mosaic-bench-host.mjs` is the generated local Nx dispatcher for
-host-only orchestration such as campaign resume. Neither file is source code;
-do not invoke either one directly.
+host-only orchestration such as campaign resume. `mosaic-bench-docker.mjs`
+builds and starts the portable Linux coordinator. None of these files is source
+code; do not invoke them directly.
 
 ## Commands
 
@@ -83,25 +84,25 @@ Run from the repository root. Every command below uses the Nx target; do not
 invoke the generated bundle directly.
 
 ```sh
-# Free preflight: uvx, Docker, Git, release assets, manifests, and pinned refs.
-npx nx run mosaic-benchmark:run -- campaign skillsbench check
+# Free portable preflight: image, Docker, Git, release assets, and pinned refs.
+npx nx run mosaic-benchmark:docker-run -- campaign skillsbench check
 
 # Paid one-task smoke. Explicit confirmation is required.
-npx nx run mosaic-benchmark:run -- campaign skillsbench smoke --yes-paid-run
+npx nx run mosaic-benchmark:docker-run -- campaign skillsbench smoke --yes-paid-run
 
 # Paid diagnostic pilot: a fixed, varied subset of 10 tasks.
-npx nx run mosaic-benchmark:run -- campaign skillsbench pilot --yes-paid-run
+npx nx run mosaic-benchmark:docker-run -- campaign skillsbench pilot --yes-paid-run
 
 # Resume an interrupted or errored pilot in its existing campaign directory.
-npx nx run mosaic-benchmark:run -- campaign skillsbench resume \
+npx nx run mosaic-benchmark:docker-run -- campaign skillsbench resume \
   --campaign benchmarks/mosaic/results/<skillsbench-pilot-campaign> \
   --yes-paid-run
 
 # Paid primary campaign: SkillsBench v1.1, 87 tasks.
-npx nx run mosaic-benchmark:run -- campaign skillsbench run --yes-paid-run
+npx nx run mosaic-benchmark:docker-run -- campaign skillsbench run --yes-paid-run
 
 # Paid secondary confirmation: Terminal-Bench 2, 89 tasks.
-npx nx run mosaic-benchmark:run -- campaign terminalbench run \
+npx nx run mosaic-benchmark:docker-run -- campaign terminalbench run \
   --yes-paid-run \
   --skillsbench-report benchmarks/mosaic/results/<skillsbench-campaign>/compare.json
 
@@ -115,14 +116,27 @@ npx nx run mosaic-benchmark:run -- compare \
 npx nx run mosaic-benchmark:release
 ```
 
+`docker-run` builds `mosaic-benchmark:local` from pinned Linux base images and
+runs BenchFlow against a nested Docker daemon. The host needs Node/Nx and a
+Docker daemon running Linux containers; `uvx`, Python, Git, and curl are inside
+the coordinator image. The target works with native Linux and Docker Desktop
+from Windows, macOS, or WSL. It accepts only `campaign` commands; use `run` for
+local comparison and `release` for release artifacts.
+
+The coordinator runs with `--privileged`, does not mount the host Docker socket,
+and bind-mounts only `benchmarks/mosaic/results`. Named volumes
+`mosaic-benchmark-docker` and `mosaic-benchmark-uv` retain task-image and Python
+tool caches between runs. The image is rebuilt on every invocation, with normal
+Docker layer caching making unchanged builds fast.
+
 ## Paid execution checklist
 
 Complete every item below before running `smoke`, `pilot`, `resume`, or `run`:
 
 - [ ] Run from the repository root on the benchmark revision intended for the
       campaign.
-- [ ] Confirm `uvx`, Docker, Git, and curl are installed, and that the trusted
-      Docker daemon is running.
+- [ ] Confirm Docker is running in Linux-container mode. For the recommended
+      `docker-run` target, `uvx`, Python, Git, and curl come from the image.
 - [ ] Provide `OPENROUTER_API_KEY` through the process environment. Never place the
       credential in a manifest, command argument, committed file, or result
       directory.
@@ -143,9 +157,9 @@ Complete every item below before running `smoke`, `pilot`, `resume`, or `run`:
       `true`:
 
   ```sh
-  npx nx run mosaic-benchmark:run -- campaign skillsbench check
+  npx nx run mosaic-benchmark:docker-run -- campaign skillsbench check
   # Or, before a Terminal-Bench campaign:
-  npx nx run mosaic-benchmark:run -- campaign terminalbench check
+  npx nx run mosaic-benchmark:docker-run -- campaign terminalbench check
   ```
 
 - [ ] Review the fixed treatment before approving spend: model
@@ -158,7 +172,7 @@ Complete every item below before running `smoke`, `pilot`, `resume`, or `run`:
 For a paid smoke, run exactly one task in each arm:
 
 ```sh
-npx nx run mosaic-benchmark:run -- \
+npx nx run mosaic-benchmark:docker-run -- \
   campaign skillsbench smoke --yes-paid-run
 ```
 
@@ -175,7 +189,7 @@ ten-task subset: `data-to-d3`, `earthquake-phase-association`, `edit-pdf`,
 `spring-boot-jakarta-migration`, `travel-planning`, and `xlsx-recover-data`.
 
 ```sh
-npx nx run mosaic-benchmark:run -- \
+npx nx run mosaic-benchmark:docker-run -- \
   campaign skillsbench pilot --yes-paid-run
 ```
 
@@ -188,7 +202,7 @@ If a pilot stops because one or more Direct tasks are unscored, fix the host
 problem and resume the existing campaign instead of starting another one:
 
 ```sh
-npx nx run mosaic-benchmark:run -- \
+npx nx run mosaic-benchmark:docker-run -- \
   campaign skillsbench resume \
   --campaign benchmarks/mosaic/results/<skillsbench-pilot-campaign> \
   --yes-paid-run
@@ -216,7 +230,7 @@ new pilot rather than mixing agent implementations in one comparison.
 For a full paid SkillsBench run, execute all 87 tasks in each arm:
 
 ```sh
-npx nx run mosaic-benchmark:run -- \
+npx nx run mosaic-benchmark:docker-run -- \
   campaign skillsbench run --yes-paid-run
 ```
 
@@ -274,9 +288,11 @@ Both manifests pin the generated bundle SHA-256 literally and verify the
 official Node archive checksum for the selected architecture. The free
 preflight requires the local bundle, manifest pins, and published sidecar to
 agree before any paid run.
-`BENCHFLOW_AGENTS_DIR` is set internally to `agents/` for each paid run. Docker
-executes untrusted benchmark tasks, so use a trusted local daemon and inspect
-the free preflight before approving cost.
+`BENCHFLOW_AGENTS_DIR` is set internally to `agents/` for each paid run. The
+portable coordinator is privileged because it owns a nested Docker daemon; run
+only the image built from this repository. It does not mount the host Docker
+socket. Docker executes untrusted benchmark tasks, so inspect the free preflight
+before approving cost.
 
 Comparison validates identical neutral treatment metadata, task manifests and
 bundle digest, exact task sets, error-free verifier results, finite rewards,

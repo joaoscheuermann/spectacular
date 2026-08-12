@@ -11,7 +11,8 @@
       "options": {
         "commands": [
           "esbuild benchmarks/mosaic/src/cli.ts --bundle --platform=node --format=esm --target=node22 --conditions=@org/source --legal-comments=none --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=benchmarks/mosaic/dist/mosaic-bench-acp.mjs",
-          "esbuild benchmarks/mosaic/src/host.ts --bundle --platform=node --format=esm --target=node22 --conditions=@org/source --legal-comments=none --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=benchmarks/mosaic/dist/mosaic-bench-host.mjs"
+          "esbuild benchmarks/mosaic/src/host.ts --bundle --platform=node --format=esm --target=node22 --conditions=@org/source --legal-comments=none --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=benchmarks/mosaic/dist/mosaic-bench-host.mjs",
+          "esbuild benchmarks/mosaic/src/docker.ts --bundle --platform=node --format=esm --target=node22 --legal-comments=none --outfile=benchmarks/mosaic/dist/mosaic-bench-docker.mjs"
         ],
         "parallel": false
       }
@@ -22,6 +23,15 @@
       "cache": false,
       "options": {
         "command": "node benchmarks/mosaic/dist/mosaic-bench-host.mjs",
+        "forwardAllArgs": true
+      }
+    },
+    "docker-run": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "cache": false,
+      "options": {
+        "command": "node benchmarks/mosaic/dist/mosaic-bench-docker.mjs",
         "forwardAllArgs": true
       }
     },

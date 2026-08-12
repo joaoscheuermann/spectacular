@@ -559,9 +559,24 @@ embedding.
 public-benchmark comparison of MOSAIC. The former custom empirical study is
 archived at the annotated tag and GitHub release
 `mosaic-validation-v0.2-archive`; it is no longer an active repository surface.
-The application exposes only Nx-managed build, run, typecheck, test, and
-release targets. Its sole `.mjs` file is a generated standalone ACP bundle for
-benchmark containers that do not contain this workspace or its dependencies.
+The application exposes only Nx-managed build, run, docker-run, typecheck,
+test, and release targets. Its generated `.mjs` files are a standalone ACP
+bundle for benchmark containers that do not contain this workspace or its
+dependencies, a local host dispatcher, and a host-side Docker launcher.
+
+The additive `docker-run` target is the portable campaign surface for native
+Linux and Docker Desktop hosts, including Windows, macOS, and WSL. It accepts
+only `campaign` commands, builds the local `mosaic-benchmark:local` Linux image
+from digest-pinned Node, uv/Python, and Docker base images, and starts it with
+the privilege required for a nested Docker daemon. BenchFlow 0.6.5 and every
+task container therefore run under Linux without mounting the host Docker
+socket or depending on host `uvx`, Python, Git, or curl. The launcher mounts
+only the benchmark `results/` directory, translates supported campaign and
+report paths beneath that mount, inherits `OPENROUTER_API_KEY` by environment
+name rather than command value, and retains the nested Docker and uv caches in
+the `mosaic-benchmark-docker` and `mosaic-benchmark-uv` named volumes. The
+ordinary `run` target remains the local comparison and native campaign surface;
+release generation remains outside the portable coordinator.
 
 The benchmark publishes two BenchFlow ACP agents: a direct agent and a MOSAIC
 agent. Both receive the same task prompt, mounted task skills, terminal tool,

@@ -1,10 +1,10 @@
 import { spawn } from 'node:child_process';
-import { stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { resumeCampaign, type ResumeOptions } from './resume.js';
 import type { CampaignRun } from './campaign.js';
+import { benchmarkRoot } from './root.js';
 
 type Output = Pick<NodeJS.WriteStream, 'write'>;
 
@@ -93,19 +93,6 @@ const takeValue = (args: string[], flag: string): string | undefined => {
     throw new Error(`${flag} requires a value`);
   args.splice(index, 2);
   return value;
-};
-
-const benchmarkRoot = async (cwd: string): Promise<string> => {
-  const candidates = [resolve(cwd, 'benchmarks', 'mosaic'), resolve(cwd)];
-  for (const candidate of candidates) {
-    try {
-      if ((await stat(resolve(candidate, 'project.json'))).isFile())
-        return candidate;
-    } catch {
-      // Try the next supported invocation directory.
-    }
-  }
-  throw new Error('Cannot find the mosaic-benchmark project root.');
 };
 
 const delegate = (args: readonly string[], root: string): Promise<number> =>
