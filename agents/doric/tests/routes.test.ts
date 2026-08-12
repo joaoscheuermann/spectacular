@@ -210,7 +210,7 @@ const access = {
 };
 
 const event = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   runId: session.id,
   sequence: 2,
   type: 'stage.started',

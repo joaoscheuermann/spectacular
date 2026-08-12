@@ -6,7 +6,7 @@ import {
   createNodeDecisionSchema,
   createNodeOutcomeSchema,
 } from '../src/lib/schemas/outcome.js';
-import type { Node } from '../src/lib/types/graph.js';
+import type { Graph, Node } from '../src/lib/types/graph.js';
 
 const node = createNode();
 
@@ -16,10 +16,10 @@ test('accepts a completed outcome with every criterion and a result', () => {
   assert.equal(parsed.success, true);
 });
 
-test('accepts unique increasing observation indices including an empty proof set', () => {
+test('accepts unique opaque observation IDs including an empty proof set', () => {
   const decision = completed();
-  decision.criteria[0]!.observationIndices = [0, 2];
-  decision.criteria[1]!.observationIndices = [];
+  decision.criteria[0]!.observationIds = ['observation-a', 'observation-c'];
+  decision.criteria[1]!.observationIds = [];
 
   assert.equal(
     createNodeDecisionSchema(node).safeParse(decision).success,
@@ -27,10 +27,10 @@ test('accepts unique increasing observation indices including an empty proof set
   );
 });
 
-test('rejects negative duplicate or out-of-order observation indices', () => {
-  for (const observationIndices of [[-1], [0, 0], [1, 0]]) {
+test('rejects empty or duplicate observation IDs', () => {
+  for (const observationIds of [[''], ['observation-a', 'observation-a']]) {
     const decision = completed();
-    decision.criteria[0]!.observationIndices = observationIndices;
+    decision.criteria[0]!.observationIds = observationIds;
 
     assert.equal(
       createNodeDecisionSchema(node).safeParse(decision).success,
@@ -39,25 +39,97 @@ test('rejects negative duplicate or out-of-order observation indices', () => {
   }
 });
 
-test('rejects an observation index outside the materialized ledger', () => {
+test('rejects an observation ID that was not presented to the node', () => {
+  const observedNode = createNode();
+  observedNode.observations = [observation('observation-1', observedNode.id)];
   const decision = completed();
-  decision.criteria[0]!.observationIndices = [1];
+  decision.criteria[0]!.observationIds = ['observation-unknown'];
 
   assert.equal(
-    createNodeOutcomeSchema(node).safeParse({
-      ...decision,
-      observations: [
-        {
-          goalId: node.id,
-          toolName: 'inspect',
-          callId: 'call-1',
-          input: '{}',
-          output: '{}',
-        },
-      ],
-    }).success,
+    createNodeOutcomeSchema(observedNode).safeParse(decision).success,
     false,
   );
+});
+
+test('accepts local and cited transitive-ancestor observation IDs', () => {
+  const root = createNode();
+  root.id = 'root';
+  root.status = 'completed';
+  root.observations = [observation('observation-root', root.id)];
+  const rootOutcome = completed();
+  rootOutcome.criteria[0]!.observationIds = ['observation-root'];
+  root.outcome = rootOutcome;
+
+  const middle = createNode();
+  middle.id = 'middle';
+  middle.status = 'completed';
+  middle.dependsOn = ['root'];
+  const middleOutcome = completed();
+  middleOutcome.criteria[0]!.observationIds = ['observation-root'];
+  middle.outcome = middleOutcome;
+
+  const current = createNode();
+  current.id = 'current';
+  current.dependsOn = ['middle'];
+  current.observations = [observation('observation-local', current.id)];
+  const graph: Graph = { revision: 1, nodes: [root, middle, current] };
+  const decision = completed();
+  decision.criteria[0]!.observationIds = [
+    'observation-root',
+    'observation-local',
+  ];
+
+  assert.equal(
+    createNodeOutcomeSchema(current, graph).safeParse(decision).success,
+    true,
+  );
+});
+
+test('rejects uncited ancestor cross-branch descendant and retired observation IDs', () => {
+  const ancestor = createNode();
+  ancestor.id = 'ancestor';
+  ancestor.status = 'completed';
+  ancestor.observations = [observation('observation-ancestor', ancestor.id)];
+  ancestor.outcome = completed();
+
+  const current = createNode();
+  current.id = 'current';
+  current.dependsOn = ['ancestor'];
+
+  const sibling = createNode();
+  sibling.id = 'sibling';
+  sibling.status = 'completed';
+  sibling.observations = [observation('observation-sibling', sibling.id)];
+  const siblingOutcome = completed();
+  siblingOutcome.criteria[0]!.observationIds = ['observation-sibling'];
+  sibling.outcome = siblingOutcome;
+
+  const descendant = createNode();
+  descendant.id = 'descendant';
+  descendant.dependsOn = ['current'];
+  descendant.observations = [
+    observation('observation-descendant', descendant.id),
+  ];
+
+  const graph: Graph = {
+    revision: 2,
+    nodes: [ancestor, current, sibling, descendant],
+  };
+
+  for (const id of [
+    'observation-ancestor',
+    'observation-sibling',
+    'observation-descendant',
+    'observation-retired',
+  ]) {
+    const decision = completed();
+    decision.criteria[0]!.observationIds = [id];
+    assert.equal(
+      createNodeOutcomeSchema(current, graph).safeParse(decision).success,
+      false,
+      id,
+    );
+  }
 });
 
 test('rejects completed outcomes with an unsatisfied criterion or no result', () => {
@@ -199,7 +271,7 @@ test('rejects legacy observation reference fields and other unknown fields', () 
   assert.equal(createNodeDecisionSchema(node).safeParse(extra).success, false);
 });
 
-test('describes every model-facing decision field without ambiguous index scope', () => {
+test('describes every model-facing decision field with opaque ID scope', () => {
   const schema = z.toJSONSchema(createNodeDecisionSchema(node), {
     target: 'draft-2020-12',
   });
@@ -207,11 +279,11 @@ test('describes every model-facing decision field without ambiguous index scope'
   assertPropertiesAreDescribed(schema);
   assert.match(
     JSON.stringify(schema.properties?.criteria),
-    /current node's observation ledger only[\s\S]*ledger starts at 0/u,
+    /opaque observation IDs from this node or the projected ancestor evidence/u,
   );
   assert.match(
     JSON.stringify(schema.properties?.criteria),
-    /Never use indices displayed for ancestor nodes/u,
+    /Use \[\] when proof requires no tool result/u,
   );
   assert.match(
     JSON.stringify(schema.properties?.criteria),
@@ -248,18 +320,20 @@ function completed() {
         criterionIndex: 0,
         satisfied: true,
         evidence: 'First proof.',
-        observationIndices: [] as number[],
+        observationIds: [] as string[],
       },
       {
         criterionIndex: 1,
         satisfied: true,
         evidence: 'Second proof.',
-        observationIndices: [] as number[],
+        observationIds: [] as string[],
       },
     ],
     result: {
       markdown: 'Completed result.',
-      artifacts: [{ kind: 'inline', mime: 'text/plain', data: 'artifact' }],
+      artifacts: [
+        { kind: 'inline' as const, mime: 'text/plain', data: 'artifact' },
+      ],
     },
     revisionRequest: null,
     reason: null,
@@ -293,7 +367,17 @@ function createNode(): Node {
     bundle: null,
     tools: [],
     artifacts: [],
+    observations: [],
     outcome: null,
     termination: null,
   };
 }
+
+const observation = (id: string, goalId: string) => ({
+  id,
+  goalId,
+  toolName: 'inspect',
+  callId: `call-${id}`,
+  input: '{}',
+  output: '{}',
+});

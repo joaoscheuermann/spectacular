@@ -19,17 +19,17 @@ C05 & O bundle admite cardinalidade de zero a \(K_{\max}\) e ordem determinísti
 \hline
 C06 & O menu é \(T_{\mathrm{base}}\cup\bigcup A(s)\) para as skills selecionadas. & Sim \\
 \hline
-C07 & A decisão do modelo contém somente campos semânticos e avaliações ordenadas cujos índices de observação são zero-based, únicos e crescentes. & Sim \\
+C07 & A decisão do modelo contém somente campos semânticos e avaliações ordenadas cujos IDs de observação são opacos, não vazios e únicos por critério. & Sim \\
 \hline
-C08 & O runtime captura automaticamente cada retorno bem-sucedido de tool executável na ordem dos resultados. & Sim \\
+C08 & O runtime captura automaticamente cada retorno serializável de tool executável com UUID opaco, na ordem dos resultados. & Sim \\
 \hline
-C09 & Dados de chamada e retorno ausentes, duplicados ou não correlacionados causam falha de runtime. & Sim \\
+C09 & IDs de observação vazios ou colidentes e resultados não serializáveis causam falha de runtime sem registro parcial. & Sim \\
 \hline
 C10 & A tool terminal de saída estruturada nunca é registrada como observação. & Sim \\
 \hline
 C11 & \texttt{needs\_revision} exige ao menos uma observação e associa o pedido ao conjunto completo do nó. & Sim \\
 \hline
-C12 & O planner localizado recebe nome, entrada e saída de todas as observações, sem \texttt{callId}. & Sim \\
+C12 & O planner localizado recebe ID, nome, entrada e saída de todas as observações, sem \texttt{callId}. & Sim \\
 \hline
 C13 & Revisões preservam nós concluídos e seus resultados. & Sim \\
 \hline
@@ -37,7 +37,7 @@ C14 & A resposta final é empacotada sem nova chamada cognitiva. & Sim \\
 \hline
 C15 & Nenhum objeto estruturado escrito pelo modelo altera plano ou estado antes de satisfazer o contrato completo do runtime. & Sim \\
 \hline
-C16 & Cada índice citado resolve no ledger correlacionado antes de outcome ou artefato ser promovido. & Sim \\
+C16 & Cada ID citado resolve no ledger local ou na projeção causal do grafo ativo antes de outcome ou artefato ser promovido. & Sim \\
 \hline
 C17 & Descendentes recebem somente critérios, observações citadas deduplicadas e artefatos de ancestrais concluídos, sem \texttt{callId}. & Sim \\
 \hline

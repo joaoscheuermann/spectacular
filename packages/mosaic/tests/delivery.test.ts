@@ -28,7 +28,7 @@ test('assembles one terminal deliverable with additional artifacts and observati
     skills: ['selected'],
     selectionRationale: 'The selected skill is sufficient.',
   };
-  node.outcome = completedOutcome('final', '## Result', [observation('final')]);
+  node.observations = [observation('final')];
 
   const action = await delivery(
     state([{ revision: 1, nodes: [node] }]),
@@ -133,6 +133,7 @@ test('returns blocked without partial delivery and keeps topological node order'
         status: 'completed',
         candidates: [],
         bundle: null,
+        observations: [],
         outcome: completedOutcome('root', 'private'),
         termination: null,
       },
@@ -143,6 +144,7 @@ test('returns blocked without partial delivery and keeps topological node order'
         status: 'blocked',
         candidates: [],
         bundle: null,
+        observations: [],
         outcome: terminalOutcome('blocked', 'blocked'),
         termination: null,
       },
@@ -227,7 +229,7 @@ test('copies delivered artifacts and observations instead of retaining graph ref
   const node = completed('final', 0, [], true, 'result', [
     { kind: 'inline', mime: 'application/json', data: '{"ok":true}' },
   ]);
-  node.outcome = completedOutcome('final', 'result', [observation('final')]);
+  node.observations = [observation('final')];
   const action = await delivery(
     state([{ revision: 1, nodes: [node] }]),
     context(),
@@ -241,8 +243,8 @@ test('copies delivered artifacts and observations instead of retaining graph ref
   assert.ok(part);
   assert.notStrictEqual(part.artifacts, node.artifacts);
   assert.notStrictEqual(part.artifacts[0], node.artifacts[1]);
-  assert.notStrictEqual(part.observations, node.outcome.observations);
-  assert.notStrictEqual(part.observations[0], node.outcome.observations[0]);
+  assert.notStrictEqual(part.observations, node.observations);
+  assert.notStrictEqual(part.observations[0], node.observations[0]);
 });
 
 const state = (graphs: Graph[]): WorkflowState => ({ graphs });
@@ -257,6 +259,7 @@ const handlers = () =>
   }) as never;
 
 const observation = (goalId: string) => ({
+  id: `observation-${goalId}`,
   goalId,
   toolName: 'lookup',
   callId: `call-${goalId}`,
@@ -294,6 +297,7 @@ const completed = (
     primary ?? { kind: 'inline', mime: 'text/markdown', data: markdown },
     ...artifacts,
   ],
+  observations: [],
   outcome: completedOutcome(id, markdown || 'semantic result'),
   termination: null,
 });
@@ -315,6 +319,7 @@ const terminal = (
   bundle: null,
   tools: [],
   artifacts: [],
+  observations: [],
   outcome: terminalOutcome(id, status),
   termination: null,
 });
@@ -326,31 +331,25 @@ const terminalOutcome = (id: string, status: 'blocked' | 'failed') => ({
       criterionIndex: 0,
       satisfied: false,
       evidence: `${id} incomplete.`,
-      observationIndices: [],
+      observationIds: [],
     },
   ],
   result: null,
   revisionRequest: null,
   reason: `${id} ${status}.`,
-  observations: [],
 });
 
-const completedOutcome = (
-  id: string,
-  markdown: string,
-  observations: readonly ReturnType<typeof observation>[] = [],
-) => ({
+const completedOutcome = (id: string, markdown: string) => ({
   status: 'completed' as const,
   criteria: [
     {
       criterionIndex: 0,
       satisfied: true,
       evidence: `${id} is complete.`,
-      observationIndices: [],
+      observationIds: [],
     },
   ],
   result: { markdown, artifacts: [] },
   revisionRequest: null,
   reason: null,
-  observations: [...observations],
 });

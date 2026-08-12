@@ -3,7 +3,9 @@ import { ToolMetadataSchema } from 'tool';
 
 import { validateGraphSchema } from './graph-validations.js';
 import { ArtifactSchema } from './artifact.js';
+import { ObservationSchema } from './observation.js';
 import { NodeOutcomeSchema } from './outcome.js';
+import { authorizedObservationIds } from '../observations.js';
 import {
   OrderedBundleSchema,
   SkillCandidateSchema,
@@ -80,6 +82,7 @@ export const NodeSchema = PlannedNodeSchema.extend({
   bundle: OrderedBundleSchema.nullable(),
   tools: z.array(ToolMetadataSchema),
   artifacts: z.array(ArtifactSchema),
+  observations: z.array(ObservationSchema),
   outcome: NodeOutcomeSchema.nullable(),
   termination: RuntimeTerminationSchema.nullable(),
 }).strict();
@@ -92,10 +95,11 @@ export const GraphSchema = withGraphValidation(
     })
     .strict(),
 ).superRefine((graph, context) => {
+  validateObservationUniqueness(graph.nodes, context);
   graph.nodes.forEach((node, index) => {
     validateRoutingTrace(node, context, ['nodes', index]);
     validateRuntimeState(node, index, context);
-    validateRuntimeOwnership(node, graph.nodes, index, context);
+    validateRuntimeOwnership(node, graph, index, context);
   });
 });
 
@@ -116,7 +120,12 @@ export const StrictGraphSchema = GraphSchema.superRefine((graph, context) => {
         message: `Generated node index must be ${index}.`,
       });
     }
-    for (const field of ['candidates', 'tools', 'artifacts'] as const) {
+    for (const field of [
+      'candidates',
+      'tools',
+      'artifacts',
+      'observations',
+    ] as const) {
       if (node[field].length === 0) continue;
       context.addIssue({
         code: 'custom',
@@ -153,6 +162,7 @@ export const materializeGraph = (plan: PlannedGraph, revision: number) =>
       bundle: null,
       tools: [],
       artifacts: [],
+      observations: [],
       outcome: null,
       termination: null,
     })),
@@ -213,7 +223,7 @@ const validateRuntimeState = (
 
 const validateRuntimeOwnership = (
   node: RuntimeNode,
-  nodes: readonly RuntimeNode[],
+  graph: z.output<typeof GraphSchema>,
   index: number,
   context: z.RefinementCtx,
 ): void => {
@@ -229,13 +239,7 @@ const validateRuntimeOwnership = (
     });
   }
 
-  const observations = [
-    ...(node.outcome?.observations ?? []),
-    ...(node.termination?.type === 'turn_limit'
-      ? node.termination.observations
-      : []),
-  ];
-  if (observations.some(({ goalId }) => goalId !== node.id)) {
+  if (node.observations.some(({ goalId }) => goalId !== node.id)) {
     context.addIssue({
       code: 'custom',
       path: ['nodes', index],
@@ -243,9 +247,31 @@ const validateRuntimeOwnership = (
     });
   }
 
+  if (node.outcome !== null) {
+    const allowed = authorizedObservationIds(node, graph);
+    node.outcome.criteria.forEach((criterion, criterionIndex) => {
+      criterion.observationIds.forEach((id, idIndex) => {
+        if (allowed.has(id)) return;
+        context.addIssue({
+          code: 'custom',
+          path: [
+            'nodes',
+            index,
+            'outcome',
+            'criteria',
+            criterionIndex,
+            'observationIds',
+            idIndex,
+          ],
+          message: `Observation ID ${id} is not causally available to node ${node.id}.`,
+        });
+      });
+    });
+  }
+
   if (node.termination?.type !== 'dependency') return;
   const expected = node.dependsOn.filter((id) => {
-    const dependency = nodes.find((candidate) => candidate.id === id);
+    const dependency = graph.nodes.find((candidate) => candidate.id === id);
     return dependency?.status !== 'completed';
   });
   if (sameItems(node.termination.dependencyIds, expected)) return;
@@ -254,6 +280,26 @@ const validateRuntimeOwnership = (
     path: ['nodes', index, 'termination', 'dependencyIds'],
     message:
       'Dependency termination must name direct non-completed dependencies.',
+  });
+};
+
+const validateObservationUniqueness = (
+  nodes: readonly RuntimeNode[],
+  context: z.RefinementCtx,
+): void => {
+  const ids = new Set<string>();
+  nodes.forEach((node, nodeIndex) => {
+    node.observations.forEach(({ id }, observationIndex) => {
+      if (!ids.has(id)) {
+        ids.add(id);
+        return;
+      }
+      context.addIssue({
+        code: 'custom',
+        path: ['nodes', nodeIndex, 'observations', observationIndex, 'id'],
+        message: `Observation ID ${id} must be unique in the active graph.`,
+      });
+    });
   });
 };
 

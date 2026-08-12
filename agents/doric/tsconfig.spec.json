@@ -32,9 +32,6 @@
     },
     {
       "path": "../../packages/llms/tsconfig.lib.json"
-    },
-    {
-      "path": "../../workflows/prompt/tsconfig.lib.json"
     }
   ]
 }

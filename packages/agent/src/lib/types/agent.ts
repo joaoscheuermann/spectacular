@@ -13,11 +13,13 @@ import type {
 } from 'llms';
 import type { MessageStorage } from 'messages';
 import type { ToolCall, ToolStorage } from 'tool';
+import type { ToolCallRecord, ToolCallStorage } from './tool-call-storage.js';
 
 export type AgentOptions = {
   readonly provider: LlmProvider;
   readonly tools: ToolStorage;
   readonly messages: MessageStorage;
+  readonly toolCalls: ToolCallStorage;
   readonly system: string;
   readonly model: string;
   readonly effort?: ReasoningEffort;
@@ -42,6 +44,22 @@ export interface AgentToolCallRepairEvent {
   readonly maxAttempts: number;
 }
 
+/** Awaited lifecycle event for one validated executable-tool call. */
+export type AgentToolEvent =
+  | { readonly type: 'tool.started'; readonly call: ToolCall }
+  | {
+      readonly type: 'tool.finished';
+      readonly call: ToolCall;
+      readonly result: unknown;
+      readonly content: string;
+      readonly record: ToolCallRecord;
+    }
+  | {
+      readonly type: 'tool.failed';
+      readonly call: ToolCall;
+      readonly error: unknown;
+    };
+
 export type AgentRunOptions<
   Output = JsonValue,
   Schema extends StructuredOutputSchema = StructuredOutputSchema,
@@ -56,6 +74,7 @@ export type AgentRunOptions<
   readonly onToolCallRepair?: (
     event: AgentToolCallRepairEvent,
   ) => void | Promise<void>;
+  readonly onToolEvent?: (event: AgentToolEvent) => void | Promise<void>;
 };
 
 export type Agent = {
@@ -116,23 +135,15 @@ export type AgentEvent<Output = JsonValue> =
       readonly type: 'agent.finished';
       readonly response: AgentResponse<Output>;
     }
-  | { readonly type: 'tool.started'; readonly call: ToolCall }
-  | {
-      readonly type: 'tool.finished';
-      readonly call: ToolCall;
-      readonly result: unknown;
-      readonly content: string;
-    }
-  | {
-      readonly type: 'tool.failed';
-      readonly call: ToolCall;
-      readonly error: unknown;
-    };
+  | AgentToolEvent;
 
 export type AgentErrorCode =
   | 'concurrent_run'
   | 'invalid_structured_output'
   | 'missing_provider_finish'
+  | 'tool_call_id_collision'
+  | 'tool_call_id_invalid'
+  | 'tool_input_serialization_failed'
   | 'turn_limit_exceeded'
   | 'tool_result_serialization_failed';
 

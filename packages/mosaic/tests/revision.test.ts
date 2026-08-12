@@ -12,7 +12,7 @@ import {
 } from '../src/lib/states/revision/localized.js';
 import type { Graph, Node } from '../src/lib/types/graph.js';
 import type { MosaicOptions } from '../src/lib/types/mosaic-options.js';
-import type { Observation } from '../src/lib/types/revision.js';
+import type { Observation } from '../src/lib/schemas/observation.js';
 import type { WorkflowState } from '../src/lib/types/workflow.js';
 import {
   mosaicProviders,
@@ -29,6 +29,18 @@ test('preserves completed nodes and resets retained target runtime state', async
   completed.candidates = [candidate('selected', 'Preserve me.')];
   completed.bundle = bundle('completed', ['selected'], 'Preserve me.');
   completed.tools = [{ name: 'lookup', description: 'Preserve me.' }];
+  completed.observations = [
+    {
+      id: 'observation-completed',
+      goalId: completed.id,
+      toolName: 'lookup',
+      callId: 'call-completed',
+      input: '{}',
+      output: 'preserved evidence',
+    },
+  ];
+  assert.ok(completed.outcome);
+  completed.outcome.criteria[0]!.observationIds = ['observation-completed'];
   const target = node('target', 1, 'needs_revision', true, ['completed']);
   target.artifacts = [{ kind: 'inline', mime: 'text/plain', data: 'partial' }];
   target.candidates = [candidate('selected', 'Clear me.')];
@@ -71,13 +83,16 @@ test('preserves completed nodes and resets retained target runtime state', async
   assert.notStrictEqual(revised.nodes[0], completed);
   assert.notStrictEqual(revised.nodes[0]?.candidates, completed.candidates);
   assert.notStrictEqual(revised.nodes[0]?.bundle, completed.bundle);
+  assert.notStrictEqual(revised.nodes[0]?.observations, completed.observations);
   assert.deepEqual(revised.nodes[1]?.candidates, []);
   assert.equal(revised.nodes[1]?.bundle, null);
   assert.deepEqual(revised.nodes[1]?.tools, []);
   assert.deepEqual(revised.nodes[1]?.artifacts, []);
+  assert.deepEqual(revised.nodes[1]?.observations, []);
   assert.equal(revised.nodes[1]?.outcome, null);
   assert.equal(revised.nodes[1]?.termination, null);
   assert.strictEqual(target.outcome, historicalOutcome);
+  assert.equal(target.observations.length, 3);
   assert.equal(target.outcome?.status, 'needs_revision');
   assert.equal(revised.nodes[1]?.status, 'pending');
   assert.equal(revised.nodes[2]?.status, 'pending');
@@ -391,6 +406,7 @@ const requestRevision = (
 ): void => {
   const goalId = target.id;
   const observations: Observation[] = outputs.map((output, index) => ({
+    id: `observation-${goalId}-${index + 1}`,
     goalId,
     toolName: `lookup-${index + 1}`,
     callId: `provider-call-${goalId}-${index + 1}`,
@@ -398,6 +414,7 @@ const requestRevision = (
     output,
   }));
   target.status = 'needs_revision';
+  target.observations = observations;
   target.outcome = {
     status: 'needs_revision',
     criteria: [
@@ -405,7 +422,7 @@ const requestRevision = (
         criterionIndex: 0,
         satisfied: false,
         evidence: 'Not complete.',
-        observationIndices: [],
+        observationIds: [],
       },
     ],
     result: null,
@@ -415,7 +432,6 @@ const requestRevision = (
       requestedEffect: 'Revise the target structure.',
     },
     reason: 'Revision required.',
-    observations,
   };
   target.termination = null;
 };
@@ -434,6 +450,7 @@ const node = (
   bundle: null,
   tools: [],
   artifacts: [],
+  observations: [],
   outcome: status === 'completed' ? completedOutcome(id) : null,
   termination: null,
 });
@@ -445,13 +462,12 @@ const completedOutcome = (id: string) => ({
       criterionIndex: 0,
       satisfied: true,
       evidence: `${id} complete.`,
-      observationIndices: [],
+      observationIds: [],
     },
   ],
   result: { markdown: `${id} result`, artifacts: [] },
   revisionRequest: null,
   reason: null,
-  observations: [],
 });
 
 const candidate = (skillName: string, rationale: string) => ({

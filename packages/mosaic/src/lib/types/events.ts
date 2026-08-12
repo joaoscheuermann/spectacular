@@ -10,7 +10,7 @@ export type MosaicStage =
   | 'delivery';
 
 type EventBase = {
-  readonly schemaVersion: 2;
+  readonly schemaVersion: 3;
   readonly runId: string;
   readonly sequence: number;
 };
@@ -188,6 +188,7 @@ type ExecutionEvent =
       readonly revision: number;
       readonly callId: string;
       readonly toolName: string;
+      readonly observationId: string;
       readonly durationMs: number;
       readonly output?: unknown;
     }

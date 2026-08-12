@@ -187,7 +187,7 @@ lexical search over permissively parsed OKF frontmatter and Markdown bodies,
 tolerates unknown producer fields and concept types, skips malformed concepts
 and reserved index/log files, does not follow symbolic links, and does not
 write files or access the network. The tool is a standalone package and is not
-registered with `workflow-prompt` by this scope.
+registered with a built-in workflow or agent composition by this scope.
 
 `apps/evolution` is the explicitly requested Node.js prompt-evolution CLI. Its
 installed root command is `evolution`, with `init [directory]` and
@@ -301,7 +301,8 @@ the bundle state does not query it or run an independent tool router. Model
 graph output owns only `id`,
 `goal`, `doneWhen`, `dependsOn`, and `deliver`; Mosaic deterministically assigns
 array-order indices, pending status, empty runtime-owned `candidates`, `tools`,
-and `artifacts` arrays, plus null `bundle`, `outcome`, and `termination` fields.
+`artifacts`, and `observations` arrays, plus null `bundle`, `outcome`, and
+`termination` fields.
 Each materialized graph also receives a runtime-owned safe non-negative integer
 `revision`: P0 is `0`, P1 is `1`, and every localized revision increments it
 contiguously. The model-facing planning schema does not expose this field. Plans
@@ -350,7 +351,7 @@ they may reference only base tools and do not expand the node tool menu.
 Every model-authored structured object is validated locally against its complete
 Zod contract before changing Mosaic state. P0, P1, each concurrent hint
 candidate, bundle selection, and each localized revision create a fresh agent
-with isolated empty in-memory message and tool storages, preserve the authored
+with isolated empty in-memory message, executable-tool, and tool-call storages, preserve the authored
 system prompt and Markdown user input, and terminate through the agent-owned
 reserved structured-output tool using the operation's direct object schema
 without sending a provider-native schema. Invalid submissions cannot
@@ -361,8 +362,8 @@ tool is never executed, registered in Mosaic, or materialized as an
 `Observation`. Bundle selection preserves `sensitiveOutput`. Reranking remains
 a direct provider operation, and provider or transport failures receive no
 Mosaic infrastructure retry.
-Execution creates one agent per ready node with isolated in-memory message
-storage and executable tools resolved from the catalog. Each node makes one
+Execution creates one agent per ready node with isolated in-memory message and
+tool-call storages plus executable tools resolved from the catalog. Each node makes one
 `agent.complete` call with tools and a node-bound strict semantic-decision
 schema plus the required Mosaic turn limit. One turn is one provider
 invocation, including direct and terminal responses, tool-call responses, and
@@ -376,7 +377,7 @@ missing executable, or incomplete inspection is not sufficient for a
 model-authored `blocked` decision. The model-facing decision owns only `status`, ordered criterion
 evaluations, `result`, `revisionRequest`, and `reason`; each criterion owns its
 zero-based index, satisfaction decision, model-authored evidence, and a unique
-increasing array of zero-based observation indices. The revision request owns only `goalId`,
+array of opaque observation IDs. The revision request owns only `goalId`,
 `invalidatedAssumption`, and `requestedEffect`. Unknown legacy reference fields
 are rejected. The agent exposes that decision schema as its reserved terminal
 tool, whether or not executable tools are present, rather than using
@@ -384,26 +385,27 @@ provider-native structured output. The terminal structured-output tool is
 never an observation. Its collision-safe Markdown execution context contains
 the original request, current goal and ordered `doneWhen` criteria, and compact
 evidence for every completed transitive ancestor: criterion status, evidence,
-observation indices and counts, cited observation names, inputs and outputs,
-and current artifacts. Shared references are rendered once in ledger order;
+observation IDs and counts, plus one producer-ordered ledger containing the ID,
+producer, tool name, input, and output for each cited observation, and current
+artifacts. Shared references are rendered once in ledger order;
 uncited observations, call IDs, and unrelated branches are excluded. Selected
 skill bodies remain in bundle order, followed by tool names and descriptions
 without duplicated tool schemas. The executor directly inspects produced state
 when possible rather than treating an ancestor declaration alone as semantic
 proof.
 
-After the model decision terminates as `completed`, `needs_revision`,
-`blocked`, or `failed`, the runtime correlates every successfully returned
-executable-tool call from the node's isolated history. It creates one ordered
-`Observation` per tool result and materializes the internal node outcome from
-the decision and the complete observation sequence. Every criterion reference
-must be zero-based, unique, increasing, and within that ledger; an empty array
-is valid for proof based only on the request, deterministic results, or ancestor
-evidence. Invalid references reject execution before outcome storage or artifact
-promotion. `callId` exists only in an
-`Observation` for runtime correlation and is not exposed in execution or
-revision prompts. Missing, duplicate, or uncorrelated call/result data is a
-runtime failure. A completed decision is valid with zero, one, or multiple
+Each successfully serialized executable-tool return is first appended to the
+node agent's isolated `ToolCallStorage` with a runtime-owned UUID. The same ID
+appears in the Markdown tool-result message and the awaited finished event.
+Mosaic materializes one ordered `Observation` per stored record on the producing
+node before validating or storing the terminal semantic outcome. Every criterion
+reference must be a unique opaque ID from that local ledger or from an observation
+cited by a completed transitive ancestor and presented in the execution prompt.
+Unknown, duplicate, cross-branch, descendant, retired-snapshot, and unpresented
+IDs are rejected before outcome storage or artifact promotion. An empty array is
+valid when proof needs no tool observation. Complete observation objects remain
+only on their producing nodes. `callId` is retained in an `Observation` for
+correlation and is not exposed in execution or revision prompts. A completed decision is valid with zero, one, or multiple
 observations. Completed nodes store their Markdown result as an inline
 `text/markdown` artifact, append additional artifacts, and return the resolved wave to
 scheduling. Model-authored `blocked` and `failed` decisions also resolve their
@@ -432,16 +434,16 @@ preserve Markdown exactly, expose copied additional artifacts and complete
 runtime observations (including call IDs and inputs/outputs), and join part
 Markdown only with `\n\n`. A `needs_revision` decision requires at least one observation,
 must target the current node, and does not promote partial results: execution
-stores its semantic request and every observation produced by the node, then
+stores its semantic request while every observation remains on the node, then
 returns normally to scheduling. Turn exhaustion materializes every correlated
-executable-tool observation already stored, adds a runtime-owned `turn_limit`
-termination, marks the node blocked, promotes no result artifacts, and resolves
+executable-tool observation already stored on the node, adds a data-free
+runtime-owned `turn_limit` termination, marks the node blocked, promotes no result artifacts, and resolves
 the wave normally. Provider, tool, schema, correlation, and state-machine
 failures retain their original identity and reject the workflow. Execution
 emits safe logs with node IDs, terminal statuses, and selected skill and tool names only, never prompts, decisions, outcomes,
 reasons, tool payloads, or error details.
 The run-local state contains only the ordered graph snapshots. Each node owns a
-complete candidate trace, `OrderedBundle | null`, `NodeOutcome | null`, and
+complete candidate trace, ordered `Observation[]`, `OrderedBundle | null`, `NodeOutcome | null`, and
 `RuntimeTermination | null`. Outstanding
 revision work is selected from node outcomes in deterministic node-wave order;
 within each node, observations retain tool-result order. The localized planner receives every
@@ -451,9 +453,9 @@ derived from the active graph's explicit `revision`; retired IDs are the IDs fou
 the active graph. Each localized pass is owned by the dedicated `revision`
 state, skips catalog hints, preserves completed and other non-pending nodes
 exactly, permits changes only to the target and pending nodes, clears routing,
-outcome, termination, and partial results from a retained target, and prevents
+observations, outcome, termination, and partial results from a retained target, and prevents
 retired ID reuse. The prior graph snapshot retains its complete
-`needs_revision` outcome. Only successfully appended localized graphs count
+`needs_revision` outcome and node observation ledger. Only successfully appended localized graphs count
 against the configured limit; exhaustion preserves the outcome, adds a
 runtime-owned `revision_limit` termination, and blocks the target without a
 provider call. Descendants of blocked or failed dependencies become blocked
@@ -491,12 +493,26 @@ disable parallel tool calls. They do not force provider `tool_choice`, because
 reasoning models may support tools and reasoning without supporting forced tool
 selection in the same request.
 
-The public Mosaic result contract remains unchanged. `MosaicOptions.models`
+Every agent requires an injected `ToolCallStorage` in addition to message and
+executable-tool storage. The package-owned in-memory implementation uses
+`crypto.randomUUID` by default and accepts an injected ID factory for tests. It
+rejects empty and within-storage duplicate IDs. Complete and stream runs share
+one executable-tool path: validate, execute, serialize input and output, append
+the record, store a short Markdown result envelope carrying the opaque ID, and
+emit the finished lifecycle with that record. The awaited `onToolEvent` callback
+receives started, finished, and failed events in both modes; streamed
+`tool.finished` also exposes the record. Rejected calls, reserved terminal calls,
+thrown handlers, and serialization failures create no record. Valid operational
+failure values such as non-zero command exit codes remain ordinary records.
+
+The public Mosaic result contract exposes copied node observations directly on
+each `WorkflowNodeResult`, while delivery parts copy the same producing-node
+ledger. `MosaicOptions.models`
 separates planning, revision, and execution profiles and keeps reranking and
 embedding as non-reasoning model IDs. Each
 `MosaicAgent.prompt` additionally accepts run-local observation options with a
 serial awaited observer, caller-supplied UUID run ID, cancellation signal, and
-either `structure` capture, the default, or `io` capture. Version-two Mosaic
+either `structure` capture, the default, or `io` capture. Version-three Mosaic
 events carry one run ID and contiguous sequence; model events also carry the
 configured provider ID. They cover lifecycle, planning, retrieval/reranking,
 bundle/menu, scheduling waves,
@@ -511,7 +527,9 @@ and tool inputs and outputs; it excludes credentials, provider controls,
 private reasoning, provider replay, encrypted reasoning content, usage
 payloads, diagnostics from caught failures, and raw causes. Existing Mosaic
 logs remain allowlisted structural projections. Safe `tool.repair` events carry
-only stage identity and attempt counters.
+only stage identity and attempt counters. `tool.finished` carries the same
+`observationId` stored on its producing node. Doric persists v3 objects as JSONB
+without a database migration; older event objects remain replayable unchanged.
 
 `mosaic/evaluation` is the benchmark-only interception entrypoint over the
 same validated engine. Its optional initial-plan, feedback-plan, skill-view,

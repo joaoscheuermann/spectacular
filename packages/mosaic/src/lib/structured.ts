@@ -1,4 +1,4 @@
-import { createAgent } from 'agent';
+import { createAgent, createToolCallStorage } from 'agent';
 import type {
   LlmProvider,
   ProviderCallFlags,
@@ -45,6 +45,7 @@ export const completeStructured = async <
     system,
     flags,
     messages: createMessageStorage(),
+    toolCalls: createToolCallStorage(),
     tools: createToolStorage([]),
     effort: profile.effort,
   });

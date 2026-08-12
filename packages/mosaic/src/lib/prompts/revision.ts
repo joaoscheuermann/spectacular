@@ -1,6 +1,6 @@
 import type { Graph, Node } from '../types/graph.js';
 import type { SkillExtraction } from '../types/hint.js';
-import type { Observation } from '../types/revision.js';
+import type { Observation } from '../schemas/observation.js';
 import { artifactSections, fenced, graphContext, section } from './context.js';
 
 const planningRules = [
@@ -92,7 +92,7 @@ export const localizedUser = (
     section('Target Goal ID', revision.goalId),
     section('Invalidated Assumption', revision.invalidatedAssumption),
     section('Requested Effect', revision.requestedEffect),
-    observationContext(target.outcome?.observations ?? []),
+    observationContext(target.observations),
     completedState(graph),
     retiredContext(retiredIds),
   ].join('\n\n');
@@ -122,6 +122,7 @@ const observationContext = (observations: readonly Observation[]): string =>
     '# Ordered Revision Observations',
     ...observations.flatMap((observation, index) => [
       `## Observation ${index + 1}`,
+      section('Observation ID', observation.id),
       section('Tool Name', observation.toolName),
       section('Input', observation.input),
       section('Output', observation.output),

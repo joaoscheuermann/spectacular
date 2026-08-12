@@ -1,6 +1,7 @@
 import * as z from 'zod';
 
 import { FinalDeliverySchema } from './delivery.js';
+import { ObservationSchema } from './observation.js';
 import { NodeOutcomeSchema } from './outcome.js';
 import { RuntimeTerminationSchema } from './termination.js';
 import {
@@ -17,6 +18,7 @@ export const WorkflowNodeResultSchema = z
     status: z.enum(['completed', 'blocked', 'failed']),
     candidates: z.array(SkillCandidateSchema),
     bundle: OrderedBundleSchema.nullable(),
+    observations: z.array(ObservationSchema),
     outcome: NodeOutcomeSchema.nullable(),
     termination: RuntimeTerminationSchema.nullable(),
   })
@@ -70,14 +72,8 @@ const validateNodeResult = (
   node: NodeResult,
   context: z.RefinementCtx,
 ): void => {
-  const observations = [
-    ...(node.outcome?.observations ?? []),
-    ...(node.termination?.type === 'turn_limit'
-      ? node.termination.observations
-      : []),
-  ];
   if (
-    observations.some(({ goalId }) => goalId !== node.id) ||
+    node.observations.some(({ goalId }) => goalId !== node.id) ||
     (node.outcome?.revisionRequest !== null &&
       node.outcome?.revisionRequest !== undefined &&
       node.outcome.revisionRequest.goalId !== node.id)

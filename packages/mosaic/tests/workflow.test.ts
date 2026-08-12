@@ -47,6 +47,7 @@ test('finishes completed graphs through delivery without provider calls', async 
         status: 'completed',
         candidates: [],
         bundle: null,
+        observations: [],
         outcome: completedOutcome(),
         termination: null,
       },
@@ -67,6 +68,7 @@ const node = (id: string): Node => ({
   bundle: null,
   tools: [],
   artifacts: [{ kind: 'inline', mime: 'text/markdown', data: 'Done.' }],
+  observations: [],
   outcome: completedOutcome(),
   termination: null,
 });
@@ -78,11 +80,10 @@ const completedOutcome = () => ({
       criterionIndex: 0,
       satisfied: true,
       evidence: 'Done.',
-      observationIndices: [],
+      observationIds: [],
     },
   ],
   result: { markdown: 'Done.', artifacts: [] },
   revisionRequest: null,
   reason: null,
-  observations: [],
 });

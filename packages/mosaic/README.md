@@ -35,8 +35,8 @@ Every materialized graph carries a runtime-owned safe non-negative integer
 every successful localized revision increments it by one. `graphs[]` preserves
 those contiguous snapshots in revision order, but array position is not the
 revision authority.
-The graph array is the complete workflow state. Each node owns a complete
-`NodeOutcome | null` and `RuntimeTermination | null`. Outstanding work, the
+The graph array is the complete workflow state. Each node owns its complete
+`Observation[]`, `NodeOutcome | null`, and `RuntimeTermination | null`. Outstanding work, the
 number of successful localized revisions, and IDs removed by earlier revisions are all
 derived from graph contents instead of being reconciled with parallel
 ledgers, queues, counters, or retired-ID collections.
@@ -46,7 +46,8 @@ ledgers, queues, counters, or retired-ID collections.
 Every model-authored structured object is validated locally against its full
 Zod contract before it can change a graph or node. P0, P1, each concurrent hint
 candidate, bundle selection, and each localized revision run through a fresh
-ephemeral `agent` with empty in-memory message and tool storages. Execution
+ephemeral `agent` with empty in-memory message, executable-tool, and tool-call
+storages. Execution
 keeps its specialized per-node agent because it also owns executable tools,
 observation history, and `execution.maxTurns`.
 
@@ -66,7 +67,8 @@ The planner's structured output owns only `id`, `goal`, `doneWhen`,
 `dependsOn`, and `deliver`. Mosaic rejects empty values, empty criteria,
 duplicate or missing dependencies, cycles, non-terminal deliveries, unknown
 fields, and graphs without a terminal deliverable. It then assigns `revision`, `pending`,
-the array-order `index`, empty `candidates`, `tools`, and `artifacts`, plus null
+the array-order `index`, empty `candidates`, `tools`, `artifacts`, and
+`observations`, plus null
 `bundle`, `outcome`, and `termination` fields itself.
 Planning treats a node as independent only when completing it cannot require
 revising another node's choices. Constraints that jointly determine feasibility
@@ -83,8 +85,8 @@ the independent `routing.maxRetrievedCandidates` as `K_retrieve`. Both paths
 reapply their bound after canonical filtering and deduplication, so an
 over-returning retriever cannot exceed either limit.
 
-A `needs_revision` outcome stores the semantic request and the complete ordered
-observation set produced by its node. `schedule` detects those nodes and routes
+A `needs_revision` node stores the semantic request in its outcome and the
+complete ordered observation set on the node. `schedule` detects those nodes and routes
 to the dedicated `revision` state, which selects one in deterministic wave
 order and performs one localized revision without catalog hints before
 returning to `schedule`. The planner receives every queued observation as
@@ -170,11 +172,12 @@ contains the original request, current goal and ordered completion criteria,
 compact evidence from completed transitive ancestors only, ordered selected
 skill bodies, and the available tool names and descriptions; tool schemas are
 not duplicated in the prompt. Each projected ancestor includes its completed
-status, criterion evidence and observation indices, total and cited observation
-counts, each cited observation's tool name, input, and output, and current
-artifacts. References shared by criteria are rendered once in original ledger
-order. Provider call IDs, uncited observations, and unrelated branches remain
-outside the prompt.
+status, criterion evidence and opaque observation IDs, total and cited
+observation counts, one causally projected ledger containing each cited
+observation's ID, producer, tool name, input, and output, and current artifacts.
+References shared by criteria are rendered once in producer-ledger order.
+Provider call IDs, uncited observations, and unrelated branches remain outside
+the prompt.
 
 For every node, `agent` represents the decision schema as a strict terminal
 tool. Provider requests therefore contain that terminal tool plus any ordinary
@@ -184,32 +187,34 @@ terminal call is validated by `agent` and is not executed as a Mosaic tool.
 The model decision contains only `status`, ordered criterion evaluations,
 `result`, `revisionRequest`, and `reason`; each evaluation contains
 `criterionIndex`, `satisfied`, model-authored `evidence`, and
-`observationIndices`. Those indices are zero-based, unique, increasing, and
-identify the smallest supporting subset of the node's observation ledger. An
-empty subset is valid when proof comes only from the request, deterministic
-results, or projected ancestor evidence. Its status is `completed`,
-`needs_revision`, `blocked`, or `failed`. The runtime then correlates every
-successful executable-tool return from the node's isolated message history,
-creates ordered `Observation` records, and rejects any referenced index outside
-that ledger before storing the outcome or promoting artifacts. `callId` exists
-only on internal observations for correlation. The terminal structured-output
-tool is never an observation, and missing, duplicate, or uncorrelated calls or
-results fail execution.
+`observationIds`. IDs must be unique within the criterion and identify the
+smallest supporting subset of the current node's ledger or the cited ledger of
+a completed transitive ancestor. An empty subset is valid when proof requires
+no tool result. IDs from unknown observations, unrelated branches, descendants,
+retired snapshots, or evidence not shown in the execution context are rejected.
+Its status is `completed`, `needs_revision`, `blocked`, or `failed`. The runtime
+records every successful executable-tool return directly in the node's isolated
+`ToolCallStorage`, creates ordered `Observation` records with UUIDs, and rejects
+unauthorized referenced IDs before storing the outcome or promoting artifacts.
+`callId` remains correlation data on the full node observation but is not a
+criterion reference. The terminal structured-output tool is never an
+observation.
 
 If a node uses its final permitted turn to request tools, those tools execute
 and their results remain in the isolated history. Before another model call,
 the agent raises `turn_limit_exceeded`; Mosaic materializes the complete ordered
-observation ledger and records it in a runtime-owned `turn_limit` termination.
+observation ledger on the node and records a data-free runtime-owned
+`turn_limit` termination.
 The node becomes `blocked` and the concurrent wave resolves normally without
 inventing a model decision or evidence.
 
-The runtime materializes and durably stores the node outcome from the semantic
-decision and every correlated observation. A completed decision is valid with zero, one, or many
-observations; it stores its Markdown result as an inline `text/markdown` artifact,
+The runtime materializes the node observation ledger before validating and
+storing its semantic outcome. A completed decision is valid with zero, one, or
+many observations; it stores its Markdown result as an inline `text/markdown` artifact,
 appends additional artifacts, marks the node completed, and returns the fully
 completed wave to `schedule`. A valid `needs_revision` decision requires at
 least one observation, preserves no partial result, stores its semantic request
-and the complete observation set on the node, and returns normally so
+and keeps the complete observation set on the node, then returns normally so
 graph-derived revision work can be processed. Model-authored `blocked` and
 `failed` decisions resolve the wave normally. Provider, tool, schema,
 correlation, and state-machine failures still reject `prompt()` with their
@@ -223,6 +228,11 @@ remain separate runtime failures.
 Execution logs node IDs, terminal statuses, and selected skill and tool names,
 never goals, prompts, decisions, outcomes, reasons, tool payloads, or error
 details.
+
+New runs emit only MOSAIC event schema version 3. `tool.finished` includes the
+same `observationId` stored in the node ledger. Doric persists these event
+objects unchanged as JSONB; older stored event versions remain replayable and
+require no database migration.
 
 ## Final delivery
 
@@ -245,6 +255,27 @@ interface FinalDeliveryPart {
   readonly markdown: string;
   readonly artifacts: readonly Artifact[];
   readonly observations: readonly Observation[];
+}
+
+interface Observation {
+  readonly id: string;
+  readonly goalId: string;
+  readonly toolName: string;
+  readonly callId: string;
+  readonly input: string;
+  readonly output: string;
+}
+
+interface WorkflowNodeResult {
+  readonly id: string;
+  readonly goal: string;
+  readonly doneWhen: readonly string[];
+  readonly status: 'completed' | 'blocked' | 'failed';
+  readonly candidates: readonly SkillCandidate[];
+  readonly bundle: OrderedBundle | null;
+  readonly observations: readonly Observation[];
+  readonly outcome: NodeOutcome | null;
+  readonly termination: RuntimeTermination | null;
 }
 
 type Artifact =
@@ -292,7 +323,7 @@ remain unchanged under `docs/original/`.
 | Contextual skill routing      | Section 4.6: retrieval and reranking use the objective, criteria, original request, and relevant prior outputs.                                     |
 | Exact tool menu               | Section 4.7: available tools are the base set plus tools declared by selected skills, without a separate tool router.                               |
 | Projected node context        | Section 4.8: the executor receives compact causal ancestor criteria, cited observations, and current artifacts needed for the objective.            |
-| Decision and evidence         | Sections 4.9-4.10: the model cites observation indices per criterion; the runtime validates them against the correlated ordered ledger.             |
+| Decision and evidence         | Sections 4.9-4.10: the model cites opaque observation IDs per criterion; the runtime validates them against local and causally projected ledgers.   |
 | Localized revision            | Section 4.10: every observation from the requesting node is associated automatically and rendered without provider call IDs.                        |
 | Scheduler/executor order      | Algorithm 1: ready nodes execute in waves, observations are appended in deterministic node and result order, and revisions preserve completed work. |
 | Normative contracts           | Appendix A: `SkillCandidate`, `OrderedBundle`, `NodeDecision`, `Observation`, runtime `NodeOutcome`, and `RevisionRequest` are separate contracts.  |

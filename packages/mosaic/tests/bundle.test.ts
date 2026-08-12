@@ -549,6 +549,7 @@ const node = (
     artifact === undefined
       ? []
       : [{ kind: 'inline', mime: 'text/plain', data: artifact }],
+  observations: [],
   outcome: null,
   termination: null,
 });

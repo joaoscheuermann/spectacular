@@ -1,106 +1,54 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import type { ProviderMessage } from 'llms';
+import type { ToolCallRecord } from 'agent';
 
 import { materializeObservations } from '../src/lib/states/execution/observations.js';
 
-test('materializes correlated observations in tool-result message order', () => {
-  const messages: ProviderMessage[] = [
-    assistant([
-      call('call-second', 'second', '{"value":2}'),
-      call('call-first', 'first', '{"value":1}'),
-    ]),
-    result('call-first', 'first output'),
-    result('call-second', 'second output'),
+test('materializes agent records in append order with opaque IDs intact', () => {
+  const records: readonly ToolCallRecord[] = [
+    record('observation-1', 'call-1', 'first', '{"value":1}', 'one'),
+    record('observation-2', 'call-2', 'second', '{"value":2}', 'two'),
   ];
 
-  const observations = materializeObservations('current', messages);
+  assert.deepEqual(materializeObservations('current', records), [
+    {
+      id: 'observation-1',
+      goalId: 'current',
+      toolName: 'first',
+      callId: 'call-1',
+      input: '{"value":1}',
+      output: 'one',
+    },
+    {
+      id: 'observation-2',
+      goalId: 'current',
+      toolName: 'second',
+      callId: 'call-2',
+      input: '{"value":2}',
+      output: 'two',
+    },
+  ]);
+});
 
-  assert.deepEqual(
-    observations.map(({ toolName, callId, input, output }) => ({
-      toolName,
-      callId,
-      input,
-      output,
-    })),
-    [
-      {
-        toolName: 'first',
-        callId: 'call-first',
-        input: '{"value":1}',
-        output: 'first output',
-      },
-      {
-        toolName: 'second',
-        callId: 'call-second',
-        input: '{"value":2}',
-        output: 'second output',
-      },
-    ],
+test('returns detached observation objects', () => {
+  const recordValue = record(
+    'observation-1',
+    'call-1',
+    'lookup',
+    '{}',
+    'result',
   );
+  const observations = materializeObservations('current', [recordValue]);
+
+  assert.notStrictEqual(observations[0], recordValue);
+  assert.equal(observations[0]?.id, recordValue.id);
 });
 
-test('rejects duplicate tool call IDs', () => {
-  const messages: ProviderMessage[] = [
-    assistant([
-      call('duplicate', 'first', '{}'),
-      call('duplicate', 'second', '{}'),
-    ]),
-    result('duplicate', 'first output'),
-  ];
-
-  assert.throws(
-    () => materializeObservations('current', messages),
-    /Node current has a duplicate tool call ID\./u,
-  );
-});
-
-test('rejects duplicate tool results', () => {
-  const messages: ProviderMessage[] = [
-    assistant([call('call-1', 'lookup', '{}')]),
-    result('call-1', 'first output'),
-    result('call-1', 'second output'),
-  ];
-
-  assert.throws(
-    () => materializeObservations('current', messages),
-    /Node current has a duplicate tool result\./u,
-  );
-});
-
-test('rejects uncorrelated tool results', () => {
-  assert.throws(
-    () =>
-      materializeObservations('current', [
-        result('unknown-call', 'unexpected output'),
-      ]),
-    /Node current has an uncorrelated tool result\./u,
-  );
-});
-
-test('rejects tool calls without results', () => {
-  assert.throws(
-    () =>
-      materializeObservations('current', [
-        assistant([call('call-1', 'lookup', '{}')]),
-      ]),
-    /Node current has a tool call without a result\./u,
-  );
-});
-
-const assistant = (
-  toolCalls: NonNullable<ProviderMessage['toolCalls']>,
-): ProviderMessage => ({ role: 'assistant', content: '', toolCalls });
-
-const call = (id: string, name: string, args: string) => ({
-  id,
-  name,
-  arguments: args,
-});
-
-const result = (toolCallId: string, content: string): ProviderMessage => ({
-  role: 'tool',
-  toolCallId,
-  content,
-});
+const record = (
+  id: string,
+  callId: string,
+  toolName: string,
+  input: string,
+  output: string,
+): ToolCallRecord => ({ id, callId, toolName, input, output });

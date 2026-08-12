@@ -1,6 +1,7 @@
 import type { FinalDelivery } from './delivery.js';
 import type { NodeOutcome } from '../schemas/outcome.js';
 import type { RuntimeTermination } from '../schemas/termination.js';
+import type { Observation } from '../schemas/observation.js';
 import type { OrderedBundle, SkillCandidate } from './routing.js';
 
 export interface WorkflowNodeResult {
@@ -10,6 +11,7 @@ export interface WorkflowNodeResult {
   readonly status: 'completed' | 'blocked' | 'failed';
   readonly candidates: readonly SkillCandidate[];
   readonly bundle: OrderedBundle | null;
+  readonly observations: readonly Observation[];
   readonly outcome: NodeOutcome | null;
   readonly termination: RuntimeTermination | null;
 }

@@ -1,4 +1,4 @@
-import type { Observation } from './revision.js';
+import type { Observation } from '../schemas/observation.js';
 import type { Artifact } from './artifact.js';
 
 /** One completed terminal node selected for the final response. */

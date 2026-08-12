@@ -1,17 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {
-  AgentErrorObject,
-  createAgent,
-  type AgentEvent,
-} from '../src/index.js';
+import { AgentErrorObject, type AgentEvent } from '../src/index.js';
 import { z } from 'zod';
 import {
   call,
   collect,
   completeFinish,
   createProvider,
+  createTestAgent as createAgent,
   createTools,
   streamEvents,
 } from './fakes.js';
@@ -102,20 +99,23 @@ test('complete executes requested tools and calls the provider again with tool r
   assert.deepEqual(tools.calls, [
     { id: lookup.id, name: 'lookup', payload: { query: 'doric' } },
   ]);
-  assert.deepEqual(messages.list(), [
+  const stored = messages.list();
+  assert.deepEqual(stored.slice(0, 2), [
     { role: 'user', content: 'Find context.' },
     {
       role: 'assistant',
       content: 'Checking.',
       toolCalls: [lookup],
     },
-    {
-      role: 'tool',
-      toolCallId: lookup.id,
-      content: '{"found":true}',
-    },
-    { role: 'assistant', content: 'Tool says result.' },
   ]);
+  assert.equal(stored[2]?.role, 'tool');
+  assert.equal(stored[2]?.toolCallId, lookup.id);
+  assert.match(String(stored[2]?.content), /# Tool Result/u);
+  assert.match(String(stored[2]?.content), /\{"found":true\}/u);
+  assert.deepEqual(stored[3], {
+    role: 'assistant',
+    content: 'Tool says result.',
+  });
   assert.deepEqual(fake.requests[1]?.messages, messages.list().slice(0, 3));
 });
 
@@ -414,12 +414,18 @@ test('stream yields provider events tool events and final agent event across a t
     type: 'tool.started',
     call: { id: lookup.id, name: 'lookup', payload: { query: 'stream' } },
   });
-  assert.deepEqual(events[5], {
-    type: 'tool.finished',
-    call: { id: lookup.id, name: 'lookup', payload: { query: 'stream' } },
-    result: 'stream-result',
-    content: 'stream-result',
+  const toolFinished = events[5];
+  assert.equal(toolFinished?.type, 'tool.finished');
+  if (toolFinished?.type !== 'tool.finished')
+    assert.fail('Missing tool event.');
+  assert.deepEqual(toolFinished.call, {
+    id: lookup.id,
+    name: 'lookup',
+    payload: { query: 'stream' },
   });
+  assert.equal(toolFinished.result, 'stream-result');
+  assert.equal(toolFinished.record.output, 'stream-result');
+  assert.match(toolFinished.content, new RegExp(toolFinished.record.id, 'u'));
   const final = events.at(-1);
 
   assert.equal(
@@ -688,13 +694,13 @@ test('serializes string object and undefined tool results into tool messages', a
 
   await agent.complete('Serialize.');
 
+  const results = messages.list().filter((message) => message.role === 'tool');
   assert.deepEqual(
-    messages.list().filter((message) => message.role === 'tool'),
-    [
-      { role: 'tool', toolCallId: first.id, content: 'plain text' },
-      { role: 'tool', toolCallId: second.id, content: '{"ok":true}' },
-      { role: 'tool', toolCallId: third.id, content: '' },
-    ],
+    results.map(({ toolCallId }) => toolCallId),
+    [first.id, second.id, third.id],
+  );
+  ['plain text', '{"ok":true}', '## Output'].forEach((output, index) =>
+    assert.ok(String(results[index]?.content).includes(output)),
   );
 });
 

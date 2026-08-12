@@ -433,7 +433,7 @@ const terminal: Tool<typeof input, typeof output> = {
 };
 
 const hook = (value: object): MosaicEvent =>
-  ({ schemaVersion: 2, runId: 'run-1', sequence: 1, ...value }) as MosaicEvent;
+  ({ schemaVersion: 3, runId: 'run-1', sequence: 1, ...value }) as MosaicEvent;
 
 const idleAgent = {
   complete: async () => {

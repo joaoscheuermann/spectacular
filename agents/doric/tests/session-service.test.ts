@@ -239,7 +239,7 @@ const storedEvent = (sequence: number) => ({
   sequence,
   type: 'stage.started',
   event: {
-    schemaVersion: 2,
+    schemaVersion: 3,
     runId: id,
     sequence,
     type: 'stage.started',

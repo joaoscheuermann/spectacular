@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { AgentErrorObject, createAgent, type Agent } from '../src/index.js';
+import { AgentErrorObject, type Agent } from '../src/index.js';
 import { createMessageStorage } from 'messages';
 import { z } from 'zod';
 
@@ -10,6 +10,7 @@ import {
   collect,
   completeFinish,
   createProvider,
+  createTestAgent as createAgent,
   createTools,
   streamEvents,
 } from './fakes.js';
@@ -94,11 +95,10 @@ for (const mode of ['complete', 'stream'] as const) {
     await assert.rejects(run, assertTurnLimit);
     assert.equal(harness.provider.requests.length, 1);
     assert.equal(harness.tools.calls.length, 1);
-    assert.deepEqual(harness.messages.list().at(-1), {
-      role: 'tool',
-      toolCallId: lookup.id,
-      content: '{"found":true}',
-    });
+    const message = harness.messages.list().at(-1);
+    assert.equal(message?.role, 'tool');
+    assert.equal(message?.toolCallId, lookup.id);
+    assert.match(String(message?.content), /\{"found":true\}/u);
   });
 }
 

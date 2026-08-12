@@ -25,7 +25,6 @@ test('accepts only strict runtime-owned termination variants', () => {
       type: 'turn_limit',
       status: 'blocked',
       limit: 8,
-      observations: [observation()],
     },
     { type: 'revision_limit', status: 'blocked', limit: 3 },
     {
@@ -45,6 +44,15 @@ test('accepts only strict runtime-owned termination variants', () => {
   }
   assert.equal(
     RuntimeTerminationSchema.safeParse({
+      type: 'turn_limit',
+      status: 'blocked',
+      limit: 8,
+      observations: [observation()],
+    }).success,
+    false,
+  );
+  assert.equal(
+    RuntimeTerminationSchema.safeParse({
       type: 'dependency',
       status: 'blocked',
       dependencyIds: ['same', 'same'],
@@ -62,7 +70,6 @@ test('validates every allowed node status outcome and termination combination', 
       type: 'turn_limit',
       status: 'blocked',
       limit: 8,
-      observations: [observation()],
     }),
     node('blocked', revisionOutcome(), {
       type: 'revision_limit',
@@ -193,11 +200,13 @@ const node = (
   status,
   candidates: [],
   bundle: null,
+  observations: [observation()],
   outcome,
   termination,
 });
 
 const observation = () => ({
+  id: 'observation-1',
   goalId: 'node',
   toolName: 'lookup',
   callId: 'call-1',
@@ -217,7 +226,7 @@ const criteria = (satisfied: boolean) => [
     criterionIndex: 0,
     satisfied,
     evidence: 'Complete evidence.',
-    observationIndices: [],
+    observationIds: [],
   },
 ];
 
@@ -232,7 +241,6 @@ const completedOutcome = () => ({
   },
   revisionRequest: null,
   reason: null,
-  observations: [observation()],
 });
 
 const blockedOutcome = () => ({
@@ -241,7 +249,6 @@ const blockedOutcome = () => ({
   result: null,
   revisionRequest: null,
   reason: 'No useful action remains.',
-  observations: [observation()],
 });
 
 const failedOutcome = () => ({

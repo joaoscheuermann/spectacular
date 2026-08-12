@@ -40,7 +40,7 @@ test('observer delivery is awaited, serial, immutable, and ordered', async () =>
   assert.equal(events[0]?.type, 'run.started');
   assert.equal(events.at(-1)?.type, 'run.finished');
   assert.equal(
-    events.every((event) => event.schemaVersion === 2),
+    events.every((event) => event.schemaVersion === 3),
     true,
   );
   assert.equal(
@@ -153,7 +153,7 @@ test('io capture deep-clones and freezes tool inputs and outputs', async () => {
   const harness = createHarness(lookup);
   const events: MosaicEvent[] = [];
 
-  await mosaic(harness.options).prompt('request', {
+  const result = await mosaic(harness.options).prompt('request', {
     capture: 'io',
     observer: (event) => {
       if (event.type === 'tool.started') {
@@ -178,6 +178,10 @@ test('io capture deep-clones and freezes tool inputs and outputs', async () => {
   assert.deepEqual(
     finished?.type === 'tool.finished' ? finished.output : null,
     { found: true },
+  );
+  assert.equal(
+    finished?.type === 'tool.finished' ? finished.observationId : undefined,
+    result.nodes[0]?.observations[0]?.id,
   );
 });
 
@@ -315,7 +319,7 @@ const decision = {
       criterionIndex: 0,
       satisfied: true,
       evidence: 'Result produced.',
-      observationIndices: [],
+      observationIds: [],
     },
   ],
   result: { markdown: 'Done.', artifacts: [] },

@@ -48,6 +48,7 @@ test('mosaic mapping uses only public visible response and tool hooks', () => {
     revision: 1,
     callId: 'call-1',
     toolName: 'terminal',
+    observationId: 'observation-1',
     durationMs: 1,
     output: { exit_code: 0 },
   });
@@ -80,4 +81,4 @@ test('mosaic result maps only a completed final delivery', () => {
 });
 
 const event = (value: object): MosaicEvent =>
-  ({ schemaVersion: 2, runId: 'run-1', sequence: 1, ...value }) as MosaicEvent;
+  ({ schemaVersion: 3, runId: 'run-1', sequence: 1, ...value }) as MosaicEvent;

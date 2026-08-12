@@ -14,19 +14,20 @@ sem \texttt{callId}; bodies delimitados; menu igual a \(T(g)\) \\
 \hline
 \texttt{NodeDecision} &
 modelo: status, critérios com \texttt{criterionIndex}, satisfação, evidência em prosa e
-\texttt{observationIndices[]}, resultado, pedido de revisão e razão &
-índices zero-based, únicos, crescentes e mínimos; não contém observações, \texttt{callId}
-nem referências opacas do provedor \\
+\texttt{observationIds[]}, resultado, pedido de revisão e razão &
+IDs opacos, não vazios, únicos por critério e causalmente disponíveis; não contém
+observações nem \texttt{callId} \\
 \hline
 \texttt{Observation} &
-runtime: \texttt{goalId}, \texttt{toolName}, \texttt{callId}, entrada, saída e ordem &
-chamada e retorno correlacionados exatamente uma vez; \texttt{callId} permanece interno;
+runtime: \texttt{id}, \texttt{goalId}, \texttt{toolName}, \texttt{callId}, entrada, saída e ordem &
+UUID opaco único no grafo ativo; chamada e retorno correlacionados exatamente uma vez;
+\texttt{callId} não serve como referência;
 a tool terminal de saída estruturada não é observação \\
 \hline
 \texttt{NodeOutcome} &
-runtime: todos os campos de \texttt{NodeDecision} mais \texttt{observations[]} &
-contém cada retorno bem-sucedido de tool executável, na ordem dos resultados;
-referências fora do ledger invalidam o outcome antes de qualquer promoção \\
+runtime: os campos validados de \texttt{NodeDecision}; observações pertencem ao \texttt{Node} &
+referências são resolvidas contra o ledger local e a projeção causal do grafo ativo;
+referências inválidas rejeitam o outcome antes de qualquer promoção \\
 \hline
 \texttt{RevisionRequest} &
 modelo: \texttt{goalId}, \texttt{invalidatedAssumption}, \texttt{requestedEffect} &

@@ -106,7 +106,7 @@ const decision = {
       criterionIndex: 0,
       satisfied: true,
       evidence: 'Result produced.',
-      observationIndices: [],
+      observationIds: [],
     },
   ],
   result: { markdown: 'Done.', artifacts: [] },

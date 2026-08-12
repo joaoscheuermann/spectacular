@@ -69,13 +69,12 @@ test('blocks descendants causally and continues an independent branch', async ()
         criterionIndex: 0,
         satisfied: false,
         evidence: 'Unavailable.',
-        observationIndices: [],
+        observationIds: [],
       },
     ],
     result: null,
     revisionRequest: null,
     reason: 'No useful action remains.',
-    observations: [],
   };
   const child = createNode('child', 1, ['blocked']);
   const grandchild = createNode('grandchild', 2, ['child']);
@@ -104,12 +103,14 @@ test('routes a node-owned localized revision to revision before scheduling work'
   const graph = createGraph([target]);
   const workflow = state([graph]);
   const observation = {
+    id: 'observation-target',
     goalId: 'target',
     toolName: 'lookup',
     callId: 'call-target',
     input: '{}',
     output: '{}',
   };
+  target.observations = [observation];
   target.outcome = {
     status: 'needs_revision',
     criteria: [
@@ -117,7 +118,7 @@ test('routes a node-owned localized revision to revision before scheduling work'
         criterionIndex: 0,
         satisfied: false,
         evidence: 'Not complete.',
-        observationIndices: [],
+        observationIds: [],
       },
     ],
     result: null,
@@ -127,7 +128,6 @@ test('routes a node-owned localized revision to revision before scheduling work'
       requestedEffect: 'Revise it.',
     },
     reason: 'Revision required.',
-    observations: [observation],
   };
 
   const action = await schedule(workflow, {} as never, handlers());
@@ -219,6 +219,7 @@ const createNode = (
   bundle: null,
   tools: [],
   artifacts: [],
+  observations: [],
   outcome: status === 'completed' ? completedOutcome(id) : null,
   termination: null,
 });
@@ -230,11 +231,10 @@ const completedOutcome = (id: string) => ({
       criterionIndex: 0,
       satisfied: true,
       evidence: `${id} is complete.`,
-      observationIndices: [],
+      observationIds: [],
     },
   ],
   result: { markdown: `${id} result`, artifacts: [] },
   revisionRequest: null,
   reason: null,
-  observations: [],
 });

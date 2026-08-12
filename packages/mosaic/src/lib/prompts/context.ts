@@ -1,7 +1,8 @@
 import type { Artifact } from '../types/artifact.js';
 import type { Graph, Node } from '../types/graph.js';
 import type { CriterionEvaluation, NodeOutcome } from '../schemas/outcome.js';
-import type { Observation } from '../types/revision.js';
+import type { Observation } from '../schemas/observation.js';
+import { completedAncestors, projectedObservations } from '../observations.js';
 
 export type ProjectedArtifact = Artifact & {
   readonly producerId: string;
@@ -13,10 +14,7 @@ export type ProjectedAncestor = {
   readonly criteria: readonly CriterionEvaluation[];
   readonly observationCount: number;
   readonly citedObservationCount: number;
-  readonly observations: readonly {
-    readonly observationIndex: number;
-    readonly observation: Observation;
-  }[];
+  readonly observations: readonly Observation[];
   readonly artifacts: readonly Artifact[];
 };
 
@@ -25,60 +23,50 @@ export const projectedAncestors = (
   node: Node,
   graph: Graph,
 ): readonly ProjectedAncestor[] =>
-  ancestors(node, graph).map((ancestor) => {
+  completedAncestors(node, graph).map((ancestor) => {
     const outcome = completedOutcome(ancestor);
     const cited = new Set(
-      outcome.criteria.flatMap(({ observationIndices }) => observationIndices),
+      outcome.criteria.flatMap(({ observationIds }) => observationIds),
     );
-    const observations = outcome.observations.flatMap((observation, index) =>
-      cited.has(index) ? [{ observationIndex: index, observation }] : [],
+    const observations = ancestor.observations.filter(({ id }) =>
+      cited.has(id),
     );
 
     return {
       producerId: ancestor.id,
       status: 'completed',
       criteria: outcome.criteria,
-      observationCount: outcome.observations.length,
+      observationCount: ancestor.observations.length,
       citedObservationCount: observations.length,
       observations,
       artifacts: ancestor.artifacts,
     };
   });
 
+/** Returns causally projected observation objects once in producer-ledger order. */
+export const projectedObservationLedger = (
+  node: Node,
+  graph: Graph,
+): readonly {
+  readonly producerId: string;
+  readonly observation: Observation;
+}[] =>
+  projectedObservations(node, graph).map((observation) => ({
+    producerId: observation.goalId,
+    observation,
+  }));
+
 /** Returns transitive-ancestor artifacts in stable graph and artifact order. */
 export const projectedArtifacts = (
   node: Node,
   graph: Graph,
 ): readonly ProjectedArtifact[] =>
-  ancestors(node, graph).flatMap((ancestor) =>
+  completedAncestors(node, graph).flatMap((ancestor) =>
     ancestor.artifacts.map((artifact) => ({
       ...artifact,
       producerId: ancestor.id,
     })),
   );
-
-const ancestors = (node: Node, graph: Graph): readonly Node[] => {
-  const byId = new Map(
-    graph.nodes.map((candidate) => [candidate.id, candidate]),
-  );
-  const ids = new Set<string>();
-
-  const collect = (candidate: Node): void => {
-    candidate.dependsOn.forEach((id) => {
-      if (ids.has(id)) return;
-
-      ids.add(id);
-      const dependency = byId.get(id);
-      if (dependency !== undefined) collect(dependency);
-    });
-  };
-
-  collect(node);
-
-  return graph.nodes.filter(
-    (candidate) => ids.has(candidate.id) && candidate.status === 'completed',
-  );
-};
 
 const completedOutcome = (node: Node): NodeOutcome => {
   if (node.outcome?.status === 'completed') return node.outcome;

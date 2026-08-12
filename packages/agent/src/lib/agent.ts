@@ -13,7 +13,9 @@ import type {
   AgentRunOptions,
   AgentStructuredAttemptEvent,
   AgentToolCallRepairEvent,
+  AgentToolEvent,
 } from './types/agent.js';
+import type { ToolCallRecord } from './types/tool-call-storage.js';
 import { serializeToolResult } from './utils/serialize.js';
 import {
   createStructuredOutputTool,
@@ -144,6 +146,12 @@ export const createAgent = (options: AgentOptions): Agent => {
     });
   };
 
+  const pushObservedToolResult = (record: ToolCallRecord): string => {
+    const content = toolResultEnvelope(record);
+    pushToolResult(record.callId, content);
+    return content;
+  };
+
   const storeAssistant = (finish: ProviderFinished<unknown>): void => {
     /** Message storage preserves both semantic calls and opaque provider replay. */
     options.messages.push({
@@ -158,13 +166,36 @@ export const createAgent = (options: AgentOptions): Agent => {
   const validatedCalls = (finish: ProviderFinished<unknown>) =>
     options.tools.calls(finish).map((call) => options.tools.validate(call));
 
-  const runTools = async (
+  const runTools = async function* <Output>(
     calls: ReturnType<typeof validatedCalls>,
-  ): Promise<void> => {
+    runOptions: AgentRunOptions<Output>,
+  ): AsyncGenerator<AgentToolEvent> {
     /** Execute provider-requested tools sequentially in provider order. */
     for (const call of calls) {
-      const result = await options.tools.execute(call);
-      pushToolResult(call.id, serializeToolResult(result));
+      const started = { type: 'tool.started' as const, call };
+      await notifyToolEvent(runOptions, started);
+      yield started;
+
+      try {
+        const result = await options.tools.execute(call);
+        const output = serializeToolResult(result);
+        const record = options.toolCalls.append(call, output);
+        const content = pushObservedToolResult(record);
+        const finished = {
+          type: 'tool.finished' as const,
+          call,
+          result,
+          content,
+          record,
+        };
+        await notifyToolEvent(runOptions, finished);
+        yield finished;
+      } catch (error) {
+        const failed = { type: 'tool.failed' as const, call, error };
+        await notifyToolEvent(runOptions, failed);
+        yield failed;
+        throw error;
+      }
     }
   };
 
@@ -278,7 +309,9 @@ export const createAgent = (options: AgentOptions): Agent => {
           }
 
           /** Tool results are appended before the loop requests the next turn. */
-          await runTools(calls);
+          for await (const event of runTools(calls, runOptions)) {
+            void event;
+          }
         }
       } finally {
         release();
@@ -426,35 +459,8 @@ export const createAgent = (options: AgentOptions): Agent => {
             return;
           }
 
-          for (const call of calls) {
-            /** Streaming exposes tool lifecycle events around the same execution path. */
-            yield {
-              type: 'tool.started',
-              call,
-            } as const;
-
-            let result: unknown;
-
-            try {
-              result = await options.tools.execute(call);
-            } catch (error) {
-              yield {
-                type: 'tool.failed',
-                call,
-                error,
-              } as const;
-              throw error;
-            }
-
-            const content = serializeToolResult(result);
-            pushToolResult(call.id, content);
-
-            yield {
-              type: 'tool.finished',
-              call,
-              result,
-              content,
-            } as const;
+          for await (const event of runTools(calls, runOptions)) {
+            yield event;
           }
         }
       } finally {
@@ -507,6 +513,36 @@ const notifyStructuredAttempt = async <Output>(
   event: Omit<AgentStructuredAttemptEvent, 'schemaVersion'>,
 ): Promise<void> => {
   await options.onStructuredAttempt?.({ schemaVersion: 1, ...event });
+};
+
+const notifyToolEvent = async <Output>(
+  options: AgentRunOptions<Output>,
+  event: AgentToolEvent,
+): Promise<void> => {
+  await options.onToolEvent?.(event);
+};
+
+const toolResultEnvelope = (record: ToolCallRecord): string =>
+  [
+    '# Tool Result',
+    '',
+    '## Observation ID',
+    '',
+    fenced(record.id),
+    '',
+    '## Output',
+    '',
+    fenced(record.output),
+  ].join('\n');
+
+const fenced = (value: string): string => {
+  const longest = Math.max(
+    0,
+    ...[...value.matchAll(/`+/gu)].map(([run]) => run.length),
+  );
+  const fence = '`'.repeat(Math.max(3, longest + 1));
+  const body = value.endsWith('\n') ? value : `${value}\n`;
+  return `${fence}text\n${body}${fence}`;
 };
 
 const responseFromFinish = <Output = JsonValue>(

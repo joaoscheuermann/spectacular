@@ -12,16 +12,16 @@
 \node[mosaicbox, below left=of choice, text width=3.3cm] (call)
   {Chamada de tool executável};
 \node[mosaicbox, below=of call, text width=3.6cm] (observation)
-  {Runtime cria \texttt{Observation}\\nome, entrada, saída e ordem};
+  {Runtime cria \texttt{Observation}\\ID opaco, nome, entrada, saída e ordem};
 \node[mosaicbox, below right=of choice, text width=3.8cm] (decision)
-  {Modelo produz decisão semântica\\status, critérios com índices de evidência, resultado,
+  {Modelo produz decisão semântica\\status, critérios com IDs de evidência, resultado,
   revisão e razão};
 \node[mosaicbox, below=18mm of decision, text width=4.6cm] (outcome)
-  {Runtime materializa \texttt{NodeOutcome}\\decisão + ledger correlacionado; referências validadas};
+  {Runtime armazena ledger no \texttt{Node}\\e valida referências antes do \texttt{NodeOutcome}};
 \node[mosaicbox, below left=of outcome, text width=3.4cm] (completed)
   {\texttt{completed}\\promove resultado};
 \node[mosaicbox, below=of outcome, text width=3.8cm] (revision)
-  {\texttt{needs\_revision}\\exige \(\geq 1\) observação e associa o conjunto completo};
+  {\texttt{needs\_revision}\\exige \(\geq 1\) observação local e usa o ledger completo};
 \node[mosaicbox, below right=of outcome, text width=3.4cm] (stopped)
   {\texttt{blocked} ou \texttt{failed}};
 

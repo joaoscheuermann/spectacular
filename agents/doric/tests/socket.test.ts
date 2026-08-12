@@ -67,7 +67,7 @@ const storedEvent = (sequence: number): SessionEvent => ({
   sequence,
   type: 'stage.started',
   event: {
-    schemaVersion: 2,
+    schemaVersion: 3,
     runId: sessionId,
     sequence,
     type: 'stage.started',

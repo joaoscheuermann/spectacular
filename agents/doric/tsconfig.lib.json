@@ -15,7 +15,7 @@
       "path": "../../packages/tool/tsconfig.lib.json"
     },
     {
-      "path": "../../workflows/prompt/tsconfig.lib.json"
+      "path": "../../packages/victor/tsconfig.lib.json"
     },
     {
       "path": "../../packages/session/tsconfig.lib.json"
@@ -28,9 +28,6 @@
     },
     {
       "path": "../../packages/oauth/tsconfig.lib.json"
-    },
-    {
-      "path": "../../packages/victor/tsconfig.lib.json"
     },
     {
       "path": "../../packages/mosaic/tsconfig.lib.json"

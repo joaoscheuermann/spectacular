@@ -100,7 +100,7 @@ test(
 );
 
 const event = (runId: string, sequence: number) => ({
-  schemaVersion: 2 as const,
+  schemaVersion: 3 as const,
   runId,
   sequence,
   type: 'stage.started' as const,

@@ -1,4 +1,9 @@
-import { createAgent, type Agent, type AgentOptions } from 'agent';
+import {
+  createAgent,
+  createToolCallStorage,
+  type Agent,
+  type AgentOptions,
+} from 'agent';
 import type { Skill } from 'bundle';
 import { createMessageStorage } from 'messages';
 import { homedir } from 'node:os';
@@ -39,6 +44,7 @@ export const direct = (dependencies: DirectDependencies = {}): Runner => {
         effort: 'low',
         system: systemPrompt(skills),
         messages: createMessageStorage(),
+        toolCalls: createToolCallStorage(),
         tools: createToolStorage([terminal]),
       });
 

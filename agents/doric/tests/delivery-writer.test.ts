@@ -54,6 +54,7 @@ test('logs only status and node IDs for blocked and failed results', () => {
             candidates: [],
             bundle: null,
             status,
+            observations: [],
             outcome: status === 'failed' ? failedOutcome() : blockedOutcome(),
             termination: null,
           },
@@ -84,13 +85,12 @@ const blockedOutcome = () => ({
       criterionIndex: 0,
       satisfied: false,
       evidence: 'private',
-      observationIndices: [],
+      observationIds: [],
     },
   ],
   result: null,
   revisionRequest: null,
   reason: 'private',
-  observations: [],
 });
 
 const failedOutcome = () => ({

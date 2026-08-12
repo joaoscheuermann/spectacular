@@ -26,20 +26,20 @@ Bundle & Sequência ordenada de skills ativadas para um objetivo. &
 Que instruções atuam em conjunto e em que ordem? \\
 \hline
 Decisão do nó & Saída semântica do modelo: status, critérios com evidência e
-índices do ledger, resultado, pedido de revisão e razão. Não contém observações
-nem IDs do provedor. &
+IDs opacos de observação, resultado, pedido de revisão e razão. Não contém
+objetos de observação nem \texttt{callId}. &
 O que o modelo concluiu semanticamente? \\
 \hline
 Observação & Registro criado pelo runtime para um retorno de tool executável,
-com correlação interna, nome, entrada, saída e ordem. &
+com ID opaco, correlação interna, nome, entrada, saída e ordem. &
 Que evidência operacional foi realmente retornada? \\
 \hline
-Resultado do nó & Objeto materializado pelo runtime ao combinar a decisão do
-modelo com todas as observações correlacionadas do nó. &
-Que decisão e evidências o runtime aceita conjuntamente? \\
+Resultado do nó & Decisão semântica validada pelo runtime; o ledger completo
+permanece exclusivamente no nó produtor. &
+Que decisão semântica o runtime aceita? \\
 \hline
 Pedido de revisão & Descrição semântica da suposição invalidada e do efeito
-solicitado, associada automaticamente a todas as observações do nó. &
+solicitado, avaliada com todas as observações do nó. &
 Por que e com que efeito o plano deve mudar? \\
 \hline
 Estado projetado & Critérios, observações citadas e artefatos dos ancestrais

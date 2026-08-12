@@ -99,22 +99,32 @@ test('automatically records one returned tool observation for a completed node',
   assert.equal(provider.requests[1]?.schema, undefined);
   assert.equal(provider.requests[0]?.tools?.length, 2);
   if (action.type !== 'transition') return;
-  assert.deepEqual(node.outcome?.observations, [
-    {
-      goalId: 'current',
-      toolName: 'lookup',
-      callId: 'call-1',
-      input: '{"query":"evidence"}',
-      output: '{"found":true}',
-    },
-  ]);
+  assert.deepEqual(
+    node.observations.map(({ goalId, toolName, callId, input, output }) => ({
+      goalId,
+      toolName,
+      callId,
+      input,
+      output,
+    })),
+    [
+      {
+        goalId: 'current',
+        toolName: 'lookup',
+        callId: 'call-1',
+        input: '{"query":"evidence"}',
+        output: '{"found":true}',
+      },
+    ],
+  );
+  assert.match(node.observations[0]?.id ?? '', /^[0-9a-f-]{36}$/u);
 });
 
-test('rejects out-of-ledger evidence after correlation without promoting artifacts', async () => {
+test('rejects an unpresented observation ID without promoting artifacts', async () => {
   const node = createNode('current', ['lookup']);
   const graph: Graph = { revision: 1, nodes: [node] };
   const decision = completed();
-  decision.criteria[0]!.observationIndices = [1];
+  decision.criteria[0]!.observationIds = ['unknown-observation-id'];
   const provider = createProvider([
     toolFinish('call-1', 'lookup'),
     terminalFinish(decision),
@@ -127,6 +137,7 @@ test('rejects out-of-ledger evidence after correlation without promoting artifac
 
   assert.equal(action.type, 'fail');
   assert.equal(node.outcome, null);
+  assert.equal(node.observations.length, 1);
   assert.deepEqual(node.artifacts, []);
   assert.notEqual(node.status, 'completed');
 });
@@ -152,7 +163,7 @@ test('automatically records every returned observation in tool-result order', as
   if (action.type !== 'transition') return;
   assert.equal(node.status, 'completed');
   assert.deepEqual(
-    node.outcome?.observations.map(({ toolName, callId, input, output }) => ({
+    node.observations.map(({ toolName, callId, input, output }) => ({
       toolName,
       callId,
       input,
@@ -205,13 +216,11 @@ test('blocks on turn exhaustion after retaining ordered observations without art
   assert.equal(node.outcome, null);
   assert.deepEqual(node.artifacts, []);
   assert.deepEqual(
-    node.termination?.type === 'turn_limit'
-      ? node.termination.observations.map(({ toolName, callId, output }) => ({
-          toolName,
-          callId,
-          output,
-        }))
-      : [],
+    node.observations.map(({ toolName, callId, output }) => ({
+      toolName,
+      callId,
+      output,
+    })),
     [
       {
         toolName: 'first',
@@ -334,7 +343,7 @@ test('stores needs_revision with every node observation and does not promote a p
   assert.equal(node.status, 'needs_revision');
   assert.deepEqual(node.artifacts, []);
   assert.deepEqual(
-    node.outcome?.observations.map(({ toolName, output }) => ({
+    node.observations.map(({ toolName, output }) => ({
       toolName,
       output,
     })),
@@ -345,7 +354,7 @@ test('stores needs_revision with every node observation and does not promote a p
     ],
   );
   assert.equal(node.outcome?.revisionRequest?.goalId, 'current');
-  assert.equal(node.outcome?.observations.length, 3);
+  assert.equal(node.observations.length, 3);
 });
 
 test('fails needs_revision when the node produced no observation', async () => {
@@ -370,7 +379,7 @@ test('fails needs_revision when the node produced no observation', async () => {
   assert.equal(node.status, 'running');
   assert.match(
     (action.error as Error).message,
-    /requires at least one observation/u,
+    /requires a local observation/u,
   );
 });
 
@@ -561,6 +570,7 @@ function createNode(id: string, toolNames: readonly string[] = []): Node {
     },
     tools: toolNames.map((name) => ({ name, description: `${name} tool` })),
     artifacts: [],
+    observations: [],
     outcome: null,
     termination: null,
   };
@@ -574,7 +584,7 @@ function completed(overrides: Record<string, unknown> = {}) {
         criterionIndex: 0,
         satisfied: true,
         evidence: 'Criterion met.',
-        observationIndices: [] as number[],
+        observationIds: [] as string[],
       },
     ],
     result: { markdown: 'Completed.', artifacts: [] },
@@ -595,7 +605,7 @@ function nonCompleted(
         criterionIndex: 0,
         satisfied: false,
         evidence: 'Criterion unmet.',
-        observationIndices: [],
+        observationIds: [],
       },
     ],
     result: null,

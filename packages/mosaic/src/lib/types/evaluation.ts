@@ -4,7 +4,7 @@ import type { Tool } from 'tool';
 import type { NodeDecision } from '../schemas/outcome.js';
 import type { PlannedGraph } from '../schemas/graph.js';
 import type { Graph, Node } from './graph.js';
-import type { Observation } from './revision.js';
+import type { Observation } from '../schemas/observation.js';
 import type { RoutingTrace } from './routing.js';
 
 export type EvaluationHook<Input, Output> = (

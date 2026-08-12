@@ -19,6 +19,8 @@ export {
   InlineArtifactSchema,
 } from './lib/schemas/artifact.js';
 export { FinalDeliverySchema } from './lib/schemas/delivery.js';
+export type { Observation } from './lib/schemas/observation.js';
+export { ObservationSchema } from './lib/schemas/observation.js';
 export type {
   CriterionEvaluation,
   NodeDecision,
@@ -49,4 +51,3 @@ export {
   OrderedBundleSchema,
   SkillCandidateSchema,
 } from './lib/schemas/routing.js';
-export type { Observation } from './lib/types/revision.js';

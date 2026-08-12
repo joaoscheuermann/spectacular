@@ -20,14 +20,9 @@ test('defines precedence tools criteria and all terminal statuses', () => {
   assert.match(prompt, /another reasonable command or tool action/u);
   assert.match(prompt, /One missing executable/u);
   assert.match(prompt, /zero-based criterionIndex/u);
-  assert.match(prompt, /smallest set of observationIndices/u);
-  assert.match(prompt, /current node's observation ledger starts at index 0/u);
-  assert.match(prompt, /first returned tool result.*index 0/u);
-  assert.match(prompt, /Never use an ancestor's observation index/u);
-  assert.match(
-    prompt,
-    /less than the number[\s\S]*of tool results returned during the current node/u,
-  );
+  assert.match(prompt, /smallest set of observationIds/u);
+  assert.match(prompt, /exact opaque IDs shown in tool-result messages/u);
+  assert.match(prompt, /another branch, a descendant, an older plan snapshot/u);
   assert.match(prompt, /exit_code.*stderr.*timed_out.*truncated/u);
   assert.match(
     prompt,
@@ -46,7 +41,7 @@ test('defines precedence tools criteria and all terminal statuses', () => {
 });
 
 test('projects only cited transitive ancestor evidence and preserves skill order', () => {
-  const root = completedNode('root', 0, [], 'root artifact', [0]);
+  const root = completedNode('root', 0, [], 'root artifact', ['obs-root-call']);
   const direct = createNode(
     'direct',
     1,
@@ -54,15 +49,15 @@ test('projects only cited transitive ancestor evidence and preserves skill order
     'completed',
     'direct artifact',
   );
-  direct.outcome = completedOutcome(
-    'direct',
-    [0, 1],
-    [
-      observation('direct', 'direct-call-1', 'cited direct output'),
-      observation('direct', 'direct-call-2', 'also cited direct output'),
-      observation('direct', 'direct-call-3', 'uncited direct output'),
-    ],
-  );
+  direct.observations = [
+    observation('direct', 'direct-call-1', 'cited direct output'),
+    observation('direct', 'direct-call-2', 'also cited direct output'),
+    observation('direct', 'direct-call-3', 'uncited direct output'),
+  ];
+  direct.outcome = completedOutcome('direct', [
+    'obs-direct-call-1',
+    'obs-direct-call-2',
+  ]);
   const unrelated = createNode(
     'unrelated',
     2,
@@ -101,10 +96,10 @@ test('projects only cited transitive ancestor evidence and preserves skill order
   assert.match(prompt, /also cited direct output/u);
   assert.match(prompt, /Total Observation Count[\s\S]*3/u);
   assert.match(prompt, /Cited Observation Count[\s\S]*2/u);
-  assert.match(prompt, /Producer-local Observation Indices/u);
-  assert.match(prompt, /not valid references for the current node/u);
+  assert.match(prompt, /Observation IDs/u);
+  assert.match(prompt, /may be cited as ancestor evidence/u);
   assert.doesNotMatch(prompt, /unrelated artifact/u);
-  assert.doesNotMatch(prompt, /uncited direct output|direct-call|root-call/u);
+  assert.doesNotMatch(prompt, /uncited direct output|## Call ID/u);
   assert.ok(prompt.indexOf('first body') < prompt.indexOf('second body'));
   assert.match(prompt, /Input schemas are supplied directly by the runtime/u);
   assert.doesNotMatch(prompt, /inputSchema/u);
@@ -120,20 +115,20 @@ test('deduplicates cross-criterion references in original observation order', ()
         criterionIndex: 0,
         satisfied: true,
         evidence: 'First criterion.',
-        observationIndices: [1],
+        observationIds: ['obs-call-1'],
       },
       {
         criterionIndex: 1,
         satisfied: true,
         evidence: 'Second criterion.',
-        observationIndices: [0, 1],
+        observationIds: ['obs-call-0', 'obs-call-1'],
       },
     ],
-    observations: [
-      observation('ancestor', 'call-0', 'first ledger output'),
-      observation('ancestor', 'call-1', 'second ledger output'),
-    ],
   };
+  ancestor.observations = [
+    observation('ancestor', 'call-0', 'first ledger output'),
+    observation('ancestor', 'call-1', 'second ledger output'),
+  ];
   const current = createNode('current', 1, ['ancestor'], 'ready');
 
   const prompt = executionPrompt.user({
@@ -150,7 +145,7 @@ test('deduplicates cross-criterion references in original observation order', ()
     prompt.indexOf('first ledger output') <
       prompt.indexOf('second ledger output'),
   );
-  assert.doesNotMatch(prompt, /call-0|call-1/u);
+  assert.doesNotMatch(prompt, /## Call ID/u);
 });
 
 test('uses collision-safe fences for arbitrary dynamic content', () => {
@@ -225,6 +220,7 @@ function createNode(
       artifact === undefined
         ? []
         : [{ kind: 'inline', mime: 'text/plain', data: artifact }],
+    observations: [],
     outcome: null,
     termination: null,
   };
@@ -235,20 +231,15 @@ function completedNode(
   index: number,
   dependsOn: string[],
   artifact?: string,
-  observationIndices: readonly number[] = [],
+  observationIds: readonly string[] = [],
 ): Node {
   const node = createNode(id, index, dependsOn, 'completed', artifact);
-  node.outcome = completedOutcome(id, observationIndices, [
-    observation(id, `${id}-call`, `cited ${id} output`),
-  ]);
+  node.observations = [observation(id, `${id}-call`, `cited ${id} output`)];
+  node.outcome = completedOutcome(id, observationIds);
   return node;
 }
 
-function completedOutcome(
-  id: string,
-  observationIndices: readonly number[],
-  observations: readonly ReturnType<typeof observation>[],
-) {
+function completedOutcome(id: string, observationIds: readonly string[]) {
   return {
     status: 'completed' as const,
     criteria: [
@@ -256,18 +247,18 @@ function completedOutcome(
         criterionIndex: 0,
         satisfied: true,
         evidence: `${id} is complete.`,
-        observationIndices: [...observationIndices],
+        observationIds: [...observationIds],
       },
     ],
     result: { markdown: `${id} result`, artifacts: [] },
     revisionRequest: null,
     reason: null,
-    observations: [...observations],
   };
 }
 
 function observation(goalId: string, callId: string, output: string) {
   return {
+    id: `obs-${callId}`,
     goalId,
     toolName: 'inspect',
     callId,

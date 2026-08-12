@@ -1,7 +1,7 @@
 # agent
 
 Embeddable TypeScript agent core that composes an injected LLM provider,
-message storage, and tool storage.
+message storage, executable-tool storage, and successful-tool-call storage.
 
 The package owns agent loop control, request assembly, tool execution order,
 stream events, and agent-specific lifecycle errors. Provider and tool package
@@ -10,7 +10,7 @@ errors pass through unchanged.
 ## Basic Usage
 
 ```ts
-import { createAgent } from 'agent';
+import { createAgent, createToolCallStorage } from 'agent';
 import { createFetchTransport, createOpenAiProvider } from 'llms';
 import { createMessageStorage } from 'messages';
 import pino from 'pino';
@@ -37,11 +37,13 @@ const lookup = defineTool({
 const tools = createToolStorage([lookup(sandbox)]);
 
 const messages = createMessageStorage();
+const toolCalls = createToolCallStorage();
 
 const agent = createAgent({
   provider,
   tools,
   messages,
+  toolCalls,
   system: 'You are a concise project assistant.',
   model: 'gpt-5',
   flags: { reasoning: { effort: 'low' }, includeUsage: true },
@@ -53,8 +55,9 @@ console.log(response.text);
 console.log(messages.list());
 ```
 
-`createAgent` does not create defaults. The caller owns provider credentials,
-tool registration, message storage, model selection, and per-call cancellation.
+`createAgent` does not create dependency defaults. The caller owns provider
+credentials, tool registration, isolated message and tool-call storages, model
+selection, and per-call cancellation.
 The system prompt is included in provider requests but is not persisted into
 external message storage.
 
@@ -65,7 +68,7 @@ attempt. Omitting the option preserves an unbounded loop. Invalid values throw
 `TypeError` before the input is stored or the provider is called.
 
 When the limit is reached, tools requested by the final permitted turn still
-execute and their results are stored. The run then throws an `AgentErrorObject`
+execute and their results are stored in both ledgers. The run then throws an `AgentErrorObject`
 with code `turn_limit_exceeded` before another provider invocation. Streaming
 preserves events already emitted but does not emit `agent.finished` for an
 exhausted run.
@@ -95,6 +98,15 @@ provider deltas already emitted for a rejected response but suppresses its
 `response.finished` event. `onToolCallRepair` receives safe attempt counters;
 `maxToolCallRepairs` overrides the default budget of two.
 
+Every successfully executed and serialized tool result receives one opaque ID
+from `ToolCallStorage`; `createToolCallStorage()` uses `crypto.randomUUID()` by
+default and accepts an injected ID factory for deterministic tests. The record
+is appended to storage; its ID and output appear in the Markdown tool-result
+message; and the same record is delivered to the awaited `onToolEvent` callback
+and exposed by a streamed `tool.finished` event. Empty or colliding IDs abort
+the run. Rejected calls, terminal structured-output calls, thrown handlers, and
+unserializable inputs or results do not create records.
+
 ## Streaming Usage
 
 ```ts
@@ -109,7 +121,7 @@ for await (const event of agent.stream('Find the current project status.')) {
       break;
 
     case 'tool.finished':
-      console.log(`Tool result: ${event.content}`);
+      console.log(`Observation ${event.record.id}: ${event.record.output}`);
       break;
 
     case 'agent.finished':
@@ -121,8 +133,10 @@ for await (const event of agent.stream('Find the current project status.')) {
 
 Streaming passes through provider events and adds agent lifecycle and tool
 events. Tool calls are executed sequentially in provider order, stored as tool
-messages, and the provider loop continues until a response has no tool calls or
-submits a validated terminal structured output.
+messages with their observation IDs, appended to tool-call storage, and the
+provider loop continues until a response has no tool calls or submits a
+validated terminal structured output. `complete` emits the same awaited tool
+lifecycle through `onToolEvent` without exposing a stream.
 
 ## Building
 

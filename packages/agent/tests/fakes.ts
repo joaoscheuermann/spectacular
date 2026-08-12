@@ -1,4 +1,9 @@
-import type { AgentEvent } from '../src/index.js';
+import {
+  createAgent,
+  createToolCallStorage,
+  type AgentEvent,
+  type AgentOptions,
+} from '../src/index.js';
 import type {
   LlmProvider,
   ProviderFinished,
@@ -23,6 +28,9 @@ type ToolFake = {
   readonly storage: ToolStorage;
   readonly calls: ToolCall[];
 };
+
+export const createTestAgent = (options: Omit<AgentOptions, 'toolCalls'>) =>
+  createAgent({ ...options, toolCalls: createToolCallStorage() });
 
 export const completeFinish = (
   text: string,

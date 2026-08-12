@@ -159,9 +159,7 @@ const part = (node: Node): FinalDeliveryPart => {
     goal: node.goal,
     markdown: primary.data,
     artifacts: artifacts.map((artifact) => ({ ...artifact })),
-    observations:
-      node.outcome?.observations.map((observation) => ({ ...observation })) ??
-      [],
+    observations: node.observations.map((observation) => ({ ...observation })),
   };
 };
 
@@ -175,6 +173,7 @@ const nodeResult = (node: Node): WorkflowNodeResult => ({
     node.bundle === null
       ? null
       : { ...node.bundle, skills: [...node.bundle.skills] },
+  observations: node.observations.map((observation) => ({ ...observation })),
   outcome: node.outcome === null ? null : structuredClone(node.outcome),
   termination:
     node.termination === null ? null : structuredClone(node.termination),

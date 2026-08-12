@@ -52,8 +52,8 @@ test('derives concurrent revision work in wave order rather than completion orde
     ['second', 'first'],
   );
   assert.deepEqual(
-    revisions.flatMap(({ outcome }) =>
-      (outcome?.observations ?? []).map(({ goalId }) => goalId),
+    revisions.flatMap(({ observations }) =>
+      observations.map(({ goalId }) => goalId),
     ),
     ['second', 'first'],
   );
@@ -103,6 +103,7 @@ const node = (id: string, index: number, toolName: string): Node => ({
   },
   tools: [{ name: toolName, description: `${toolName} tool` }],
   artifacts: [],
+  observations: [],
   outcome: null,
   termination: null,
 });
@@ -144,7 +145,7 @@ const revisionOutcome = (goalId: string) => ({
       criterionIndex: 0,
       satisfied: false,
       evidence: 'Criterion unmet.',
-      observationIndices: [],
+      observationIds: [],
     },
   ],
   result: null,

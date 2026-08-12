@@ -13,6 +13,7 @@ out-tsc
 # dependencies
 node_modules
 local_cache
+/.cache/
 
 # IDEs and editors
 /.idea

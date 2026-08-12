@@ -1,12 +1,11 @@
-import { AgentErrorObject, createAgent } from 'agent';
-import { createMessageStorage } from 'messages';
 import {
-  createToolStorage,
-  type Tool,
-  type ToolCall,
-  type ToolCallRequest,
-  type ToolStorage,
-} from 'tool';
+  AgentErrorObject,
+  createAgent,
+  createToolCallStorage,
+  type AgentToolEvent,
+} from 'agent';
+import { createMessageStorage } from 'messages';
+import { createToolStorage, type Tool } from 'tool';
 
 import * as executionPrompt from '../../prompts/execution.js';
 import {
@@ -20,6 +19,8 @@ import { materializeObservations } from './observations.js';
 import { evaluate } from '../../evaluation.js';
 import type { MosaicRuntime } from '../../observability.js';
 import type { MosaicEvaluationHooks } from '../../types/evaluation.js';
+import { ObservationSchema } from '../../schemas/observation.js';
+import { GraphSchema } from '../../schemas/graph.js';
 
 /**
  * Implements the node executor and lifecycle from the MOSAIC paper, sections
@@ -107,6 +108,7 @@ const execute = async (
   });
   /** Keep history available when a bounded run exhausts after executing tools. */
   const messages = createMessageStorage();
+  const toolCalls = createToolCallStorage();
 
   try {
     /** Resolve graph-approved tool metadata to executable catalog entries. */
@@ -152,8 +154,9 @@ const execute = async (
               node.id,
               graph.revision,
             ) ?? options.providers.execution,
-          tools: observedTools(tools, node.id, graph.revision, runtime),
+          tools: createToolStorage(tools),
           messages,
+          toolCalls,
           system: executionPrompt.system(options.skills.required),
           model: options.models.execution.model,
           effort: options.models.execution.effort,
@@ -196,6 +199,7 @@ const execute = async (
                       attempt: event.attempt,
                       maxAttempts: event.maxAttempts,
                     }),
+                  onToolEvent: observeTools(runtime, node.id, graph.revision),
                 }),
           },
         );
@@ -204,21 +208,29 @@ const execute = async (
         }
         return {
           decision,
-          observations: materializeObservations(node.id, messages.list()),
+          observations: materializeObservations(node.id, toolCalls.list()),
         };
       },
     );
     const decision = createNodeDecisionSchema(node).parse(execution.decision);
 
+    const observations = ObservationSchema.array().parse(
+      execution.observations,
+    );
+    if (observations.some(({ goalId }) => goalId !== node.id)) {
+      throw new Error(
+        `Node ${node.id} received an observation from another node.`,
+      );
+    }
+    node.observations = observations.map((observation) => ({ ...observation }));
+    GraphSchema.parse(graph);
+
     /**
-     * MOSAIC 0.2 materializes the runtime outcome by attaching every correlated
-     * executable-tool observation. The terminal structured-output tool is
-     * normalized away by `agent` and therefore never enters this ledger.
+     * MOSAIC 0.2 keeps every executable-tool observation on the producing node
+     * before validating the semantic outcome. The terminal structured-output
+     * tool is normalized away by `agent` and never enters this ledger.
      */
-    const outcome = createNodeOutcomeSchema(node).parse({
-      ...decision,
-      observations: execution.observations,
-    });
+    const outcome = createNodeOutcomeSchema(node, graph).parse(decision);
 
     await runtime?.emit({
       type: 'decision.created',
@@ -233,11 +245,9 @@ const execute = async (
       stage: 'execution',
       nodeId: node.id,
       revision: graph.revision,
-      count: outcome.observations.length,
-      toolNames: outcome.observations.map(({ toolName }) => toolName),
-      ...(runtime.capture === 'io'
-        ? { observations: outcome.observations }
-        : {}),
+      count: node.observations.length,
+      toolNames: node.observations.map(({ toolName }) => toolName),
+      ...(runtime.capture === 'io' ? { observations: node.observations } : {}),
     });
     await runtime?.emit({
       type: 'outcome.created',
@@ -257,7 +267,7 @@ const execute = async (
       if (request === null) {
         throw new Error(`Node ${node.id} returned no revision request.`);
       }
-      if (outcome.observations.length === 0) {
+      if (node.observations.length === 0) {
         throw new Error(
           `Node ${node.id} requested revision without an observation.`,
         );
@@ -314,15 +324,25 @@ const execute = async (
       error instanceof AgentErrorObject &&
       error.data.code === 'turn_limit_exceeded'
     ) {
-      const observations = materializeObservations(node.id, messages.list());
+      const observations = materializeObservations(node.id, toolCalls.list());
+      node.observations = observations;
       node.outcome = null;
       node.termination = {
         type: 'turn_limit',
         status: 'blocked',
         limit: options.execution.maxTurns,
-        observations,
       };
       node.status = 'blocked';
+      GraphSchema.parse(graph);
+      await runtime?.emit({
+        type: 'observations.created',
+        stage: 'execution',
+        nodeId: node.id,
+        revision: graph.revision,
+        count: observations.length,
+        toolNames: observations.map(({ toolName }) => toolName),
+        ...(runtime.capture === 'io' ? { observations } : {}),
+      });
       await statusEvent(runtime, graph, node);
       options.logger.info(
         { nodeId: node.id, status: node.status },
@@ -336,70 +356,58 @@ const execute = async (
   }
 };
 
-const observedTools = (
-  tools: readonly Tool[],
+const observeTools = (
+  runtime: MosaicRuntime,
   nodeId: string,
   revision: number,
-  runtime?: MosaicRuntime,
-): ToolStorage => {
-  const storage = createToolStorage(tools);
-  if (runtime === undefined) return storage;
+): ((event: AgentToolEvent) => Promise<void>) => {
+  const timers = new Map<string, ReturnType<MosaicRuntime['timer']>>();
 
-  return {
-    definitions: () => storage.definitions(),
-    calls: (turn) => storage.calls(turn),
-    validate: (call) => storage.validate(call),
-    get: (name) => storage.get(name),
-    execute: async (call) => {
-      const identity = callIdentity(call);
+  return async (event) => {
+    const identity = {
+      callId: event.call.id,
+      toolName: event.call.name,
+    };
+
+    if (event.type === 'tool.started') {
       await runtime.emit({
         type: 'tool.started',
         stage: 'execution',
         nodeId,
         revision,
         ...identity,
-        ...(runtime.capture === 'io' ? { input: callInput(call) } : {}),
+        ...(runtime.capture === 'io' ? { input: event.call.payload } : {}),
       });
-      const timer = runtime.timer();
-      try {
-        const output = await storage.execute(call);
-        await runtime.emit({
-          type: 'tool.finished',
-          stage: 'execution',
-          nodeId,
-          revision,
-          ...identity,
-          durationMs: runtime.duration(timer),
-          ...(runtime.capture === 'io' ? { output } : {}),
-        });
-        return output;
-      } catch (error) {
-        await runtime.emit({
-          type: 'tool.failed',
-          stage: 'execution',
-          nodeId,
-          revision,
-          ...identity,
-          durationMs: runtime.duration(timer),
-        });
-        throw error;
-      }
-    },
+      timers.set(event.call.id, runtime.timer());
+      return;
+    }
+
+    const timer = timers.get(event.call.id) ?? runtime.timer();
+    timers.delete(event.call.id);
+
+    if (event.type === 'tool.finished') {
+      await runtime.emit({
+        type: 'tool.finished',
+        stage: 'execution',
+        nodeId,
+        revision,
+        ...identity,
+        observationId: event.record.id,
+        durationMs: runtime.duration(timer),
+        ...(runtime.capture === 'io' ? { output: event.result } : {}),
+      });
+      return;
+    }
+
+    await runtime.emit({
+      type: 'tool.failed',
+      stage: 'execution',
+      nodeId,
+      revision,
+      ...identity,
+      durationMs: runtime.duration(timer),
+    });
   };
-};
-
-const callIdentity = (call: ToolCall | ToolCallRequest) => ({
-  callId: call.id,
-  toolName: call.name,
-});
-
-const callInput = (call: ToolCall | ToolCallRequest): unknown => {
-  if ('payload' in call) return call.payload;
-  try {
-    return JSON.parse(call.arguments) as unknown;
-  } catch {
-    return undefined;
-  }
 };
 
 const statusEvent = async (

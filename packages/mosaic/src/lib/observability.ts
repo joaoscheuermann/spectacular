@@ -69,7 +69,7 @@ export const createRuntime = (
     if (observer === undefined) return;
 
     const event = immutable({
-      schemaVersion: 2 as const,
+      schemaVersion: 3 as const,
       runId,
       sequence: ++sequence,
       ...input,

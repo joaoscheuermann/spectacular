@@ -6,6 +6,7 @@ import {
   artifactSections,
   fenced,
   projectedAncestors,
+  projectedObservationLedger,
   section,
 } from './context.js';
 
@@ -58,8 +59,8 @@ export const system = (required: readonly Skill[] = []): string =>
     '- One missing executable, failed command, or incomplete inspection is not',
     '  sufficient for blocked while an alternative action remains.',
     '- Never claim an action or observation without a supporting tool result.',
-    '- The runtime records every returned executable-tool result from this node as',
-    '  ordered current-node evidence. Do not reproduce provider call IDs.',
+    '- The runtime records every returned executable-tool result from this node and',
+    '  includes its opaque observation ID in the tool-result message.',
     '- When a tool result exposes exit_code, stderr, timed_out, or truncated, inspect',
     '  those fields before completing the node.',
     '- A later successful command does not automatically resolve an earlier failure.',
@@ -69,16 +70,14 @@ export const system = (required: readonly Skill[] = []): string =>
     '- Inspect produced state directly when possible. An ancestor declaration alone',
     '  does not prove a semantic condition that the current node can inspect.',
     '',
-    '# Observation indexing',
+    '# Observation references',
     '',
-    "- The current node's observation ledger starts at index 0 independently of",
-    '  every ancestor and every other node.',
-    '- The first returned tool result during this node has index 0, the second has',
-    '  index 1, and each later returned result increments that current-node index.',
-    "- Never use an ancestor's observation index in observationIndices. Indices shown",
-    '  under Projected Ancestor Evidence belong only to the named producer node.',
-    '- Do not count ancestor observations, model responses, provider turns, or the',
-    '  terminal structured-output submission as current-node observations.',
+    '- Cite tool evidence only by the exact opaque IDs shown in tool-result messages',
+    '  or in the Projected Ancestor Observation Ledger.',
+    '- observationIds may cite this node or projected completed ancestors. Never cite',
+    '  an ID from another branch, a descendant, an older plan snapshot, or memory.',
+    '- Provider call IDs, model responses, provider turns, and the terminal',
+    '  structured-output submission are not observation IDs.',
     '',
     '# Terminal statuses',
     '',
@@ -94,12 +93,9 @@ export const system = (required: readonly Skill[] = []): string =>
     '- Return one criteria entry for every doneWhen item, in the same order, using',
     '  its zero-based criterionIndex.',
     '- Ground each criterion evaluation in concise model-authored prose.',
-    '- For tool-dependent criteria, cite the smallest set of observationIndices that',
-    '  proves the evaluation. Indices are zero-based, unique, and increasing.',
-    '- Before submitting, verify that every observationIndex is less than the number',
-    '  of tool results returned during the current node.',
-    '- Use an empty observationIndices array only when the proof comes entirely from',
-    '  the request, a deterministic result, or projected ancestor evidence.',
+    '- For tool-dependent criteria, cite the smallest set of observationIds that',
+    '  proves the evaluation. IDs must be exact and unique within the criterion.',
+    '- Use an empty observationIds array only when the proof requires no tool result.',
     '- Write result.markdown in the language of the original request.',
     '- For completed, provide result and set revisionRequest and reason to null.',
     '- For needs_revision, provide a non-empty reason and a revisionRequest whose',
@@ -155,6 +151,7 @@ const ancestors = (node: Node, graph: Graph): string => {
    * unrelated branches unless the plan references them explicitly.
    */
   const projected = projectedAncestors(node, graph);
+  const ledger = projectedObservationLedger(node, graph);
 
   if (projected.length === 0) {
     return [
@@ -165,9 +162,7 @@ const ancestors = (node: Node, graph: Graph): string => {
 
   return [
     '# Projected Ancestor Evidence',
-    'The indices below are local to each named producer node. They explain ancestor',
-    'evidence but are not valid references for the current node. When relying only on',
-    'projected ancestor evidence, use an empty current-node observationIndices array.',
+    'Only observation IDs listed in the ledger below may be cited as ancestor evidence.',
     ...projected.flatMap((ancestor, index) => [
       `## Ancestor ${index + 1}`,
       section('Producer Node ID', ancestor.producerId),
@@ -178,10 +173,10 @@ const ancestors = (node: Node, graph: Graph): string => {
         section('Satisfied', String(criterion.satisfied)),
         section('Evidence', criterion.evidence),
         section(
-          'Producer-local Observation Indices',
-          criterion.observationIndices.length === 0
+          'Observation IDs',
+          criterion.observationIds.length === 0
             ? 'None.'
-            : criterion.observationIndices.join(', '),
+            : criterion.observationIds.join(', '),
         ),
       ]),
       section('Total Observation Count', String(ancestor.observationCount)),
@@ -189,15 +184,6 @@ const ancestors = (node: Node, graph: Graph): string => {
         'Cited Observation Count',
         String(ancestor.citedObservationCount),
       ),
-      '### Cited Observations',
-      ...(ancestor.observations.length === 0
-        ? ['No tool observations are cited.']
-        : ancestor.observations.flatMap(({ observationIndex, observation }) => [
-            `#### Producer-local Observation ${observationIndex}`,
-            section('Tool Name', observation.toolName),
-            section('Input', observation.input),
-            section('Output', observation.output),
-          ])),
       '### Current Artifacts',
       ...(ancestor.artifacts.length === 0
         ? ['No artifacts are available.']
@@ -206,6 +192,17 @@ const ancestors = (node: Node, graph: Graph): string => {
             ...artifactSections(artifact),
           ])),
     ]),
+    '## Projected Ancestor Observation Ledger',
+    ...(ledger.length === 0
+      ? ['No ancestor observations are authorized.']
+      : ledger.flatMap(({ producerId, observation }, index) => [
+          `### Observation ${index + 1}`,
+          section('Observation ID', observation.id),
+          section('Producer Node ID', producerId),
+          section('Tool Name', observation.toolName),
+          section('Input', observation.input),
+          section('Output', observation.output),
+        ])),
   ].join('\n\n');
 };
 

@@ -251,7 +251,7 @@ session. `afterSequence` is an optional non-negative integer and defaults to
 {
   "events": [
     {
-      "schemaVersion": 2,
+      "schemaVersion": 3,
       "runId": "018f47d2-e3b1-7b4f-8b2c-1f5a7fdf1601",
       "sequence": 1,
       "type": "stage.started",
@@ -264,7 +264,9 @@ session. `afterSequence` is an optional non-negative integer and defaults to
 
 Events are ordered by `sequence`. Calls without `afterSequence` return the
 complete history; clients can pass the returned `lastSequence` to read only
-later events. An invalid cursor returns `400 invalid_event_cursor`, and an
+later events. New runs emit schema version 3, while older JSONB event objects
+remain replayable without migration. An invalid cursor returns
+`400 invalid_event_cursor`, and an
 unknown or deleted session returns `404 session_not_found`. Responses use
 `Cache-Control: no-store`. Use Socket.IO when live delivery is required.
 
@@ -338,7 +340,7 @@ Server-to-client events:
 | Event              | Payload                          | Description                                     |
 | ------------------ | -------------------------------- | ----------------------------------------------- |
 | `session:snapshot` | `{ sessionId, session, events }` | Current session plus events after the sequence. |
-| `mosaic:event`     | `{ sessionId, event }`           | One persisted Mosaic schema-version 2 event.    |
+| `mosaic:event`     | `{ sessionId, event }`           | One persisted Mosaic schema-version 3 event.    |
 | `session:updated`  | Session representation           | Latest state after a session transition.        |
 | `session:deleted`  | `{ sessionId }`                  | Indicates deletion and ends the subscription.   |
 

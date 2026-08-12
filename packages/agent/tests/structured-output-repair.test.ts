@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { AgentErrorObject, createAgent, type Agent } from '../src/index.js';
+import { AgentErrorObject, type Agent } from '../src/index.js';
 import {
   ProviderErrorObject,
   type ProviderFinished,
@@ -16,6 +16,7 @@ import {
   collect,
   completeFinish,
   createProvider,
+  createTestAgent as createAgent,
   createTools,
   streamEvents,
 } from './fakes.js';

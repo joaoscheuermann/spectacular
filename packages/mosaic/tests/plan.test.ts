@@ -207,6 +207,16 @@ test('rejects every plan re-entry after the body-aware P1', async () => {
   const target = active.nodes[0];
   assert.ok(target);
   target.status = 'needs_revision';
+  target.observations = [
+    {
+      id: 'observation-1',
+      goalId: target.id,
+      toolName: 'inspect',
+      callId: 'call-1',
+      input: '{}',
+      output: '{}',
+    },
+  ];
   target.outcome = {
     status: 'needs_revision',
     criteria: [
@@ -214,7 +224,7 @@ test('rejects every plan re-entry after the body-aware P1', async () => {
         criterionIndex: 0,
         satisfied: false,
         evidence: 'Not complete.',
-        observationIndices: [],
+        observationIds: [],
       },
     ],
     result: null,
@@ -224,15 +234,6 @@ test('rejects every plan re-entry after the body-aware P1', async () => {
       requestedEffect: 'Revise the target structure.',
     },
     reason: 'Revision required.',
-    observations: [
-      {
-        goalId: target.id,
-        toolName: 'inspect',
-        callId: 'call-1',
-        input: '{}',
-        output: '{}',
-      },
-    ],
   };
   const harness = createHarness({ plans: [] });
   const action = await plan(
@@ -618,6 +619,7 @@ const runtimeNode = (
   bundle: null,
   tools: [],
   artifacts: [],
+  observations: [],
   outcome: null,
   termination: null,
 });
@@ -629,13 +631,12 @@ const completedOutcome = (id: string) => ({
       criterionIndex: 0,
       satisfied: true,
       evidence: `${id} complete.`,
-      observationIndices: [],
+      observationIds: [],
     },
   ],
   result: { markdown: `${id} result`, artifacts: [] },
   revisionRequest: null,
   reason: null,
-  observations: [],
 });
 
 function createSkill(name: string): Skill {

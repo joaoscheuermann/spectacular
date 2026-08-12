@@ -90,6 +90,7 @@ export const applyLocalizedRevision = (
       bundle: null,
       tools: [],
       artifacts: [],
+      observations: [],
       outcome: null,
       termination: null,
     };
@@ -136,7 +137,7 @@ const cloneNode = (node: Node): Node => ({
           ...node.outcome,
           criteria: node.outcome.criteria.map((criterion) => ({
             ...criterion,
-            observationIndices: [...criterion.observationIndices],
+            observationIds: [...criterion.observationIds],
           })),
           result:
             node.outcome.result === null
@@ -151,24 +152,15 @@ const cloneNode = (node: Node): Node => ({
             node.outcome.revisionRequest === null
               ? null
               : { ...node.outcome.revisionRequest },
-          observations: node.outcome.observations.map((observation) => ({
-            ...observation,
-          })),
         },
+  observations: node.observations.map((observation) => ({ ...observation })),
   termination:
     node.termination === null
       ? null
-      : node.termination.type === 'turn_limit'
+      : node.termination.type === 'dependency'
         ? {
             ...node.termination,
-            observations: node.termination.observations.map((observation) => ({
-              ...observation,
-            })),
+            dependencyIds: [...node.termination.dependencyIds],
           }
-        : node.termination.type === 'dependency'
-          ? {
-              ...node.termination,
-              dependencyIds: [...node.termination.dependencyIds],
-            }
-          : { ...node.termination },
+        : { ...node.termination },
 });

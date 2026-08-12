@@ -1,7 +1,7 @@
 import * as z from 'zod';
 
 import { ArtifactSchema } from './artifact.js';
-import { ObservationSchema } from './revision.js';
+import { ObservationSchema } from './observation.js';
 
 const FinalDeliveryPartSchema = z
   .object({

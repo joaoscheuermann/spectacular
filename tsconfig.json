@@ -34,9 +34,6 @@
       "path": "./packages/artifacts"
     },
     {
-      "path": "./workflows/prompt"
-    },
-    {
       "path": "./packages/config"
     },
     {

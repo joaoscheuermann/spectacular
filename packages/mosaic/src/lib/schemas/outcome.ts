@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
-import type { Node } from '../types/graph.js';
+import { authorizedObservationIds } from '../observations.js';
+import type { Graph, Node } from '../types/graph.js';
 import { ArtifactSchema } from './artifact.js';
 import { RevisionRequestSchema } from './revision.js';
-import { ObservationSchema } from './revision.js';
 
 /**
  * Records one ordered evaluation from `doneWhen`. Section 4.9 and Appendix A,
@@ -22,30 +22,33 @@ export const CriterionSchema = z
     satisfied: z
       .boolean()
       .describe(
-        'True only when the available request, deterministic result, projected ancestor evidence, or cited current-node observations prove this criterion; completed requires true for every entry.',
+        'True only when the available request, deterministic result, or cited local or projected ancestor observations prove this criterion; completed requires true for every entry.',
       ),
     evidence: z
       .string()
       .trim()
       .min(1)
       .describe(
-        'Non-empty concise proof for this criterion evaluation; state what establishes the decision and use observationIndices separately for any cited current-node tool results.',
+        'Non-empty concise proof for this criterion evaluation; state what establishes the decision and use observationIds separately for cited tool results.',
       ),
-    observationIndices: z
-      .array(z.number().int().nonnegative())
-      .superRefine((indices, context) => {
-        indices.forEach((index, position) => {
-          if (position === 0 || index > indices[position - 1]!) return;
+    observationIds: z
+      .array(z.string().trim().min(1))
+      .superRefine((ids, context) => {
+        const seen = new Set<string>();
+        ids.forEach((id, position) => {
+          if (!seen.has(id)) {
+            seen.add(id);
+            return;
+          }
           context.addIssue({
             code: 'custom',
             path: [position],
-            message:
-              'Observation indices must be unique and strictly increasing.',
+            message: 'Observation IDs must be unique within one criterion.',
           });
         });
       })
       .describe(
-        "Smallest unique strictly increasing list of indices from the current node's observation ledger only. That ledger starts at 0 for every node: the first returned executable-tool result during this node is 0, the second is 1, and so on. Never use indices displayed for ancestor nodes. Use [] when proof requires no current-node tool result.",
+        'Smallest unique list of opaque observation IDs from this node or the projected ancestor evidence. Use [] when proof requires no tool result.',
       ),
   })
   .strict();
@@ -53,8 +56,8 @@ export const CriterionSchema = z
 type Criterion = z.output<typeof CriterionSchema>;
 
 export type CriterionEvaluation = Readonly<
-  Omit<Criterion, 'observationIndices'> & {
-    readonly observationIndices: readonly number[];
+  Omit<Criterion, 'observationIds'> & {
+    readonly observationIds: readonly string[];
   }
 >;
 
@@ -122,27 +125,12 @@ export const NodeDecisionSchema = DecisionFieldsSchema.superRefine(
 
 export type NodeDecision = z.output<typeof NodeDecisionSchema>;
 
-/** Complete runtime outcome: the model decision plus ordered observations. */
-export const NodeOutcomeSchema = DecisionFieldsSchema.extend({
-  observations: z
-    .array(ObservationSchema)
-    .describe(
-      'Runtime-owned ordered ledger of executable-tool results returned during this node; its zero-based positions are the only valid observationIndices.',
-    ),
-}).superRefine((outcome, context) => {
-  validateStatus(undefined, outcome, context);
-  validateObservationIndices(outcome, context);
-  if (
-    outcome.status === 'needs_revision' &&
-    outcome.observations.length === 0
-  ) {
-    context.addIssue({
-      code: 'custom',
-      path: ['observations'],
-      message: 'A needs_revision outcome requires at least one observation.',
-    });
-  }
-});
+/** Complete semantic outcome; observation objects remain on the producing node. */
+export const NodeOutcomeSchema = DecisionFieldsSchema.superRefine(
+  (outcome, context) => {
+    validateStatus(undefined, outcome, context);
+  },
+);
 
 export type NodeOutcome = z.output<typeof NodeOutcomeSchema>;
 
@@ -156,9 +144,17 @@ export const createNodeDecisionSchema = (node: Node) =>
   });
 
 /** Validates a materialized outcome against its owning node. */
-export const createNodeOutcomeSchema = (node: Node) =>
+export const createNodeOutcomeSchema = (node: Node, graph?: Graph) =>
   NodeOutcomeSchema.superRefine((outcome, context) => {
     validateCriteria(node, outcome, context);
+    validateObservationIds(node, graph, outcome, context);
+    if (outcome.status === 'needs_revision' && node.observations.length === 0) {
+      context.addIssue({
+        code: 'custom',
+        path: ['revisionRequest'],
+        message: 'A needs_revision outcome requires a local observation.',
+      });
+    }
     if (
       outcome.status === 'needs_revision' &&
       outcome.revisionRequest?.goalId !== node.id
@@ -196,23 +192,25 @@ const validateCriteria = (
   });
 };
 
-const validateObservationIndices = (
-  outcome: NodeOutcome,
+const validateObservationIds = (
+  node: Node,
+  graph: Graph | undefined,
+  outcome: Decision,
   context: RefinementContext,
 ): void => {
+  const allowed =
+    graph === undefined
+      ? new Set(node.observations.map(({ id }) => id))
+      : authorizedObservationIds(node, graph);
+
   outcome.criteria.forEach((criterion, criterionPosition) => {
-    criterion.observationIndices.forEach((observationIndex, indexPosition) => {
-      if (observationIndex < outcome.observations.length) return;
+    criterion.observationIds.forEach((observationId, idPosition) => {
+      if (allowed.has(observationId)) return;
 
       context.addIssue({
         code: 'custom',
-        path: [
-          'criteria',
-          criterionPosition,
-          'observationIndices',
-          indexPosition,
-        ],
-        message: `Observation index ${observationIndex} is outside the node observation ledger.`,
+        path: ['criteria', criterionPosition, 'observationIds', idPosition],
+        message: `Observation ID ${observationId} was not presented to node ${node.id}.`,
       });
     });
   });
