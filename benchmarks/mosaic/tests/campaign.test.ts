@@ -8,7 +8,7 @@ import {
   stat,
   writeFile,
 } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { devNull, tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import test from 'node:test';
 
@@ -225,13 +225,13 @@ test('assembles both smoke arms after a verified preflight', async (t) => {
       '--skill-mode',
       'with-skill',
       '--jobs-dir',
-      `${arm.directory}/jobs`,
+      join(arm.directory, 'jobs'),
       '--task-manifest-out',
-      `${arm.directory}/task-manifest.json`,
+      join(arm.directory, 'task-manifest.json'),
       '--run-config-out',
-      `${arm.directory}/run-config.json`,
+      join(arm.directory, 'run-config.json'),
       '--health-summary-out',
-      `${arm.directory}/health.json`,
+      join(arm.directory, 'health.json'),
       '--expected-tasks',
       '1',
     ]),
@@ -421,6 +421,16 @@ test('checks the actual runner, assets, checksum, local bundle, and remote commi
         command.file === 'curl' &&
         command.args.at(-1)?.endsWith('/mosaic-bench-acp.mjs.sha256'),
     ),
+    true,
+  );
+  assert.equal(
+    commands
+      .filter(
+        (command) => command.file === 'curl' && command.args.includes('-o'),
+      )
+      .every(
+        (command) => command.args[command.args.indexOf('-o') + 1] === devNull,
+      ),
     true,
   );
   assert.equal(

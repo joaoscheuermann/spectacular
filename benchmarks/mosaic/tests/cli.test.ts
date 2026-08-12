@@ -149,7 +149,7 @@ test('creates the release checksum beside the generated bundle', async () => {
     const stdout = output();
 
     assert.equal(await runCli(['release'], { cwd: root, stdout }), 0);
-    assert.equal(JSON.parse(stdout.lines[0] ?? '{}').version, '0.1.10');
+    assert.equal(JSON.parse(stdout.lines[0] ?? '{}').version, '0.1.11');
     const checksum = await readFile(
       join(root, 'dist', 'mosaic-bench-acp.mjs.sha256'),
       'utf8',

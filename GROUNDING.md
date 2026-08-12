@@ -656,7 +656,9 @@ higher-reward/lower-total-cost strict Pareto win remains a separate aspirational
 indicator, not the sole useful result. Valid evidence with a quality win exits
 zero; valid evidence without a quality win exits one; invalid evidence exits
 two. Paid smoke, pilot, and full campaigns require explicit `--yes-paid-run`;
-credentials remain runtime-only and are never persisted or logged.
+credentials remain runtime-only and are never persisted or logged. The free
+preflight discards release-asset probes through Node's OS-specific null device,
+so remote-asset validation is equivalent on Windows and POSIX hosts.
 
 CLI streamed A2A event output is visible console rendering through
 `pino`/`pino-pretty`. Redaction must be applied to message text and structured

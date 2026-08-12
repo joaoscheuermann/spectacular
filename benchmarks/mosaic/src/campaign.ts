@@ -7,6 +7,7 @@ import {
   stat,
   writeFile,
 } from 'node:fs/promises';
+import { devNull } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 
 import {
@@ -43,8 +44,8 @@ export type {
 
 const model = 'openrouter/openai/gpt-5.6-luna';
 const releaseAssets = [
-  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.10/mosaic-bench-acp.mjs',
-  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.10/mosaic-bench-acp.mjs.sha256',
+  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.11/mosaic-bench-acp.mjs',
+  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.11/mosaic-bench-acp.mjs.sha256',
 ] as const;
 
 const definitions: Record<
@@ -111,7 +112,7 @@ const check = async (
     ...releaseAssets.map((asset) =>
       commandCheck(
         `release-asset:${asset}`,
-        { file: 'curl', args: ['-fsSL', '-o', '/dev/null', asset], cwd: root },
+        { file: 'curl', args: ['-fsSL', '-o', devNull, asset], cwd: root },
         runner,
       ),
     ),
