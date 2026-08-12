@@ -1,7 +1,8 @@
 #!/bin/sh
 set -eu
 
-dockerd --host=unix:///var/run/docker.sock > /tmp/dockerd.log 2>&1 &
+dockerd_log=/var/log/mosaic-dockerd.log
+dind dockerd --host=unix:///var/run/docker.sock > "$dockerd_log" 2>&1 &
 dockerd_pid=$!
 
 stop_daemon() {
@@ -27,7 +28,7 @@ done
 
 if [ "$ready" -ne 1 ]; then
   echo 'The benchmark Docker daemon did not become ready.' >&2
-  cat /tmp/dockerd.log >&2
+  cat "$dockerd_log" >&2
   exit 1
 fi
 

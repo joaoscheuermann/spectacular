@@ -15,9 +15,11 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
+COPY --from=docker /usr/local/bin/dind /usr/local/bin/dind
 COPY --from=docker /usr/local/libexec/docker/cli-plugins/docker-compose /usr/local/lib/docker/cli-plugins/docker-compose
 
-RUN chmod 0555 /usr/local/lib/docker/cli-plugins/docker-compose \
+RUN chmod 0555 /usr/local/bin/dind \
+  /usr/local/lib/docker/cli-plugins/docker-compose \
   && node --version \
   && uv --version \
   && docker compose version

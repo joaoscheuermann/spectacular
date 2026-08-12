@@ -330,9 +330,16 @@ requests, over a run-local ordered graph snapshot array. Each graph's explicit
 `revision`, rather than its array position or array length, is authoritative;
 the history must be contiguous and ordered. The `plan` state rejects every
 re-entry after P1. P0 is catalog-independent and P1 is exactly one body-aware
-revision. `routing.maxHintCandidates` implements `K_hint`, while the independent
-`routing.maxRetrievedCandidates` implements `K_retrieve`; each is also applied
-as a defensive post-filter bound over canonical, unique, non-required skills.
+revision. For every P0 goal, P1 evaluates all required skills in configured
+order followed by canonical, unique, non-required skills retrieved up to
+`routing.maxHintCandidates`, which implements `K_hint`. Required skills neither
+consume that limit nor depend on retrieval; when no optional catalog exists,
+Mosaic skips retrieval but still extracts their goal-specific hints. Empty
+extractions remain observable through `hint.result`, but only material hints
+are passed to P1. Planning `retrieval.result` events contain only optional
+skills actually recovered. The independent `routing.maxRetrievedCandidates`
+implements `K_retrieve`; it is applied as a defensive post-filter bound over
+canonical, unique, non-required skills.
 `routing.maxSkills` is bounded only by `maxRetrievedCandidates`. Bundle routing uses the original request, current
 goal and completion criteria, and only transitive-ancestor artifacts. It
 retrieves a bounded routable-skill candidate set, reranks complete skill bodies,
@@ -345,9 +352,10 @@ call is made. No-candidate routing and a zero selected-skill limit materialize
 deterministic empty traces; the zero limit bypasses retrieval, reranking, and
 selection. The exact node tool menu is the stable union of base tools and tools
 declared by selected skills, with duplicate names removed by first occurrence.
-Always-available skills are excluded from hints and routing, do not count toward
-the selected-skill limit, and are injected as universal execution instructions;
-they may reference only base tools and do not expand the node tool menu.
+Always-available skills participate in P1 hint extraction for every P0 goal but
+remain excluded from routing, `bundle.skills`, and the selected-skill limit.
+They are injected as universal execution instructions, may reference only base
+tools, and do not expand the node tool menu.
 Every model-authored structured object is validated locally against its complete
 Zod contract before changing Mosaic state. P0, P1, each concurrent hint
 candidate, bundle selection, and each localized revision create a fresh agent
@@ -579,12 +587,15 @@ from digest-pinned Node, uv/Python, and Docker base images, and starts it with
 the privilege required for a nested Docker daemon. BenchFlow 0.6.5 and every
 task container therefore run under Linux without mounting the host Docker
 socket or depending on host `uvx`, Python, Git, or curl. The launcher mounts
-only the benchmark `results/` directory, translates supported campaign and
-report paths beneath that mount, inherits `OPENROUTER_API_KEY` by environment
-name rather than command value, and retains the nested Docker and uv caches in
-the `mosaic-benchmark-docker` and `mosaic-benchmark-uv` named volumes. The
-ordinary `run` target remains the local comparison and native campaign surface;
-release generation remains outside the portable coordinator.
+only the benchmark `results/` directory. Before starting its daemon, the
+coordinator uses the helper from the digest-pinned Docker DinD image to enable
+cgroup v2 nesting and shared mount propagation. The launcher translates
+supported campaign and report paths beneath the results mount, inherits
+`OPENROUTER_API_KEY` by environment name rather than command value, and retains
+the nested Docker and uv caches in the `mosaic-benchmark-docker` and
+`mosaic-benchmark-uv` named volumes. The ordinary `run` target remains the local
+comparison and native campaign surface; release generation remains outside the
+portable coordinator.
 
 The benchmark publishes two BenchFlow ACP agents: a direct agent and a MOSAIC
 agent. Both receive the same task prompt, mounted task skills, terminal tool,

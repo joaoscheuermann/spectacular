@@ -25,9 +25,8 @@ export async function hints(
   runtime?: MosaicRuntime,
   hooks?: MosaicEvaluationHooks,
 ): Promise<SkillExtraction[]> {
-  const { providers, skills, models, routing } = options;
+  const { providers, skills, models } = options;
 
-  // Always-available skills are universal instructions, not planning signals.
   const required = new Set(skills.required.map(({ name }) => name));
 
   // Resolve indexed matches through the canonical, currently loaded catalog.
@@ -37,44 +36,27 @@ export async function hints(
       .map((skill) => [skill.name, skill]),
   );
 
-  // An empty routable catalog contributes no evidence and needs no model calls.
-  if (catalog.size === 0) return [];
+  // An entirely empty catalog contributes no evidence and needs no model calls.
+  if (skills.required.length === 0 && catalog.size === 0) return [];
 
   // Goals are independent at this stage, so their preliminary retrieval can run together.
   const byNode = await Promise.all(
     graph.nodes.map(async (node) => {
-      // Retrieve at most K_hint high-recall candidates for this P0 objective.
-      const query = candidatesPrompt.search(input, node);
-      const matches = await evaluate(
-        hooks?.retrieval,
-        {
-          request: input,
-          graph,
-          node,
-          query,
-          limit: routing.maxHintCandidates,
-          catalog: [...catalog.values()],
-        },
-        async ({ query: searchQuery, limit }) =>
-          (await skills.retriever.search(searchQuery, limit)).map(
-            ({ data: skill, score }) => ({ skill, score }),
-          ),
-      );
-      const candidates = canonicalCandidates(
-        validateMatches(matches, catalog, routing.maxHintCandidates).map(
-          ({ skill }) => skill,
-        ),
-        catalog,
-        routing.maxHintCandidates,
-      );
-      await runtime?.emit({
-        type: 'retrieval.result',
-        stage: 'plan',
-        nodeId: node.id,
-        revision: graph.revision,
-        skillNames: candidates.map(({ name }) => name),
-        ...(runtime.capture === 'io' ? { query } : {}),
-      });
+      const optional =
+        catalog.size === 0
+          ? []
+          : await retrieveCandidates(
+              input,
+              graph,
+              node,
+              options,
+              catalog,
+              runtime,
+              hooks,
+            );
+
+      // Required skills are evaluated first and do not consume K_hint.
+      const candidates = [...skills.required, ...optional];
 
       // Convert each complete skill body into short, goal-specific planning hints.
       const extracted = await Promise.all(
@@ -126,6 +108,51 @@ export async function hints(
   // Flatten only after all work completes to retain graph and candidate ordering.
   return byNode.flat();
 }
+
+const retrieveCandidates = async (
+  input: string,
+  graph: Graph,
+  node: Graph['nodes'][number],
+  options: MosaicOptions,
+  catalog: ReadonlyMap<string, Skill>,
+  runtime?: MosaicRuntime,
+  hooks?: MosaicEvaluationHooks,
+): Promise<Skill[]> => {
+  const { routing, skills } = options;
+  const query = candidatesPrompt.search(input, node);
+  const matches = await evaluate(
+    hooks?.retrieval,
+    {
+      request: input,
+      graph,
+      node,
+      query,
+      limit: routing.maxHintCandidates,
+      catalog: [...catalog.values()],
+    },
+    async ({ query: searchQuery, limit }) =>
+      (await skills.retriever.search(searchQuery, limit)).map(
+        ({ data: skill, score }) => ({ skill, score }),
+      ),
+  );
+  const candidates = canonicalCandidates(
+    validateMatches(matches, catalog, routing.maxHintCandidates).map(
+      ({ skill }) => skill,
+    ),
+    catalog,
+    routing.maxHintCandidates,
+  );
+  await runtime?.emit({
+    type: 'retrieval.result',
+    stage: 'plan',
+    nodeId: node.id,
+    revision: graph.revision,
+    skillNames: candidates.map(({ name }) => name),
+    ...(runtime.capture === 'io' ? { query } : {}),
+  });
+
+  return candidates;
+};
 
 /** Keeps only current, unique candidates and enforces the defensive hint bound. */
 const canonicalCandidates = (

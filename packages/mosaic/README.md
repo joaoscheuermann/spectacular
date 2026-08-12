@@ -78,12 +78,19 @@ remain in the same node unless verification is an independently requested
 deliverable. Every semantic claim in a goal must appear explicitly in
 `doneWhen`.
 
-P0 never reads the catalog. P1 retrieves candidates independently for each
-goal, excludes required and stale skills, deduplicates canonical names, and
-applies `routing.maxHintCandidates` as `K_hint`. Later execution routing uses
-the independent `routing.maxRetrievedCandidates` as `K_retrieve`. Both paths
-reapply their bound after canonical filtering and deduplication, so an
-over-returning retriever cannot exceed either limit.
+P0 never reads the catalog. For every P0 goal, P1 sends each required skill to
+the hint extractor in configured order, followed by optional candidates
+retrieved independently for that goal. Optional retrieval excludes required
+and stale skills, deduplicates canonical names, and applies
+`routing.maxHintCandidates` as `K_hint`; required skills neither consume this
+limit nor depend on the retriever. A required-only catalog skips retrieval but
+still runs each extraction. `hint.result` records empty and material
+extractions, while only material hints reach the P1 revision prompt.
+`retrieval.result` names only optional skills actually recovered. Later
+execution routing uses the independent `routing.maxRetrievedCandidates` as
+`K_retrieve`. Both retrieval paths reapply their bound after canonical
+filtering and deduplication, so an over-returning retriever cannot exceed
+either limit.
 
 A `needs_revision` node stores the semantic request in its outcome and the
 complete ordered observation set on the node. `schedule` detects those nodes and routes
@@ -154,12 +161,12 @@ required text, removes duplicate `allowedTools` while preserving first
 occurrence, and always recalculates `indexText` from the normalized record.
 Doric uses that same `indexText` directly for lexical and vector indexing.
 
-Always-available skills form Doric's derived universal profile. They are
-excluded from hints, routing candidates, `bundle.skills`, and `maxSkills`, then
-injected into every execution system prompt in manifest order. They may refer
-only to base tools and cannot expand the node tool menu. `tools.retriever`
-remains available to other Mosaic policies but is not a tool router for this
-state.
+Always-available skills form Doric's derived universal profile. They participate
+in P1 hint extraction for every P0 goal, but remain excluded from routing
+candidates, `bundle.skills`, and `maxSkills`, then are injected into every
+execution system prompt in manifest order. They may refer only to base tools
+and cannot expand the node tool menu. `tools.retriever` remains available to
+other Mosaic policies but is not a tool router for this state.
 
 ## Execution
 

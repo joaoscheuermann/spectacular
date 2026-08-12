@@ -24,6 +24,8 @@ import { plan } from '../src/lib/states/plan/index.js';
 import type { Graph } from '../src/lib/types/graph.js';
 import type { MosaicOptions } from '../src/lib/types/mosaic-options.js';
 import type { WorkflowState } from '../src/lib/types/workflow.js';
+import { createRuntime } from '../src/lib/observability.js';
+import type { MosaicEvent } from '../src/index.js';
 import {
   mosaicProviders,
   terminalFinish,
@@ -143,6 +145,140 @@ test('performs exactly one P0 to P1 revision with bounded stable canonical hints
     harness.hintRequests.map(({ user }) => user).join('\n'),
     /stale/u,
   );
+});
+
+test('evaluates every required skill for every P0 goal without retrieval and forwards only material hints', async () => {
+  const silent = createSkill('silent-required');
+  const material = createSkill('material-required');
+  const p0 = materializeGraph(
+    {
+      nodes: [
+        nodePlan('first', false),
+        { ...nodePlan('second', true), dependsOn: ['first'] },
+      ],
+    },
+    0,
+  );
+  const harness = createHarness({
+    plans: [plannedGraph('revised')],
+    required: [silent, material],
+    menu: [silent, material],
+    hintResults: [
+      [],
+      [{ effect: 'gap', evidence: 'The first material result is missing.' }],
+      [],
+      [
+        {
+          effect: 'dependency',
+          evidence: 'The second material dependency is missing.',
+        },
+      ],
+    ],
+    hintDelays: [15, 10, 5, 0],
+  });
+  const events: MosaicEvent[] = [];
+  const runtime = createRuntime({
+    observer: (event) => {
+      events.push(event);
+    },
+  });
+
+  await plan(
+    state([p0]),
+    { input: 'Review every goal.', options: harness.options, runtime },
+    handlers(),
+  );
+
+  assert.equal(harness.searches.length, 0);
+  assert.deepEqual(
+    harness.hintRequests.map(({ user }) => ({
+      goalId: /## Goal ID\n\n```text\n([^\n]+)/u.exec(user)?.[1],
+      skillName: /## Canonical Name\n\n```text\n([^\n]+)/u.exec(user)?.[1],
+    })),
+    [
+      { goalId: 'first', skillName: 'silent-required' },
+      { goalId: 'first', skillName: 'material-required' },
+      { goalId: 'second', skillName: 'silent-required' },
+      { goalId: 'second', skillName: 'material-required' },
+    ],
+  );
+  const hintEvents = events.filter(({ type }) => type === 'hint.result');
+  assert.equal(hintEvents.length, 4);
+  assert.equal(
+    events.some(({ type }) => type === 'retrieval.result'),
+    false,
+  );
+  assert.equal(
+    hintEvents.filter(
+      (event) =>
+        event.type === 'hint.result' &&
+        event.skillName === 'silent-required' &&
+        event.hintCount === 0,
+    ).length,
+    2,
+  );
+  const revisionInput = userContent(harness.completions.at(-1)!);
+  assert.doesNotMatch(revisionInput, /silent-required/u);
+  assert.match(revisionInput, /material-required/u);
+  assert.ok(
+    revisionInput.indexOf('The first material result is missing.') <
+      revisionInput.indexOf('The second material dependency is missing.'),
+  );
+});
+
+test('places required skills before independently bounded optional candidates without retrieving them twice', async () => {
+  const required = createSkill('required-skill');
+  const firstOptional = createSkill('first-optional');
+  const secondOptional = createSkill('second-optional');
+  const p0 = materializeGraph(plannedGraph('initial'), 0);
+  const harness = createHarness({
+    plans: [plannedGraph('revised')],
+    required: [required],
+    matches: [required, firstOptional, firstOptional, secondOptional],
+    menu: [required, firstOptional, secondOptional],
+    maxHintCandidates: 1,
+    hintResults: [
+      [{ effect: 'gap', evidence: 'Required evidence.' }],
+      [{ effect: 'vocabulary', evidence: 'Optional evidence.' }],
+    ],
+  });
+  const events: MosaicEvent[] = [];
+  const runtime = createRuntime({
+    observer: (event) => {
+      events.push(event);
+    },
+  });
+
+  await plan(
+    state([p0]),
+    { input: 'Review the goal.', options: harness.options, runtime },
+    handlers(),
+  );
+
+  assert.deepEqual(
+    harness.searches.map(({ topK }) => topK),
+    [1],
+  );
+  assert.deepEqual(
+    harness.hintRequests.map(
+      ({ user }) => /## Canonical Name\n\n```text\n([^\n]+)/u.exec(user)?.[1],
+    ),
+    ['required-skill', 'first-optional'],
+  );
+  assert.deepEqual(
+    events
+      .filter(({ type }) => type === 'retrieval.result')
+      .map((event) =>
+        event.type === 'retrieval.result' ? event.skillNames : [],
+      ),
+    [['first-optional']],
+  );
+  const revisionInput = userContent(harness.completions.at(-1)!);
+  assert.ok(
+    revisionInput.indexOf('Required evidence.') <
+      revisionInput.indexOf('Optional evidence.'),
+  );
+  assert.doesNotMatch(revisionInput, /second-optional/u);
 });
 
 test('defensively limits an over-returning index and supports an empty catalog', async () => {
@@ -485,6 +621,7 @@ test('validates candidate and ordered bundle invariants in graph state', () => {
 
 type HarnessInput = {
   readonly plans: PlannedGraph[];
+  readonly required?: readonly Skill[];
   readonly matches?: readonly Skill[];
   readonly menu?: readonly Skill[];
   readonly maxHintCandidates?: number;
@@ -551,7 +688,7 @@ const createHarness = (input: HarnessInput) => {
     execution: { maxTurns: 8 },
     revision: { max: 3 },
     skills: {
-      required: [],
+      required: input.required ?? [],
       menu: input.menu ?? input.matches ?? [],
       retriever: retriever as never,
     },
