@@ -7,6 +7,7 @@ import { z } from 'zod';
 import type { Tool } from 'tool';
 
 import { execution } from '../src/lib/states/execution/index.js';
+import type { NodeDecision } from '../src/lib/schemas/outcome.js';
 import type { Graph, Node } from '../src/lib/types/graph.js';
 import type {
   WorkflowContext,
@@ -120,26 +121,149 @@ test('automatically records one returned tool observation for a completed node',
   assert.match(node.observations[0]?.id ?? '', /^[0-9a-f-]{36}$/u);
 });
 
-test('rejects an unpresented observation ID without promoting artifacts', async () => {
+test('repairs a similar unauthorized observation ID before completing', async () => {
   const node = createNode('current', ['lookup']);
   const graph: Graph = { revision: 1, nodes: [node] };
-  const decision = completed();
-  decision.criteria[0]!.observationIds = ['unknown-observation-id'];
-  const provider = createProvider([
-    toolFinish('call-1', 'lookup'),
-    terminalFinish(decision),
-  ]);
+  let authorizedId = '';
+  let rejectedId = '';
+  const provider = createProvider([], (request) => {
+    if (provider.requests.length === 1) return toolFinish('call-1', 'lookup');
+
+    authorizedId ||= observationIdFrom(request);
+    rejectedId ||= `${authorizedId.slice(0, -1)}x`;
+    if (provider.requests.length === 2) {
+      const invalid = completed();
+      invalid.criteria[0]!.observationIds = [rejectedId];
+      return terminalFinish(invalid)(request);
+    }
+
+    const correction = correctionMessageFrom(request);
+    assert.match(correction, /The observation ID is not authorized\./u);
+    assert.match(
+      correction,
+      new RegExp(`Most similar valid observation ID: ${authorizedId}`, 'u'),
+    );
+    assert.doesNotMatch(correction, new RegExp(rejectedId, 'u'));
+    const corrected = completed();
+    corrected.criteria[0]!.observationIds = [authorizedId];
+    return terminalFinish(corrected)(request);
+  });
   const harness = createHarness(graph, provider, [
     tool('lookup', async () => ({ found: true })),
   ]);
 
   const action = await execution(state([graph]), harness.context, handlers());
 
+  assert.equal(action.type, 'transition');
+  assert.equal(provider.requests.length, 3);
+  assert.equal(node.status, 'completed');
+  assert.deepEqual(node.outcome?.criteria[0]?.observationIds, [authorizedId]);
+});
+
+test('authorizes projected ancestors while excluding sibling observations', async () => {
+  const ancestor = createNode('ancestor');
+  ancestor.status = 'completed';
+  ancestor.deliver = false;
+  ancestor.observations = [
+    {
+      id: 'observation-ancestor',
+      goalId: ancestor.id,
+      toolName: 'inspect',
+      callId: 'call-ancestor',
+      input: '{}',
+      output: '{"valid":true}',
+    },
+  ];
+  const ancestorOutcome = completed() as NodeDecision;
+  ancestorOutcome.criteria[0]!.observationIds = ['observation-ancestor'];
+  ancestor.outcome = ancestorOutcome;
+
+  const sibling = createNode('sibling');
+  sibling.index = 1;
+  sibling.status = 'completed';
+  sibling.deliver = false;
+  sibling.observations = [
+    {
+      id: 'observation-sibling',
+      goalId: sibling.id,
+      toolName: 'inspect',
+      callId: 'call-sibling',
+      input: '{}',
+      output: '{"valid":false}',
+    },
+  ];
+  const siblingOutcome = completed() as NodeDecision;
+  siblingOutcome.criteria[0]!.observationIds = ['observation-sibling'];
+  sibling.outcome = siblingOutcome;
+
+  const node = createNode('current');
+  node.index = 2;
+  node.dependsOn = [ancestor.id];
+  const graph: Graph = { revision: 1, nodes: [ancestor, sibling, node] };
+  const invalid = completed();
+  invalid.criteria[0]!.observationIds = ['observation-sibling'];
+  const corrected = completed();
+  corrected.criteria[0]!.observationIds = ['observation-ancestor'];
+  const provider = createProvider([
+    terminalFinish(invalid),
+    (request) => {
+      const correction = correctionMessageFrom(request);
+      assert.match(
+        correction,
+        /Most similar valid observation ID: observation-ancestor/u,
+      );
+      assert.doesNotMatch(correction, /observation-sibling/u);
+      return terminalFinish(corrected)(request);
+    },
+  ]);
+  const harness = createHarness(graph, provider);
+
+  const action = await execution(state([graph]), harness.context, handlers());
+
+  assert.equal(action.type, 'transition');
+  assert.equal(node.status, 'completed');
+  assert.deepEqual(node.outcome?.criteria[0]?.observationIds, [
+    'observation-ancestor',
+  ]);
+});
+
+test('rejects an unauthorized observation ID returned by an execution hook', async () => {
+  const node = createNode('current');
+  const graph: Graph = { revision: 1, nodes: [node] };
+  const decision = completed() as NodeDecision;
+  decision.criteria[0]!.observationIds = ['unknown-observation-id'];
+  const provider = createProvider([]);
+  const harness = createHarness(graph, provider);
+
+  const action = await execution(
+    state([graph]),
+    {
+      ...harness.context,
+      hooks: {
+        execution: async () => ({
+          decision,
+          observations: [
+            {
+              id: 'authorized-observation-id',
+              goalId: node.id,
+              toolName: 'lookup',
+              callId: 'call-1',
+              input: '{}',
+              output: '{"found":true}',
+            },
+          ],
+        }),
+      },
+    },
+    handlers(),
+  );
+
   assert.equal(action.type, 'fail');
   assert.equal(node.outcome, null);
   assert.equal(node.observations.length, 1);
   assert.deepEqual(node.artifacts, []);
   assert.notEqual(node.status, 'completed');
+  assert.equal(provider.requests.length, 0);
 });
 
 test('automatically records every returned observation in tool-result order', async () => {
@@ -659,6 +783,25 @@ function terminalFinish(
       ],
     };
   };
+}
+
+function observationIdFrom(request: ProviderRequest<unknown>): string {
+  const content = request.messages
+    .filter(({ role }) => role === 'tool')
+    .map(({ content }) => (typeof content === 'string' ? content : ''))
+    .join('\n');
+  const match = content.match(/[0-9a-f]{8}-[0-9a-f-]{27}/u);
+  assert.ok(match);
+  return match[0];
+}
+
+function correctionMessageFrom(request: ProviderRequest<unknown>): string {
+  const correction = request.messages
+    .filter(({ role }) => role === 'system')
+    .map(({ content }) => (typeof content === 'string' ? content : ''))
+    .find((content) => content.startsWith('# Structured output correction'));
+  assert.ok(correction);
+  return correction;
 }
 
 function tool(

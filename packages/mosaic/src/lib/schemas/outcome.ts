@@ -143,11 +143,24 @@ export const createNodeDecisionSchema = (node: Node) =>
     validateStatus(node.id, outcome, context);
   });
 
+/** Creates the internal execution schema with dynamically resolved evidence scope. */
+export const createExecutionDecisionSchema = (
+  node: Node,
+  getAuthorizedObservationIds: () => readonly string[],
+) =>
+  createNodeDecisionSchema(node).superRefine((outcome, context) => {
+    validateObservationIds(outcome, context, getAuthorizedObservationIds);
+  });
+
 /** Validates a materialized outcome against its owning node. */
 export const createNodeOutcomeSchema = (node: Node, graph?: Graph) =>
   NodeOutcomeSchema.superRefine((outcome, context) => {
     validateCriteria(node, outcome, context);
-    validateObservationIds(node, graph, outcome, context);
+    validateObservationIds(outcome, context, () =>
+      graph === undefined
+        ? node.observations.map(({ id }) => id)
+        : [...authorizedObservationIds(node, graph)],
+    );
     if (outcome.status === 'needs_revision' && node.observations.length === 0) {
       context.addIssue({
         code: 'custom',
@@ -193,15 +206,12 @@ const validateCriteria = (
 };
 
 const validateObservationIds = (
-  node: Node,
-  graph: Graph | undefined,
   outcome: Decision,
   context: RefinementContext,
+  getAuthorizedObservationIds: () => readonly string[],
 ): void => {
-  const allowed =
-    graph === undefined
-      ? new Set(node.observations.map(({ id }) => id))
-      : authorizedObservationIds(node, graph);
+  const authorized = [...new Set(getAuthorizedObservationIds())];
+  const allowed = new Set(authorized);
 
   outcome.criteria.forEach((criterion, criterionPosition) => {
     criterion.observationIds.forEach((observationId, idPosition) => {
@@ -210,10 +220,73 @@ const validateObservationIds = (
       context.addIssue({
         code: 'custom',
         path: ['criteria', criterionPosition, 'observationIds', idPosition],
-        message: `Observation ID ${observationId} was not presented to node ${node.id}.`,
+        message: observationIdDiagnostic(observationId, authorized),
       });
     });
   });
+};
+
+const observationIdDiagnostic = (
+  rejected: string,
+  authorized: readonly string[],
+): string => {
+  if (authorized.length === 0) {
+    return [
+      'The observation ID is not authorized.',
+      'Most similar valid observation ID: none.',
+      'Other valid observation IDs: none.',
+      'Use [].',
+    ].join('\n');
+  }
+
+  const ranked = authorized
+    .map((id, index) => ({ id, index, distance: levenshtein(rejected, id) }))
+    .sort(
+      (left, right) =>
+        left.distance - right.distance || left.index - right.index,
+    )
+    .slice(0, 10)
+    .map(({ id }) => id);
+  const [mostSimilar, ...others] = ranked;
+  const omitted = authorized.length - ranked.length;
+
+  return [
+    'The observation ID is not authorized.',
+    `Most similar valid observation ID: ${mostSimilar}`,
+    others.length === 0
+      ? 'Other valid observation IDs: none.'
+      : `Other valid observation IDs: ${others.join(', ')}`,
+    ...(omitted === 0
+      ? []
+      : [
+          `Showing ${ranked.length} of ${authorized.length} valid observation IDs; ${omitted} omitted.`,
+        ]),
+  ].join('\n');
+};
+
+/** Computes edit distance without adding a dependency for opaque-ID ranking. */
+const levenshtein = (left: string, right: string): number => {
+  const source = [...left];
+  const target = [...right];
+  let previous = target.map((_, index) => index + 1);
+  previous.unshift(0);
+
+  source.forEach((sourceCharacter, sourceIndex) => {
+    const current = [sourceIndex + 1];
+    target.forEach((targetCharacter, targetIndex) => {
+      current.push(
+        Math.min(
+          current[targetIndex]! + 1,
+          previous[targetIndex + 1]! + 1,
+          previous[targetIndex]! +
+            (sourceCharacter === targetCharacter ? 0 : 1),
+        ),
+      );
+    });
+    previous = current;
+  });
+
+  return previous[target.length]!;
 };
 
 const validateStatus = (

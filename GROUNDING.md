@@ -1,6 +1,6 @@
 # Doric Grounding
 
-Last reviewed: 2026-08-11
+Last reviewed: 2026-08-12
 
 This is Doric's repository validity contract. Every agent working in this
 repository must read it before non-trivial planning, reviewing, artifact
@@ -402,8 +402,16 @@ node before validating or storing the terminal semantic outcome. Every criterion
 reference must be a unique opaque ID from that local ledger or from an observation
 cited by a completed transitive ancestor and presented in the execution prompt.
 Unknown, duplicate, cross-branch, descendant, retired-snapshot, and unpresented
-IDs are rejected before outcome storage or artifact promotion. An empty array is
-valid when proof needs no tool observation. Complete observation objects remain
+IDs are rejected by the Agent's terminal `safeParse` before its normal two-repair
+budget is exhausted, and the materialized-outcome schema repeats the same check
+before outcome storage or artifact promotion for hooks and other bypass paths.
+Each terminal parse resolves its authorized IDs dynamically from current local
+tool-call records followed by causally projected active-graph observations, with
+stable deduplication. An invalid-ID diagnostic never repeats the rejected value;
+it ranks only authorized IDs by Levenshtein distance with causal-order ties,
+shows at most ten IDs with explicit truncation, and directs the model to use an
+empty list when none are authorized. An empty array is valid when proof needs no
+tool observation. Complete observation objects remain
 only on their producing nodes. `callId` is retained in an `Observation` for
 correlation and is not exposed in execution or revision prompts. A completed decision is valid with zero, one, or multiple
 observations. Completed nodes store their Markdown result as an inline

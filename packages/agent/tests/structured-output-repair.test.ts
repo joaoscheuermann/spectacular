@@ -220,6 +220,48 @@ test('correction feedback includes at most ten normalized issues without rejecte
   assert.doesNotMatch(correction, /private-value/);
 });
 
+test('correction feedback preserves additional diagnostic lines', async () => {
+  const schema = z.object({
+    answer: z.string().superRefine((_, context) => {
+      context.addIssue({
+        code: 'custom',
+        message: [
+          'The answer is not authorized.',
+          'Most similar valid answer: public-answer',
+          'Other valid answers: none.',
+        ].join('\n'),
+      });
+    }),
+  });
+  const fake = createProvider({
+    complete: (request, index) =>
+      completeFinish('', [
+        call(terminalName(request), {
+          answer: index === 0 ? 'private-answer' : 'public-answer',
+        }),
+      ]),
+  });
+  const agent = createAgent({
+    provider: fake.provider,
+    tools: createTools().storage,
+    messages: createMessageStorage(),
+    system: '',
+    model: 'fake-model',
+  });
+
+  await assert.rejects(
+    agent.complete('Return an answer.', { schema, maxToolCallRepairs: 1 }),
+  );
+
+  const correction = correctionFrom(fake.requests[1]);
+  assert.ok(correction);
+  assert.match(
+    correction,
+    /Problem: The answer is not authorized\.\n  Most similar valid answer: public-answer\n  Other valid answers: none\./u,
+  );
+  assert.doesNotMatch(correction, /private-answer/u);
+});
+
 for (const mode of ['complete', 'stream'] as const) {
   test(`${mode} throws after two repair attempts with its latest error`, async () => {
     const fake = createProvider({

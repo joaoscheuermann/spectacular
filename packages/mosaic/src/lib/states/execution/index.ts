@@ -9,9 +9,11 @@ import { createToolStorage, type Tool } from 'tool';
 
 import * as executionPrompt from '../../prompts/execution.js';
 import {
+  createExecutionDecisionSchema,
   createNodeDecisionSchema,
   createNodeOutcomeSchema,
 } from '../../schemas/outcome.js';
+import { projectedObservations } from '../../observations.js';
 import { resolveSkills } from '../bundle/menus.js';
 import type { Graph, Node } from '../../types/graph.js';
 import type { WorkflowContext, WorkflowHandler } from '../../types/workflow.js';
@@ -170,7 +172,12 @@ const execute = async (
             tools,
           }),
           {
-            schema: createNodeDecisionSchema(node),
+            schema: createExecutionDecisionSchema(node, () => [
+              ...new Set([
+                ...toolCalls.list().map(({ id }) => id),
+                ...projectedObservations(current, active).map(({ id }) => id),
+              ]),
+            ]),
             maxTurns: options.execution.maxTurns,
             ...(runtime === undefined
               ? {}

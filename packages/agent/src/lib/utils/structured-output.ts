@@ -195,13 +195,17 @@ const validationDiagnostic = (
         typeof issue.expected === 'string'
           ? [`  Expected: ${issue.expected}`]
           : [];
-      const message = issue.message.replace(/\s+/g, ' ').trim();
+      const [message = '', ...details] = issue.message
+        .split(/\r?\n/u)
+        .map((line) => line.replace(/\s+/g, ' ').trim())
+        .filter((line) => line.length > 0);
 
       return [
         `- Field: ${path}`,
         `  Kind: ${kind}`,
         ...expected,
         `  Problem: ${message}`,
+        ...details.map((line) => `  ${line}`),
       ].join('\n');
     })
     .join('\n');

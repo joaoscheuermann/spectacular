@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import {
   createNodeDecisionSchema,
+  createExecutionDecisionSchema,
   createNodeOutcomeSchema,
 } from '../src/lib/schemas/outcome.js';
 import type { Graph, Node } from '../src/lib/types/graph.js';
@@ -49,6 +50,102 @@ test('rejects an observation ID that was not presented to the node', () => {
     createNodeOutcomeSchema(observedNode).safeParse(decision).success,
     false,
   );
+});
+
+test('describes invalid observation IDs with bounded similarity-ranked authorized IDs', () => {
+  const decision = completed();
+  decision.criteria[0]!.observationIds = ['private-observation'];
+  const authorized = [
+    'observation-00',
+    'observation-10',
+    'observation-20',
+    'observation-30',
+    'observation-40',
+    'observation-50',
+    'observation-60',
+    'observation-70',
+    'observation-80',
+    'observation-90',
+    'observation-100',
+    'observation-110',
+  ];
+  const parsed = createExecutionDecisionSchema(createNode(), () => authorized)
+    .safeParse(decision);
+
+  assert.equal(parsed.success, false);
+  if (parsed.success) return;
+  assert.deepEqual(parsed.error.issues[0]?.path, [
+    'criteria',
+    0,
+    'observationIds',
+    0,
+  ]);
+  const message = parsed.error.issues[0]?.message ?? '';
+  assert.match(message, /^The observation ID is not authorized\./u);
+  assert.match(
+    message,
+    /Most similar valid observation ID: observation-00/u,
+  );
+  assert.match(
+    message,
+    /Other valid observation IDs: observation-10, observation-20, observation-30, observation-40, observation-50, observation-60, observation-70, observation-80, observation-90/u,
+  );
+  assert.match(message, /Showing 10 of 12 valid observation IDs; 2 omitted\./u);
+  assert.doesNotMatch(message, /observation-100|observation-110|private-observation/u);
+});
+
+test('uses causal order to break equal observation ID distances', () => {
+  const decision = completed();
+  decision.criteria[0]!.observationIds = ['observation-aa'];
+  const parsed = createExecutionDecisionSchema(createNode(), () => [
+    'observation-ab',
+    'observation-ac',
+  ]).safeParse(decision);
+
+  assert.equal(parsed.success, false);
+  if (parsed.success) return;
+  assert.match(
+    parsed.error.issues[0]?.message ?? '',
+    /Most similar valid observation ID: observation-ab\nOther valid observation IDs: observation-ac/u,
+  );
+});
+
+test('resolves authorized observation IDs during every execution parse', () => {
+  const decision = completed();
+  decision.criteria[0]!.observationIds = ['observation-later'];
+  const authorized: string[] = [];
+  const schema = createExecutionDecisionSchema(createNode(), () => authorized);
+
+  assert.equal(schema.safeParse(decision).success, false);
+  authorized.push('observation-later');
+  assert.equal(schema.safeParse(decision).success, true);
+});
+
+test('describes single and empty authorized observation ID sets', () => {
+  const decision = completed();
+  decision.criteria[0]!.observationIds = ['rejected-private-id'];
+
+  const single = createExecutionDecisionSchema(createNode(), () => [
+    'only-authorized-id',
+  ]).safeParse(decision);
+  assert.equal(single.success, false);
+  if (!single.success) {
+    assert.match(
+      single.error.issues[0]?.message ?? '',
+      /Most similar valid observation ID: only-authorized-id\nOther valid observation IDs: none\./u,
+    );
+  }
+
+  const empty = createExecutionDecisionSchema(createNode(), () => [])
+    .safeParse(decision);
+  assert.equal(empty.success, false);
+  if (!empty.success) {
+    assert.match(
+      empty.error.issues[0]?.message ?? '',
+      /Most similar valid observation ID: none\.\nOther valid observation IDs: none\.\nUse \[\]\./u,
+    );
+    assert.doesNotMatch(empty.error.issues[0]?.message ?? '', /rejected-private-id/u);
+  }
 });
 
 test('accepts local and cited transitive-ancestor observation IDs', () => {
