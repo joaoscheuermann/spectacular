@@ -1,6 +1,6 @@
 # Doric Grounding
 
-Last reviewed: 2026-08-12
+Last reviewed: 2026-08-13
 
 This is Doric's repository validity contract. Every agent working in this
 repository must read it before non-trivial planning, reviewing, artifact
@@ -393,7 +393,9 @@ evaluations, `result`, `revisionRequest`, and `reason`; each criterion owns its
 zero-based index, satisfaction decision, model-authored evidence, and a unique
 array of opaque observation IDs. The revision request owns only `goalId`,
 `invalidatedAssumption`, and `requestedEffect`. Unknown legacy reference fields
-are rejected. The agent exposes that decision schema as its reserved terminal
+are rejected. A model-authored `blocked` decision requires at least one
+unsatisfied criterion; logical impossibility may still be established without
+a local tool observation. The agent exposes that decision schema as its reserved terminal
 tool, whether or not executable tools are present, rather than using
 provider-native structured output. The terminal structured-output tool is
 never an observation. Its collision-safe Markdown execution context contains
@@ -406,7 +408,18 @@ uncited observations, call IDs, and unrelated branches are excluded. Selected
 skill bodies remain in bundle order, followed by tool names and descriptions
 without duplicated tool schemas. The executor directly inspects produced state
 when possible rather than treating an ancestor declaration alone as semantic
-proof.
+proof. After a successful localized revision, affected nodes receive a short
+handoff derived from graph history: the invalidated assumption, requested
+effect, previously unsatisfied criteria, and relevant historical tool results.
+Historical observation and provider call IDs are omitted; the handoff is
+non-citable context, and the new execution must produce current observations
+before relying on its claims or tool results. A post-revision `completed`
+decision must cite at least one observation produced by that current node
+execution; this additional evidence requirement does not apply to `blocked` or
+`failed`. Historical results are eligible only when a previously unsatisfied
+criterion cited their local observation; the handoff retains at most the five
+most recent eligible results, compacts large inputs and outputs, and reports
+the count omitted.
 
 Each successfully serialized executable-tool return is first appended to the
 node agent's isolated `ToolCallStorage` with a runtime-owned lowercase six-hex
@@ -416,6 +429,9 @@ graph snapshots and the current wave. It retries collisions with fresh UUIDs
 and raises an internal operational error after 32 consecutive collisions. The
 same short ID appears in the Markdown tool-result message, awaited finished
 event, node ledger, decisions, revisions, results, and delivery.
+Evaluation-hook observations must supply the same canonical six-hex handles;
+the shared allocator claims them before storage and rejects malformed,
+duplicate, current-wave, or historical-snapshot collisions.
 Mosaic materializes one ordered `Observation` per stored record on the producing
 node before validating or storing the terminal semantic outcome. Every criterion
 reference must be a unique opaque ID from that local ledger or from an observation
@@ -481,7 +497,10 @@ the active graph. Each localized pass is owned by the dedicated `revision`
 state, skips catalog hints, preserves completed and other non-pending nodes
 exactly, permits changes only to the target and pending nodes, clears routing,
 observations, outcome, termination, and partial results from a retained target, and prevents
-retired ID reuse. The prior graph snapshot retains its complete
+retired ID reuse. A localized plan that changes none of the planner-owned
+`id`, `goal`, `doneWhen`, `dependsOn`, or `deliver` fields in the revisable
+region is rejected inside the structured-output boundary before a snapshot is
+appended, so its repair does not consume the localized-revision limit. The prior graph snapshot retains its complete
 `needs_revision` outcome and node observation ledger. Only successfully appended localized graphs count
 against the configured limit; exhaustion preserves the outcome, adds a
 runtime-owned `revision_limit` termination, and blocks the target without a
@@ -615,10 +634,10 @@ The benchmark publishes two BenchFlow ACP agents: a direct agent and a MOSAIC
 agent. Both receive the same task prompt, mounted task skills, terminal tool,
 OpenRouter-backed OpenAI Completions-compatible proxy, model, and low reasoning
 effort. Both compose the shared `createUnifiedProvider`; BenchFlow selects
-OpenRouter with `openrouter/deepseek/deepseek-v4-pro-0813` and resolves the host's
+OpenRouter with `openrouter/deepseek/deepseek-v4-pro` and resolves the host's
 `OPENROUTER_API_KEY`, while the agents receive only the proxy endpoint, alias,
 and ephemeral proxy credential. The adapter sends that alias to LiteLLM while
-the unified provider uses the fixed original `deepseek/deepseek-v4-pro-0813` identifier
+the unified provider uses the fixed original `deepseek/deepseek-v4-pro` identifier
 for curated capability policy; it does not treat LiteLLM's compatibility-only
 model listing as an OpenRouter capability catalog. The generated adapter owns
 the fixed `low` effort for both arms and the campaign omits BenchFlow's ACP

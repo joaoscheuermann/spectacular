@@ -154,7 +154,7 @@ const empty: Metrics = {
   totalTokens: 0,
   tasks: 0,
 };
-const model = 'openrouter/deepseek/deepseek-v4-pro-0813';
+const model = 'openrouter/deepseek/deepseek-v4-pro';
 const digestNames = [
   'taskManifest',
   'runConfig',

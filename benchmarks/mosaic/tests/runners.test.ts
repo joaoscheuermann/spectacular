@@ -47,7 +47,7 @@ test('provider composition uses Unified OpenRouter with the BenchFlow proxy', as
 
   assert.equal(profile.provider.metadata.id, 'unified');
   assert.equal(profile.model, 'proxy/model');
-  assert.equal(defaultModel, 'deepseek/deepseek-v4-pro-0813');
+  assert.equal(defaultModel, 'deepseek/deepseek-v4-pro');
   assert.equal(authorization, 'Bearer secret');
   assert.equal(url, 'https://proxy.invalid/v1/models');
   assert.equal(environment.OPENROUTER_API_KEY, 'secret');
@@ -77,7 +77,7 @@ test('provider composition sends the proxy alias using the fixed upstream model 
     environment: {
       OPENROUTER_API_KEY: 'secret',
       OPENROUTER_BASE_URL: 'https://proxy.invalid/v1',
-      OPENROUTER_MODEL: 'benchflow-openrouter-deepseek-deepseek-v4-pro-0813',
+      OPENROUTER_MODEL: 'benchflow-openrouter-deepseek-deepseek-v4-pro',
     },
     transport: {
       request: async (request) => {
@@ -105,10 +105,7 @@ test('provider composition sends the proxy alias using the fixed upstream model 
 
   assert.equal(requests.length, 1);
   assert.equal(requests[0]?.url, 'https://proxy.invalid/v1/chat/completions');
-  assert.equal(
-    body.model,
-    'benchflow-openrouter-deepseek-deepseek-v4-pro-0813',
-  );
+  assert.equal(body.model, 'benchflow-openrouter-deepseek-deepseek-v4-pro');
 });
 
 test('reads, deletes, and caches the process credential file', async () => {

@@ -6,6 +6,7 @@ const format = /^[0-9a-f]{6}$/u;
 export interface ObservationIdAllocator {
   next(): string;
   reserve(ids: Iterable<string>): void;
+  claim(ids: Iterable<string>): void;
 }
 
 /** Allocates one run-local six-hex handle while rejecting bounded collisions. */
@@ -35,6 +36,22 @@ export const createObservationIdAllocator = (
     },
     reserve: (ids) => {
       for (const id of ids) reserved.add(id);
+    },
+    claim: (ids) => {
+      const claimed = [...ids];
+      const seen = new Set<string>();
+      for (const id of claimed) {
+        if (!format.test(id)) {
+          throw new Error(
+            'Mosaic observation ID must use six lowercase hexadecimal characters.',
+          );
+        }
+        if (reserved.has(id) || seen.has(id)) {
+          throw new Error('Mosaic observation ID is already reserved.');
+        }
+        seen.add(id);
+      }
+      for (const id of claimed) reserved.add(id);
     },
   };
 };

@@ -16,6 +16,7 @@ import {
 import { projectedObservations } from '../../observations.js';
 import { resolveSkills } from '../bundle/menus.js';
 import type { Graph, Node } from '../../types/graph.js';
+import type { RevisionExecutionHandoff } from '../../types/revision.js';
 import type { WorkflowContext, WorkflowHandler } from '../../types/workflow.js';
 import { materializeObservations } from './observations.js';
 import { evaluate } from '../../evaluation.js';
@@ -27,13 +28,9 @@ import {
   createObservationIdAllocator,
   type ObservationIdAllocator,
 } from '../../observation-ids.js';
+import { revisionExecutionHandoff } from './handoff.js';
 
-/**
- * Implements the node executor and lifecycle from the MOSAIC paper, sections
- * 4.9-4.10 and Algorithm 1. In particular, section 4.10
- * says: "O scheduler o coloca em running." Doric groups ready nodes into a
- * concurrent wave; that batching policy is a local MOSAIC 0.2 runtime choice.
- */
+/** Executes concurrent node waves under MOSAIC sections 4.9-4.10. */
 export const execution: WorkflowHandler = async (
   state,
   { input, options, runtime, hooks, observationIds },
@@ -63,12 +60,7 @@ export const execution: WorkflowHandler = async (
       ),
     );
 
-    /**
-     * Execute the complete wave concurrently and wait for every node. Using
-     * allSettled prevents one rejection from hiding later node state changes.
-     * Algorithm 1 selects the next ready objective abstractly; it does not
-     * prescribe sequential or concurrent dispatch.
-     */
+    /** Wait for the whole wave so one rejection cannot hide later state changes. */
     await runtime?.emit({
       type: 'wave.started',
       stage: 'execution',
@@ -77,7 +69,16 @@ export const execution: WorkflowHandler = async (
     });
     const results = await Promise.allSettled(
       nodes.map((node) =>
-        execute(input, node, graph, options, ids, runtime, hooks),
+        execute({
+          input,
+          node,
+          graph,
+          options,
+          observationIds: ids,
+          runtime,
+          hooks,
+          handoff: revisionExecutionHandoff(node, graphs),
+        }),
       ),
     );
 
@@ -94,25 +95,34 @@ export const execution: WorkflowHandler = async (
       nodeIds: nodes.map(({ id }) => id),
     });
 
-    /**
-     * Return to scheduling so downstream dependencies can become ready. This
-     * realizes section 4.10: pending becomes ready after dependencies complete.
-     */
+    /** Return to scheduling so completed dependencies can release descendants. */
     return transition('schedule', state);
   } catch (e) {
     return fail(e);
   }
 };
 
-const execute = async (
-  input: string,
-  node: Node,
-  graph: Graph,
-  options: WorkflowContext['options'],
-  observationIds: ObservationIdAllocator,
-  runtime?: MosaicRuntime,
-  hooks?: MosaicEvaluationHooks,
-): Promise<void> => {
+type ExecutionInput = {
+  readonly input: string;
+  readonly node: Node;
+  readonly graph: Graph;
+  readonly options: WorkflowContext['options'];
+  readonly observationIds: ObservationIdAllocator;
+  readonly runtime: MosaicRuntime | undefined;
+  readonly hooks: MosaicEvaluationHooks | undefined;
+  readonly handoff: RevisionExecutionHandoff | undefined;
+};
+
+const execute = async ({
+  input,
+  node,
+  graph,
+  options,
+  observationIds,
+  runtime,
+  hooks,
+  handoff,
+}: ExecutionInput): Promise<void> => {
   /** The runtime owns node status after scheduling hands the node to execution. */
   node.status = 'running';
   await runtime?.emit({
@@ -136,11 +146,6 @@ const execute = async (
     }
     const skills = resolveSkills(node.bundle.skills, options.skills.menu);
 
-    /**
-     * Keep the observation ledger local to this node. Appendix A, table A.2
-     * requires every Observation call and return to remain correlated.
-     */
-    /** Compose the node-local agent with only its resolved executable tools. */
     options.logger.info(
       {
         nodeId: node.id,
@@ -164,6 +169,8 @@ const execute = async (
         if (current.id !== node.id || active.revision !== graph.revision) {
           throw new Error('Evaluation execution changed its node identity.');
         }
+        const currentObservationIds = () =>
+          toolCalls.list().map(({ id }) => id);
         const agent = createAgent({
           provider:
             runtime?.provider(
@@ -184,16 +191,21 @@ const execute = async (
             request,
             node: current,
             graph: active,
+            handoff,
             skills,
             tools,
           }),
           {
-            schema: createExecutionDecisionSchema(node, () => [
-              ...new Set([
-                ...toolCalls.list().map(({ id }) => id),
-                ...projectedObservations(current, active).map(({ id }) => id),
-              ]),
-            ]),
+            schema: createExecutionDecisionSchema(
+              node,
+              () => [
+                ...new Set([
+                  ...currentObservationIds(),
+                  ...projectedObservations(current, active).map(({ id }) => id),
+                ]),
+              ],
+              handoff === undefined ? undefined : currentObservationIds,
+            ),
             maxTurns: options.execution.maxTurns,
             ...(runtime === undefined
               ? {}
@@ -236,7 +248,6 @@ const execute = async (
       },
     );
     const decision = createNodeDecisionSchema(node).parse(execution.decision);
-
     const observations = ObservationSchema.array().parse(
       execution.observations,
     );
@@ -245,6 +256,12 @@ const execute = async (
         `Node ${node.id} received an observation from another node.`,
       );
     }
+    const agentObservationIds = new Set(toolCalls.list().map(({ id }) => id));
+    observationIds.claim(
+      observations.flatMap(({ id }) =>
+        agentObservationIds.has(id) ? [] : [id],
+      ),
+    );
     node.observations = observations.map((observation) => ({ ...observation }));
     GraphSchema.parse(graph);
 
@@ -253,7 +270,13 @@ const execute = async (
      * before validating the semantic outcome. The terminal structured-output
      * tool is normalized away by `agent` and never enters this ledger.
      */
-    const outcome = createNodeOutcomeSchema(node, graph).parse(decision);
+    const outcome = createNodeOutcomeSchema(
+      node,
+      graph,
+      handoff === undefined
+        ? undefined
+        : () => node.observations.map(({ id }) => id),
+    ).parse(decision);
 
     await runtime?.emit({
       type: 'decision.created',

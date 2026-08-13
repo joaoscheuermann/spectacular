@@ -7,8 +7,8 @@ install_cmd = '''set -eu
 BF_NODE_DIR=/opt/benchflow/node
 BF_NODE_VERSION=22.20.0
 BF_MOSAIC_DIR=/opt/benchflow/mosaic
-BF_RELEASE=mosaic-benchmark-v0.1.15
-BF_BUNDLE_SHA256=6a9c788666d931a9eaa8f8766175ed5c8f2a2606c1c3341627a303c7425eb760
+BF_RELEASE=mosaic-benchmark-v0.1.16
+BF_BUNDLE_SHA256=97d47dff261d78f7cacf624429d2deff3cdc44ae37515e51d165a47207ea3cf4
 if ! command -v curl >/dev/null 2>&1 || ! command -v tar >/dev/null 2>&1 || ! command -v xz >/dev/null 2>&1 || ! command -v sha256sum >/dev/null 2>&1; then
   if command -v apt-get >/dev/null 2>&1; then
     apt-get update -qq
@@ -75,7 +75,7 @@ unset OPENROUTER_API_KEY BENCHFLOW_PROVIDER_API_KEY BENCHFLOW_LITELLM_MASTER_KEY
 export OPENROUTER_API_KEY_FILE="$key_file"
 exec /opt/benchflow/node/bin/node /opt/benchflow/mosaic/mosaic-bench-acp.mjs serve mosaic'''
 supports_acp_set_model = false
-default_model = "openrouter/deepseek/deepseek-v4-pro-0813"
+default_model = "openrouter/deepseek/deepseek-v4-pro"
 skill_paths = ["$HOME/.agents/skills"]
 home_dirs = [".agents"]
 

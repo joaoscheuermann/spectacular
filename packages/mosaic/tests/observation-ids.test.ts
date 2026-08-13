@@ -33,3 +33,30 @@ test('fails operationally after 32 consecutive collisions', () => {
 
   assert.throws(() => ids.next(), /allocation exhausted after 32 collisions/u);
 });
+
+test('claims caller-supplied canonical IDs without permitting reuse', () => {
+  const ids = createObservationIdAllocator(
+    () => 'bbbbbb00-0000-4000-8000-000000000000',
+  );
+
+  ids.claim(['aaaaaa']);
+
+  assert.throws(() => ids.claim(['aaaaaa']), /already reserved/u);
+  assert.throws(() => ids.claim(['ABCDEF']), /six lowercase hexadecimal/u);
+  assert.throws(() => ids.claim(['not-hex']), /six lowercase hexadecimal/u);
+  assert.equal(ids.next(), 'bbbbbb');
+});
+
+test('claims caller-supplied IDs atomically', () => {
+  const values = [
+    'bbbbbb00-0000-4000-8000-000000000000',
+    'cccccc00-0000-4000-8000-000000000000',
+  ];
+  const ids = createObservationIdAllocator(() => values.shift()!);
+
+  assert.throws(
+    () => ids.claim(['bbbbbb', 'not-hex']),
+    /six lowercase hexadecimal/u,
+  );
+  assert.equal(ids.next(), 'bbbbbb');
+});

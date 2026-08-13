@@ -1,14 +1,11 @@
 import * as revisionPrompt from '../../prompts/revision.js';
-import {
-  GraphHistorySchema,
-  GraphSchema,
-  PlannedGraphSchema,
-} from '../../schemas/graph.js';
+import { GraphHistorySchema, GraphSchema } from '../../schemas/graph.js';
 import { completeStructured } from '../../structured.js';
 import { evaluate } from '../../evaluation.js';
 import type { WorkflowHandler } from '../../types/workflow.js';
 import {
   applyLocalizedRevision,
+  localizedRevisionSchema,
   localizedRevisionCount,
   retiredNodeIds,
   revisionNodes,
@@ -111,7 +108,8 @@ export const revision: WorkflowHandler = async (
      * and every ordered Observation without provider-opaque call IDs. Catalog
      * hints are intentionally absent from runtime revision.
      */
-    const plan = PlannedGraphSchema.parse(
+    const schema = localizedRevisionSchema(active, target);
+    const plan = schema.parse(
       await evaluate(
         hooks?.localizedRevision,
         { request: input, graph: active, target, retiredIds },
@@ -126,7 +124,7 @@ export const revision: WorkflowHandler = async (
               target,
               retiredIds,
             ),
-            schema: PlannedGraphSchema,
+            schema,
             runtime,
             stage: 'revision',
             nodeId: target.id,

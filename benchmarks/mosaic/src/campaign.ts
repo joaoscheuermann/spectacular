@@ -42,10 +42,10 @@ export type {
   CommandRunner,
 } from './campaign-types.js';
 
-const model = 'openrouter/deepseek/deepseek-v4-pro-0813';
+const model = 'openrouter/deepseek/deepseek-v4-pro';
 const releaseAssets = [
-  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.15/mosaic-bench-acp.mjs',
-  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.15/mosaic-bench-acp.mjs.sha256',
+  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.16/mosaic-bench-acp.mjs',
+  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.16/mosaic-bench-acp.mjs.sha256',
 ] as const;
 
 const definitions: Record<

@@ -53,7 +53,7 @@ export interface ProviderOptions {
   readonly logger?: Logger;
 }
 
-export const defaultModel = 'deepseek/deepseek-v4-pro-0813';
+export const defaultModel = 'deepseek/deepseek-v4-pro';
 
 const sensitiveName =
   /(?:master|private|api|access)[_-]?key|auth(?:orization)?|bearer|token|secret|password|credentials?|cookie/iu;

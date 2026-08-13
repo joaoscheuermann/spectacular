@@ -159,6 +159,281 @@ test('does not reuse an observation ID retained by an earlier revision', async (
   assert.equal(node.observations[0]?.id, 'bbbbbb');
 });
 
+test('hands a replacement node the newest applicable prior attempt without authorizing old evidence', async () => {
+  const first = createNode('first');
+  first.index = 0;
+  first.doneWhen = ['First revision criterion.'];
+  first.status = 'needs_revision';
+  first.observations = [
+    {
+      id: '111111',
+      goalId: first.id,
+      toolName: 'inspect-first',
+      callId: 'call-first-history',
+      input: '{}',
+      output: 'newer unrelated revision output',
+    },
+  ];
+  first.outcome = {
+    ...nonCompleted('needs_revision', 'Revise first.'),
+    revisionRequest: {
+      goalId: first.id,
+      invalidatedAssumption: 'Newer unrelated assumption.',
+      requestedEffect: 'Revise the first node.',
+    },
+  };
+
+  const second = createNode('second');
+  second.index = 1;
+  second.doneWhen = ['Already satisfied.', 'Old target must be replaced.'];
+  second.status = 'needs_revision';
+  second.observations = [
+    {
+      id: '222222',
+      goalId: second.id,
+      toolName: 'inspect-unlinked',
+      callId: 'call-unlinked-history',
+      input: '{"scope":"unlinked"}',
+      output: 'unlinked historical output',
+    },
+    {
+      id: '333333',
+      goalId: second.id,
+      toolName: 'inspect-linked',
+      callId: 'call-linked-history',
+      input: '{"scope":"linked"}',
+      output: 'linked historical output',
+    },
+  ];
+  second.outcome = {
+    status: 'needs_revision',
+    criteria: [
+      {
+        criterionIndex: 0,
+        satisfied: true,
+        evidence: 'Already satisfied.',
+        observationIds: ['222222'],
+      },
+      {
+        criterionIndex: 1,
+        satisfied: false,
+        evidence: 'The target structure is unavailable.',
+        observationIds: ['333333'],
+      },
+    ],
+    result: null,
+    revisionRequest: {
+      goalId: second.id,
+      invalidatedAssumption: 'The original structure remains available.',
+      requestedEffect: 'Replace the target with a supported structure.',
+    },
+    reason: 'The plan must change.',
+  };
+
+  const replacementBefore = createNode('replacement');
+  replacementBefore.index = 1;
+  replacementBefore.status = 'pending';
+  replacementBefore.bundle = null;
+  replacementBefore.goal = 'Use the supported replacement.';
+  const replacement = createNode('replacement', ['verify-revision']);
+  replacement.goal = replacementBefore.goal;
+  const active: Graph = { revision: 3, nodes: [replacement] };
+  let currentObservationId = '';
+  const provider = createProvider([], (request) => {
+    const prompt = request.messages
+      .filter(({ role }) => role === 'user')
+      .map(({ content }) => (typeof content === 'string' ? content : ''))
+      .join('\n');
+
+    assert.match(prompt, /The original structure remains available\./u);
+    assert.match(prompt, /Replace the target with a supported structure\./u);
+    assert.match(prompt, /Old target must be replaced\./u);
+    assert.match(prompt, /linked historical output/u);
+    assert.doesNotMatch(
+      prompt,
+      /Already satisfied\.|unlinked historical output|Newer unrelated assumption/u,
+    );
+    assert.doesNotMatch(
+      prompt,
+      /222222|333333|call-unlinked-history|call-linked-history/u,
+    );
+    assert.match(prompt, /not citable evidence/u);
+    assert.match(prompt, /cite only fresh observation IDs/u);
+
+    if (provider.requests.length === 1) {
+      const invalid = completed();
+      invalid.criteria[0]!.observationIds = ['333333'];
+      return terminalFinish(invalid)(request);
+    }
+
+    if (provider.requests.length === 2) {
+      const correction = correctionMessageFrom(request);
+      assert.match(correction, /Most similar valid observation ID: none\./u);
+      assert.match(correction, /fresh local observation ID/u);
+      assert.doesNotMatch(correction, /333333/u);
+      return toolFinish('call-current-revision', 'verify-revision');
+    }
+
+    currentObservationId = observationIdFrom(request);
+    const corrected = completed();
+    corrected.criteria[0]!.observationIds = [currentObservationId];
+    return terminalFinish(corrected)(request);
+  });
+  const harness = createHarness(active, provider, [
+    tool('verify-revision', async () => ({ corrected: true })),
+  ]);
+
+  const action = await execution(
+    state([
+      { revision: 0, nodes: [createNode('p0')] },
+      { revision: 1, nodes: [first, second] },
+      { revision: 2, nodes: [first, replacementBefore] },
+      active,
+    ]),
+    harness.context,
+    handlers(),
+  );
+
+  assert.equal(action.type, 'transition');
+  assert.equal(provider.requests.length, 3);
+  assert.equal(replacement.status, 'completed');
+  assert.match(currentObservationId, /^[0-9a-f]{6}$/u);
+  assert.deepEqual(replacement.outcome?.criteria[0]?.observationIds, [
+    currentObservationId,
+  ]);
+  assert.equal(replacement.observations[0]?.id, currentObservationId);
+});
+
+test('rejects a post-revision completion hook that does not cite its fresh observation', async () => {
+  const prior = revisionTarget('prior');
+  const current = createNode('prior');
+  current.goal = 'Revised prior goal.';
+  const active: Graph = { revision: 2, nodes: [current] };
+  const decision = completed() as NodeDecision;
+  const provider = createProvider([]);
+  const harness = createHarness(active, provider);
+
+  const action = await execution(
+    state([{ revision: 1, nodes: [prior] }, active]),
+    {
+      ...harness.context,
+      hooks: {
+        execution: async () => ({
+          decision,
+          observations: [freshObservation(current.id, 'dddddd')],
+        }),
+      },
+    },
+    handlers(),
+  );
+
+  assert.equal(action.type, 'fail');
+  if (action.type !== 'fail') return;
+  assert.match(
+    (action.error as Error).message,
+    /completed post-revision outcome must cite at least one fresh local observation ID/u,
+  );
+  assert.equal(current.status, 'running');
+  assert.equal(current.outcome, null);
+  assert.equal(current.observations.length, 1);
+  assert.equal(provider.requests.length, 0);
+});
+
+test('accepts a post-revision completion hook that cites its fresh observation', async () => {
+  const prior = revisionTarget('prior');
+  const current = createNode('prior');
+  current.goal = 'Revised prior goal.';
+  const active: Graph = { revision: 2, nodes: [current] };
+  const decision = completed() as NodeDecision;
+  decision.criteria[0]!.observationIds = ['eeeeee'];
+  const provider = createProvider([]);
+  const harness = createHarness(active, provider);
+
+  const action = await execution(
+    state([{ revision: 1, nodes: [prior] }, active]),
+    {
+      ...harness.context,
+      hooks: {
+        execution: async () => ({
+          decision,
+          observations: [freshObservation(current.id, 'eeeeee')],
+        }),
+      },
+    },
+    handlers(),
+  );
+
+  assert.equal(action.type, 'transition');
+  assert.equal(current.status, 'completed');
+  assert.deepEqual(current.outcome?.criteria[0]?.observationIds, ['eeeeee']);
+  assert.equal(current.observations[0]?.id, 'eeeeee');
+  assert.equal(provider.requests.length, 0);
+});
+
+test('rejects a hook observation ID retained by an earlier snapshot', async () => {
+  const prior = revisionTarget('prior');
+  prior.observations = [freshObservation(prior.id, 'aaaaaa')];
+  prior.outcome!.criteria[0]!.observationIds = ['aaaaaa'];
+  const current = createNode('prior');
+  current.goal = 'Revised prior goal.';
+  const active: Graph = { revision: 2, nodes: [current] };
+  const decision = completed() as NodeDecision;
+  decision.criteria[0]!.observationIds = ['aaaaaa'];
+  const provider = createProvider([]);
+  const harness = createHarness(active, provider);
+
+  const action = await execution(
+    state([{ revision: 1, nodes: [prior] }, active]),
+    {
+      ...harness.context,
+      hooks: {
+        execution: async () => ({
+          decision,
+          observations: [freshObservation(current.id, 'aaaaaa')],
+        }),
+      },
+    },
+    handlers(),
+  );
+
+  assert.equal(action.type, 'fail');
+  if (action.type !== 'fail') return;
+  assert.match((action.error as Error).message, /already reserved/u);
+  assert.equal(current.outcome, null);
+  assert.deepEqual(current.observations, []);
+  assert.equal(provider.requests.length, 0);
+});
+
+test('allows tool-free blocked and failed hooks after a revision handoff', async () => {
+  for (const status of ['blocked', 'failed'] as const) {
+    const prior = revisionTarget(`prior-${status}`);
+    const current = createNode(`prior-${status}`);
+    current.goal = `Revised ${status} goal.`;
+    const active: Graph = { revision: 2, nodes: [current] };
+    const provider = createProvider([]);
+    const harness = createHarness(active, provider);
+
+    const action = await execution(
+      state([{ revision: 1, nodes: [prior] }, active]),
+      {
+        ...harness.context,
+        hooks: {
+          execution: async () => ({
+            decision: nonCompleted(status, `${status} after revision.`),
+            observations: [],
+          }),
+        },
+      },
+      handlers(),
+    );
+
+    assert.equal(action.type, 'transition');
+    assert.equal(current.status, status);
+    assert.deepEqual(current.observations, []);
+    assert.equal(provider.requests.length, 0);
+  }
+});
+
 test('repairs a similar unauthorized observation ID before completing', async () => {
   const node = createNode('current', ['lookup']);
   const graph: Graph = { revision: 1, nodes: [node] };
@@ -313,7 +588,7 @@ test('rejects an unauthorized observation ID returned by an execution hook', asy
   const node = createNode('current');
   const graph: Graph = { revision: 1, nodes: [node] };
   const decision = completed() as NodeDecision;
-  decision.criteria[0]!.observationIds = ['unknown-observation-id'];
+  decision.criteria[0]!.observationIds = ['ffffff'];
   const provider = createProvider([]);
   const harness = createHarness(graph, provider);
 
@@ -326,7 +601,7 @@ test('rejects an unauthorized observation ID returned by an execution hook', asy
           decision,
           observations: [
             {
-              id: 'authorized-observation-id',
+              id: 'eeeeee',
               goalId: node.id,
               toolName: 'lookup',
               callId: 'call-1',
@@ -779,6 +1054,31 @@ function createNode(id: string, toolNames: readonly string[] = []): Node {
     observations: [],
     outcome: null,
     termination: null,
+  };
+}
+
+function revisionTarget(id: string): Node {
+  const target = createNode(id);
+  target.status = 'needs_revision';
+  target.outcome = {
+    ...nonCompleted('needs_revision', 'Revision required.'),
+    revisionRequest: {
+      goalId: id,
+      invalidatedAssumption: 'The old structure remains valid.',
+      requestedEffect: 'Use a supported replacement.',
+    },
+  };
+  return target;
+}
+
+function freshObservation(goalId: string, id: string) {
+  return {
+    id,
+    goalId,
+    toolName: 'inspect',
+    callId: `call-${id}`,
+    input: '{}',
+    output: '{"corrected":true}',
   };
 }
 

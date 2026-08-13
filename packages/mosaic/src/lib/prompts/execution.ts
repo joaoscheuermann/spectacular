@@ -2,6 +2,7 @@ import type { Skill } from 'bundle';
 import type { Tool } from 'tool';
 
 import type { Graph, Node } from '../types/graph.js';
+import type { RevisionExecutionHandoff } from '../types/revision.js';
 import {
   artifactSections,
   fenced,
@@ -14,6 +15,7 @@ type ExecutionContext = {
   readonly request: string;
   readonly node: Node;
   readonly graph: Graph;
+  readonly handoff?: RevisionExecutionHandoff | undefined;
   readonly skills: readonly Skill[];
   readonly tools: readonly Tool[];
 };
@@ -76,6 +78,11 @@ export const system = (required: readonly Skill[] = []): string =>
     '  or in the Projected Ancestor Observation Ledger.',
     '- observationIds may cite this node or projected completed ancestors. Never cite',
     '  an ID from another branch, a descendant, an older plan snapshot, or memory.',
+    '- A Previous Revision Handoff is historical context, not evidence. Obtain new',
+    '  tool observations before relying on its claims or tool results.',
+    '- A completed post-revision decision must cite at least one fresh local',
+    '  observation ID produced by the current execution.',
+    '- This extra fresh-observation requirement does not apply to blocked or failed.',
     '- Provider call IDs, model responses, provider turns, and the terminal',
     '  structured-output submission are not observation IDs.',
     '',
@@ -107,6 +114,8 @@ export const system = (required: readonly Skill[] = []): string =>
     '- For blocked, identify concrete impossibility evidence and the reasonable',
     '  alternatives tried. Absence of explicit confirmation does not prove impossibility',
     '  when the available data supports a valid interpretation.',
+    '- For blocked, mark at least one criterion unsatisfied. A logical impossibility',
+    '  may use no local observation when its proof requires no tool result.',
     '- Keep operational failures distinct from semantic terminal decisions.',
     '- Submit the decision through the structured-output mechanism supplied by',
     '  the runtime.',
@@ -124,6 +133,7 @@ export const user = ({
   request,
   node,
   graph,
+  handoff,
   skills: selected,
   tools,
 }: ExecutionContext): string =>
@@ -134,16 +144,56 @@ export const user = ({
     section('Node ID', node.id),
     section('Goal', node.goal),
     criteria(node.doneWhen),
+    revisionHandoff(handoff),
     ancestors(node, graph),
     skills(selected),
     availableTools(tools),
-  ].join('\n\n');
+  ]
+    .filter((part) => part.length > 0)
+    .join('\n\n');
 
 const criteria = (items: readonly string[]): string =>
   [
     '## Completion Criteria',
     ...items.flatMap((item, index) => [`### Criterion ${index}`, fenced(item)]),
   ].join('\n\n');
+
+const revisionHandoff = (
+  handoff: RevisionExecutionHandoff | undefined,
+): string => {
+  if (handoff === undefined) return '';
+
+  return [
+    '# Previous Revision Handoff',
+    'This is historical context only, not citable evidence. Historical observation',
+    'IDs and provider call IDs are omitted and are not authorized. Re-run the needed',
+    'checks and cite only fresh observation IDs produced in this execution.',
+    section('Invalidated Assumption', handoff.invalidatedAssumption),
+    section('Requested Effect', handoff.requestedEffect),
+    '## Previously Unsatisfied Criteria',
+    ...(handoff.falseCriteria.length === 0
+      ? ['No criterion was marked unsatisfied.']
+      : handoff.falseCriteria.flatMap((criterion, index) => [
+          `### Criterion ${index + 1}`,
+          section('Criterion Index', String(criterion.criterionIndex)),
+          section('Criterion Text', criterion.text),
+        ])),
+    '## Relevant Historical Tool Results',
+    ...(handoff.observations.length === 0
+      ? ['No linked historical tool result is available.']
+      : handoff.observations.flatMap((observation, index) => [
+          `### Tool Result ${index + 1}`,
+          section('Tool Name', observation.toolName),
+          section('Input', observation.input),
+          section('Output', observation.output),
+        ])),
+    ...(handoff.omittedObservationCount === 0
+      ? []
+      : [
+          `${handoff.omittedObservationCount} older linked historical tool result(s) omitted to keep this handoff short.`,
+        ]),
+  ].join('\n\n');
+};
 
 const ancestors = (node: Node, graph: Graph): string => {
   /**

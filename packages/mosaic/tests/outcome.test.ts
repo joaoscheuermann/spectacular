@@ -3,6 +3,8 @@ import test from 'node:test';
 import { z } from 'zod';
 
 import {
+  NodeDecisionSchema,
+  NodeOutcomeSchema,
   createNodeDecisionSchema,
   createExecutionDecisionSchema,
   createNodeOutcomeSchema,
@@ -52,6 +54,28 @@ test('rejects an observation ID that was not presented to the node', () => {
   );
 });
 
+test('requires a fresh local citation only for post-revision completion', () => {
+  const freshId = 'fresh-local';
+  const ancestorId = 'projected-ancestor';
+  const schema = createExecutionDecisionSchema(
+    node,
+    () => [freshId, ancestorId],
+    () => [freshId],
+  );
+  const withoutCitation = completed();
+  const ancestorOnly = completed();
+  ancestorOnly.criteria[0]!.observationIds = [ancestorId];
+  const withFreshCitation = completed();
+  withFreshCitation.criteria[0]!.observationIds = [freshId];
+  const blocked = nonCompleted('blocked');
+  blocked.criteria[0]!.satisfied = false;
+
+  assert.equal(schema.safeParse(withoutCitation).success, false);
+  assert.equal(schema.safeParse(ancestorOnly).success, false);
+  assert.equal(schema.safeParse(withFreshCitation).success, true);
+  assert.equal(schema.safeParse(blocked).success, true);
+});
+
 test('describes invalid observation IDs with bounded similarity-ranked authorized IDs', () => {
   const decision = completed();
   decision.criteria[0]!.observationIds = ['private-observation'];
@@ -69,8 +93,10 @@ test('describes invalid observation IDs with bounded similarity-ranked authorize
     'observation-100',
     'observation-110',
   ];
-  const parsed = createExecutionDecisionSchema(createNode(), () => authorized)
-    .safeParse(decision);
+  const parsed = createExecutionDecisionSchema(
+    createNode(),
+    () => authorized,
+  ).safeParse(decision);
 
   assert.equal(parsed.success, false);
   if (parsed.success) return;
@@ -82,16 +108,16 @@ test('describes invalid observation IDs with bounded similarity-ranked authorize
   ]);
   const message = parsed.error.issues[0]?.message ?? '';
   assert.match(message, /^The observation ID is not authorized\./u);
-  assert.match(
-    message,
-    /Most similar valid observation ID: observation-00/u,
-  );
+  assert.match(message, /Most similar valid observation ID: observation-00/u);
   assert.match(
     message,
     /Other valid observation IDs: observation-10, observation-20, observation-30, observation-40, observation-50, observation-60, observation-70, observation-80, observation-90/u,
   );
   assert.match(message, /Showing 10 of 12 valid observation IDs; 2 omitted\./u);
-  assert.doesNotMatch(message, /observation-100|observation-110|private-observation/u);
+  assert.doesNotMatch(
+    message,
+    /observation-100|observation-110|private-observation/u,
+  );
 });
 
 test('uses causal order to break equal observation ID distances', () => {
@@ -136,15 +162,19 @@ test('describes single and empty authorized observation ID sets', () => {
     );
   }
 
-  const empty = createExecutionDecisionSchema(createNode(), () => [])
-    .safeParse(decision);
+  const empty = createExecutionDecisionSchema(createNode(), () => []).safeParse(
+    decision,
+  );
   assert.equal(empty.success, false);
   if (!empty.success) {
     assert.match(
       empty.error.issues[0]?.message ?? '',
       /Most similar valid observation ID: none\.\nOther valid observation IDs: none\.\nUse \[\]\./u,
     );
-    assert.doesNotMatch(empty.error.issues[0]?.message ?? '', /rejected-private-id/u);
+    assert.doesNotMatch(
+      empty.error.issues[0]?.message ?? '',
+      /rejected-private-id/u,
+    );
   }
 });
 
@@ -281,6 +311,28 @@ test('requires exactly one ordered evaluation per doneWhen criterion', () => {
   );
 });
 
+test('rejects blocked decisions and outcomes when every criterion is satisfied', () => {
+  const blocked = nonCompleted('blocked');
+  const schemas = [
+    NodeDecisionSchema,
+    createNodeDecisionSchema(node),
+    NodeOutcomeSchema,
+    createNodeOutcomeSchema(node),
+  ];
+
+  schemas.forEach((schema) => {
+    const parsed = schema.safeParse(blocked);
+
+    assert.equal(parsed.success, false);
+    if (parsed.success) return;
+    assert.deepEqual(parsed.error.issues[0]?.path, ['criteria']);
+    assert.equal(
+      parsed.error.issues[0]?.message,
+      'A blocked outcome requires at least one unsatisfied criterion.',
+    );
+  });
+});
+
 test('accepts needs_revision only with a node-local semantic request and reason', () => {
   const request = {
     goalId: node.id,
@@ -315,6 +367,7 @@ test('accepts needs_revision only with a node-local semantic request and reason'
 test('accepts blocked and failed only without a promoted result and with a reason', () => {
   for (const status of ['blocked', 'failed'] as const) {
     const valid = nonCompleted(status);
+    if (status === 'blocked') valid.criteria[0]!.satisfied = false;
     const withResult = { ...valid, result: completed().result };
     const withoutReason = { ...valid, reason: null };
     const withRevision = {

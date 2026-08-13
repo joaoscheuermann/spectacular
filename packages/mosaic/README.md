@@ -108,7 +108,11 @@ only the target and pending nodes may change. A retained target restarts as
 pending with routing, outcome, termination, and partial artifacts cleared. The
 prior snapshot retains the complete `needs_revision` outcome. IDs present in
 older snapshots but absent from the active graph cannot
-be reused. The successful revision count is derived from the active revision as
+be reused. A localized response that changes none of the planner-owned `id`,
+`goal`, `doneWhen`, `dependsOn`, or `deliver` fields in the revisable region is
+rejected before a snapshot is appended and may use the existing
+structured-output repair budget; it therefore does not consume the
+localized-revision limit. The successful revision count is derived from the active revision as
 `max(0, revision - 1)`;
 exhaustion of `revision.max` preserves that outcome, adds a runtime-owned
 `revision_limit` termination, and blocks the target without a provider call.
@@ -189,7 +193,16 @@ observation counts, one causally projected ledger containing each cited
 observation's ID, producer, tool name, input, and output, and current artifacts.
 References shared by criteria are rendered once in producer-ledger order.
 Provider call IDs, uncited observations, and unrelated branches remain outside
-the prompt.
+the prompt. After a successful localized revision, each affected executor also
+receives a short historical handoff containing the invalidated assumption,
+requested effect, previously unsatisfied criteria, and relevant prior tool
+results. The handoff omits observation and provider call IDs, is not citable,
+and a post-revision `completed` decision must cite at least one fresh local
+observation before its claims or results can prove a criterion. This additional
+requirement does not apply to `blocked` or `failed`. Only local observations
+cited by a previously unsatisfied criterion are eligible; at most the five
+most recent are retained, oversized inputs and outputs are compacted, and the
+omitted count is shown.
 
 For every node, `agent` represents the decision schema as a strict terminal
 tool. Provider requests therefore contain that terminal tool plus any ordinary
@@ -212,6 +225,8 @@ concurrent nodes and reserves observations in every graph snapshot plus the
 current wave. Collisions generate another UUID; 32 consecutive collisions fail
 as an internal operational error. The resulting handle is reused unchanged in
 tool-result messages, events, records, decisions, revisions, and results.
+Evaluation-hook observations must use the same six-hex form and are claimed by
+the shared allocator, which rejects malformed or already reserved IDs.
 Mosaic creates ordered `Observation` records with those handles and rejects
 unauthorized referenced IDs before storing the outcome or promoting artifacts.
 `callId` remains correlation data on the full node observation but is not a
@@ -234,7 +249,9 @@ completed wave to `schedule`. A valid `needs_revision` decision requires at
 least one observation, preserves no partial result, stores its semantic request
 and keeps the complete observation set on the node, then returns normally so
 graph-derived revision work can be processed. Model-authored `blocked` and
-`failed` decisions resolve the wave normally. Provider, tool, schema,
+`failed` decisions resolve the wave normally, but `blocked` requires at least
+one unsatisfied criterion. It does not universally require a local observation,
+because a logical impossibility may be tool-free. Provider, tool, schema,
 correlation, and state-machine failures still reject `prompt()` with their
 original identity.
 Before completing, the executor inspects available failure, timeout, stderr,

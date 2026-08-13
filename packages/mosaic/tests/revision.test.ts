@@ -7,6 +7,7 @@ import type { LlmProvider, ProviderRequest } from 'llms';
 import type { PlannedGraph } from '../src/lib/schemas/graph.js';
 import { revision } from '../src/lib/states/revision/index.js';
 import {
+  localizedRevisionSchema,
   localizedRevisionCount,
   retiredNodeIds,
 } from '../src/lib/states/revision/localized.js';
@@ -217,6 +218,131 @@ test('processes multiple revisions in deterministic node-wave order', async () =
   assert.equal(second.state.graphs.at(-1)?.nodes[1]?.goal, 'First revised');
   assert.match(userContent(harness.requests[0]!), /second/u);
   assert.match(userContent(harness.requests[1]!), /first/u);
+});
+
+test('repairs an exact localized no-op without consuming the revision limit', async () => {
+  const target = node('target', 0, 'needs_revision', true);
+  const active: Graph = { revision: 1, nodes: [target] };
+  requestRevision(target);
+  const harness = createHarness(
+    [
+      { nodes: [plannedNode(target)] },
+      {
+        nodes: [
+          {
+            ...plannedNode(target),
+            goal: 'Revised target result',
+          },
+        ],
+      },
+    ],
+    1,
+  );
+
+  const action = await revision(
+    state(active),
+    { input: 'Request.', options: harness.options },
+    handlers(),
+  );
+
+  assert.equal(action.type, 'transition');
+  if (action.type !== 'transition') return;
+  assert.equal(harness.requests.length, 2);
+  assert.equal(localizedRevisionCount(action.state.graphs), 1);
+  assert.equal(action.state.graphs.at(-1)?.revision, 2);
+  assert.equal(
+    action.state.graphs.at(-1)?.nodes[0]?.goal,
+    'Revised target result',
+  );
+  const systemPrompt = harness.requests[0]!.messages.filter(
+    ({ role }) => role === 'system',
+  )
+    .map(({ content }) => (typeof content === 'string' ? content : ''))
+    .join('\n');
+  assert.match(systemPrompt, /exact no-op is not a revision/u);
+});
+
+test('treats each planner-owned revisable field as a material exact change', () => {
+  const completed = node('completed', 0, 'completed', false);
+  const target = node('target', 1, 'needs_revision', true, ['completed']);
+  const fallback = node('fallback', 2, 'pending', true);
+  requestRevision(target);
+  const active: Graph = {
+    revision: 1,
+    nodes: [completed, target, fallback],
+  };
+  const baseline = {
+    nodes: [plannedNode(completed), plannedNode(target), plannedNode(fallback)],
+  };
+  const schema = localizedRevisionSchema(active, target);
+  const targetPlan = baseline.nodes[1]!;
+  const changes: PlannedGraph['nodes'][number][] = [
+    { ...targetPlan, id: 'target-renamed' },
+    { ...targetPlan, goal: 'Changed goal' },
+    { ...targetPlan, doneWhen: ['Changed criterion'] },
+    { ...targetPlan, dependsOn: [] },
+    { ...targetPlan, deliver: false },
+  ];
+
+  assert.equal(schema.safeParse(baseline).success, false);
+  assert.equal(
+    schema.safeParse({
+      nodes: [
+        { ...baseline.nodes[0]!, goal: 'Protected-only change' },
+        baseline.nodes[1]!,
+        baseline.nodes[2]!,
+      ],
+    }).success,
+    false,
+  );
+  changes.forEach((changed) => {
+    assert.equal(
+      schema.safeParse({
+        nodes: [baseline.nodes[0]!, changed, baseline.nodes[2]!],
+      }).success,
+      true,
+    );
+  });
+});
+
+test('repairs a protected-only change as a no-op in the revisable region', async () => {
+  const completed = node('completed', 0, 'completed', false);
+  const target = node('target', 1, 'needs_revision', true, ['completed']);
+  const active: Graph = { revision: 1, nodes: [completed, target] };
+  requestRevision(target);
+  const harness = createHarness(
+    [
+      {
+        nodes: [
+          { ...plannedNode(completed), goal: 'Invalid protected change' },
+          plannedNode(target),
+        ],
+      },
+      {
+        nodes: [
+          plannedNode(completed),
+          { ...plannedNode(target), goal: 'Valid revised target' },
+        ],
+      },
+    ],
+    1,
+  );
+
+  const action = await revision(
+    state(active),
+    { input: 'Request.', options: harness.options },
+    handlers(),
+  );
+
+  assert.equal(action.type, 'transition');
+  if (action.type !== 'transition') return;
+  assert.equal(harness.requests.length, 2);
+  assert.equal(localizedRevisionCount(action.state.graphs), 1);
+  assert.equal(action.state.graphs.at(-1)?.nodes[0]?.goal, completed.goal);
+  assert.equal(
+    action.state.graphs.at(-1)?.nodes[1]?.goal,
+    'Valid revised target',
+  );
 });
 
 test('blocks without a provider call when the localized revision limit is zero or exhausted', async () => {

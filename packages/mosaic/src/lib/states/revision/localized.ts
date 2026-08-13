@@ -1,4 +1,8 @@
-import { GraphSchema, type PlannedGraph } from '../../schemas/graph.js';
+import {
+  GraphSchema,
+  PlannedGraphSchema,
+  type PlannedGraph,
+} from '../../schemas/graph.js';
 import type { Graph, Node } from '../../types/graph.js';
 
 /** Returns successful localized revisions already represented by graph snapshots. */
@@ -36,6 +40,18 @@ export const revisionNodes = (graph: Graph): Node[] =>
         node.outcome.revisionRequest !== null,
     )
     .sort((left, right) => right.index - left.index);
+
+/** Rejects an exact planner-owned no-op while it can still be repaired. */
+export const localizedRevisionSchema = (active: Graph, target: Node) =>
+  PlannedGraphSchema.superRefine((plan, context) => {
+    if (!sameRevisablePlan(active, plan, target.id)) return;
+    context.addIssue({
+      code: 'custom',
+      path: ['nodes'],
+      message:
+        'Localized revision must change at least one planner-owned node field.',
+    });
+  });
 
 /** Applies planner fields while enforcing localized runtime-state preservation. */
 export const applyLocalizedRevision = (
@@ -110,6 +126,18 @@ const samePlan = (
   node.deliver === planned.deliver &&
   sameItems(node.doneWhen, planned.doneWhen) &&
   sameItems(node.dependsOn, planned.dependsOn);
+
+const sameRevisablePlan = (
+  graph: Graph,
+  plan: PlannedGraph,
+  targetId: string,
+): boolean =>
+  graph.nodes.length === plan.nodes.length &&
+  graph.nodes.every((node, index) => {
+    if (node.id !== targetId && node.status !== 'pending') return true;
+    const planned = plan.nodes[index];
+    return planned !== undefined && samePlan(node, planned);
+  });
 
 const sameItems = (
   left: readonly string[],

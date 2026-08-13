@@ -147,13 +147,23 @@ export const createNodeDecisionSchema = (node: Node) =>
 export const createExecutionDecisionSchema = (
   node: Node,
   getAuthorizedObservationIds: () => readonly string[],
+  getRequiredCurrentObservationIds?: (() => readonly string[]) | undefined,
 ) =>
   createNodeDecisionSchema(node).superRefine((outcome, context) => {
     validateObservationIds(outcome, context, getAuthorizedObservationIds);
+    validateCurrentRevisionEvidence(
+      outcome,
+      context,
+      getRequiredCurrentObservationIds,
+    );
   });
 
 /** Validates a materialized outcome against its owning node. */
-export const createNodeOutcomeSchema = (node: Node, graph?: Graph) =>
+export const createNodeOutcomeSchema = (
+  node: Node,
+  graph?: Graph,
+  getRequiredCurrentObservationIds?: (() => readonly string[]) | undefined,
+) =>
   NodeOutcomeSchema.superRefine((outcome, context) => {
     validateCriteria(node, outcome, context);
     validateObservationIds(outcome, context, () =>
@@ -178,6 +188,11 @@ export const createNodeOutcomeSchema = (node: Node, graph?: Graph) =>
         message: `Revision goalId must be ${node.id}.`,
       });
     }
+    validateCurrentRevisionEvidence(
+      outcome,
+      context,
+      getRequiredCurrentObservationIds,
+    );
   });
 
 const validateCriteria = (
@@ -314,6 +329,17 @@ const validateStatus = (
     return;
   }
 
+  if (
+    outcome.status === 'blocked' &&
+    outcome.criteria.every(({ satisfied }) => satisfied)
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['criteria'],
+      message: 'A blocked outcome requires at least one unsatisfied criterion.',
+    });
+  }
+
   if (outcome.result !== null) {
     context.addIssue({
       code: 'custom',
@@ -329,6 +355,32 @@ const validateStatus = (
       message: 'Only needs_revision may include a revision request.',
     });
   }
+};
+
+const validateCurrentRevisionEvidence = (
+  outcome: Decision,
+  context: RefinementContext,
+  getRequiredCurrentObservationIds: (() => readonly string[]) | undefined,
+): void => {
+  if (
+    outcome.status !== 'completed' ||
+    getRequiredCurrentObservationIds === undefined
+  ) {
+    return;
+  }
+
+  const currentIds = new Set(getRequiredCurrentObservationIds());
+  const citesCurrent = outcome.criteria.some(({ observationIds }) =>
+    observationIds.some((id) => currentIds.has(id)),
+  );
+  if (citesCurrent) return;
+
+  context.addIssue({
+    code: 'custom',
+    path: ['criteria'],
+    message:
+      'A completed post-revision outcome must cite at least one fresh local observation ID.',
+  });
 };
 
 const validateCompleted = (
