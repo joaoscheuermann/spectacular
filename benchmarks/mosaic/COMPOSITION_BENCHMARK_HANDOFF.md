@@ -129,7 +129,7 @@ Preserve the current closed campaign controls unless a separately approved
 contract changes them:
 
 - provider route: OpenRouter through BenchFlow's LiteLLM proxy;
-- model: `openrouter/openai/gpt-5.6-luna`;
+- model: `openrouter/deepseek/deepseek-v4-pro-0813`;
 - adapter-owned reasoning effort: `low` for both arms;
 - terminal tool and Docker sandbox;
 - single-shot loop, zero retries, concurrency 1, build concurrency 1;

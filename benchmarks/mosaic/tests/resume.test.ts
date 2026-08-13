@@ -57,7 +57,7 @@ const setup = async (): Promise<{
     schema_version: 1,
     eval: {
       agent: 'mosaic-direct',
-      model: 'openrouter/openai/gpt-5.6-luna',
+      model: 'openrouter/deepseek/deepseek-v4-pro-0813',
       reasoning_effort: null,
       environment: 'docker',
       concurrency: 1,
@@ -87,7 +87,7 @@ const setup = async (): Promise<{
     },
     expectedTasks: 10,
     agent: 'mosaic-direct',
-    model: 'openrouter/openai/gpt-5.6-luna',
+    model: 'openrouter/deepseek/deepseek-v4-pro-0813',
     effort: 'low',
     sandbox: 'docker',
     concurrency: 1,
@@ -214,7 +214,7 @@ const writeOutputs = async (command: Command): Promise<void> => {
         schema_version: 1,
         eval: {
           agent,
-          model: 'openrouter/openai/gpt-5.6-luna',
+          model: 'openrouter/deepseek/deepseek-v4-pro-0813',
           reasoning_effort: null,
           environment: 'docker',
           concurrency: 1,

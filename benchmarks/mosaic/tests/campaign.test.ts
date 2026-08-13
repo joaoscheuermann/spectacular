@@ -136,7 +136,7 @@ const writeArtifacts = async (command: Command): Promise<void> => {
     schema_version: 1,
     eval: {
       agent,
-      model: 'openrouter/openai/gpt-5.6-luna',
+      model: 'openrouter/deepseek/deepseek-v4-pro-0813',
       reasoning_effort: null,
       environment: 'docker',
       concurrency: 1,
@@ -209,7 +209,7 @@ test('assembles both smoke arms after a verified preflight', async (t) => {
       '--agent',
       arm.arm,
       '--model',
-      'openrouter/openai/gpt-5.6-luna',
+      'openrouter/deepseek/deepseek-v4-pro-0813',
       '--sandbox',
       'docker',
       '--concurrency',

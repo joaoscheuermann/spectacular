@@ -156,7 +156,7 @@ Complete every item below before running `smoke`, `pilot`, `resume`, or `run`:
   npx nx run mosaic-benchmark:release
   ```
 
-- [ ] Confirm the public `mosaic-benchmark-v0.1.14` release contains exactly
+- [ ] Confirm the public `mosaic-benchmark-v0.1.15` release contains exactly
       `mosaic-bench-acp.mjs` and `mosaic-bench-acp.mjs.sha256`. The generated
       bundle hash, published sidecar, and `BF_BUNDLE_SHA256` in both agent
       manifests must be identical.
@@ -171,7 +171,7 @@ Complete every item below before running `smoke`, `pilot`, `resume`, or `run`:
   ```
 
 - [ ] Review the fixed treatment before approving spend: model
-      `openrouter/openai/gpt-5.6-luna`, low reasoning effort, two sequential arms, required
+      `openrouter/deepseek/deepseek-v4-pro-0813`, low reasoning effort, two sequential arms, required
       usage tracking, zero retries, and one task/build worker at a time.
 - [ ] Confirm the available provider budget. `--yes-paid-run` is the explicit
       acknowledgement that the command may incur model and container costs; it
@@ -275,14 +275,14 @@ SkillsBench is pinned to
 smoke task is `jax-computing-basics`; its pilot task set is fixed in `src/pilot.ts`.
 Terminal-Bench 2 is pinned to
 `2fd12b88aafdd04a52c298e3940bcb189f9766d6`, uses `no-skill` mode, and its
-smoke task is `regex-log`. Both arms use `openrouter/openai/gpt-5.6-luna`, low reasoning
+smoke task is `regex-log`. Both arms use `openrouter/deepseek/deepseek-v4-pro-0813`, low reasoning
 effort, Docker, single-task/build concurrency, single-shot looping, zero
 retries, and required usage tracking.
 
 ## Environment and safety
 
 BenchFlow resolves the host's `OPENROUTER_API_KEY`, routes the explicit
-`openrouter/openai/gpt-5.6-luna` model through its LiteLLM proxy, and maps the
+`openrouter/deepseek/deepseek-v4-pro-0813` model through its LiteLLM proxy, and maps the
 proxy URL, ephemeral key, and model alias into `OPENROUTER_BASE_URL`,
 `OPENROUTER_API_KEY`, and `OPENROUTER_MODEL` inside the task container. Both
 arms compose `createUnifiedProvider`; without a proxy URL it defaults to

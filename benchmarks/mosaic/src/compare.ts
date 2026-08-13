@@ -154,7 +154,7 @@ const empty: Metrics = {
   totalTokens: 0,
   tasks: 0,
 };
-const model = 'openrouter/openai/gpt-5.6-luna';
+const model = 'openrouter/deepseek/deepseek-v4-pro-0813';
 const digestNames = [
   'taskManifest',
   'runConfig',

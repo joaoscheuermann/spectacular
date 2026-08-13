@@ -11,7 +11,7 @@ export type ResumeEvidence = {
   readonly metadata: CampaignMetadata;
 };
 
-export const model = 'openrouter/openai/gpt-5.6-luna';
+export const model = 'openrouter/deepseek/deepseek-v4-pro-0813';
 export const commit = 'b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af';
 export const pilotTaskNames = new Set<string>(skillsbenchPilotTasks);
 export const digestNames = [

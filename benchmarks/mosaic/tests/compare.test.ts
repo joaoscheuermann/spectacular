@@ -73,7 +73,7 @@ const writeArm = async (
     schema_version: 1,
     eval: {
       agent,
-      model: 'openrouter/openai/gpt-5.6-luna',
+      model: 'openrouter/deepseek/deepseek-v4-pro-0813',
       reasoning_effort: null,
       environment: 'docker',
       concurrency: 1,
@@ -125,7 +125,7 @@ const writeArm = async (
     },
     expectedTasks: fixture.tasks.length,
     agent,
-    model: 'openrouter/openai/gpt-5.6-luna',
+    model: 'openrouter/deepseek/deepseek-v4-pro-0813',
     effort: 'low',
     sandbox: 'docker',
     concurrency: 1,
@@ -146,7 +146,7 @@ const writeArm = async (
     task_name: task,
     agent,
     agent_name: 'mosaic-benchmark',
-    model: 'openrouter/openai/gpt-5.6-luna',
+    model: 'openrouter/deepseek/deepseek-v4-pro-0813',
     skill_mode: 'with-skill',
     loop: { strategy: 'single-shot' },
     usage_tracking: {
@@ -548,7 +548,7 @@ test('rejects task names that diverge from the manifest despite coherent health'
         task_name: 'other-task',
         agent: 'mosaic',
         agent_name: 'mosaic-benchmark',
-        model: 'openrouter/openai/gpt-5.6-luna',
+        model: 'openrouter/deepseek/deepseek-v4-pro-0813',
         skill_mode: 'with-skill',
         loop: { strategy: 'single-shot' },
         usage_tracking: {

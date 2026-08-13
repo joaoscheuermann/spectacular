@@ -615,10 +615,10 @@ The benchmark publishes two BenchFlow ACP agents: a direct agent and a MOSAIC
 agent. Both receive the same task prompt, mounted task skills, terminal tool,
 OpenRouter-backed OpenAI Completions-compatible proxy, model, and low reasoning
 effort. Both compose the shared `createUnifiedProvider`; BenchFlow selects
-OpenRouter with `openrouter/openai/gpt-5.6-luna` and resolves the host's
+OpenRouter with `openrouter/deepseek/deepseek-v4-pro-0813` and resolves the host's
 `OPENROUTER_API_KEY`, while the agents receive only the proxy endpoint, alias,
 and ephemeral proxy credential. The adapter sends that alias to LiteLLM while
-the unified provider uses the fixed original `openai/gpt-5.6-luna` identifier
+the unified provider uses the fixed original `deepseek/deepseek-v4-pro-0813` identifier
 for curated capability policy; it does not treat LiteLLM's compatibility-only
 model listing as an OpenRouter capability catalog. The generated adapter owns
 the fixed `low` effort for both arms and the campaign omits BenchFlow's ACP

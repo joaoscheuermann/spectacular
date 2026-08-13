@@ -41,14 +41,17 @@ const assertContract = (manifest: Manifest): void => {
   assert.equal(manifest.protocol, 'acp');
   assert.equal(manifest.api_protocol, 'openai-completions');
   assert.equal(manifest.supports_acp_set_model, false);
-  assert.equal(manifest.default_model, 'openrouter/openai/gpt-5.6-luna');
+  assert.equal(
+    manifest.default_model,
+    'openrouter/deepseek/deepseek-v4-pro-0813',
+  );
   assert.deepEqual(manifest.skill_paths, ['$HOME/.agents/skills']);
   assert.deepEqual(manifest.home_dirs, ['.agents']);
   assert.deepEqual(manifest.env_mapping, mapping);
   assert.match(manifest.install_cmd, /BF_NODE_VERSION=22\.20\.0/);
   assert.match(manifest.install_cmd, /x86_64\|amd64\) node_arch=x64/);
   assert.match(manifest.install_cmd, /aarch64\|arm64\) node_arch=arm64/);
-  assert.match(manifest.install_cmd, /mosaic-benchmark-v0\.1\.14/);
+  assert.match(manifest.install_cmd, /mosaic-benchmark-v0\.1\.15/);
   assert.match(manifest.install_cmd, /BF_BUNDLE_SHA256=[a-f0-9]{64}/);
   assert.match(
     manifest.install_cmd,
