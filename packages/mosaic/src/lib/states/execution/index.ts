@@ -23,6 +23,10 @@ import type { MosaicRuntime } from '../../observability.js';
 import type { MosaicEvaluationHooks } from '../../types/evaluation.js';
 import { ObservationSchema } from '../../schemas/observation.js';
 import { GraphSchema } from '../../schemas/graph.js';
+import {
+  createObservationIdAllocator,
+  type ObservationIdAllocator,
+} from '../../observation-ids.js';
 
 /**
  * Implements the node executor and lifecycle from the MOSAIC paper, sections
@@ -32,7 +36,7 @@ import { GraphSchema } from '../../schemas/graph.js';
  */
 export const execution: WorkflowHandler = async (
   state,
-  { input, options, runtime, hooks },
+  { input, options, runtime, hooks, observationIds },
   { transition, fail },
 ) => {
   try {
@@ -52,6 +56,13 @@ export const execution: WorkflowHandler = async (
     if (nodes.length === 0)
       return fail(new Error('Impossible to continue, missing ready nodes!'));
 
+    const ids = observationIds ?? createObservationIdAllocator();
+    ids.reserve(
+      state.graphs.flatMap((snapshot) =>
+        snapshot.nodes.flatMap((node) => node.observations.map(({ id }) => id)),
+      ),
+    );
+
     /**
      * Execute the complete wave concurrently and wait for every node. Using
      * allSettled prevents one rejection from hiding later node state changes.
@@ -65,7 +76,9 @@ export const execution: WorkflowHandler = async (
       nodeIds: nodes.map(({ id }) => id),
     });
     const results = await Promise.allSettled(
-      nodes.map((node) => execute(input, node, graph, options, runtime, hooks)),
+      nodes.map((node) =>
+        execute(input, node, graph, options, ids, runtime, hooks),
+      ),
     );
 
     const failure = results.find(
@@ -96,6 +109,7 @@ const execute = async (
   node: Node,
   graph: Graph,
   options: WorkflowContext['options'],
+  observationIds: ObservationIdAllocator,
   runtime?: MosaicRuntime,
   hooks?: MosaicEvaluationHooks,
 ): Promise<void> => {
@@ -110,7 +124,9 @@ const execute = async (
   });
   /** Keep history available when a bounded run exhausts after executing tools. */
   const messages = createMessageStorage();
-  const toolCalls = createToolCallStorage();
+  const toolCalls = createToolCallStorage({
+    createId: () => observationIds.next(),
+  });
 
   try {
     /** Resolve graph-approved tool metadata to executable catalog entries. */

@@ -56,10 +56,15 @@ object schema through a reserved `submit_structured_output` terminal tool and
 never send a provider-native `schema` field. Invalid or malformed arguments cannot
 mutate state. The agent may provide bounded diagnostics and make two correction
 attempts; the next invalid submission fails with `invalid_structured_output`.
-Rejected provider output is retained only for protocol replay. The terminal tool is
-never executed, registered as a Mosaic tool, or materialized as an
-`Observation`. Provider and transport failures propagate without an
-infrastructure retry. `provider.rerank` remains a direct provider operation.
+Concrete invalid primitive or missing leaves are repaired transactionally:
+only rejected paths are copied into the ephemeral prior candidate, valid fields
+remain unchanged, and the composed object is revalidated. Root, collection,
+malformed-JSON, and cross-field failures regenerate the whole object. Rejected
+candidates are retained only for protocol replay and never enter Mosaic events,
+logs, or correction feedback. The terminal tool is never executed, registered
+as a Mosaic tool, or materialized as an `Observation`. Provider and transport
+failures propagate without an infrastructure retry. `provider.rerank` remains
+a direct provider operation.
 
 ## Graph planning and revision
 
@@ -201,7 +206,13 @@ no tool result. IDs from unknown observations, unrelated branches, descendants,
 retired snapshots, or evidence not shown in the execution context are rejected.
 Its status is `completed`, `needs_revision`, `blocked`, or `failed`. The runtime
 records every successful executable-tool return directly in the node's isolated
-`ToolCallStorage`, creates ordered `Observation` records with UUIDs, and rejects
+`ToolCallStorage`. One run-local allocator creates a lowercase six-hex handle
+from the first six hexadecimal characters of a fresh UUID. It is shared by all
+concurrent nodes and reserves observations in every graph snapshot plus the
+current wave. Collisions generate another UUID; 32 consecutive collisions fail
+as an internal operational error. The resulting handle is reused unchanged in
+tool-result messages, events, records, decisions, revisions, and results.
+Mosaic creates ordered `Observation` records with those handles and rejects
 unauthorized referenced IDs before storing the outcome or promoting artifacts.
 `callId` remains correlation data on the full node observation but is not a
 criterion reference. The terminal structured-output tool is never an
@@ -239,7 +250,9 @@ details.
 New runs emit only MOSAIC event schema version 3. `tool.finished` includes the
 same `observationId` stored in the node ledger. Doric persists these event
 objects unchanged as JSONB; older stored event versions remain replayable and
-require no database migration.
+require no database migration. IO capture redacts reserved terminal arguments
+and rejected structured-response text; validated graphs, decisions, and
+outcomes remain observable through their state events.
 
 ## Final delivery
 

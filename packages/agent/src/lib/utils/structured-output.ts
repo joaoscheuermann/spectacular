@@ -22,11 +22,30 @@ export type StructuredOutputTool = {
 export type StructuredOutputSubmission<Output> =
   | { readonly type: 'continue' }
   | { readonly type: 'finished'; readonly finish: ProviderFinished<Output> }
-  | { readonly type: 'invalid'; readonly error: AgentErrorObject };
+  | {
+      readonly type: 'invalid';
+      readonly error: AgentErrorObject;
+      readonly baseline?: StructuredOutputBaseline;
+    };
+
+export type StructuredOutputPath = readonly (string | number)[];
+
+/** Ephemeral candidate retained only while repairing concrete leaf paths. */
+export type StructuredOutputBaseline = {
+  readonly value: unknown;
+  readonly paths: readonly StructuredOutputPath[];
+};
 
 export type StructuredOutputRepair = {
   readonly invalidSubmissions: number;
   readonly correction: string;
+};
+
+type ValidationIssue = {
+  readonly code: string;
+  readonly expected?: unknown;
+  readonly path: readonly PropertyKey[];
+  readonly message: string;
 };
 
 /**
@@ -77,6 +96,7 @@ export const structuredOutputInstruction = (name: string): string =>
 export const parseStructuredOutputTool = <Output>(
   finish: ProviderFinished<unknown>,
   tool: StructuredOutputTool,
+  baseline?: StructuredOutputBaseline,
 ): StructuredOutputSubmission<Output> => {
   /** Ordinary tool calls are not terminal and continue through the agent loop. */
   const terminal = finish.toolCalls.filter(({ name }) => name === tool.name);
@@ -109,26 +129,29 @@ export const parseStructuredOutputTool = <Output>(
    * Validate locally with the original Zod schema. This enforces refinements
    * that may not be representable in the provider-facing JSON Schema.
    */
+  if (baseline !== undefined) {
+    const composed = composeCandidate(baseline, value);
+    const parsed = tool.schema.safeParse(composed);
+
+    if (parsed.success)
+      return finishedSubmission(finish, composed, parsed.data);
+
+    /** A failed composition falls back to normal whole-submission validation. */
+    const replacement = tool.schema.safeParse(value);
+    if (replacement.success) {
+      return finishedSubmission(finish, value, replacement.data);
+    }
+
+    return invalidValidation(value, replacement.error.issues);
+  }
+
   const parsed = tool.schema.safeParse(value);
 
   if (!parsed.success) {
-    return invalidSubmission(
-      'Agent terminal structured output failed schema validation.',
-      validationDiagnostic(parsed.error.issues),
-    );
+    return invalidValidation(value, parsed.error.issues);
   }
 
-  /** Convert the internal terminal call into the agent's tool-free finish shape. */
-  return {
-    type: 'finished',
-    finish: {
-      ...finish,
-      text: terminal[0].arguments,
-      finishReason: 'stop',
-      toolCalls: [],
-      structured: parsed.data as Output,
-    },
-  };
+  return finishedSubmission(finish, value, parsed.data);
 };
 
 /** Applies the fixed cumulative budget and prepares one transient correction. */
@@ -137,12 +160,43 @@ export const nextStructuredOutputRepair = (
   error: AgentErrorObject,
   invalidSubmissions: number,
   maxRepairs = defaultInvalidSubmissionLimit,
+  baseline?: StructuredOutputBaseline,
 ): StructuredOutputRepair => {
   if (invalidSubmissions >= maxRepairs) throw error;
 
   return {
     invalidSubmissions: invalidSubmissions + 1,
-    correction: structuredOutputCorrection(tool.name, error),
+    correction: structuredOutputCorrection(tool.name, error, baseline),
+  };
+};
+
+const finishedSubmission = <Output>(
+  finish: ProviderFinished<unknown>,
+  value: unknown,
+  structured: unknown,
+): StructuredOutputSubmission<Output> => ({
+  type: 'finished',
+  finish: {
+    ...finish,
+    text: JSON.stringify(value),
+    finishReason: 'stop',
+    toolCalls: [],
+    structured: structured as Output,
+  },
+});
+
+const invalidValidation = <Output>(
+  value: unknown,
+  issues: readonly ValidationIssue[],
+): StructuredOutputSubmission<Output> => {
+  const paths = repairablePaths(value, issues);
+
+  return {
+    ...invalidSubmission(
+      'Agent terminal structured output failed schema validation.',
+      validationDiagnostic(issues),
+    ),
+    ...(paths === undefined ? {} : { baseline: { value, paths } }),
   };
 };
 
@@ -159,6 +213,7 @@ const availableName = (names: ReadonlySet<string>): string => {
 const structuredOutputCorrection = (
   name: string,
   error: AgentErrorObject,
+  baseline?: StructuredOutputBaseline,
 ): string =>
   [
     '# Structured output correction',
@@ -170,7 +225,9 @@ const structuredOutputCorrection = (
       ? []
       : [
           '',
-          'Correct every validation issue listed below. Preserve fields that already satisfy the schema. Do not encode objects or arrays as JSON strings.',
+          baseline === undefined
+            ? 'Correct every validation issue listed below. Preserve fields that already satisfy the schema. Do not encode objects or arrays as JSON strings.'
+            : `Only the following rejected paths will be applied to the previous candidate: ${baseline.paths.map(formatPath).join(', ')}. Changes to every other path will be ignored. Do not encode objects or arrays as JSON strings.`,
           '',
           '# Validation issues',
           '',
@@ -178,14 +235,7 @@ const structuredOutputCorrection = (
         ]),
   ].join('\n');
 
-const validationDiagnostic = (
-  issues: readonly {
-    readonly code: string;
-    readonly expected?: unknown;
-    readonly path: readonly PropertyKey[];
-    readonly message: string;
-  }[],
-): string =>
+const validationDiagnostic = (issues: readonly ValidationIssue[]): string =>
   issues
     .slice(0, validationIssueLimit)
     .map((issue) => {
@@ -209,6 +259,134 @@ const validationDiagnostic = (
       ].join('\n');
     })
     .join('\n');
+
+const repairablePaths = (
+  value: unknown,
+  issues: readonly ValidationIssue[],
+): readonly StructuredOutputPath[] | undefined => {
+  const paths = issues.map((issue) => repairablePath(value, issue));
+  if (paths.some((path) => path === undefined)) return undefined;
+
+  const unique = new Map<string, StructuredOutputPath>();
+  paths.forEach((path) => {
+    if (path !== undefined) unique.set(JSON.stringify(path), path);
+  });
+  return [...unique.values()];
+};
+
+const repairablePath = (
+  value: unknown,
+  issue: ValidationIssue,
+): StructuredOutputPath | undefined => {
+  if (issue.code === 'custom' || issue.path.length === 0) return undefined;
+  if (
+    !issue.path.every(
+      (part) => typeof part === 'string' || typeof part === 'number',
+    )
+  ) {
+    return undefined;
+  }
+
+  const path = issue.path as StructuredOutputPath;
+  const located = locate(value, path);
+  if (!located.parentFound) return undefined;
+  if (!located.found) {
+    return typeof path.at(-1) === 'string' && primitiveExpected(issue.expected)
+      ? path
+      : undefined;
+  }
+  return primitive(located.value) && !collectionExpected(issue.expected)
+    ? path
+    : undefined;
+};
+
+const primitive = (value: unknown): boolean =>
+  value === null || ['string', 'number', 'boolean'].includes(typeof value);
+
+const primitiveExpected = (expected: unknown): boolean =>
+  typeof expected === 'string' &&
+  ['string', 'number', 'boolean', 'null'].includes(expected);
+
+const collectionExpected = (expected: unknown): boolean =>
+  expected === 'object' || expected === 'array' || expected === 'record';
+
+const composeCandidate = (
+  baseline: StructuredOutputBaseline,
+  candidate: unknown,
+): unknown =>
+  baseline.paths.reduce((value, path) => {
+    const replacement = locate(candidate, path);
+    return replacement.parentFound
+      ? replaceAt(value, path, replacement)
+      : value;
+  }, baseline.value);
+
+type Located = {
+  readonly found: boolean;
+  readonly parentFound: boolean;
+  readonly value?: unknown;
+};
+
+const locate = (value: unknown, path: StructuredOutputPath): Located => {
+  let current = value;
+  for (let index = 0; index < path.length; index += 1) {
+    if (!container(current)) return { found: false, parentFound: false };
+    const key = path[index]!;
+    const found = Object.prototype.hasOwnProperty.call(current, key);
+    if (!found) {
+      return { found: false, parentFound: index === path.length - 1 };
+    }
+    current = current[key as keyof typeof current];
+  }
+  return { found: true, parentFound: true, value: current };
+};
+
+const replaceAt = (
+  value: unknown,
+  path: StructuredOutputPath,
+  replacement: Located,
+): unknown => {
+  const [key, ...rest] = path;
+  if (key === undefined || !container(value)) return value;
+
+  if (rest.length === 0) {
+    if (Array.isArray(value)) {
+      if (typeof key !== 'number' || !replacement.found) return value;
+      return value.map((item, index) =>
+        index === key ? replacement.value : item,
+      );
+    }
+    return Object.fromEntries([
+      ...Object.entries(value).filter(([name]) => name !== String(key)),
+      ...(replacement.found ? [[String(key), replacement.value]] : []),
+    ]);
+  }
+
+  const child = value[key as keyof typeof value];
+  const next = replaceAt(child, rest, replacement);
+  return Array.isArray(value)
+    ? value.map((item, index) => (index === key ? next : item))
+    : Object.fromEntries(
+        Object.entries(value).map(([name, item]) => [
+          name,
+          name === String(key) ? next : item,
+        ]),
+      );
+};
+
+const container = (value: unknown): value is Record<PropertyKey, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const formatPath = (path: StructuredOutputPath): string =>
+  path.reduce<string>(
+    (output, part) =>
+      typeof part === 'number'
+        ? `${output}[${part}]`
+        : output.length === 0
+          ? part
+          : `${output}.${part}`,
+    '',
+  );
 
 const invalidSubmission = <Output>(
   message: string,

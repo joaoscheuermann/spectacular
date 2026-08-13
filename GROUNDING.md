@@ -363,9 +363,15 @@ with isolated empty in-memory message, executable-tool, and tool-call storages, 
 system prompt and Markdown user input, and terminate through the agent-owned
 reserved structured-output tool using the operation's direct object schema
 without sending a provider-native schema. Invalid submissions cannot
-mutate Mosaic state, are retained only for provider replay, and may receive
-bounded diagnostic feedback for two correction attempts; the next invalid submission propagates
-`invalid_structured_output` through the owning workflow state. The reserved
+mutate Mosaic state, are retained only for provider replay and ephemeral
+transactional repair, and may receive bounded diagnostic feedback for two
+correction attempts. Concrete invalid primitive or missing leaves form a
+baseline whose next submission can replace only the rejected paths; valid
+fields remain unchanged and the composed object is revalidated. Malformed JSON,
+root and collection errors, and cross-field refinements use whole-object
+regeneration. Rejected candidates never enter Mosaic events, logs, or feedback;
+the next invalid submission propagates `invalid_structured_output` through the
+owning workflow state. The reserved
 tool is never executed, registered in Mosaic, or materialized as an
 `Observation`. Bundle selection preserves `sensitiveOutput`. Reranking remains
 a direct provider operation, and provider or transport failures receive no
@@ -403,8 +409,13 @@ when possible rather than treating an ancestor declaration alone as semantic
 proof.
 
 Each successfully serialized executable-tool return is first appended to the
-node agent's isolated `ToolCallStorage` with a runtime-owned UUID. The same ID
-appears in the Markdown tool-result message and the awaited finished event.
+node agent's isolated `ToolCallStorage` with a runtime-owned lowercase six-hex
+handle derived from the first six hexadecimal characters of a fresh UUID. One
+allocator is shared by every concurrent node in a run and reserves IDs from all
+graph snapshots and the current wave. It retries collisions with fresh UUIDs
+and raises an internal operational error after 32 consecutive collisions. The
+same short ID appears in the Markdown tool-result message, awaited finished
+event, node ledger, decisions, revisions, results, and delivery.
 Mosaic materializes one ordered `Observation` per stored record on the producing
 node before validating or storing the terminal semantic outcome. Every criterion
 reference must be a unique opaque ID from that local ledger or from an observation
@@ -541,7 +552,10 @@ counts, ranks, scores, and durations. IO capture may additionally contain
 model-visible messages and tool definitions, model-emitted visible content,
 and tool inputs and outputs; it excludes credentials, provider controls,
 private reasoning, provider replay, encrypted reasoning content, usage
-payloads, diagnostics from caught failures, and raw causes. Existing Mosaic
+payloads, rejected structured candidates, diagnostics from caught failures,
+and raw causes. Reserved terminal arguments and rejected structured-response
+text are redacted while validated state remains available through graph,
+decision, and outcome events. Existing Mosaic
 logs remain allowlisted structural projections. Safe `tool.repair` events carry
 only stage identity and attempt counters. `tool.finished` carries the same
 `observationId` stored on its producing node. Doric persists v3 objects as JSONB
@@ -624,9 +638,14 @@ run through POSIX `sh -c`; the model-facing description does not promise
 Bash-only syntax and directs agents to discover available executables. Loaded
 skill bodies identify their canonical mounted
 directory so references to bundled scripts and supporting files resolve the
-same way in both arms. ACP prompt failures write only an authentic provider
-error code when available, or a fixed generic line otherwise; provider
-messages, diagnostics, causes, and thrown values are never written.
+same way in both arms. Only an authentic agent-owned
+`invalid_structured_output` exhaustion becomes a scoreable ACP failure: the
+adapter writes its safe code and returns `end_turn` so the verifier runs and the
+Direct arm may continue. Other authentic Agent or Provider failures become
+JSON-RPC `-32603` with at most `{source, code}`; unknown failures carry no data.
+ACP stderr likewise writes only an authentic safe code or a fixed generic line.
+Messages, diagnostics, causes, stacks, caught objects, and thrown values never
+cross the wire or stderr.
 
 The BenchFlow launcher transfers its ephemeral proxy credential through a
 mode-0600 `OPENROUTER_API_KEY_FILE`, removes credential values from the Node
@@ -934,19 +953,29 @@ converts it to a tool-free structured finish, and never executes it or stores a
 tool result for it. Missing, malformed, schema-invalid, duplicate, or mixed
 terminal submissions are repairable. The agent stores each invalid response
 for provider replay without executing any included call, then may make two
-correction attempts after the initial invalid submission. Each next request
-receives one transient system correction naming the terminal tool, explaining
-the failure, directing the model to correct every issue without stringifying
-objects or arrays, and including at most ten normalized Zod issues with their
-field path, issue kind, expected type when available, and safe message;
-rejected arguments are never copied into the correction. The
+correction attempts after the initial invalid submission. A JSON candidate
+whose Zod issues all point to concrete primitive or missing leaves is retained
+ephemerally as a transactional baseline. The retry replaces only those paths,
+ignores changes to previously valid paths, and fully validates the composition.
+If composition fails, the whole retry follows normal validation and becomes a
+new baseline only when all new issues are repairable leaves. Malformed JSON,
+root or collection errors, and cross-field refinements clear the baseline and
+regenerate the whole object. Ordinary tool turns, success, exhaustion, and run
+termination also clear it. Each next request receives one transient system
+correction naming the terminal tool, explaining the failure, stating when only
+listed paths will be applied, and including at most ten normalized Zod issues
+with their field path, issue kind, expected type when available, and safe
+message; rejected arguments are never copied into the correction. The
 retry budget is cumulative across the run, and ordinary tool turns neither
 consume nor reset it. The third invalid submission throws the latest
 `invalid_structured_output` `AgentErrorObject`, whose existing `diagnostic`
 field contains the same safe validation details when available. This terminal
 behavior applies equally to complete and stream agent runs. Streaming
-preserves already-emitted provider deltas, suppresses an invalid
-`response.finished`, and adds no repair-specific public event.
+buffers structured provider turns until terminal validation and suppresses all
+provider events from an invalid turn. A successful transactional finish stores
+and returns text serialized from the accepted composition while keeping raw
+provider replay only in the provider replay field; no repair-specific public
+event is added.
 Agent runs may declare an optional positive safe-integer `maxTurns`; omission
 keeps the loop unbounded. Invalid values fail with `TypeError` before message
 storage or provider activity. The budget is checked immediately before every

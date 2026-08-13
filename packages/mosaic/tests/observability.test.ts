@@ -220,6 +220,69 @@ test('io capture omits reasoning, usage, flags, auth, and request controls', asy
   }
 });
 
+test('io capture never exposes rejected structured candidates', async () => {
+  const events: MosaicEvent[] = [];
+  const runtime = createRuntime({
+    capture: 'io',
+    observer: (event) => {
+      events.push(event);
+    },
+  });
+  const provider = {
+    metadata: { id: 'fake', name: 'Fake', baseUrl: 'https://fake.invalid' },
+    complete: async () => ({
+      text: 'private rejected text',
+      finishReason: 'tool_calls' as const,
+      structured: { private: 'rejected structured response' },
+      toolCalls: [
+        {
+          id: 'terminal-call',
+          name: 'submit_structured_output',
+          arguments: '{"private":"rejected response"}',
+        },
+      ],
+    }),
+  } as unknown as LlmProvider;
+  const observed = runtime.provider(provider, 'plan');
+
+  await observed.complete({
+    model: 'fake-model',
+    messages: [
+      {
+        role: 'system',
+        content: '# Structured output correction\n\nRetry safely.',
+      },
+      {
+        role: 'assistant',
+        content: 'private rejected request',
+        toolCalls: [
+          {
+            id: 'previous-terminal-call',
+            name: 'submit_structured_output',
+            arguments: '{"private":"previous response"}',
+          },
+        ],
+      },
+    ],
+    tools: [
+      {
+        name: 'submit_structured_output',
+        description:
+          'Submit the final structured output and end the agent run.',
+        inputSchema: { type: 'object' },
+        outputSchema: { not: {} },
+      },
+    ],
+  });
+
+  const trace = JSON.stringify(events);
+  assert.doesNotMatch(
+    trace,
+    /private rejected|rejected response|previous response/u,
+  );
+  assert.match(trace, /submit_structured_output/u);
+});
+
 test('duration measurements exclude observer latency', async () => {
   const runtime = createRuntime({
     observer: async () => {

@@ -57,6 +57,14 @@ test('derives concurrent revision work in wave order rather than completion orde
     ),
     ['second', 'first'],
   );
+  const observationIds = graph.nodes.flatMap(({ observations }) =>
+    observations.map(({ id }) => id),
+  );
+  assert.equal(new Set(observationIds).size, 2);
+  assert.equal(
+    observationIds.every((id) => /^[0-9a-f]{6}$/u.test(id)),
+    true,
+  );
 });
 
 const context = (provider: LlmProvider, tools: Tool[]): WorkflowContext => ({

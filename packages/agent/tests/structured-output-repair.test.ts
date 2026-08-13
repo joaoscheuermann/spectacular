@@ -209,7 +209,10 @@ test('correction feedback includes at most ten normalized issues without rejecte
 
   const correction = correctionFrom(fake.requests[1]);
   assert.ok(correction);
-  assert.match(correction, /Correct every validation issue listed below\./);
+  assert.match(
+    correction,
+    /Only the following rejected paths will be applied/u,
+  );
   assert.match(correction, /Do not encode objects or arrays as JSON strings\./);
   assert.match(
     correction,
@@ -375,7 +378,7 @@ test('ordinary tool turns consume transient corrections without changing the ret
   );
 });
 
-test('stream preserves invalid deltas while suppressing the invalid finished event', async () => {
+test('stream suppresses invalid deltas and the invalid finished event', async () => {
   const fake = createProvider({
     stream: (request, index) =>
       streamEvents(
@@ -416,7 +419,7 @@ test('stream preserves invalid deltas while suppressing the invalid finished eve
       (event) =>
         event.type === 'text.delta' && event.delta === 'visible rejected delta',
     ),
-    true,
+    false,
   );
   assert.deepEqual(messages.list().at(-1), {
     role: 'assistant',

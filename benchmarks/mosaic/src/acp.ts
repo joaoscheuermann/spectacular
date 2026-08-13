@@ -3,9 +3,11 @@ import {
   methods,
   ndJsonStream,
   PROTOCOL_VERSION,
+  RequestError,
   type AgentApp,
   type SessionUpdate,
 } from '@agentclientprotocol/sdk';
+import { AgentErrorObject } from 'agent';
 import { randomUUID } from 'node:crypto';
 import { Readable, Writable } from 'node:stream';
 import { ProviderErrorObject } from 'llms';
@@ -23,8 +25,13 @@ export interface AcpOptions {
   readonly mode: RunMode;
   readonly createRunner?: (mode: RunMode) => Runner | Promise<Runner>;
   readonly randomUUID?: () => string;
-  readonly reportFailure?: (error: unknown) => void;
+  readonly reportFailure?: (failure?: SafeFailure) => void;
 }
+
+type SafeFailure = {
+  readonly source: 'agent' | 'provider';
+  readonly code: string;
+};
 
 /** Creates the stable ACP application while keeping transport concerns outside. */
 export const acp = (options: AcpOptions): AgentApp => {
@@ -46,7 +53,7 @@ export const acp = (options: AcpOptions): AgentApp => {
           ? params.protocolVersion
           : PROTOCOL_VERSION,
       agentCapabilities: { loadSession: false },
-      agentInfo: { name: 'mosaic-benchmark', version: '0.1.13' },
+      agentInfo: { name: 'mosaic-benchmark', version: '0.1.14' },
     }))
     .onRequest(methods.agent.session.new, ({ params }) => {
       const sessionId = identifier();
@@ -81,8 +88,15 @@ export const acp = (options: AcpOptions): AgentApp => {
         return { stopReason: signal.aborted ? 'cancelled' : 'end_turn' };
       } catch (error) {
         if (signal.aborted) return { stopReason: 'cancelled' };
-        reportFailure(error);
-        throw error;
+        const failure = safeFailure(error);
+        reportFailure(failure);
+        if (
+          error instanceof AgentErrorObject &&
+          error.data.code === 'invalid_structured_output'
+        ) {
+          return { stopReason: 'end_turn' };
+        }
+        throw RequestError.internalError(failure);
       } finally {
         if (session.controller === controller) session.controller = undefined;
       }
@@ -163,8 +177,17 @@ const terminalStatus = (status: string): boolean =>
 const defaultRunner = (mode: RunMode): Runner =>
   mode === 'direct' ? direct() : mosaic();
 
-const defaultFailureReporter = (error: unknown): void => {
-  const code =
-    error instanceof ProviderErrorObject ? `: ${error.data.code}` : '';
+const safeFailure = (error: unknown): SafeFailure | undefined => {
+  if (error instanceof AgentErrorObject) {
+    return { source: 'agent', code: error.data.code };
+  }
+  if (error instanceof ProviderErrorObject) {
+    return { source: 'provider', code: error.data.code };
+  }
+  return undefined;
+};
+
+const defaultFailureReporter = (failure?: SafeFailure): void => {
+  const code = failure === undefined ? '' : `: ${failure.code}`;
   process.stderr.write(`MOSAIC benchmark prompt failed${code}.\n`);
 };

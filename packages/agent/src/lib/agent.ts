@@ -3,6 +3,7 @@ import type {
   ProviderFinished,
   ProviderMessage,
   ProviderRequest,
+  ProviderStreamEvent,
 } from 'llms';
 
 import { AgentErrorObject } from './classes/agent-error.js';
@@ -11,17 +12,26 @@ import type {
   AgentOptions,
   AgentResponse,
   AgentRunOptions,
-  AgentStructuredAttemptEvent,
-  AgentToolCallRepairEvent,
   AgentToolEvent,
 } from './types/agent.js';
 import type { ToolCallRecord } from './types/tool-call-storage.js';
 import { serializeToolResult } from './utils/serialize.js';
 import {
+  notifyStructuredAttempt,
+  notifyToolCallRepair,
+  notifyToolEvent,
+  pushIncompleteToolResults,
+  repairLimit,
+  responseFromFinish,
+  toolCallCorrection,
+  toolResultEnvelope,
+} from './utils/run.js';
+import {
   createStructuredOutputTool,
   nextStructuredOutputRepair,
   parseStructuredOutputTool,
   structuredOutputInstruction,
+  type StructuredOutputBaseline,
   type StructuredOutputTool,
 } from './utils/structured-output.js';
 
@@ -217,6 +227,7 @@ export const createAgent = (options: AgentOptions): Agent => {
         let invalidSubmissions = 0;
         let structuredAttempts = 0;
         let correction: string | undefined;
+        let baseline: StructuredOutputBaseline | undefined;
 
         while (true) {
           /** Ask the provider for either executable calls or the terminal result. */
@@ -230,6 +241,7 @@ export const createAgent = (options: AgentOptions): Agent => {
             const submission = parseStructuredOutputTool<Output>(
               finish,
               terminal,
+              baseline,
             );
 
             if (submission.type === 'invalid') {
@@ -241,6 +253,7 @@ export const createAgent = (options: AgentOptions): Agent => {
                   submission.error,
                   invalidSubmissions,
                   maxRepairs,
+                  submission.baseline,
                 );
               } catch (error) {
                 structuredAttempts += 1;
@@ -264,6 +277,7 @@ export const createAgent = (options: AgentOptions): Agent => {
                   : { diagnostic: submission.error.data.diagnostic }),
               });
               invalidSubmissions = repair.invalidSubmissions;
+              baseline = submission.baseline;
               pushIncompleteToolResults(finish, pushToolResult);
               await notifyToolCallRepair(runOptions, {
                 attempt: invalidSubmissions,
@@ -274,6 +288,7 @@ export const createAgent = (options: AgentOptions): Agent => {
             }
 
             if (submission.type === 'finished') {
+              baseline = undefined;
               structuredAttempts += 1;
               await notifyStructuredAttempt(runOptions, {
                 attempt: structuredAttempts,
@@ -285,6 +300,9 @@ export const createAgent = (options: AgentOptions): Agent => {
               return responseFromFinish(submission.finish);
             }
           }
+
+          /** Any ordinary tool turn ends a pending transactional repair. */
+          baseline = undefined;
 
           /** Ordinary assistant turns remain available to later tool iterations. */
           storeAssistant(finish);
@@ -333,6 +351,7 @@ export const createAgent = (options: AgentOptions): Agent => {
         let invalidSubmissions = 0;
         let structuredAttempts = 0;
         let correction: string | undefined;
+        let baseline: StructuredOutputBaseline | undefined;
         yield {
           type: 'agent.started',
           model: options.model,
@@ -341,20 +360,19 @@ export const createAgent = (options: AgentOptions): Agent => {
 
         while (true) {
           let finish: ProviderFinished<Output> | undefined;
-          let rejected = false;
+          const buffered: ProviderStreamEvent<Output>[] = [];
           beginTurn();
           const request = buildRequest(runOptions, terminal, correction);
           correction = undefined;
 
           for await (const event of options.provider.stream(request)) {
-            if (rejected) continue;
-
             if (event.type === 'response.finished') {
               /** Normalize a terminal call before exposing the finished event. */
               if (terminal !== undefined) {
                 const submission = parseStructuredOutputTool<Output>(
                   event.finish,
                   terminal,
+                  baseline,
                 );
 
                 if (submission.type === 'invalid') {
@@ -366,6 +384,7 @@ export const createAgent = (options: AgentOptions): Agent => {
                       submission.error,
                       invalidSubmissions,
                       maxRepairs,
+                      submission.baseline,
                     );
                   } catch (error) {
                     structuredAttempts += 1;
@@ -389,14 +408,15 @@ export const createAgent = (options: AgentOptions): Agent => {
                       : { diagnostic: submission.error.data.diagnostic }),
                   });
                   invalidSubmissions = repair.invalidSubmissions;
+                  baseline = submission.baseline;
                   pushIncompleteToolResults(event.finish, pushToolResult);
                   await notifyToolCallRepair(runOptions, {
                     attempt: invalidSubmissions,
                     maxAttempts: maxRepairs,
                   });
                   correction = repair.correction;
-                  rejected = true;
-                  continue;
+                  finish = undefined;
+                  break;
                 }
 
                 finish =
@@ -404,6 +424,7 @@ export const createAgent = (options: AgentOptions): Agent => {
                     ? submission.finish
                     : event.finish;
                 if (submission.type === 'finished') {
+                  baseline = undefined;
                   structuredAttempts += 1;
                   await notifyStructuredAttempt(runOptions, {
                     attempt: structuredAttempts,
@@ -415,14 +436,16 @@ export const createAgent = (options: AgentOptions): Agent => {
                 finish = event.finish;
               }
 
-              yield { ...event, finish };
+              if (terminal === undefined) yield { ...event, finish };
+              else buffered.push({ ...event, finish });
               continue;
             }
 
-            yield event;
+            if (terminal === undefined) yield event;
+            else buffered.push(event);
           }
 
-          if (rejected) continue;
+          if (finish === undefined && correction !== undefined) continue;
 
           if (finish === undefined) {
             throw new AgentErrorObject({
@@ -432,7 +455,12 @@ export const createAgent = (options: AgentOptions): Agent => {
             });
           }
 
+          for (const event of buffered) yield event;
+
           storeAssistant(finish);
+
+          /** Ordinary calls cannot inherit a prior structured repair baseline. */
+          if (finish.toolCalls.length > 0) baseline = undefined;
 
           /** A normalized terminal finish has no calls and completes the stream. */
           let calls: ReturnType<typeof validatedCalls>;
@@ -469,90 +497,3 @@ export const createAgent = (options: AgentOptions): Agent => {
     },
   };
 };
-
-const defaultMaxToolCallRepairs = 2;
-
-const repairLimit = (value: number | undefined): number => {
-  const limit = value ?? defaultMaxToolCallRepairs;
-
-  if (Number.isSafeInteger(limit) && limit >= 0) return limit;
-  throw new TypeError(
-    'Agent maxToolCallRepairs must be a non-negative safe integer.',
-  );
-};
-
-const toolCallCorrection = [
-  '# Tool call correction',
-  '',
-  'The previous tool-call response was rejected before any tool ran.',
-  'Call only available tools and pass valid JSON arguments matching their schemas.',
-].join('\n');
-
-const pushIncompleteToolResults = (
-  finish: ProviderFinished<unknown>,
-  push: (callId: string, content: string, status: 'incomplete') => void,
-): void => {
-  for (const call of finish.toolCalls) {
-    push(
-      call.id,
-      'Tool call rejected before execution. Correct the call and try again.',
-      'incomplete',
-    );
-  }
-};
-
-const notifyToolCallRepair = async <Output>(
-  options: AgentRunOptions<Output>,
-  event: Omit<AgentToolCallRepairEvent, 'schemaVersion'>,
-): Promise<void> => {
-  await options.onToolCallRepair?.({ schemaVersion: 1, ...event });
-};
-
-const notifyStructuredAttempt = async <Output>(
-  options: AgentRunOptions<Output>,
-  event: Omit<AgentStructuredAttemptEvent, 'schemaVersion'>,
-): Promise<void> => {
-  await options.onStructuredAttempt?.({ schemaVersion: 1, ...event });
-};
-
-const notifyToolEvent = async <Output>(
-  options: AgentRunOptions<Output>,
-  event: AgentToolEvent,
-): Promise<void> => {
-  await options.onToolEvent?.(event);
-};
-
-const toolResultEnvelope = (record: ToolCallRecord): string =>
-  [
-    '# Tool Result',
-    '',
-    '## Observation ID',
-    '',
-    fenced(record.id),
-    '',
-    '## Output',
-    '',
-    fenced(record.output),
-  ].join('\n');
-
-const fenced = (value: string): string => {
-  const longest = Math.max(
-    0,
-    ...[...value.matchAll(/`+/gu)].map(([run]) => run.length),
-  );
-  const fence = '`'.repeat(Math.max(3, longest + 1));
-  const body = value.endsWith('\n') ? value : `${value}\n`;
-  return `${fence}text\n${body}${fence}`;
-};
-
-const responseFromFinish = <Output = JsonValue>(
-  finish: ProviderFinished<Output>,
-): AgentResponse<Output> => ({
-  text: finish.text,
-  finishReason: finish.finishReason,
-  usage: finish.usage,
-  reasoning: finish.reasoning,
-  refusal: finish.refusal,
-  structured: finish.structured,
-  finish,
-});

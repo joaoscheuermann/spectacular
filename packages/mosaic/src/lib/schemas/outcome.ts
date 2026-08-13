@@ -218,7 +218,8 @@ const validateObservationIds = (
       if (allowed.has(observationId)) return;
 
       context.addIssue({
-        code: 'custom',
+        code: 'invalid_value',
+        values: authorized,
         path: ['criteria', criterionPosition, 'observationIds', idPosition],
         message: observationIdDiagnostic(observationId, authorized),
       });

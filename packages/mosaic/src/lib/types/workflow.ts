@@ -4,6 +4,7 @@ import type { MosaicResult } from './result.js';
 import type { MosaicRuntime } from '../observability.js';
 import type { MosaicEvaluationHooks } from './evaluation.js';
 import type { StateMachineHandler } from 'state-machine';
+import type { ObservationIdAllocator } from '../observation-ids.js';
 
 export type WorkflowHandlerName =
   | 'plan'
@@ -18,6 +19,7 @@ export type WorkflowContext = {
   readonly options: MosaicOptions;
   readonly runtime?: MosaicRuntime;
   readonly hooks?: MosaicEvaluationHooks;
+  readonly observationIds?: ObservationIdAllocator;
 };
 
 export type WorkflowState = {

@@ -37,6 +37,14 @@ pass BenchFlow's ACP reasoning-effort option because the external manifest
 contract cannot declare the config-option identifier that BenchFlow requires;
 the closed comparator therefore requires the harness field to remain null.
 
+The ACP adapter treats only an authentic agent-owned
+`invalid_structured_output` exhaustion as a scoreable task failure. It writes
+only that safe code and returns `end_turn`, so the official verifier runs and
+the Direct arm can continue. Other authentic Agent or Provider failures become
+JSON-RPC `-32603` errors carrying at most `{source, code}`. Unknown failures
+carry no data. Messages, diagnostics, causes, stacks, and captured error objects
+never cross the wire or stderr.
+
 The primary decision and efficiency readings are:
 
 ```text
@@ -148,7 +156,7 @@ Complete every item below before running `smoke`, `pilot`, `resume`, or `run`:
   npx nx run mosaic-benchmark:release
   ```
 
-- [ ] Confirm the public `mosaic-benchmark-v0.1.13` release contains exactly
+- [ ] Confirm the public `mosaic-benchmark-v0.1.14` release contains exactly
       `mosaic-bench-acp.mjs` and `mosaic-bench-acp.mjs.sha256`. The generated
       bundle hash, published sidecar, and `BF_BUNDLE_SHA256` in both agent
       manifests must be identical.

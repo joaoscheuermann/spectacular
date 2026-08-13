@@ -14,6 +14,7 @@ import type {
   WorkflowState,
 } from '../src/lib/types/workflow.js';
 import { mosaicProviders } from './structured.js';
+import { createObservationIdAllocator } from '../src/lib/observation-ids.js';
 
 test('fails without executing workflow work when no graph exists', async () => {
   const action = await execution(
@@ -118,7 +119,44 @@ test('automatically records one returned tool observation for a completed node',
       },
     ],
   );
-  assert.match(node.observations[0]?.id ?? '', /^[0-9a-f-]{36}$/u);
+  assert.match(node.observations[0]?.id ?? '', /^[0-9a-f]{6}$/u);
+});
+
+test('does not reuse an observation ID retained by an earlier revision', async () => {
+  const historical = createNode('historical');
+  historical.observations = [
+    {
+      id: 'aaaaaa',
+      goalId: historical.id,
+      toolName: 'lookup',
+      callId: 'historical-call',
+      input: '{}',
+      output: '{}',
+    },
+  ];
+  const node = createNode('current', ['lookup']);
+  const graph: Graph = { revision: 1, nodes: [node] };
+  const provider = createProvider([
+    toolFinish('call-1', 'lookup'),
+    terminalFinish(completed()),
+  ]);
+  const harness = createHarness(graph, provider, [tool('lookup')]);
+  const uuids = [
+    'aaaaaa00-0000-4000-8000-000000000000',
+    'bbbbbb00-0000-4000-8000-000000000000',
+  ];
+
+  const action = await execution(
+    state([{ revision: 0, nodes: [historical] }, graph]),
+    {
+      ...harness.context,
+      observationIds: createObservationIdAllocator(() => uuids.shift()!),
+    },
+    handlers(),
+  );
+
+  assert.equal(action.type, 'transition');
+  assert.equal(node.observations[0]?.id, 'bbbbbb');
 });
 
 test('repairs a similar unauthorized observation ID before completing', async () => {
@@ -158,6 +196,50 @@ test('repairs a similar unauthorized observation ID before completing', async ()
   assert.equal(provider.requests.length, 3);
   assert.equal(node.status, 'completed');
   assert.deepEqual(node.outcome?.criteria[0]?.observationIds, [authorizedId]);
+});
+
+test('repairs the Spring criterion 12 without accepting corruption at criteria 5 and 7', async () => {
+  const node = createNode('spring', ['lookup']);
+  node.doneWhen = Array.from(
+    { length: 13 },
+    (_, index) => `Spring migration criterion ${index}.`,
+  );
+  const graph: Graph = { revision: 1, nodes: [node] };
+  let authorizedId = '';
+  const provider = createProvider([], (request) => {
+    if (provider.requests.length === 1) return toolFinish('call-1', 'lookup');
+
+    authorizedId ||= observationIdFrom(request);
+    const criteria = node.doneWhen.map((_, index) => ({
+      criterionIndex: index,
+      satisfied: true,
+      evidence: `criterion-${index}-proof`,
+      observationIds: index === 12 ? [authorizedId] : [],
+    }));
+    if (provider.requests.length === 2) {
+      criteria[12]!.observationIds = [`${authorizedId.slice(0, -1)}x`];
+    } else {
+      criteria[5]!.criterionIndex = 50;
+      criteria[7]!.satisfied = 'corrupted' as unknown as boolean;
+    }
+    return terminalFinish({
+      status: 'completed',
+      criteria,
+      result: { markdown: 'Spring migration completed.', artifacts: [] },
+      revisionRequest: null,
+      reason: null,
+    })(request);
+  });
+  const harness = createHarness(graph, provider, [tool('lookup')]);
+
+  const action = await execution(state([graph]), harness.context, handlers());
+
+  assert.equal(action.type, 'transition');
+  assert.equal(provider.requests.length, 3);
+  assert.equal(node.status, 'completed');
+  assert.equal(node.outcome?.criteria[5]?.criterionIndex, 5);
+  assert.equal(node.outcome?.criteria[7]?.satisfied, true);
+  assert.deepEqual(node.outcome?.criteria[12]?.observationIds, [authorizedId]);
 });
 
 test('authorizes projected ancestors while excluding sibling observations', async () => {
@@ -790,7 +872,7 @@ function observationIdFrom(request: ProviderRequest<unknown>): string {
     .filter(({ role }) => role === 'tool')
     .map(({ content }) => (typeof content === 'string' ? content : ''))
     .join('\n');
-  const match = content.match(/[0-9a-f]{8}-[0-9a-f-]{27}/u);
+  const match = content.match(/\b[0-9a-f]{6}\b/u);
   assert.ok(match);
   return match[0];
 }

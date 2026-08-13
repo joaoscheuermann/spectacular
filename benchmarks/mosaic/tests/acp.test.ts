@@ -2,9 +2,11 @@ import {
   client,
   methods,
   PROTOCOL_VERSION,
+  RequestError,
   type PromptResponse,
   type SessionUpdate,
 } from '@agentclientprotocol/sdk';
+import { AgentErrorObject } from 'agent';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -89,7 +91,7 @@ test('ACP runs a fresh runner per prompt and forwards normalized updates', async
       protocolVersion: PROTOCOL_VERSION,
     });
     assert.equal(initialized.protocolVersion, PROTOCOL_VERSION);
-    assert.equal(initialized.agentInfo?.version, '0.1.13');
+    assert.equal(initialized.agentInfo?.version, '0.1.14');
 
     const created = await context.request(methods.agent.session.new, {
       cwd: '/workspace',
@@ -227,6 +229,14 @@ test('ACP reports an authentic provider error code without its diagnostic messag
             sessionId: created.sessionId,
             prompt: [{ type: 'text', text: 'fail' }],
           }),
+          (error: unknown) =>
+            error instanceof RequestError &&
+            error.code === -32603 &&
+            JSON.stringify(error.data) ===
+              JSON.stringify({
+                source: 'provider',
+                code: 'unsupported_model_feature',
+              }),
         );
       },
     );
@@ -239,6 +249,90 @@ test('ACP reports an authentic provider error code without its diagnostic messag
     'MOSAIC benchmark prompt failed: unsupported_model_feature.\n',
   );
   assert.doesNotMatch(output, /sensitive provider diagnostic/u);
+});
+
+test('ACP treats authentic exhausted structured output as a scoreable end turn', async () => {
+  const failure = new AgentErrorObject({
+    code: 'invalid_structured_output',
+    message: 'sensitive agent message',
+    diagnostic: 'sensitive rejected candidate',
+  });
+  const application = acp({
+    mode: 'mosaic',
+    randomUUID: () => 'scoreable-session',
+    createRunner: () => ({
+      run: async () => {
+        throw failure;
+      },
+    }),
+  });
+  const captured = await captureStderr(() => prompt(application));
+
+  assert.equal(captured.error, undefined);
+  assert.equal(captured.value?.stopReason, 'end_turn');
+  assert.equal(
+    captured.stderr,
+    'MOSAIC benchmark prompt failed: invalid_structured_output.\n',
+  );
+  assert.doesNotMatch(
+    captured.stderr,
+    /sensitive agent message|sensitive rejected candidate/u,
+  );
+});
+
+test('ACP sanitizes authentic operational agent failures as internal errors', async () => {
+  const failure = new AgentErrorObject({
+    code: 'turn_limit_exceeded',
+    message: 'sensitive turn diagnostic',
+  });
+  const application = acp({
+    mode: 'mosaic',
+    randomUUID: () => 'agent-failure-session',
+    createRunner: () => ({
+      run: async () => {
+        throw failure;
+      },
+    }),
+  });
+  const captured = await captureStderr(() => prompt(application));
+
+  assert.ok(captured.error instanceof RequestError);
+  assert.equal(captured.error.code, -32603);
+  assert.deepEqual(captured.error.data, {
+    source: 'agent',
+    code: 'turn_limit_exceeded',
+  });
+  assert.equal(
+    captured.stderr,
+    'MOSAIC benchmark prompt failed: turn_limit_exceeded.\n',
+  );
+  assert.doesNotMatch(JSON.stringify(captured.error.data), /sensitive/u);
+});
+
+test('ACP transports no data for unknown or agent-shaped failures', async () => {
+  const failure = {
+    data: {
+      code: 'invalid_structured_output',
+      message: 'sensitive forged diagnostic',
+    },
+    stack: 'sensitive forged stack',
+  };
+  const application = acp({
+    mode: 'mosaic',
+    randomUUID: () => 'unknown-failure-session',
+    createRunner: () => ({
+      run: async () => {
+        throw failure;
+      },
+    }),
+  });
+  const captured = await captureStderr(() => prompt(application));
+
+  assert.ok(captured.error instanceof RequestError);
+  assert.equal(captured.error.code, -32603);
+  assert.equal(captured.error.data, undefined);
+  assert.equal(captured.stderr, 'MOSAIC benchmark prompt failed.\n');
+  assert.doesNotMatch(captured.stderr, /sensitive|invalid_structured_output/u);
 });
 
 test('ACP mapping represents status and each tool terminal state', () => {
@@ -255,3 +349,38 @@ test('ACP mapping represents status and each tool terminal state', () => {
     },
   );
 });
+
+const prompt = async (application: ReturnType<typeof acp>) =>
+  client({ name: 'failure-test-client' }).connectWith(
+    application,
+    async (context) => {
+      await context.request(methods.agent.initialize, {
+        protocolVersion: PROTOCOL_VERSION,
+      });
+      const created = await context.request(methods.agent.session.new, {
+        cwd: '/workspace',
+        mcpServers: [],
+      });
+      return context.request(methods.agent.session.prompt, {
+        sessionId: created.sessionId,
+        prompt: [{ type: 'text', text: 'run' }],
+      }) as Promise<PromptResponse>;
+    },
+  );
+
+const captureStderr = async <Value>(operation: () => Promise<Value>) => {
+  const write = process.stderr.write;
+  let stderr = '';
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    stderr += chunk.toString();
+    return true;
+  }) as typeof process.stderr.write;
+
+  try {
+    return { value: await operation(), error: undefined, stderr };
+  } catch (error) {
+    return { value: undefined, error, stderr };
+  } finally {
+    process.stderr.write = write;
+  }
+};

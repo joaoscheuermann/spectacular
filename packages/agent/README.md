@@ -83,19 +83,32 @@ automatic. Requiring the terminal call is a runtime invariant: the agent does
 not send forced `tool_choice`, because some reasoning providers cannot combine
 thinking mode with forced tool selection.
 
-An invalid terminal submission is stored for provider replay but no tool runs.
-Every rejected call receives an `incomplete` tool result. The agent may request
-two corrected submissions after the initial failure,
-using a transient system correction that names the terminal tool and reports
-bounded schema issues without copying the rejected arguments. Missing,
-malformed, schema-invalid, duplicate, and mixed terminal calls share this fixed
-budget. Invalid ordinary tool-call batches share the same budget and are
-validated atomically before any handler runs. Ordinary valid tool turns neither
-consume nor reset it. The next invalid submission throws the latest error.
+An invalid terminal submission is retained only for provider replay and
+ephemeral repair; no tool runs. Every rejected call receives an `incomplete`
+tool result. When every Zod issue identifies a concrete primitive or missing
+leaf, the agent keeps that candidate as a baseline. The next submission can
+replace only those rejected paths; changes to fields that were already valid
+are ignored, and the composed object is fully revalidated. If composition
+fails, the whole new submission is validated normally and becomes a new
+baseline only when all of its issues are also repairable leaves. Malformed
+JSON, root and collection errors, and cross-field refinements use whole-object
+regeneration instead.
 
-`complete` and `stream` use the same repair behavior. Streaming preserves
-provider deltas already emitted for a rejected response but suppresses its
-`response.finished` event. `onToolCallRepair` receives safe attempt counters;
+The agent may request two corrected submissions after the initial failure.
+Its transient correction names the terminal tool and reports at most ten safe
+schema issues without copying rejected values. Missing, malformed,
+schema-invalid, duplicate, mixed, and invalid ordinary tool-call batches share
+this cumulative budget. An ordinary tool turn clears the transactional
+baseline without consuming or resetting the budget. Success, exhaustion, and
+run termination also discard it. The next invalid submission throws the latest
+error.
+
+`complete` and `stream` use the same repair behavior. Structured streams buffer
+one provider turn until its terminal submission is classified and suppress all
+provider events from a rejected turn. The final `AgentResponse.text`, final
+finish, and stored assistant message serialize the object that was actually
+accepted after composition; opaque provider replay remains unchanged.
+`onToolCallRepair` receives safe attempt counters, and
 `maxToolCallRepairs` overrides the default budget of two.
 
 Every successfully executed and serialized tool result receives one opaque ID

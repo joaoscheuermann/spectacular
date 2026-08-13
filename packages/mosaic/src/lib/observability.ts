@@ -168,7 +168,7 @@ const complete =
     await responseEvent(
       runtime,
       provider.metadata.id,
-      request.model,
+      current,
       response,
       'complete',
       stage,
@@ -203,7 +203,7 @@ const stream = (
         await responseEvent(
           runtime,
           provider.metadata.id,
-          request.model,
+          current,
           event.finish,
           'stream',
           stage,
@@ -280,7 +280,7 @@ const requestEvent = async (
 const responseEvent = async (
   runtime: MosaicRuntime,
   providerId: string,
-  model: string,
+  request: ProviderRequest,
   response: ProviderFinished<unknown>,
   operation: 'complete' | 'stream',
   stage: MosaicStage,
@@ -293,12 +293,14 @@ const responseEvent = async (
     providerId,
     stage,
     operation,
-    model,
+    model: request.model,
     finishReason: response.finishReason,
     durationMs: runtime.duration(timer),
     ...(nodeId === undefined ? {} : { nodeId }),
     ...(revision === undefined ? {} : { revision }),
-    ...(runtime.capture === 'io' ? { content: visibleResponse(response) } : {}),
+    ...(runtime.capture === 'io'
+      ? { content: visibleResponse(response, request) }
+      : {}),
   });
 };
 
@@ -310,18 +312,65 @@ const withSignal = <Request extends { readonly signal?: AbortSignal }>(
     ? request
     : ({ ...request, signal } as Request);
 
-const visibleRequest = (request: ProviderRequest): unknown => ({
-  messages: request.messages,
-  tools: request.tools,
-});
+const visibleRequest = (request: ProviderRequest): unknown => {
+  const terminalNames = structuredToolNames(request);
+  const repairing = request.messages.some(
+    ({ role, content }) =>
+      role === 'system' &&
+      typeof content === 'string' &&
+      content.startsWith('# Structured output correction'),
+  );
 
-const visibleResponse = (response: ProviderFinished<unknown>): unknown => ({
-  text: response.text,
-  finishReason: response.finishReason,
-  refusal: response.refusal,
-  toolCalls: response.toolCalls,
-  structured: response.structured,
-});
+  return {
+    messages: request.messages.map((message) => ({
+      ...message,
+      ...(repairing && message.role === 'assistant' ? { content: '' } : {}),
+      ...('toolCalls' in message && message.toolCalls !== undefined
+        ? { toolCalls: redactTerminalCalls(message.toolCalls, terminalNames) }
+        : {}),
+    })),
+    tools: request.tools,
+  };
+};
+
+const visibleResponse = (
+  response: ProviderFinished<unknown>,
+  request: ProviderRequest,
+): unknown => {
+  const structured = request.tools?.some(isStructuredTool) === true;
+
+  return {
+    text: structured ? '' : response.text,
+    finishReason: response.finishReason,
+    refusal: response.refusal,
+    toolCalls: redactTerminalCalls(
+      response.toolCalls,
+      structuredToolNames(request),
+    ),
+    structured: structured ? undefined : response.structured,
+  };
+};
+
+const structuredToolNames = (request: ProviderRequest): ReadonlySet<string> =>
+  new Set(
+    request.tools?.filter(isStructuredTool).map(({ name }) => name) ?? [],
+  );
+
+const isStructuredTool = (tool: { readonly description?: string }): boolean =>
+  tool.description ===
+  'Submit the final structured output and end the agent run.';
+
+const redactTerminalCalls = <Call extends { readonly name: string }>(
+  calls: readonly Call[],
+  terminalNames: ReadonlySet<string>,
+): readonly unknown[] =>
+  calls.map((call) => {
+    if (!terminalNames.has(call.name)) return call;
+    const { arguments: _arguments, ...safe } = call as Call & {
+      readonly arguments?: string;
+    };
+    return safe;
+  });
 
 const immutable = <Value>(value: Value): Value =>
   freeze(structuredClone(value));

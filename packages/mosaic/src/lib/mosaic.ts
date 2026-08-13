@@ -6,6 +6,7 @@ import { createMachine } from './workflow/machine.js';
 import { createRuntime } from './observability.js';
 import type { MosaicRunOptions } from './types/events.js';
 import type { MosaicEvaluationHooks } from './types/evaluation.js';
+import { createObservationIdAllocator } from './observation-ids.js';
 
 export function mosaic(options: MosaicOptions): MosaicAgent {
   return createMosaic(options);
@@ -41,6 +42,7 @@ export function createMosaic(
             input,
             options,
             runtime,
+            observationIds: createObservationIdAllocator(),
             ...(hooks === undefined ? {} : { hooks }),
           },
         });
