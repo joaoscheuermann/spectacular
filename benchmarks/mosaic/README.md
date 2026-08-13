@@ -70,6 +70,148 @@ Terminal-Bench 2 is a secondary confirmation of whether that result transfers
 beyond the skill-oriented primary benchmark; it can run only after a valid
 SkillsBench comparison.
 
+## Composition evaluation
+
+The canonical SkillsBench campaign above keeps every task skill required. It is
+useful end-to-end evidence, but it does not test discovery, matching, bundle
+cardinality, or selective composition. The additive composition suite separates
+those mechanisms into five implementation stages:
+
+1. Pin and verify the external SRA-Bench corpus and instance artifacts.
+2. Materialize a deterministic 100-query pilot: 50 multi-skill CHAMP and 50
+   multi-skill BigCodeBench cases, stratified by gold cardinality.
+3. Compare `no-skills`, `fixed-top-k`, `mosaic`, and diagnostic `oracle`, then
+   score both frozen candidates and selected bundles independently of answer
+   quality.
+4. Run 24 controlled P0→P1 cases: six composition classes crossed with four
+   domains, under `no-hints`, diagnostic `gold`, lexical `retrieved`, and
+   negative-control `distractor` evidence.
+5. Prepare a global SkillsBench v1.1 catalog and the closed
+   `no-skills`/`fixed-top-k`/`mosaic-selective`/diagnostic `oracle`/diagnostic
+   `all-skills` treatment contract.
+
+Stage 5 is deliberately called **SkillsBench Composition**, not SkillComposer.
+The latter's official code, catalog, materialized split, and checkpoints are not
+part of this repository. The global-catalog condition remains a preparation
+contract until it has a neutral catalog mount and BenchFlow task adapter; the
+ordinary 87-task campaign remains the transfer/regression benchmark.
+
+### SRA-Bench
+
+Obtain the pinned SR-Agents and SRA-Bench dataset revisions named in
+`src/composition/sra-pilot.ts`. Place the uncompressed dataset files beneath one
+source directory as `corpus/corpus.json`, `instances/champ.json`, and
+`instances/bigcodebench.json`. Preparation is offline and fails if any byte
+count or SHA-256 differs:
+
+```sh
+npx nx run mosaic-benchmark:run -- composition sra prepare \
+  --source <pinned-sra-data> \
+  --output benchmarks/mosaic/results/sra-pilot
+```
+
+Produce a frozen retrieval artifact with the pinned SR-Agents implementation,
+limited to the selected IDs in the generated dataset file. Its interoperable
+shape is `{ "results": [...] }`, with `instance_id`, `gold_skill_ids`, and an
+ordered `retrieved` list. Score it without a model:
+
+```sh
+npx nx run mosaic-benchmark:run -- composition sra score \
+  --input <retrieval.json> --k 8 --output <retrieval-metrics.json>
+```
+
+Run one dataset and one arm per output. These commands call models and therefore
+require explicit approval. `cohere/rerank-v3.5` is the default body-aware
+reranker for the MOSAIC arm; `--reranker-model` changes the recorded treatment.
+
+```sh
+npx nx run mosaic-benchmark:run -- composition sra run \
+  --arm mosaic \
+  --instances benchmarks/mosaic/results/sra-pilot/instances/champ.json \
+  --corpus <pinned-sra-data>/corpus/corpus.json \
+  --retrieval <champ-retrieval.json> \
+  --output benchmarks/mosaic/results/sra-champ-mosaic.jsonl \
+  --max-hint-candidates 6 --max-retrieved-candidates 50 --max-skills 6 \
+  --yes-paid-run
+```
+
+Use the generated `gold.json` to score the selected bundle or routed candidates
+independently of downstream execution:
+
+```sh
+npx nx run mosaic-benchmark:run -- composition sra score-output \
+  --input benchmarks/mosaic/results/sra-champ-mosaic.jsonl \
+  --gold benchmarks/mosaic/results/sra-pilot/gold.json \
+  --projection selected --k 8 --output <bundle-metrics.json>
+```
+
+The inference JSONL follows the pinned SR-Agents `InferenceRecord` contract.
+Use its official dataset evaluator for downstream answer quality:
+
+```sh
+sragents evaluate \
+  --input benchmarks/mosaic/results/sra-champ-mosaic.jsonl \
+  --instances benchmarks/mosaic/results/sra-pilot/instances/champ.json \
+  --output <champ-end-task-eval.json>
+```
+
+The run sidecar binds resume evidence to the arm, model, reranker, routing
+limits, instance set, corpus, and retrieval input. Never compare or concatenate
+outputs whose run identities differ. `oracle` is a ceiling and `no-skills` a
+floor; neither is the primary MOSAIC result.
+
+### Controlled P0→P1
+
+Inspect the frozen 6×4 matrix without a provider:
+
+```sh
+npx nx run mosaic-benchmark:run -- composition planning manifest
+```
+
+Run all 24 cases, or repeat `--case <id>` for a predeclared subset:
+
+```sh
+npx nx run mosaic-benchmark:run -- composition planning run \
+  --output benchmarks/mosaic/results/planning-p0-p1 \
+  --yes-paid-run
+```
+
+The runner creates one P0 per case and reuses that exact graph across all four
+conditions. It stubs routing and execution, persists criterion-level P0/P1
+scores and regressions, and reports macro results overall and by domain and
+composition class. The rubric-bound semantic observer uses the same configured
+model by default; treat it as model adjudication and audit a sample manually
+before making confirmatory claims.
+
+### SkillsBench Composition
+
+The implementation scans only a clean caller-verified checkout at
+`b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af`. It hashes all upstream skill
+package bytes, creates collision-safe catalog IDs, preserves task golds for
+offline scoring, builds a full gold-free TF-IDF unigram/bigram ranking, and
+defines five closed arms. The checkout must be the exact Git root and its
+`tasks/` tree must contain no modified, untracked, or ignored bytes; skill
+packages may not contain symlinks or submodules. The canonical scan yields 232
+occurrences and 209 catalog skills. Preparation is provider-free and refuses to
+overwrite its artifact:
+
+```sh
+npx nx run mosaic-benchmark:run -- composition skillsbench prepare \
+  --source <skillsbench-v1.1-checkout> \
+  --output benchmarks/mosaic/results/skillsbench-composition.json
+```
+
+Preparation never changes the canonical `with-skill` campaign. Runtime package
+materialization copies packages to neutral catalog-ID paths so original task
+provenance is not model-visible. Until that neutral global catalog is mounted
+into every BenchFlow task, do not run or report this condition as an external
+benchmark result.
+
+All composition model runs use the local `run` target and inherit
+`OPENROUTER_API_KEY` only from the environment. Preparation, manifest, and score
+commands do not construct a provider. No model run starts without
+`--yes-paid-run`.
+
 ## Layout
 
 ```text
@@ -156,7 +298,7 @@ Complete every item below before running `smoke`, `pilot`, `resume`, or `run`:
   npx nx run mosaic-benchmark:release
   ```
 
-- [ ] Confirm the public `mosaic-benchmark-v0.1.16` release contains exactly
+- [ ] Confirm the public `mosaic-benchmark-v0.2.0` release contains exactly
       `mosaic-bench-acp.mjs` and `mosaic-bench-acp.mjs.sha256`. The generated
       bundle hash, published sidecar, and `BF_BUNDLE_SHA256` in both agent
       manifests must be identical.

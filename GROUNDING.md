@@ -613,6 +613,73 @@ test, and release targets. Its generated `.mjs` files are a standalone ACP
 bundle for benchmark containers that do not contain this workspace or its
 dependencies, a local host dispatcher, and a host-side Docker launcher.
 
+The same private application also owns an additive composition-evaluation
+surface under the local `composition` command. It does not change the canonical
+BenchFlow treatment described below and it is not a revival of the archived
+empirical application. Provider-free preparation, manifest, and scoring
+commands may run locally. Every composition command that can call a model is
+fail-closed behind the explicit `--yes-paid-run` flag and writes only to a
+caller-selected fresh output path. Composition evidence is diagnostic until its
+own frozen input manifest, complete task set, and treatment controls validate;
+it cannot satisfy the canonical SkillsBench evidence gate for Terminal-Bench.
+
+The external composition benchmark is SRA-Bench, with SR-Agents pinned to
+`277fd8d2bbd7d3b81a5cf4ffa6e87e18c7906e4f` and its Hugging Face dataset pinned
+to `6143f2634eb284955ce312213bac24b582d039f3`. Preparation verifies the exact
+corpus, CHAMP, and BigCodeBench byte counts and SHA-256 digests before creating
+a frozen 100-query pilot: 50 multi-skill CHAMP and 50 multi-skill BigCodeBench
+queries, selected deterministically within gold-cardinality strata. Runs are
+dataset-homogeneous and compare `no-skills`, frozen retrieval `fixed-top-k`,
+selective `mosaic`, and diagnostic `oracle` arms under one model profile. The
+selective arm receives the same frozen candidate ranking, reranks full bodies
+with the pinned default `cohere/rerank-v3.5`, and chooses at most its configured
+bundle limit. Output scoring separately measures routed candidates and selected
+bundles with Recall@K, set precision/F1, MRR, nDCG, exact match, and cardinality
+error. Append-only run output is bound to a sidecar identity covering the arm,
+model, reranker, limits, instances, corpus, and retrieval input; resume refuses
+a mismatch.
+
+The controlled planning instrument contains exactly 24 authored cases: the six
+predeclared composition classes A-F crossed with the four domains
+documents/finance, software, artifacts, and communications. Every case includes
+request-grounded P0 criteria, catalog-grounded P1 criteria, relevant skills,
+intradomain distractors, semantic roles, outputs, behaviors, dependencies, and
+tool requirements. One validated P0 is reused across `no-hints`, diagnostic
+`gold`, deterministic lexical `retrieved`, and negative-control `distractor`
+conditions. Initial planning sees only the request; revision sees only P0 and
+the condition's public skill evidence; lexical retrieval has no gold fields or
+gold-sized cutoff. A separate rubric-bound structured call maps plan text to
+semantic labels for scoring. Routing and execution are intercepted through
+`mosaic/evaluation`, so downstream tools and execution cannot confound the
+P0-to-P1 transition. Reports preserve P0, P1, observations, criterion-level
+scores, gains, regressions, provider-call events, and macro readings overall and
+by domain and composition class. Paid planning runs reserve stdout for the final
+JSON summary and emit live safe progress to stderr for run and case lifecycle,
+model calls and cache hits, structured-attempt acceptance and repair, and
+retrieval counts. Progress exposes only case, condition, and operation IDs plus
+counts and booleans; it excludes prompts, model outputs, validation diagnostics,
+credentials, and caught failures. The same-model semantic judge is an explicit
+diagnostic limitation, not hidden ground truth.
+
+The SkillsBench composition condition scans a caller-verified clean checkout of
+the existing v1.1 pin into a deterministic global catalog, hashes every package,
+namespaces same-name/different-body collisions, and preserves task-to-skill gold
+associations only for offline evaluation and the diagnostic oracle. Its closed
+arms are `no-skills`, `fixed-top-k`, `mosaic-selective`, diagnostic `oracle`, and
+diagnostic `all-skills`. A frozen lexical ranker may use task text and public
+skill text only; it must not use task-to-skill golds, provenance paths, or gold
+cardinality. Runtime skill packages must be materialized into neutral catalog
+paths so original task IDs cannot leak to the model. The canonical byte checkout
+produces 232 task-local occurrences collapsed into
+209 catalog skills, catalog SHA-256
+`382379cc8b2ac56aab6d6c4559bb2e6b1d6203f5de58534532e9ad528bdefe7c`, and
+fixed-ranking SHA-256
+`0a1631e7ad74730c909194efee941d2ba981279cd8d040941d2a5039fafc9ffd`;
+preparation rejects any mismatch. This condition is a local
+preparation and treatment contract until a global-catalog mount and official
+task execution adapter are integrated with BenchFlow; it must not be described
+as a SkillComposer reproduction or as completed external evidence.
+
 The additive `docker-run` target is the portable campaign surface for native
 Linux and Docker Desktop hosts, including Windows, macOS, and WSL. It accepts
 only `campaign` commands, builds the local `mosaic-benchmark:local` Linux image

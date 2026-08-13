@@ -14,6 +14,12 @@ import {
 import { compare, type CompareOptions, type CompareReport } from './compare.js';
 import { serveAcp, type AcpOptions } from './acp.js';
 import type { RunMode } from './run.js';
+import {
+  compositionUsage,
+  formatPlanningProgress,
+  runCompositionCommand,
+  type CompositionCommandDependencies,
+} from './composition-cli.js';
 
 type Output = Pick<NodeJS.WriteStream, 'write'>;
 
@@ -26,6 +32,7 @@ export interface CliDependencies {
     options: CampaignOptions,
   ) => Promise<CampaignCheck | CampaignRun>;
   readonly compare?: (options: CompareOptions) => Promise<CompareReport>;
+  readonly composition?: CompositionCommandDependencies;
 }
 
 /** Executes one benchmark command and returns its process exit code. */
@@ -44,6 +51,19 @@ export const runCli = async (
         return await runCampaign(args.slice(1), dependencies, stdout);
       case 'compare':
         return await runComparison(args.slice(1), dependencies, stdout);
+      case 'composition':
+        writeJson(
+          stdout,
+          await runCompositionCommand(args.slice(1), {
+            ...dependencies.composition,
+            progress:
+              dependencies.composition?.progress ??
+              ((event) => {
+                stderr.write(`${formatPlanningProgress(event)}\n`);
+              }),
+          }),
+        );
+        return 0;
       case 'release':
         return await createRelease(args.slice(1), dependencies, stdout);
       case 'help':
@@ -132,7 +152,7 @@ const createRelease = async (
   const checksum = `${asset}.sha256`;
   await writeFile(checksum, `${digest}  mosaic-bench-acp.mjs\n`, 'utf8');
   writeJson(stdout, {
-    version: '0.1.16',
+    version: '0.2.0',
     asset,
     checksum,
     sha256: digest,
@@ -221,6 +241,7 @@ const usage = [
   '  npx nx run mosaic-benchmark:run -- campaign terminalbench <smoke|run> --yes-paid-run --skillsbench-report <path>',
   '    Terminal-Bench also requires --skillsbench-report <valid-report.json>',
   '  npx nx run mosaic-benchmark:run -- compare --direct <dir> --mosaic <dir> [--report <file>]',
+  compositionUsage,
   '  npx nx run mosaic-benchmark:release',
 ].join('\n');
 

@@ -44,8 +44,8 @@ export type {
 
 const model = 'openrouter/deepseek/deepseek-v4-pro';
 const releaseAssets = [
-  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.16/mosaic-bench-acp.mjs',
-  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.1.16/mosaic-bench-acp.mjs.sha256',
+  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.2.0/mosaic-bench-acp.mjs',
+  'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.2.0/mosaic-bench-acp.mjs.sha256',
 ] as const;
 
 const definitions: Record<

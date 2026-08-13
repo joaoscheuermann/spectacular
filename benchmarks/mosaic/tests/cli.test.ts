@@ -149,7 +149,7 @@ test('creates the release checksum beside the generated bundle', async () => {
     const stdout = output();
 
     assert.equal(await runCli(['release'], { cwd: root, stdout }), 0);
-    assert.equal(JSON.parse(stdout.lines[0] ?? '{}').version, '0.1.16');
+    assert.equal(JSON.parse(stdout.lines[0] ?? '{}').version, '0.2.0');
     const checksum = await readFile(
       join(root, 'dist', 'mosaic-bench-acp.mjs.sha256'),
       'utf8',
@@ -171,4 +171,70 @@ test('rejects unknown arguments without writing to stdout', async () => {
   assert.equal(code, 2);
   assert.deepEqual(stdout.lines, []);
   assert.match(stderr.lines[0] ?? '', /Unknown argument/);
+});
+
+test('streams controlled planning progress to stderr and keeps stdout as JSON', async () => {
+  const stdout = output();
+  const stderr = output();
+  const code = await runCli(
+    [
+      'composition',
+      'planning',
+      'run',
+      '--output',
+      '/output',
+      '--case',
+      'planning.software.c',
+      '--yes-paid-run',
+    ],
+    {
+      stdout,
+      stderr,
+      composition: {
+        createProfile: () => ({}) as never,
+        runPlanning: async (options) => {
+          const progress = (
+            options as typeof options & {
+              readonly progress?: (
+                event: Readonly<Record<string, unknown>>,
+              ) => void | Promise<void>;
+            }
+          ).progress;
+          await progress?.({ type: 'run.started', caseCount: 1 });
+          await progress?.({
+            type: 'model.call',
+            caseId: 'planning.software.c',
+            operation: 'observation',
+            condition: 'gold',
+            call: 1,
+          });
+          await progress?.({
+            type: 'structured.attempt',
+            caseId: 'planning.software.c',
+            operation: 'observation',
+            condition: 'gold',
+            attempt: 1,
+            runtimeAccepted: false,
+            feedbackSent: true,
+          });
+          await progress?.({
+            type: 'run.completed',
+            caseCount: 1,
+            modelCallCount: 1,
+          });
+          return { benchmark: 'mosaic-p0-p1-controlled' } as never;
+        },
+      },
+    },
+  );
+
+  assert.equal(code, 0);
+  assert.equal(
+    JSON.parse(stdout.lines[0] ?? '{}').benchmark,
+    'mosaic-p0-p1-controlled',
+  );
+  assert.ok(stderr.lines.some((line) => line.includes('run started')));
+  assert.ok(stderr.lines.some((line) => line.includes('model call')));
+  assert.ok(stderr.lines.some((line) => line.includes('repair=yes')));
+  assert.ok(stderr.lines.some((line) => line.includes('run completed')));
 });
