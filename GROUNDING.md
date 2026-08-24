@@ -1154,13 +1154,14 @@ resulting complete or partial history. Prompt failures return the session to
 `agent.failed`, and `agent.cancelled` events around the Agent stream.
 
 Arbitrary Agent event values are converted to JSON without dropping reasoning,
-replay, tool payloads/results, errors, stacks, causes, or own error properties.
-Cycles and non-JSON values receive explicit markers, and configured credential
-values are redacted. One process-local map owns only live leases, FIFO prompts,
-abort controllers, and Socket.IO subscribers. It is not the replay source of
-truth, does not resume accepted or queued prompts after restart, and requires
-no distributed Socket.IO adapter because Doric currently supports one host
-instance.
+replay, tool payloads/results, errors, or defined stacks, causes, and own error
+properties. Undefined object properties are omitted. Undefined array entries,
+cycles, and other non-JSON values receive explicit markers, and configured
+credential values are redacted. One process-local map owns only live leases,
+FIFO prompts, abort controllers, and Socket.IO subscribers. It is not the
+replay source of truth, does not resume accepted or queued prompts after
+restart, and requires no distributed Socket.IO adapter because Doric currently
+supports one host instance.
 
 ## Hard Constraints
 

@@ -133,9 +133,10 @@ Agent stream events retain reasoning, provider replay, tool payloads/results,
 usage, response finishes, and failures. Doric also writes `prompt.accepted`,
 `agent.failed`, and `agent.cancelled`. Events are persisted before publication.
 
-Errors preserve `name`, `message`, `stack`, `cause`, and own properties. Cycles
-and non-JSON values use explicit markers. Values of configured credentials are
-replaced with `[REDACTED]` before persistence.
+Errors preserve defined `name`, `message`, `stack`, `cause`, and own
+properties. Undefined object properties are omitted; undefined array entries,
+cycles, and other non-JSON values use explicit markers. Values of configured
+credentials are replaced with `[REDACTED]` before persistence.
 
 ## Socket.IO
 

@@ -25,6 +25,12 @@ test('preserves reasoning replay and tool IO while redacting credentials', () =>
   });
 });
 
+test('omits undefined object properties while marking array entries', () => {
+  assert.deepEqual(eventJson({ absent: undefined, values: [undefined] }, []), {
+    values: ['[Undefined]'],
+  });
+});
+
 test('serializes Error fields own properties cycles and non-JSON values', () => {
   const cause = new Error('root secret');
   const error = new Error('failed secret', { cause }) as Error & {
@@ -32,7 +38,7 @@ test('serializes Error fields own properties cycles and non-JSON values', () => 
     context: unknown;
   };
   error.code = 7n;
-  error.context = { missing: undefined, value: Number.NaN };
+  error.context = { value: Number.NaN };
   const cyclic: Record<string, unknown> = { error };
   cyclic.self = cyclic;
 
@@ -46,6 +52,5 @@ test('serializes Error fields own properties cycles and non-JSON values', () => 
   assert.match(output, /failed \[REDACTED\]/u);
   assert.match(output, /root \[REDACTED\]/u);
   assert.match(output, /\[BigInt: 7\]/u);
-  assert.match(output, /\[Undefined\]/u);
   assert.match(output, /\[NaN\]/u);
 });

@@ -62,14 +62,16 @@ export const eventJson = (
       );
 
     return Object.fromEntries(
-      [...names].map((name) => {
+      [...names].flatMap<[string, unknown]>((name) => {
         let entry: unknown;
         try {
           entry = Reflect.get(current, name);
         } catch {
           entry = marker('Unserializable property');
         }
-        return [redact(name), visit(entry, `${path}.${name}`)];
+        return entry === undefined
+          ? []
+          : [[redact(name), visit(entry, `${path}.${name}`)]];
       }),
     );
   };
