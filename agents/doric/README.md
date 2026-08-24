@@ -1,372 +1,188 @@
-# Doric host
+# Doric Direct agent
 
-Doric stores Mosaic configuration, sessions, and ordered events in PostgreSQL.
-Migrations are deployed explicitly before the HTTP host starts.
+Doric exposes long-lived, sandbox-backed Direct sessions. PostgreSQL stores
+configuration, public session state, provider-ready message history, and the
+complete ordered Agent event stream. Socket.IO replays that durable history
+before continuing with live delivery.
 
-## Network API
+The HTTP and Socket.IO interfaces share one listener. It defaults to
+`0.0.0.0:3000` and can be changed with `DORIC_HOST` and `DORIC_PORT`.
 
-The HTTP and Socket.IO interfaces use the same origin. The host defaults to
-`0.0.0.0` and the port defaults to `3000`; set `DORIC_HOST` or `DORIC_PORT` to
-override them. All interfaces are intentionally unauthenticated. Configuration
-updates can change provider base URLs and credential environment names, so
-expose Doric only inside a trusted network.
+## Session lifecycle
 
-### REST endpoints
+`POST /sessions` creates a `queued` session without a prompt and starts
+acquiring one sandbox lease. Acquisition changes the state to `ready`. The
+lease and sandbox are reused by every prompt and remain reserved until the
+session is terminated or the process shuts down.
 
-| Method   | Path                             | Success | Description                                                  |
-| -------- | -------------------------------- | ------- | ------------------------------------------------------------ |
-| `GET`    | `/vms`                           | `200`   | Lists the currently running Docker or Firecracker sandboxes. |
-| `GET`    | `/vms/:id/ssh`                   | `200`   | Returns SSH access for a VM leased to an active session.     |
-| `GET`    | `/mosaic/config`                 | `200`   | Returns the active Mosaic configuration snapshot.            |
-| `PUT`    | `/mosaic/config`                 | `200`   | Validates and completely replaces the Mosaic configuration.  |
-| `POST`   | `/mosaic/sessions`               | `202`   | Creates and asynchronously starts one Mosaic session.        |
-| `GET`    | `/mosaic/sessions`               | `200`   | Lists sessions from newest to oldest with cursor pagination. |
-| `GET`    | `/mosaic/sessions/:id/ssh`       | `200`   | Polls the active session's SSH access.                       |
-| `GET`    | `/mosaic/sessions/:id/events`    | `200`   | Replays events after an optional sequence.                   |
-| `POST`   | `/mosaic/sessions/:id/terminate` | `200`   | Requests best-effort, idempotent session cancellation.       |
-| `DELETE` | `/mosaic/sessions/:id`           | `204`   | Deletes a terminal session and its persisted events.         |
+Accepted prompts are serialized in FIFO order. Each prompt changes the state
+from `ready` to `running` and back to `ready`, whether it succeeds or fails. A
+prompt failure does not terminate the session. Termination changes an active
+session through `cancelling` to `cancelled`; sandbox acquisition or restart
+reconciliation can change it to `failed`.
 
-There is currently no health endpoint or single-session
-`GET /mosaic/sessions/:id` endpoint.
+There is no automatic expiry. At most ten sandboxes are provisioned by the
+default pool, so callers must terminate sessions they no longer need.
 
-#### `GET /vms`
+For every prompt Doric creates a fresh Agent with:
 
-Returns an array containing only sandboxes that are currently provisioned:
+- the captured `models.execution` provider/model and `execution.maxTurns`;
+- all bundle tools bound to the session sandbox;
+- a fresh tool-call storage;
+- message storage initialized from the exact persisted conversation history;
+- one deterministic system prompt followed by every bundle skill body in
+  bundle order.
 
-```json
-[
-  {
-    "id": "sandbox-id",
-    "provider": "docker"
-  }
-]
+Complete and partial message history is persisted after success or failure and
+becomes the next prompt's history.
+
+## REST API
+
+| Method   | Path                      | Success | Purpose                                      |
+| -------- | ------------------------- | ------- | -------------------------------------------- |
+| `GET`    | `/config`                 | `200`   | Return the active configuration snapshot.    |
+| `PUT`    | `/config`                 | `200`   | Replace the complete configuration.          |
+| `POST`   | `/sessions`               | `202`   | Create a prompt-free queued session.         |
+| `GET`    | `/sessions`               | `200`   | List sessions with cursor pagination.        |
+| `GET`    | `/sessions/:id`           | `200`   | Return the same representation as the list.  |
+| `POST`   | `/sessions/:id/prompt`    | `202`   | Accept one prompt into the FIFO queue.       |
+| `GET`    | `/sessions/:id/events`    | `200`   | Replay all or cursor-filtered events.        |
+| `GET`    | `/sessions/:id/ssh`       | `200`   | Poll SSH access for the reserved sandbox.    |
+| `POST`   | `/sessions/:id/terminate` | `200`   | Request idempotent cancellation.             |
+| `DELETE` | `/sessions/:id`           | `204`   | Delete a terminal session and its events.    |
+| `GET`    | `/vms`                    | `200`   | List provisioned runtimes.                   |
+| `GET`    | `/vms/:id/ssh`            | `200`   | Return SSH access for a currently leased VM. |
+
+There are no `/mosaic` compatibility aliases.
+
+### Configuration
+
+The `GET/PUT /config` schema is unchanged. Provider URLs, credential
+environment-variable names, all five model profiles, routing limits, execution
+limits, and revision limits continue to be stored and returned. Direct uses
+only `models.execution` and `execution.maxTurns`; other profiles and limits are
+currently inactive.
+
+Credential values are resolved from the named environment variables at
+runtime. They are never stored in the configuration tables.
+
+### Create and prompt
+
+```console
+curl -sS -X POST http://127.0.0.1:3000/sessions
 ```
-
-`provider` is either `docker` or `firecracker`.
-
-#### SSH access
-
-The Doric runtime image and Compose profiles enable key-only SSH on a dynamic
-loopback port for every sandbox. Native source runs leave it disabled unless
-`DORIC_SANDBOX_SSH=true`, because the host must provide the pinned Dropbear
-binary at `/opt/doric/firecracker/dropbearmulti`. Credentials are returned only
-while the VM is leased to an active Mosaic session. The
-`POST /mosaic/sessions` response includes a stable polling link:
-
-```json
-{
-  "id": "018f47d2-e3b1-7b4f-8b2c-1f5a7fdf1601",
-  "state": "queued",
-  "ssh": {
-    "href": "/mosaic/sessions/018f47d2-e3b1-7b4f-8b2c-1f5a7fdf1601/ssh"
-  }
-}
-```
-
-While the session waits for a sandbox, `GET` on that link returns `202`, a
-`Retry-After: 1` header, and `{ "status": "pending" }`. Once the lease is
-ready, it returns:
-
-```json
-{
-  "status": "ready",
-  "vmId": "sandbox-id",
-  "href": "/vms/sandbox-id/ssh",
-  "ssh": {
-    "host": "127.0.0.1",
-    "port": 32768,
-    "username": "root",
-    "privateKey": "-----BEGIN OPENSSH PRIVATE KEY-----\n...",
-    "knownHosts": "[127.0.0.1]:32768 ssh-ed25519 ...",
-    "hostKeyFingerprint": "SHA256:..."
-  }
-}
-```
-
-`GET /vms/:id/ssh` returns the same `ssh` object together with `vm` and the
-owning `sessionId`. It returns `409 vm_ssh_unavailable` for an idle or releasing
-VM and `404 vm_not_found` after disposal. Session polling returns
-`409 session_ssh_unavailable` when SSH is disabled and
-`410 session_ssh_expired` after its lease is released. All SSH responses use
-`Cache-Control: no-store`.
-
-Write the returned identity and host entry to owner-only files before invoking
-the OpenSSH client on the Doric host:
-
-```sh
-curl -sS http://127.0.0.1:3000/mosaic/sessions/$SESSION_ID/ssh > ssh.json
-jq -r '.ssh.privateKey' ssh.json > id_ed25519
-jq -r '.ssh.knownHosts' ssh.json > known_hosts
-chmod 600 id_ed25519 known_hosts
-ssh -i ./id_ed25519 \
-  -p "$(jq -r '.ssh.port' ssh.json)" \
-  -o BatchMode=yes \
-  -o IdentitiesOnly=yes \
-  -o StrictHostKeyChecking=yes \
-  -o UserKnownHostsFile="$PWD/known_hosts" \
-  "$(jq -r '.ssh.username' ssh.json)@$(jq -r '.ssh.host' ssh.json)"
-```
-
-The returned host is loopback, so the SSH command must run on the same host as
-Doric. The unauthenticated HTTP API also returns the private key; keep the HTTP
-listener on its existing isolated trusted network. Firecracker access requires
-the Linux x86_64 Compose profile with KVM and TUN access. Docker and
-Firecracker both use the same response contract.
-
-Sandbox creation permits three consecutive factory failures per waiting batch.
-After the third failure, the pending acquisition is rejected and its Mosaic
-session transitions from `queued` to `failed` instead of waiting forever. A
-later session starts a fresh batch, allowing recovery after the provider is
-restored.
-
-#### `GET /mosaic/config`
-
-Returns the active configuration, its monotonically increasing revision, and
-the activation timestamp:
-
-```json
-{
-  "configuration": {
-    "providers": [],
-    "models": {},
-    "routing": {},
-    "execution": {},
-    "revision": {}
-  },
-  "revision": 1,
-  "updatedAt": "2026-08-09T12:00:00.000Z"
-}
-```
-
-Credential values are never returned. Provider entries contain only the
-credential environment-variable name in `apiKeyEnv`.
-
-#### `PUT /mosaic/config`
-
-The request body is the complete `configuration` object returned by the GET,
-without the outer `configuration`, numeric `revision`, or `updatedAt` fields:
-
-```json
-{
-  "providers": [
-    {
-      "id": "openrouter",
-      "baseUrl": "https://openrouter.ai/api/v1",
-      "apiKeyEnv": "OPENROUTER_API_KEY"
-    }
-  ],
-  "models": {
-    "planning": {
-      "providerId": "openrouter",
-      "model": "qwen/qwen3.7-flash",
-      "effort": "low"
-    },
-    "revision": {
-      "providerId": "openrouter",
-      "model": "google/gemini-3.6-flash",
-      "effort": "low"
-    },
-    "execution": {
-      "providerId": "openrouter",
-      "model": "deepseek/deepseek-v4-flash-0731",
-      "effort": "low"
-    },
-    "reranker": {
-      "providerId": "openrouter",
-      "model": "voyageai/rerank-2.5-lite"
-    },
-    "embedder": {
-      "providerId": "openrouter",
-      "model": "voyageai/voyage-4-large",
-      "dimensions": 2048
-    }
-  },
-  "routing": {
-    "maxHintCandidates": 5,
-    "maxRetrievedCandidates": 5,
-    "maxSkills": 5
-  },
-  "execution": { "maxTurns": 32 },
-  "revision": { "max": 3 }
-}
-```
-
-The response is the same snapshot shape as `GET /mosaic/config`. Invalid
-input returns `422 invalid_config`; failure while preparing or activating the
-new generation returns `503 configuration_rejected`. Existing sessions retain
-their captured configuration revision.
-
-#### `POST /mosaic/sessions`
-
-Creates a queued session and returns its session representation with status
-`202`. The creation response alone adds the stable SSH polling link:
 
 ```json
 {
   "id": "018f47d2-e3b1-7b4f-8b2c-1f5a7fdf1601",
-  "prompt": "Implement the requested change.",
   "state": "queued",
   "configRevision": 1,
-  "result": null,
   "lastSequence": 0,
-  "createdAt": "2026-08-09T12:00:00.000Z",
-  "updatedAt": "2026-08-09T12:00:00.000Z",
+  "createdAt": "2026-08-24T12:00:00.000Z",
+  "updatedAt": "2026-08-24T12:00:00.000Z",
   "ssh": {
-    "href": "/mosaic/sessions/018f47d2-e3b1-7b4f-8b2c-1f5a7fdf1601/ssh"
+    "href": "/sessions/018f47d2-e3b1-7b4f-8b2c-1f5a7fdf1601/ssh"
   }
 }
 ```
 
-The prompt must be a non-empty string. Invalid input returns
-`422 invalid_prompt`.
-
-#### `GET /mosaic/sessions`
-
-The optional query parameters are:
-
-| Parameter | Default | Constraint                              |
-| --------- | ------- | --------------------------------------- |
-| `limit`   | `50`    | Positive integer with a maximum of 100. |
-| `cursor`  | none    | Session UUID returned as `nextCursor`.  |
-
-The response is:
+```console
+curl -sS -X POST \
+  -H 'content-type: application/json' \
+  -d '{"prompt":"Inspect the repository and run the focused tests."}' \
+  http://127.0.0.1:3000/sessions/018f47d2-e3b1-7b4f-8b2c-1f5a7fdf1601/prompt
+```
 
 ```json
 {
-  "sessions": [],
-  "nextCursor": "018f47d2-e3b1-7b4f-8b2c-1f5a7fdf1601"
+  "promptId": "018f47d2-e3b1-7b4f-8b2c-1f5a7fdf1602"
 }
 ```
 
-`nextCursor` is omitted when no additional page exists. Invalid pagination
-returns `400 invalid_page`.
+Sessions accept prompts while `queued`, `ready`, or `running`. Concurrent
+requests receive independent prompt IDs and enter the same FIFO queue. Terminal
+or cancelling sessions return `409 session_inactive`.
 
-#### `GET /mosaic/sessions/:id/events`
+The public list/detail representation contains `id`, `state`,
+`configRevision`, `lastSequence`, timestamps, and `errorCode` when applicable.
+It never includes prompts, messages, events, or results.
 
-Returns a point-in-time replay of the original Mosaic events persisted for the
-session. `afterSequence` is an optional non-negative integer and defaults to
-`0`; only events with a greater sequence are returned:
+### Event replay
+
+`GET /sessions/:id/events` returns the complete point-in-time history.
+`afterSequence=N` is an optional exclusive cursor. The response prohibits
+caching and has this shape:
 
 ```json
 {
   "events": [
     {
-      "schemaVersion": 3,
-      "runId": "018f47d2-e3b1-7b4f-8b2c-1f5a7fdf1601",
+      "sessionId": "018f47d2-e3b1-7b4f-8b2c-1f5a7fdf1601",
+      "promptId": "018f47d2-e3b1-7b4f-8b2c-1f5a7fdf1602",
       "sequence": 1,
-      "type": "stage.started",
-      "stage": "plan"
+      "type": "prompt.accepted",
+      "event": { "type": "prompt.accepted" },
+      "createdAt": "2026-08-24T12:00:01.000Z"
     }
   ],
   "lastSequence": 1
 }
 ```
 
-Events are ordered by `sequence`. Calls without `afterSequence` return the
-complete history; clients can pass the returned `lastSequence` to read only
-later events. New runs emit schema version 3, while older JSONB event objects
-remain replayable without migration. An invalid cursor returns
-`400 invalid_event_cursor`, and an
-unknown or deleted session returns `404 session_not_found`. Responses use
-`Cache-Control: no-store`. Use Socket.IO when live delivery is required.
+Agent stream events retain reasoning, provider replay, tool payloads/results,
+usage, response finishes, and failures. Doric also writes `prompt.accepted`,
+`agent.failed`, and `agent.cancelled`. Events are persisted before publication.
 
-#### Session representation
+Errors preserve `name`, `message`, `stack`, `cause`, and own properties. Cycles
+and non-JSON values use explicit markers. Values of configured credentials are
+replaced with `[REDACTED]` before persistence.
 
-Session creation, listing, termination, snapshots, and update events use this
-shape:
+## Socket.IO
 
-```json
-{
-  "id": "018f47d2-e3b1-7b4f-8b2c-1f5a7fdf1601",
-  "prompt": "Implement the requested change.",
-  "state": "running",
-  "configRevision": 1,
-  "result": null,
-  "lastSequence": 3,
-  "createdAt": "2026-08-09T12:00:00.000Z",
-  "updatedAt": "2026-08-09T12:00:01.000Z",
-  "startedAt": "2026-08-09T12:00:01.000Z"
-}
+Connect to namespace `/sessions` with `sessionId` in the connection query.
+`afterSequence` is optional; omitting it requests full playback.
+
+```ts
+import { io } from 'socket.io-client';
+
+const socket = io('http://127.0.0.1:3000/sessions', {
+  query: { sessionId, afterSequence: 42 },
+});
 ```
 
-States are `queued`, `running`, `cancelling`, `completed`, `failed`, or
-`cancelled`. `startedAt`, `finishedAt`, and `errorCode` are present only when
-applicable.
+The server emits:
 
-#### `POST /mosaic/sessions/:id/terminate`
+| Event              | Payload                                        |
+| ------------------ | ---------------------------------------------- |
+| `session:snapshot` | `{ sessionId, session, events }`               |
+| `agent:event`      | One complete persisted session-event envelope. |
+| `session:updated`  | The current public session representation.     |
+| `session:deleted`  | `{ sessionId }`                                |
 
-Requests cancellation and returns the latest session representation. Repeated
-requests are safe. An invalid UUID returns `400 invalid_session_id`; an unknown
-UUID returns `404 session_not_found`.
+The subscription is registered before PostgreSQL replay. Events published
+during replay are buffered and deduplicated by sequence before live delivery.
 
-#### `DELETE /mosaic/sessions/:id`
+## Persistence and migration
 
-Deletes only a `completed`, `failed`, or `cancelled` session. Its events are
-removed by cascade. An active session returns `409 session_active`, an invalid
-UUID returns `400 invalid_session_id`, and an unknown UUID returns
-`404 session_not_found`.
+The Prisma schema uses generic `Session` and `SessionEvent` models. Messages
+and event bodies are JSONB, event sequences are contiguous per session, and
+deleting a terminal session cascades to its events.
 
-All REST errors use a sanitized envelope:
+Migration `20260824000000_direct_sessions` intentionally drops
+`mosaic_session`, `mosaic_event`, and their data before creating the generic
+tables. It preserves the existing configuration and provider/model tables.
+Back up PostgreSQL before deployment if the old event history is needed.
 
-```json
-{
-  "error": {
-    "code": "error_code",
-    "message": "Safe human-readable message."
-  }
-}
-```
+Production startup never runs migrations implicitly. Apply them separately:
 
-Unexpected failures return `500 internal_error`.
-
-### Socket.IO namespace `/mosaic`
-
-Connect Socket.IO to the `/mosaic` namespace on the same HTTP origin. The
-database is the replay source of truth, and event sequence numbers are
-monotonic within each session.
-
-Client-to-server events:
-
-| Event                 | Payload                         | Description                                 |
-| --------------------- | ------------------------------- | ------------------------------------------- |
-| `session:subscribe`   | `{ sessionId, afterSequence? }` | Starts snapshot, replay, and live delivery. |
-| `session:unsubscribe` | `{ sessionId }`                 | Stops delivery for that session.            |
-
-`sessionId` must be a UUID. `afterSequence` is an optional non-negative integer
-and defaults to `0`. Invalid client event payloads are ignored.
-
-Server-to-client events:
-
-| Event              | Payload                          | Description                                     |
-| ------------------ | -------------------------------- | ----------------------------------------------- |
-| `session:snapshot` | `{ sessionId, session, events }` | Current session plus events after the sequence. |
-| `mosaic:event`     | `{ sessionId, event }`           | One persisted Mosaic schema-version 3 event.    |
-| `session:updated`  | Session representation           | Latest state after a session transition.        |
-| `session:deleted`  | `{ sessionId }`                  | Indicates deletion and ends the subscription.   |
-
-For an unknown session, `session:snapshot.session` is `null`. Each Mosaic event
-contains its own `sequence`; clients should use it to order and deduplicate
-events and pass the last received value as `afterSequence` after reconnecting.
-
-## Running locally
-
-Create a root `.env` from `.example.env`, set the PostgreSQL fields and runtime
-provider key, then start the Docker sandbox profile from the repository root:
-
-```sh
-docker compose --env-file .env -f agents/doric/compose.yaml --profile docker up --build
-```
-
-On a Linux x86_64 host with KVM, use the Firecracker sandbox profile instead:
-
-```sh
-docker compose --env-file .env -f agents/doric/compose.yaml --profile firecracker up --build
-```
-
-For a host process outside Compose, apply migrations and start Doric with the
-same `DORIC_DATABASE_URL`:
-
-```sh
+```console
 npx nx run doric:migrate
-npx nx run doric:serve
 ```
+
+## Security
+
+The API is unauthenticated and binds to all interfaces by default. Keep it on
+an isolated trusted network. This is especially important because event replay
+intentionally exposes model reasoning, replay data, tool input/output, stacks,
+and causes. Full event bodies and prompts are not written to Doric operational
+logs.

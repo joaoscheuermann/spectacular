@@ -18,7 +18,7 @@ import { createDatabase } from './lib/database.js';
 import { handleHttpError } from './lib/http.js';
 import { createSessionService } from './lib/session-service.js';
 import { createSessionStore } from './lib/sessions.js';
-import { createMosaicSocket } from './lib/socket.js';
+import { createSessionsSocket } from './lib/socket.js';
 import { createVmRegistry } from './lib/vms.js';
 import { createConfigRouter } from './routes/config.js';
 import { createSessionsRouter } from './routes/sessions.js';
@@ -133,7 +133,7 @@ async function main() {
     'Bundles loaded',
   );
   startupStage = 'configuration_activation';
-  startup.info('Activating Mosaic configuration');
+  startup.info('Activating Doric configuration');
   const config = await createConfigService({
     store: createConfigStore(database),
     bundles,
@@ -144,12 +144,10 @@ async function main() {
     {
       configRevision: snapshot.revision,
       providerCount: snapshot.configuration.providers.length,
-      models: snapshot.configuration.models,
-      routing: snapshot.configuration.routing,
-      execution: snapshot.configuration.execution,
-      revision: snapshot.configuration.revision,
+      executionModel: snapshot.configuration.models.execution,
+      maxTurns: snapshot.configuration.execution.maxTurns,
     },
-    'Mosaic configuration activated',
+    'Doric configuration activated',
   );
   startupStage = 'session_reconciliation';
   startup.info('Reconciling persisted sessions');
@@ -163,7 +161,7 @@ async function main() {
       'Interrupted sessions marked as failed',
     );
   }
-  const publisher = createMosaicSocket(io, sessions);
+  const publisher = createSessionsSocket(io, sessions);
   const service = createSessionService({
     store: sessions,
     config,
@@ -181,11 +179,11 @@ async function main() {
       ssh: service.sshForVm,
     }),
   );
-  app.use('/mosaic/config', createConfigRouter(config));
-  app.use('/mosaic/sessions', createSessionsRouter(service));
+  app.use('/config', createConfigRouter(config));
+  app.use('/sessions', createSessionsRouter(service));
   app.use(handleHttpError);
   startup.info(
-    { restEndpointCount: 10, socketNamespace: '/mosaic' },
+    { restEndpointCount: 11, socketNamespace: '/sessions' },
     'Network interfaces configured',
   );
 

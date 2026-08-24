@@ -3,45 +3,140 @@ import test from 'node:test';
 
 import { defaultConfig } from '../src/lib/config.js';
 import { createSessionService } from '../src/lib/session-service.js';
-import type { Session, SessionState } from '../src/lib/sessions.js';
+import type {
+  Session,
+  SessionEvent,
+  SessionState,
+} from '../src/lib/sessions.js';
 
-test('cancels a queued sandbox acquisition without starting Mosaic', async () => {
+test('uses one lease and executes simultaneous prompts in FIFO order', async () => {
   const harness = createHarness();
-  let executed = false;
-  const pool = {
-    acquire: ({ signal }: { signal?: AbortSignal }) =>
-      new Promise((_resolve, reject) =>
-        signal?.addEventListener('abort', () =>
-          reject(new DOMException('aborted', 'AbortError')),
-        ),
-      ),
-  };
+  let acquisitions = 0;
+  let releases = 0;
+  let unblockFirst: () => void = () => undefined;
+  const firstGate = new Promise<void>((resolve) => {
+    unblockFirst = resolve;
+  });
+  const calls: string[] = [];
+  const sandboxes: string[] = [];
   const service = createSessionService({
     ...harness.dependencies,
-    pool: pool as never,
-    execute: async () => {
-      executed = true;
+    pool: {
+      acquire: async () => {
+        acquisitions += 1;
+        return {
+          sandbox,
+          release: async () => {
+            releases += 1;
+          },
+        };
+      },
+    } as never,
+    execute: async ({ prompt }, lease) => {
+      calls.push(prompt);
+      sandboxes.push(lease.sandbox.id);
+      if (prompt === 'first') await firstGate;
     },
   });
 
-  const created = await service.create('request');
-  assert.equal(created.state, 'queued');
-  assert.deepEqual(await service.ssh(created.id), { status: 'pending' });
-  assert.equal((await service.terminate(created.id))?.state, 'cancelling');
+  const created = await service.create();
+  await harness.waitFor('ready');
+  const [first, second] = await Promise.all([
+    service.prompt(created.id, 'first'),
+    service.prompt(created.id, 'second'),
+  ]);
+  assert.equal(first.status, 'accepted');
+  assert.equal(second.status, 'accepted');
+  await waitUntil(() => calls.length === 1);
+  assert.deepEqual(calls, ['first']);
+
+  unblockFirst();
+  await waitUntil(
+    () => calls.length === 2 && harness.current().state === 'ready',
+  );
+  assert.deepEqual(calls, ['first', 'second']);
+  assert.deepEqual(sandboxes, ['vm-1', 'vm-1']);
+  assert.equal(acquisitions, 1);
+  assert.equal(releases, 0);
+
+  await service.terminate(created.id);
   await service.dispose();
-  assert.equal(executed, false);
+  assert.equal(releases, 1);
   assert.equal(harness.current().state, 'cancelled');
-  assert.deepEqual(await service.ssh(created.id), { status: 'expired' });
 });
 
-test('marks a queued session failed when sandbox acquisition is exhausted', async () => {
-  let finished: () => void = () => undefined;
-  const failed = new Promise<void>((resolve) => {
-    finished = resolve;
+test('keeps processing queued prompts after one prompt fails', async () => {
+  const harness = createHarness();
+  const calls: string[] = [];
+  const service = createSessionService({
+    ...harness.dependencies,
+    pool: leasePool(),
+    execute: async ({ prompt }) => {
+      calls.push(prompt);
+      if (prompt === 'broken') throw new Error('credential secret-value');
+    },
   });
-  const harness = createHarness((state) => {
-    if (state === 'failed') finished();
+
+  const created = await service.create();
+  await harness.waitFor('ready');
+  const first = await service.prompt(created.id, 'broken');
+  const second = await service.prompt(created.id, 'next');
+  assert.equal(first.status, 'accepted');
+  assert.equal(second.status, 'accepted');
+  await waitUntil(
+    () => calls.length === 2 && harness.current().state === 'ready',
+  );
+
+  const failure = harness.events().find(({ type }) => type === 'agent.failed');
+  assert.ok(failure !== undefined && first.status === 'accepted');
+  assert.equal(failure.promptId, first.promptId);
+  assert.doesNotMatch(JSON.stringify(failure), /secret-value/u);
+  await service.terminate(created.id);
+  await service.dispose();
+});
+
+test('cancels the active prompt and every queued prompt before one release', async () => {
+  const harness = createHarness();
+  let releases = 0;
+  const service = createSessionService({
+    ...harness.dependencies,
+    pool: leasePool(() => {
+      releases += 1;
+    }),
+    execute: ({ signal }) =>
+      new Promise((_resolve, reject) =>
+        signal.addEventListener('abort', () =>
+          reject(new DOMException('aborted', 'AbortError')),
+        ),
+      ),
   });
+
+  const created = await service.create();
+  await harness.waitFor('ready');
+  const first = await service.prompt(created.id, 'first');
+  const second = await service.prompt(created.id, 'second');
+  await harness.waitFor('running');
+  assert.equal((await service.terminate(created.id))?.state, 'cancelling');
+  await service.dispose();
+
+  const cancelled = harness
+    .events()
+    .filter(({ type }) => type === 'agent.cancelled');
+  assert.equal(cancelled.length, 2);
+  assert.deepEqual(
+    new Set(cancelled.map(({ promptId }) => promptId)),
+    new Set(
+      [first, second].flatMap((value) =>
+        value.status === 'accepted' ? [value.promptId] : [],
+      ),
+    ),
+  );
+  assert.equal(releases, 1);
+  assert.equal(harness.current().state, 'cancelled');
+});
+
+test('fails a queued session when sandbox acquisition is exhausted', async () => {
+  const harness = createHarness();
   const service = createSessionService({
     ...harness.dependencies,
     pool: {
@@ -51,150 +146,120 @@ test('marks a queued session failed when sandbox acquisition is exhausted', asyn
     } as never,
   });
 
-  const created = await service.create('request');
+  const created = await service.create();
   assert.equal(created.state, 'queued');
-  await failed;
-  assert.equal(harness.current().state, 'failed');
+  await harness.waitFor('failed');
+  assert.equal(harness.current().errorCode, 'sandbox_acquisition_failed');
   await service.dispose();
   assert.deepEqual(await service.ssh(created.id), { status: 'expired' });
 });
 
-test('aborts a running execution and releases its sandbox lease', async () => {
-  let released = 0;
-  let started: () => void = () => undefined;
-  const running = new Promise<void>((resolve) => {
-    started = resolve;
-  });
-  const harness = createHarness((state) => {
-    if (state === 'running') started();
-  });
-  const service = createSessionService({
-    ...harness.dependencies,
-    pool: {
-      acquire: async () => ({
-        sandbox: sandbox('vm-1'),
-        release: async () => {
-          released += 1;
-        },
-      }),
-    } as never,
-    execute: ({ signal }) =>
-      new Promise((_resolve, reject) =>
-        signal.addEventListener('abort', () =>
-          reject(new DOMException('aborted', 'AbortError')),
-        ),
-      ),
-  });
-
-  const created = await service.create('request');
-  await running;
-  assert.deepEqual(await service.ssh(created.id), {
-    status: 'ready',
-    vmId: 'vm-1',
-    ssh: access,
-  });
-  assert.deepEqual(await service.sshForVm('vm-1'), {
-    sessionId: created.id,
-    ssh: access,
-  });
-  assert.equal((await service.terminate(created.id))?.state, 'cancelling');
-  await service.dispose();
-  assert.equal(harness.current().state, 'cancelled');
-  assert.equal(released, 1);
-  assert.equal(await service.sshForVm('vm-1'), undefined);
-});
-
-test('keeps the generation captured at creation while configuration changes', async () => {
+test('captures the configuration generation when the session is created', async () => {
   const harness = createHarness();
-  const oldGeneration = { snapshot, marker: 'old' };
-  const newGeneration = {
-    snapshot: { ...snapshot, revision: 2 },
-    marker: 'new',
-  };
+  const oldGeneration = generation('old');
+  const newGeneration = generation('new');
   let active = oldGeneration;
   let releaseAcquire: () => void = () => undefined;
-  const acquired = new Promise<void>((resolve) => {
+  const acquireGate = new Promise<void>((resolve) => {
     releaseAcquire = resolve;
   });
-  let executed: unknown;
-  let markExecuted: () => void = () => undefined;
-  const execution = new Promise<void>((resolve) => {
-    markExecuted = resolve;
-  });
+  let observed: unknown;
   const service = createSessionService({
     ...harness.dependencies,
     config: { current: () => active } as never,
     pool: {
       acquire: async () => {
-        await acquired;
-        return { sandbox: sandbox('vm-1'), release: async () => undefined };
+        await acquireGate;
+        return { sandbox, release: async () => undefined };
       },
     } as never,
-    execute: async ({ generation }) => {
-      executed = generation;
-      markExecuted();
-      return { status: 'completed' };
+    execute: async ({ generation: value }) => {
+      observed = value;
     },
   });
 
-  await service.create('request');
+  const created = await service.create();
   active = newGeneration;
   releaseAcquire();
-  await execution;
+  await harness.waitFor('ready');
+  await service.prompt(created.id, 'work');
+  await waitUntil(() => observed !== undefined);
+  assert.equal(observed, oldGeneration);
+  await service.terminate(created.id);
   await service.dispose();
-  assert.equal(executed, oldGeneration);
 });
 
-test('returns original persisted events after the requested sequence', async () => {
-  const events = [storedEvent(1), storedEvent(2)];
-  const harness = createHarness();
-  const service = createSessionService({
-    ...harness.dependencies,
-    store: {
-      ...harness.store,
-      eventsAfter: async (_id: string, sequence: number) =>
-        events.filter((value) => value.sequence > sequence),
-    } as never,
-    pool: {} as never,
-  });
-
-  assert.deepEqual(await service.events(id, 1), {
-    events: [events[1]!.event],
-    lastSequence: 2,
-  });
-});
-
-const createHarness = (
-  onUpdate: (state: SessionState) => void = () => undefined,
-) => {
-  let current = session('queued');
-  const update = (state: SessionState) => {
-    current = session(state);
-    onUpdate(state);
-    return current;
+const createHarness = () => {
+  let value = session('queued');
+  let messages: readonly never[] = [];
+  const storedEvents: SessionEvent[] = [];
+  const waiters: Array<{ state: SessionState; resolve: () => void }> = [];
+  const update = (state: SessionState, errorCode?: string): Session => {
+    value = session(state, errorCode, storedEvents.length);
+    waiters
+      .filter((waiter) => waiter.state === state)
+      .forEach(({ resolve }) => resolve());
+    return value;
   };
   const store = {
-    create: async () => ({ session: current, snapshot }),
+    create: async () => ({ session: value, snapshot, messages }),
+    find: async () => ({ session: value, snapshot, messages }),
+    list: async () => ({ sessions: [value] }),
+    markReady: async () =>
+      update(value.state === 'queued' ? 'ready' : value.state),
     markRunning: async () =>
-      current.state === 'queued' ? update('running') : current,
+      update(value.state === 'ready' ? 'running' : value.state),
+    finishPrompt: async (_id: string, next: readonly never[]) => {
+      messages = next;
+      return update(value.state === 'running' ? 'ready' : value.state);
+    },
+    acceptPrompt: async (_id: string, promptId: string) => {
+      if (terminal.has(value.state)) return { status: 'inactive' as const };
+      const accepted = storedEvent(
+        promptId,
+        'prompt.accepted',
+        storedEvents.length + 1,
+      );
+      storedEvents.push(accepted);
+      value = session(value.state, value.errorCode, storedEvents.length);
+      return { status: 'accepted' as const, event: accepted };
+    },
     requestCancellation: async () =>
-      terminal.has(current.state) ? current : update('cancelling'),
-    finish: async (_id: string, target: 'completed' | 'failed' | 'cancelled') =>
-      update(current.state === 'cancelling' ? 'cancelled' : target),
-    list: async () => ({ sessions: [], nextCursor: undefined }),
-    find: async () => ({ session: current, snapshot }),
-    eventsAfter: async () => [],
+      terminal.has(value.state) ? value : update('cancelling'),
+    finish: async (
+      _id: string,
+      target: 'failed' | 'cancelled',
+      errorCode?: string,
+    ) => update(value.state === 'cancelling' ? 'cancelled' : target, errorCode),
+    appendEvent: async (_id: string, promptId: string, event: unknown) => {
+      const type = (event as { type: string }).type;
+      const stored = storedEvent(
+        promptId,
+        type,
+        storedEvents.length + 1,
+        event,
+      );
+      storedEvents.push(stored);
+      value = session(value.state, value.errorCode, storedEvents.length);
+      return stored;
+    },
+    eventsAfter: async (_id: string, sequence: number) =>
+      storedEvents.filter((event) => event.sequence > sequence),
     delete: async () => 'active' as const,
   };
   return {
-    current: () => current,
-    store,
+    current: () => value,
+    events: () => [...storedEvents],
+    waitFor: (state: SessionState) => {
+      if (value.state === state) return Promise.resolve();
+      return new Promise<void>((resolve) => waiters.push({ state, resolve }));
+    },
     dependencies: {
       store: store as never,
-      config: { current: () => ({ snapshot }) } as never,
+      config: { current: () => generation('current') } as never,
       publisher: {
         event: () => undefined,
-        updated: (value: Session) => onUpdate(value.state),
+        updated: () => undefined,
         deleted: () => undefined,
       },
       logger: { debug: () => undefined, error: () => undefined } as never,
@@ -208,42 +273,62 @@ const snapshot = {
   revision: 1,
   updatedAt: new Date(0).toISOString(),
 };
-const terminal = new Set<SessionState>(['completed', 'failed', 'cancelled']);
-const session = (state: SessionState): Session => ({
+const terminal = new Set<SessionState>(['failed', 'cancelled', 'cancelling']);
+const generation = (marker: string) => ({
+  snapshot,
+  marker,
+  redactions: () => ['secret-value'],
+  providers: new Map(),
+  catalog: { skills: [], tools: [] },
+});
+const session = (
+  state: SessionState,
+  errorCode?: string,
+  lastSequence = 0,
+): Session => ({
   id,
-  prompt: 'request',
   state,
   configRevision: 1,
-  result: null,
-  lastSequence: 0,
+  ...(errorCode === undefined ? {} : { errorCode }),
+  lastSequence,
   createdAt: new Date(0).toISOString(),
   updatedAt: new Date(0).toISOString(),
 });
-
-const access = {
-  host: '127.0.0.1',
-  port: 2200,
-  username: 'root' as const,
-  privateKey: 'private-key',
-  knownHosts: '[127.0.0.1]:2200 ssh-ed25519 host-key',
-  hostKeyFingerprint: 'SHA256:test',
-};
-
-const sandbox = (sandboxId: string) => ({
-  id: sandboxId,
-  ssh: async () => access,
-});
-
-const storedEvent = (sequence: number) => ({
+const storedEvent = (
+  promptId: string,
+  type: string,
+  sequence: number,
+  event: unknown = { type },
+): SessionEvent => ({
   sessionId: id,
+  promptId,
   sequence,
-  type: 'stage.started',
-  event: {
-    schemaVersion: 3,
-    runId: id,
-    sequence,
-    type: 'stage.started',
-    stage: 'plan',
-  },
+  type,
+  event,
   createdAt: new Date(sequence * 1000).toISOString(),
 });
+const sandbox = {
+  id: 'vm-1',
+  ssh: async () => ({
+    host: '127.0.0.1',
+    port: 2200,
+    username: 'root' as const,
+    privateKey: 'key',
+    knownHosts: 'known',
+    hostKeyFingerprint: 'fingerprint',
+  }),
+};
+const leasePool = (release: () => void = () => undefined) =>
+  ({
+    acquire: async () => ({
+      sandbox,
+      release: async () => release(),
+    }),
+  }) as never;
+const waitUntil = async (condition: () => boolean): Promise<void> => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (condition()) return;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  assert.fail('Condition was not reached.');
+};

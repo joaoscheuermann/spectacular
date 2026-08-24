@@ -143,6 +143,6 @@ const required = <Value>(
 ): Value => {
   const value = values.get(role);
   if (value === undefined)
-    throw new Error(`Stored Mosaic model role is missing: ${role}`);
+    throw new Error(`Stored Doric model role is missing: ${role}`);
   return value;
 };

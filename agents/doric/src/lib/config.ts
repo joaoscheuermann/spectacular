@@ -42,7 +42,7 @@ const plainModel = z
 
 const embedderModel = plainModel.extend({ dimensions: limit }).strict();
 
-/** Complete, credential-free Mosaic configuration accepted by the REST API. */
+/** Complete credential-free configuration accepted by the REST API. */
 export const ConfigInputSchema = z
   .object({
     providers: z.array(provider).min(1),

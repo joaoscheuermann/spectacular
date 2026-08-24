@@ -15,9 +15,6 @@
       "path": "../../packages/tool/tsconfig.lib.json"
     },
     {
-      "path": "../../packages/victor/tsconfig.lib.json"
-    },
-    {
       "path": "../../packages/session/tsconfig.lib.json"
     },
     {
@@ -30,7 +27,7 @@
       "path": "../../packages/oauth/tsconfig.lib.json"
     },
     {
-      "path": "../../packages/mosaic/tsconfig.lib.json"
+      "path": "../../packages/messages/tsconfig.lib.json"
     },
     {
       "path": "../../packages/llms/tsconfig.lib.json"
@@ -49,6 +46,9 @@
     },
     {
       "path": "../../packages/artifacts/tsconfig.lib.json"
+    },
+    {
+      "path": "../../packages/agent/tsconfig.lib.json"
     }
   ]
 }

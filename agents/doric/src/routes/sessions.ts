@@ -4,41 +4,29 @@ import { z } from 'zod';
 import { sendError } from '../lib/http.js';
 import type { SessionService } from '../lib/session-service.js';
 
-const createInput = z
-  .object({
-    prompt: z.string().refine((value) => value.trim().length > 0),
-  })
-  .strict();
-
 const listInput = z.object({
   limit: z.coerce.number().int().safe().positive().max(100).default(50),
   cursor: z.uuid().optional(),
 });
-
 const idInput = z.object({ id: z.uuid() });
+const promptInput = z
+  .object({
+    prompt: z.string().refine((value) => value.trim().length > 0),
+  })
+  .strict();
 const eventsInput = z.object({
   afterSequence: z.coerce.number().int().safe().nonnegative().default(0),
 });
 
-/** Exposes durable Mosaic session commands and cursor-based history. */
+/** Exposes long-lived Direct sessions, FIFO prompts, and durable event history. */
 export const createSessionsRouter = (service: SessionService): Router => {
   const router = Router();
 
-  router.post('/', async (request, response) => {
-    const parsed = createInput.safeParse(request.body);
-    if (!parsed.success) {
-      sendError(
-        response,
-        422,
-        'invalid_prompt',
-        'A non-empty prompt is required.',
-      );
-      return;
-    }
-    const session = await service.create(parsed.data.prompt);
+  router.post('/', async (_request, response) => {
+    const session = await service.create();
     response.status(202).json({
       ...session,
-      ssh: { href: `/mosaic/sessions/${session.id}/ssh` },
+      ssh: { href: `/sessions/${session.id}/ssh` },
     });
   });
 
@@ -51,31 +39,67 @@ export const createSessionsRouter = (service: SessionService): Router => {
     response.json(await service.list(parsed.data.limit, parsed.data.cursor));
   });
 
+  router.get('/:id', async (request, response) => {
+    const parsed = idInput.safeParse(request.params);
+    if (!parsed.success) {
+      invalidId(response);
+      return;
+    }
+    const session = await service.find(parsed.data.id);
+    if (session === undefined) {
+      missing(response);
+      return;
+    }
+    response.json(session);
+  });
+
+  router.post('/:id/prompt', async (request, response) => {
+    const id = idInput.safeParse(request.params);
+    if (!id.success) {
+      invalidId(response);
+      return;
+    }
+    const input = promptInput.safeParse(request.body);
+    if (!input.success) {
+      sendError(
+        response,
+        422,
+        'invalid_prompt',
+        'A non-empty prompt is required.',
+      );
+      return;
+    }
+    const result = await service.prompt(id.data.id, input.data.prompt);
+    if (result.status === 'missing') {
+      missing(response);
+      return;
+    }
+    if (result.status === 'inactive') {
+      sendError(
+        response,
+        409,
+        'session_inactive',
+        'The session no longer accepts prompts.',
+      );
+      return;
+    }
+    response.status(202).json({ promptId: result.promptId });
+  });
+
   router.get('/:id/ssh', async (request, response) => {
     response.set('Cache-Control', 'no-store');
     const parsed = idInput.safeParse(request.params);
     if (!parsed.success) {
-      sendError(
-        response,
-        400,
-        'invalid_session_id',
-        'The session ID is invalid.',
-      );
+      invalidId(response);
       return;
     }
-
     const access = await service.ssh(parsed.data.id);
     if (access.status === 'pending') {
       response.set('Retry-After', '1').status(202).json({ status: 'pending' });
       return;
     }
     if (access.status === 'missing') {
-      sendError(
-        response,
-        404,
-        'session_not_found',
-        'The session was not found.',
-      );
+      missing(response);
       return;
     }
     if (access.status === 'expired') {
@@ -106,12 +130,7 @@ export const createSessionsRouter = (service: SessionService): Router => {
     response.set('Cache-Control', 'no-store');
     const id = idInput.safeParse(request.params);
     if (!id.success) {
-      sendError(
-        response,
-        400,
-        'invalid_session_id',
-        'The session ID is invalid.',
-      );
+      invalidId(response);
       return;
     }
     const query = eventsInput.safeParse(request.query);
@@ -124,15 +143,9 @@ export const createSessionsRouter = (service: SessionService): Router => {
       );
       return;
     }
-
     const events = await service.events(id.data.id, query.data.afterSequence);
     if (events === undefined) {
-      sendError(
-        response,
-        404,
-        'session_not_found',
-        'The session was not found.',
-      );
+      missing(response);
       return;
     }
     response.json(events);
@@ -141,22 +154,12 @@ export const createSessionsRouter = (service: SessionService): Router => {
   router.post('/:id/terminate', async (request, response) => {
     const parsed = idInput.safeParse(request.params);
     if (!parsed.success) {
-      sendError(
-        response,
-        400,
-        'invalid_session_id',
-        'The session ID is invalid.',
-      );
+      invalidId(response);
       return;
     }
     const session = await service.terminate(parsed.data.id);
     if (session === undefined) {
-      sendError(
-        response,
-        404,
-        'session_not_found',
-        'The session was not found.',
-      );
+      missing(response);
       return;
     }
     response.json(session);
@@ -165,22 +168,12 @@ export const createSessionsRouter = (service: SessionService): Router => {
   router.delete('/:id', async (request, response) => {
     const parsed = idInput.safeParse(request.params);
     if (!parsed.success) {
-      sendError(
-        response,
-        400,
-        'invalid_session_id',
-        'The session ID is invalid.',
-      );
+      invalidId(response);
       return;
     }
     const outcome = await service.delete(parsed.data.id);
     if (outcome === 'missing') {
-      sendError(
-        response,
-        404,
-        'session_not_found',
-        'The session was not found.',
-      );
+      missing(response);
       return;
     }
     if (outcome === 'active') {
@@ -197,3 +190,9 @@ export const createSessionsRouter = (service: SessionService): Router => {
 
   return router;
 };
+
+const invalidId = (response: Parameters<typeof sendError>[0]) =>
+  sendError(response, 400, 'invalid_session_id', 'The session ID is invalid.');
+
+const missing = (response: Parameters<typeof sendError>[0]) =>
+  sendError(response, 404, 'session_not_found', 'The session was not found.');

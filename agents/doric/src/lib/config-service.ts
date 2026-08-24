@@ -59,7 +59,6 @@ export const createConfigService = async ({
           bundles,
           logger,
           environment,
-          previous: active,
         });
         const snapshot = await store.replace(config);
         active = { ...candidate, snapshot };

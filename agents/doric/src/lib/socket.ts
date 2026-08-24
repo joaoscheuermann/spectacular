@@ -4,13 +4,10 @@ import { z } from 'zod';
 import type { SessionPublisher } from './session-publisher.js';
 import type { Session, SessionEvent, SessionStore } from './sessions.js';
 
-const subscriptionInput = z
-  .object({
-    sessionId: z.uuid(),
-    afterSequence: z.number().int().safe().nonnegative().optional(),
-  })
-  .strict();
-const unsubscribeInput = z.object({ sessionId: z.uuid() }).strict();
+const queryInput = z.object({
+  sessionId: z.uuid(),
+  afterSequence: z.coerce.number().int().safe().nonnegative().optional(),
+});
 
 type Subscription = {
   ready: boolean;
@@ -20,52 +17,52 @@ type Subscription = {
   deleted: boolean;
 };
 
-/** Attaches the durable Mosaic replay namespace and returns its publisher. */
-export const createMosaicSocket = (
+/** Attaches query-based durable replay followed by race-free live delivery. */
+export const createSessionsSocket = (
   io: Server,
   store: SessionStore,
 ): SessionPublisher => {
-  const namespace = io.of('/mosaic');
+  const namespace = io.of('/sessions');
   const subscriptions = new Map<string, Map<Socket, Subscription>>();
 
-  namespace.on('connection', (socket) => {
-    socket.on('session:subscribe', async (input: unknown) => {
-      const parsed = subscriptionInput.safeParse(input);
-      if (!parsed.success) return;
-      const { sessionId, afterSequence = 0 } = parsed.data;
-      const subscription = subscribe(
-        subscriptions,
-        sessionId,
-        socket,
-        afterSequence,
-      );
-      const [record, events] = await Promise.all([
-        store.find(sessionId),
-        store.eventsAfter(sessionId, afterSequence),
-      ]);
-      socket.emit('session:snapshot', {
-        sessionId,
-        session: record?.session ?? null,
-        events: events.map(({ event }) => event),
-      });
-      subscription.lastSequence = Math.max(
-        afterSequence,
-        events.at(-1)?.sequence ?? afterSequence,
-      );
-      subscription.ready = true;
-      flush(subscriptions, socket, sessionId, subscription);
-    });
+  namespace.use((socket, next) => {
+    const parsed = queryInput.safeParse(socket.handshake.query);
+    if (!parsed.success) {
+      next(new Error('A valid sessionId query parameter is required.'));
+      return;
+    }
+    socket.data.subscription = parsed.data;
+    next();
+  });
 
-    socket.on('session:unsubscribe', (input: unknown) => {
-      const parsed = unsubscribeInput.safeParse(input);
-      if (parsed.success)
-        unsubscribe(subscriptions, parsed.data.sessionId, socket);
+  namespace.on('connection', async (socket) => {
+    const { sessionId, afterSequence = 0 } = socket.data
+      .subscription as z.output<typeof queryInput>;
+    const subscription = subscribe(
+      subscriptions,
+      sessionId,
+      socket,
+      afterSequence,
+    );
+    socket.on('disconnect', () =>
+      unsubscribe(subscriptions, sessionId, socket),
+    );
+
+    const [record, events] = await Promise.all([
+      store.find(sessionId),
+      store.eventsAfter(sessionId, afterSequence),
+    ]);
+    socket.emit('session:snapshot', {
+      sessionId,
+      session: record?.session ?? null,
+      events,
     });
-    socket.on('disconnect', () => {
-      subscriptions.forEach((_sockets, sessionId) =>
-        unsubscribe(subscriptions, sessionId, socket),
-      );
-    });
+    subscription.lastSequence = Math.max(
+      afterSequence,
+      events.at(-1)?.sequence ?? afterSequence,
+    );
+    subscription.ready = true;
+    flush(subscriptions, socket, sessionId, subscription);
   });
 
   return {
@@ -75,7 +72,7 @@ export const createMosaicSocket = (
           subscription.buffered.push(value);
           return;
         }
-        emitEvent(socket, value.sessionId, subscription, value);
+        emitEvent(socket, subscription, value);
       });
     },
     updated(value) {
@@ -137,7 +134,7 @@ const flush = (
 ) => {
   subscription.buffered
     .sort((left, right) => left.sequence - right.sequence)
-    .forEach((event) => emitEvent(socket, sessionId, subscription, event));
+    .forEach((event) => emitEvent(socket, subscription, event));
   subscription.buffered.length = 0;
   if (subscription.update !== undefined) {
     socket.emit('session:updated', subscription.update);
@@ -151,11 +148,10 @@ const flush = (
 
 const emitEvent = (
   socket: Socket,
-  sessionId: string,
   subscription: Subscription,
   event: SessionEvent,
 ) => {
   if (event.sequence <= subscription.lastSequence) return;
-  socket.emit('mosaic:event', { sessionId, event: event.event });
+  socket.emit('agent:event', event);
   subscription.lastSequence = event.sequence;
 };
