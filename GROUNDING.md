@@ -183,6 +183,525 @@ and reserved index/log files, does not follow symbolic links, and does not
 write files or access the network. The tool is a standalone package and is not
 registered with a built-in workflow or agent composition by this scope.
 
+`packages/victor` owns Node.js-compatible, process-local in-memory retrieval.
+It exposes incremental lexical and vector indexes plus a read-only hybrid
+search. The lexical index applies deterministic Unicode tokenization and BM25;
+the vector index accepts caller-injected embedding generation and ranks by
+cosine similarity. Both indexes store caller values through per-add text
+transformation. Hybrid search queries its injected lexical and semantic sources
+concurrently, fuses their bounded ranks with equal-weight reciprocal rank fusion
+using a fixed rank constant of 60, deduplicates by a caller-provided canonical
+key, and resolves fused-score ties by that key. It has no persistence or
+provider integration.
+
+`packages/state-machine` owns reusable, process-local typed transition
+execution. A definition stores only its exhaustive handler map and infers its
+available handler names from that map. Each run keeps its context, current
+handler, and current state local and resolves with a finished, domain-failed,
+or engine-error result. Every handler receives the same state object type but
+explicitly supplies the next state to a transition. A transition accepts only
+an available handler name and passes that handler a shallow copy of the
+supplied state object. It owns no workflow policy, persistence, listeners,
+recovery hooks, or external side effects.
+
+`packages/mosaic` remains an independent library and benchmark subject; it is
+not part of the main Doric composition. It depends on `packages/state-machine`
+and owns the goal-workflow policy: planning and revision, scheduling, skill retrieval and
+reranking, and per-node skill/tool menu composition. Its public
+factory accepts injected planning, localized-revision, execution, and reranker
+providers, a logger, independent planning, localized revision, and execution
+model profiles with explicit reasoning effort, plus reranker and embedder model
+IDs without reasoning effort,
+independent required positive safe-integer hint and execution candidate limits,
+a selected-skill limit, a required non-negative integer
+localized-revision limit, a required positive safe-integer per-node model-turn
+limit, bundle skills and executable tools, and both retrievers. Run options may
+carry a caller-owned UUID run ID and cancellation signal. The tool retriever remains
+part of this composition contract, but
+the bundle state does not query it or run an independent tool router. Model
+graph output owns only `id`,
+`goal`, `doneWhen`, `dependsOn`, and `deliver`; Mosaic deterministically assigns
+array-order indices, pending status, empty runtime-owned `candidates`, `tools`,
+`artifacts`, and `observations` arrays, plus null `bundle`, `outcome`, and
+`termination` fields.
+Each materialized graph also receives a runtime-owned safe non-negative integer
+`revision`: P0 is `0`, P1 is `1`, and every localized revision increments it
+contiguously. The model-facing planning schema does not expose this field. Plans
+require non-empty nodes, IDs, goals, and criteria;
+unique existing dependencies; acyclicity; and at least one terminal deliverable,
+while every deliverable must be terminal. A node is independent only when its
+completion cannot require revising choices made in another node. Joint
+feasibility constraints remain in one node, upstream choices validate
+downstream-invalidating constraints before completion, production owns final
+semantic verification by default, and every semantic goal claim is explicit in
+`doneWhen`. A routed node stores a complete
+`SkillCandidate` trace with canonical name, exact finite reranker score,
+contiguous one-based rank, and non-empty selector rationale for every accepted
+or rejected candidate. Its non-null `OrderedBundle` stores the matching goal
+ID, unique selected names in candidate order, and a non-empty global rationale.
+`bundle: null` means the node has never passed routing; routed empty bundles are
+non-null. Full skill definitions remain in the catalog and are resolved only
+from bundle names when composing tools and the execution prompt.
+Mosaic runs the fixed
+`plan(P0) -> plan(P1) -> schedule -> bundle -> execution -> schedule -> delivery -> finish(MosaicResult)`
+lifecycle, with `schedule -> revision -> schedule` for localized runtime
+requests, over a run-local ordered graph snapshot array. Each graph's explicit
+`revision`, rather than its array position or array length, is authoritative;
+the history must be contiguous and ordered. The `plan` state rejects every
+re-entry after P1. P0 is catalog-independent and P1 is exactly one body-aware
+revision. For every P0 goal, P1 evaluates all required skills in configured
+order followed by canonical, unique, non-required skills retrieved up to
+`routing.maxHintCandidates`, which implements `K_hint`. Required skills neither
+consume that limit nor depend on retrieval; when no optional catalog exists,
+Mosaic skips retrieval but still extracts their goal-specific hints. Empty
+extractions remain observable through `hint.result`, but only material hints
+are passed to P1. Planning `retrieval.result` events contain only optional
+skills actually recovered. The independent `routing.maxRetrievedCandidates`
+implements `K_retrieve`; it is applied as a defensive post-filter bound over
+canonical, unique, non-required skills.
+`routing.maxSkills` is bounded only by `maxRetrievedCandidates`. Bundle routing uses the original request, current
+goal and completion criteria, and only transitive-ancestor artifacts. It
+retrieves a bounded routable-skill candidate set, reranks complete skill bodies,
+validates one node-bound structured evaluation for every candidate plus a
+global selection rationale, and locally normalizes the result by descending
+relevance score with canonical-name tie-breaking. The exact provider scores are
+preserved. The selected bundle is unique, bounded, may be empty, and remains
+observable in that order on the node and its public result. No additional model
+call is made. No-candidate routing and a zero selected-skill limit materialize
+deterministic empty traces; the zero limit bypasses retrieval, reranking, and
+selection. The exact node tool menu is the stable union of base tools and tools
+declared by selected skills, with duplicate names removed by first occurrence.
+Always-available skills participate in P1 hint extraction for every P0 goal but
+remain excluded from routing, `bundle.skills`, and the selected-skill limit.
+They are injected as universal execution instructions, may reference only base
+tools, and do not expand the node tool menu.
+Every model-authored structured object is validated locally against its complete
+Zod contract before changing Mosaic state. P0, P1, each concurrent hint
+candidate, bundle selection, and each localized revision create a fresh agent
+with isolated empty in-memory message, executable-tool, and tool-call storages, preserve the authored
+system prompt and Markdown user input, and terminate through the agent-owned
+reserved structured-output tool using the operation's direct object schema
+without sending a provider-native schema. Invalid submissions cannot
+mutate Mosaic state, are retained only for provider replay and ephemeral
+transactional repair, and may receive bounded diagnostic feedback for two
+correction attempts. Concrete invalid primitive or missing leaves form a
+baseline whose next submission can replace only the rejected paths; valid
+fields remain unchanged and the composed object is revalidated. Malformed JSON,
+root and collection errors, and cross-field refinements use whole-object
+regeneration. Rejected candidates never enter Mosaic events, logs, or feedback;
+the next invalid submission propagates `invalid_structured_output` through the
+owning workflow state. The reserved
+tool is never executed, registered in Mosaic, or materialized as an
+`Observation`. Bundle selection preserves `sensitiveOutput`. Reranking remains
+a direct provider operation, and provider or transport failures receive no
+Mosaic infrastructure retry.
+Execution creates one agent per ready node with isolated in-memory message and
+tool-call storages plus executable tools resolved from the catalog. Each node makes one
+`agent.complete` call with tools and a node-bound strict semantic-decision
+schema plus the required Mosaic turn limit. One turn is one provider
+invocation, including direct and terminal responses, tool-call responses, and
+structured-output repair attempts. Tools requested on the final permitted turn
+execute and their results are stored; exhaustion is raised before another
+provider invocation. When a provider requires sequential tool calls, its
+one-tool limit applies to each response rather than the node or task; another
+tool may be called in a later response after observing the result. The executor
+must continue while a reasonable corrective action remains: one failed command,
+missing executable, or incomplete inspection is not sufficient for a
+model-authored `blocked` decision. The model-facing decision owns only `status`, ordered criterion
+evaluations, `result`, `revisionRequest`, and `reason`; each criterion owns its
+zero-based index, satisfaction decision, model-authored evidence, and a unique
+array of opaque observation IDs. The revision request owns only `goalId`,
+`invalidatedAssumption`, and `requestedEffect`. Unknown legacy reference fields
+are rejected. A model-authored `blocked` decision requires at least one
+unsatisfied criterion; logical impossibility may still be established without
+a local tool observation. The agent exposes that decision schema as its reserved terminal
+tool, whether or not executable tools are present, rather than using
+provider-native structured output. The terminal structured-output tool is
+never an observation. Its collision-safe Markdown execution context contains
+the original request, current goal and ordered `doneWhen` criteria, and compact
+evidence for every completed transitive ancestor: criterion status, evidence,
+observation IDs and counts, plus one producer-ordered ledger containing the ID,
+producer, tool name, input, and output for each cited observation, and current
+artifacts. Shared references are rendered once in ledger order;
+uncited observations, call IDs, and unrelated branches are excluded. Selected
+skill bodies remain in bundle order, followed by tool names and descriptions
+without duplicated tool schemas. The executor directly inspects produced state
+when possible rather than treating an ancestor declaration alone as semantic
+proof. After a successful localized revision, affected nodes receive a short
+handoff derived from graph history: the invalidated assumption, requested
+effect, previously unsatisfied criteria, and relevant historical tool results.
+Historical observation and provider call IDs are omitted; the handoff is
+non-citable context, and the new execution must produce current observations
+before relying on its claims or tool results. A post-revision `completed`
+decision must cite at least one observation produced by that current node
+execution; this additional evidence requirement does not apply to `blocked` or
+`failed`. Historical results are eligible only when a previously unsatisfied
+criterion cited their local observation; the handoff retains at most the five
+most recent eligible results, compacts large inputs and outputs, and reports
+the count omitted.
+
+Each successfully serialized executable-tool return is first appended to the
+node agent's isolated `ToolCallStorage` with a runtime-owned lowercase six-hex
+handle derived from the first six hexadecimal characters of a fresh UUID. One
+allocator is shared by every concurrent node in a run and reserves IDs from all
+graph snapshots and the current wave. It retries collisions with fresh UUIDs
+and raises an internal operational error after 32 consecutive collisions. The
+same short ID appears in the Markdown tool-result message, awaited finished
+event, node ledger, decisions, revisions, results, and delivery.
+Evaluation-hook observations must supply the same canonical six-hex handles;
+the shared allocator claims them before storage and rejects malformed,
+duplicate, current-wave, or historical-snapshot collisions.
+Mosaic materializes one ordered `Observation` per stored record on the producing
+node before validating or storing the terminal semantic outcome. Every criterion
+reference must be a unique opaque ID from that local ledger or from an observation
+cited by a completed transitive ancestor and presented in the execution prompt.
+Unknown, duplicate, cross-branch, descendant, retired-snapshot, and unpresented
+IDs are rejected by the Agent's terminal `safeParse` before its normal two-repair
+budget is exhausted, and the materialized-outcome schema repeats the same check
+before outcome storage or artifact promotion for hooks and other bypass paths.
+Each terminal parse resolves its authorized IDs dynamically from current local
+tool-call records followed by causally projected active-graph observations, with
+stable deduplication. An invalid-ID diagnostic never repeats the rejected value;
+it ranks only authorized IDs by Levenshtein distance with causal-order ties,
+shows at most ten IDs with explicit truncation, and directs the model to use an
+empty list when none are authorized. An empty array is valid when proof needs no
+tool observation. Complete observation objects remain
+only on their producing nodes. `callId` is retained in an `Observation` for
+correlation and is not exposed in execution or revision prompts. A completed decision is valid with zero, one, or multiple
+observations. Completed nodes store their Markdown result as an inline
+`text/markdown` artifact, append additional artifacts, and return the resolved wave to
+scheduling. Model-authored `blocked` and `failed` decisions also resolve their
+wave normally. When every node is terminal, `delivery` performs stable
+topological assembly using original node-array position as its tie-breaker and
+finishes with `MosaicResult`.
+Before `completed`, the executor inspects available command exit, stderr,
+timeout, and truncation signals. A later successful command requires a new
+observation to prove that an earlier failed state was repaired. Required shell
+steps use failure-preserving composition. Semantic `blocked` requires concrete
+impossibility evidence, reasonable alternatives tried, and consideration of
+`needs_revision`; lack of explicit confirmation is not by itself impossibility,
+and operational failures remain distinct.
+Artifacts use one strict public discriminated union: inline artifacts contain
+`kind: 'inline'`, a normalized non-empty MIME type, and string data that may be
+empty; reference artifacts contain `kind: 'reference'`, a normalized non-empty
+MIME type, and a normalized non-empty opaque reference. Its provider-facing
+JSON Schema represents the two strict variants with `anyOf`, avoiding the
+unsupported `oneOf` keyword in terminal function parameters. The runtime preserves
+artifact order through decisions, outcomes, graph snapshots, causal projection,
+and delivery, and renders references as references rather than content. The
+MOSAIC core only validates and transports opaque references; storage, resolution,
+existence checks, persistence, and authorization policy remain out of scope.
+Delivery does not make provider, model, skill, or tool calls. Its public parts
+preserve Markdown exactly, expose copied additional artifacts and complete
+runtime observations (including call IDs and inputs/outputs), and join part
+Markdown only with `\n\n`. A `needs_revision` decision requires at least one observation,
+must target the current node, and does not promote partial results: execution
+stores its semantic request while every observation remains on the node, then
+returns normally to scheduling. Turn exhaustion materializes every correlated
+executable-tool observation already stored on the node, adds a data-free
+runtime-owned `turn_limit` termination, marks the node blocked, promotes no result artifacts, and resolves
+the wave normally. Provider, tool, schema, correlation, and state-machine
+failures retain their original identity and reject the workflow. Execution
+emits safe logs with node IDs, terminal statuses, and selected skill and tool names only, never prompts, decisions, outcomes,
+reasons, tool payloads, or error details.
+The run-local state contains only the ordered graph snapshots. Each node owns a
+complete candidate trace, ordered `Observation[]`, `OrderedBundle | null`, `NodeOutcome | null`, and
+`RuntimeTermination | null`. Outstanding
+revision work is selected from node outcomes in deterministic node-wave order;
+within each node, observations retain tool-result order. The localized planner receives every
+queued observation as fenced tool name, input, and output evidence and never
+receives `callId`. The successful local revision count and next revision are
+derived from the active graph's explicit `revision`; retired IDs are the IDs found in older snapshots but absent from
+the active graph. Each localized pass is owned by the dedicated `revision`
+state, skips catalog hints, preserves completed and other non-pending nodes
+exactly, permits changes only to the target and pending nodes, clears routing,
+observations, outcome, termination, and partial results from a retained target, and prevents
+retired ID reuse. A localized plan that changes none of the planner-owned
+`id`, `goal`, `doneWhen`, `dependsOn`, or `deliver` fields in the revisable
+region is rejected inside the structured-output boundary before a snapshot is
+appended, so its repair does not consume the localized-revision limit. The prior graph snapshot retains its complete
+`needs_revision` outcome and node observation ledger. Only successfully appended localized graphs count
+against the configured limit; exhaustion preserves the outcome, adds a
+runtime-owned `revision_limit` termination, and blocks the target without a
+provider call. Descendants of blocked or failed dependencies become blocked
+with direct dependency IDs, while independent branches continue. A completed
+result includes `FinalDelivery`; blocked and failed results omit partial
+delivery, with `failed` taking precedence. This behavior implements
+MOSAIC 0.2 sections 4.8-4.10 and the `NodeContext`, `NodeDecision`,
+`Observation`, runtime `NodeOutcome`, and `RevisionRequest` contracts in
+Appendix A. The paper recommends a reserved terminal tool for provider-neutral
+structured output while permitting other protocols that preserve complete
+validation, atomicity, bounded feedback, and bounded recovery. Concurrent ready
+waves, `Promise.allSettled`, the exact isolated-agent composition, explicit
+criterion proof entries, and `text/markdown` artifact promotion are Doric
+runtime choices.
+Planning and revision append a graph, the last graph is active, and
+scheduling mutates that graph when marking nodes ready. It succeeds for an
+already-terminal graph and otherwise preserves the intentional missing-ready
+domain failure when progress cannot continue.
+
+Agent structured runs expose an optional awaited `onStructuredAttempt`
+callback on `AgentRunOptions`. It receives only schema version, one-based
+structured-submission attempt, runtime acceptance, whether bounded feedback
+will be sent, and an optional safe validation diagnostic. It never receives
+rejected arguments, model reasoning, thrown values, or raw causes. A callback
+failure retains its identity and aborts both complete and stream runs before
+further provider activity.
+
+Agent runs validate an entire provider tool-call batch before any handler
+executes. Invalid JSON, unknown tools, invalid payloads, and invalid terminal
+submissions share a default two-repair budget, append `incomplete` tool results,
+and may be observed through the safe `onToolCallRepair` counter callback.
+Handler failures are never retried by this protocol repair path. Structured
+runs require a terminal tool call at the runtime validation boundary and
+disable parallel tool calls. They do not force provider `tool_choice`, because
+reasoning models may support tools and reasoning without supporting forced tool
+selection in the same request.
+
+Every agent requires an injected `ToolCallStorage` in addition to message and
+executable-tool storage. The package-owned in-memory implementation uses
+`crypto.randomUUID` by default and accepts an injected ID factory for tests. It
+rejects empty and within-storage duplicate IDs. Complete and stream runs share
+one executable-tool path: validate, execute, serialize input and output, append
+the record, store a short Markdown result envelope carrying the opaque ID, and
+emit the finished lifecycle with that record. The awaited `onToolEvent` callback
+receives started, finished, and failed events in both modes; streamed
+`tool.finished` also exposes the record. Rejected calls, reserved terminal calls,
+thrown handlers, and serialization failures create no record. Valid operational
+failure values such as non-zero command exit codes remain ordinary records.
+
+The public Mosaic result contract exposes copied node observations directly on
+each `WorkflowNodeResult`, while delivery parts copy the same producing-node
+ledger. `MosaicOptions.models`
+separates planning, revision, and execution profiles and keeps reranking and
+embedding as non-reasoning model IDs. Each
+`MosaicAgent.prompt` additionally accepts run-local observation options with a
+serial awaited observer, caller-supplied UUID run ID, cancellation signal, and
+either `structure` capture, the default, or `io` capture. Version-three Mosaic
+events carry one run ID and contiguous sequence; model events also carry the
+configured provider ID. They cover lifecycle, planning, retrieval/reranking,
+bundle/menu, scheduling waves,
+node execution and tools, decisions and runtime observations, revision, and
+delivery. Every delivered event is a detached deeply frozen copy. Observer
+latency is excluded from reported durations; the first observer failure aborts
+the run and suppresses later events without reverting effects already
+executed. Structure capture contains only allowlisted identifiers, statuses,
+counts, ranks, scores, and durations. IO capture may additionally contain
+model-visible messages and tool definitions, model-emitted visible content,
+and tool inputs and outputs; it excludes credentials, provider controls,
+private reasoning, provider replay, encrypted reasoning content, usage
+payloads, rejected structured candidates, diagnostics from caught failures,
+and raw causes. Reserved terminal arguments and rejected structured-response
+text are redacted while validated state remains available through graph,
+decision, and outcome events. Existing Mosaic
+logs remain allowlisted structural projections. Safe `tool.repair` events carry
+only stage identity and attempt counters. `tool.finished` carries the same
+`observationId` stored on its producing node.
+
+`mosaic/evaluation` is the benchmark-only interception entrypoint over the
+same validated engine. Its optional initial-plan, feedback-plan, skill-view,
+retrieval, routing, menu, execution, and localized-revision hooks receive
+detached readonly snapshots and may delegate through `next`. Hook results pass
+the normal complete schemas and runtime invariants before state mutation. An
+adapter with no hooks is behaviorally neutral. A feedback hook may return
+`unchanged`; Mosaic then performs no hint or P1 provider call and materializes
+revision 1 as a validated plan identical to P0.
+
+`benchmarks/mosaic` is the user-approved private Nx application for the minimal
+public-benchmark comparison of MOSAIC. The former custom empirical study is
+archived at the annotated tag and GitHub release
+`mosaic-validation-v0.2-archive`; it is no longer an active repository surface.
+The application exposes only Nx-managed build, run, docker-run, typecheck,
+test, and release targets. Its generated `.mjs` files are a standalone ACP
+bundle for benchmark containers that do not contain this workspace or its
+dependencies, a local host dispatcher, and a host-side Docker launcher.
+
+The same private application also owns an additive composition-evaluation
+surface under the local `composition` command. It does not change the canonical
+BenchFlow treatment described below and it is not a revival of the archived
+empirical application. Provider-free preparation, manifest, and scoring
+commands may run locally. Every composition command that can call a model is
+fail-closed behind the explicit `--yes-paid-run` flag and writes only to a
+caller-selected fresh output path. Composition evidence is diagnostic until its
+own frozen input manifest, complete task set, and treatment controls validate;
+it cannot satisfy the canonical SkillsBench evidence gate for Terminal-Bench.
+
+The external composition benchmark is SRA-Bench, with SR-Agents pinned to
+`277fd8d2bbd7d3b81a5cf4ffa6e87e18c7906e4f` and its Hugging Face dataset pinned
+to `6143f2634eb284955ce312213bac24b582d039f3`. Preparation verifies the exact
+corpus, CHAMP, and BigCodeBench byte counts and SHA-256 digests before creating
+a frozen 100-query pilot: 50 multi-skill CHAMP and 50 multi-skill BigCodeBench
+queries, selected deterministically within gold-cardinality strata. Runs are
+dataset-homogeneous and compare `no-skills`, frozen retrieval `fixed-top-k`,
+selective `mosaic`, and diagnostic `oracle` arms under one model profile. The
+selective arm receives the same frozen candidate ranking, reranks full bodies
+with the pinned default `cohere/rerank-v3.5`, and chooses at most its configured
+bundle limit. Output scoring separately measures routed candidates and selected
+bundles with Recall@K, set precision/F1, MRR, nDCG, exact match, and cardinality
+error. Append-only run output is bound to a sidecar identity covering the arm,
+model, reranker, limits, instances, corpus, and retrieval input; resume refuses
+a mismatch.
+
+The controlled planning instrument contains exactly 24 authored cases: the six
+predeclared composition classes A-F crossed with the four domains
+documents/finance, software, artifacts, and communications. Every case includes
+request-grounded P0 criteria, catalog-grounded P1 criteria, relevant skills,
+intradomain distractors, semantic roles, outputs, behaviors, dependencies, and
+tool requirements. One validated P0 is reused across `no-hints`, diagnostic
+`gold`, deterministic lexical `retrieved`, and negative-control `distractor`
+conditions. Initial planning sees only the request; revision sees only P0 and
+the condition's public skill evidence; lexical retrieval has no gold fields or
+gold-sized cutoff. A separate rubric-bound structured call maps plan text to
+semantic labels for scoring. Routing and execution are intercepted through
+`mosaic/evaluation`, so downstream tools and execution cannot confound the
+P0-to-P1 transition. Reports preserve P0, P1, observations, criterion-level
+scores, gains, regressions, provider-call events, and macro readings overall and
+by domain and composition class. Paid planning runs reserve stdout for the final
+JSON summary and emit live safe progress to stderr for run and case lifecycle,
+model calls and cache hits, structured-attempt acceptance and repair, and
+retrieval counts. Progress exposes only case, condition, and operation IDs plus
+counts and booleans; it excludes prompts, model outputs, validation diagnostics,
+credentials, and caught failures. The same-model semantic judge is an explicit
+diagnostic limitation, not hidden ground truth.
+
+The SkillsBench composition condition scans a caller-verified clean checkout of
+the existing v1.1 pin into a deterministic global catalog, hashes every package,
+namespaces same-name/different-body collisions, and preserves task-to-skill gold
+associations only for offline evaluation and the diagnostic oracle. Its closed
+arms are `no-skills`, `fixed-top-k`, `mosaic-selective`, diagnostic `oracle`, and
+diagnostic `all-skills`. A frozen lexical ranker may use task text and public
+skill text only; it must not use task-to-skill golds, provenance paths, or gold
+cardinality. Runtime skill packages must be materialized into neutral catalog
+paths so original task IDs cannot leak to the model. The canonical byte checkout
+produces 232 task-local occurrences collapsed into
+209 catalog skills, catalog SHA-256
+`382379cc8b2ac56aab6d6c4559bb2e6b1d6203f5de58534532e9ad528bdefe7c`, and
+fixed-ranking SHA-256
+`0a1631e7ad74730c909194efee941d2ba981279cd8d040941d2a5039fafc9ffd`;
+preparation rejects any mismatch. This condition is a local
+preparation and treatment contract until a global-catalog mount and official
+task execution adapter are integrated with BenchFlow; it must not be described
+as a SkillComposer reproduction or as completed external evidence.
+
+The additive `docker-run` target is the portable campaign surface for native
+Linux and Docker Desktop hosts, including Windows, macOS, and WSL. It accepts
+only `campaign` commands, builds the local `mosaic-benchmark:local` Linux image
+from digest-pinned Node, uv/Python, and Docker base images, and starts it with
+the privilege required for a nested Docker daemon. BenchFlow 0.6.5 and every
+task container therefore run under Linux without mounting the host Docker
+socket or depending on host `uvx`, Python, Git, or curl. The launcher mounts
+only the benchmark `results/` directory. Before starting its daemon, the
+coordinator uses the helper from the digest-pinned Docker DinD image to enable
+cgroup v2 nesting and shared mount propagation. The launcher translates
+supported campaign and report paths beneath the results mount, inherits
+`OPENROUTER_API_KEY` by environment name rather than command value, and retains
+the nested Docker and uv caches in the `mosaic-benchmark-docker` and
+`mosaic-benchmark-uv` named volumes. The ordinary `run` target remains the local
+comparison and native campaign surface; release generation remains outside the
+portable coordinator.
+
+The benchmark publishes two BenchFlow ACP agents: a direct agent and a MOSAIC
+agent. Both receive the same task prompt, mounted task skills, terminal tool,
+OpenRouter-backed OpenAI Completions-compatible proxy, model, and low reasoning
+effort. Both compose the shared `createUnifiedProvider`; BenchFlow selects
+OpenRouter with `openrouter/deepseek/deepseek-v4-pro` and resolves the host's
+`OPENROUTER_API_KEY`, while the agents receive only the proxy endpoint, alias,
+and ephemeral proxy credential. The adapter sends that alias to LiteLLM while
+the unified provider uses the fixed original `deepseek/deepseek-v4-pro` identifier
+for curated capability policy; it does not treat LiteLLM's compatibility-only
+model listing as an OpenRouter capability catalog. The generated adapter owns
+the fixed `low` effort for both arms and the campaign omits BenchFlow's ACP
+reasoning-effort option because the external manifest contract cannot declare
+its required config-option identifier. The persisted BenchFlow run
+configuration must record that harness-owned effort as null. The MOSAIC arm
+uses the ordinary public `mosaic` entrypoint and observes runs through
+`MosaicRunOptions.observer` with `capture: 'io'`; it does not use benchmark
+interception hooks from `mosaic/evaluation`. IO events may expose model-visible
+content and terminal inputs and outputs to the benchmark trajectory, but never
+private reasoning or credentials. The terminal is benchmark-only authority
+inside the task sandbox and does not add command execution to a product package
+or Doric host surface. Its strict input accepts an optional positive safe
+integer `max_output_chars`; the runtime clamps that request to the fixed 12 KiB
+combined stdout/stderr ceiling instead of rejecting larger requests. Commands
+run through POSIX `sh -c`; the model-facing description does not promise
+Bash-only syntax and directs agents to discover available executables. Loaded
+skill bodies identify their canonical mounted
+directory so references to bundled scripts and supporting files resolve the
+same way in both arms. Only an authentic agent-owned
+`invalid_structured_output` exhaustion becomes a scoreable ACP failure: the
+adapter writes its safe code and returns `end_turn` so the verifier runs and the
+Direct arm may continue. Other authentic Agent or Provider failures become
+JSON-RPC `-32603` with at most `{source, code}`; unknown failures carry no data.
+ACP stderr likewise writes only an authentic safe code or a fixed generic line.
+Messages, diagnostics, causes, stacks, caught objects, and thrown values never
+cross the wire or stderr.
+
+The BenchFlow launcher transfers its ephemeral proxy credential through a
+mode-0600 `OPENROUTER_API_KEY_FILE`, removes credential values from the Node
+process environment, and the provider reads and unlinks that file while
+constructing the ACP app, before any prompt or terminal exists. Terminal
+subprocesses additionally drop credential-shaped environment names. The host's
+actual `OPENROUTER_API_KEY` never enters the agent container. The generated
+bundle, its published
+checksum sidecar, and both launch manifests are fixed campaign inputs. Both
+manifests pin the bundle SHA-256 literally and pin the official Node archive
+SHA-256 per supported architecture; a paid campaign repeats the free preflight
+and refuses any local, manifest, or published bundle hash mismatch.
+
+SkillsBench v1.1, pinned to commit
+`b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af`, is the primary benchmark.
+A diagnostic one-task SkillsBench smoke uses `jax-computing-basics` in both
+arms because it exercises sequential command recovery without relying on the
+flaky `edit-pdf` verifier environment. Smoke evidence remains operational only.
+A diagnostic SkillsBench `pilot` action runs a predeclared, varied ten-task
+subset through both arms by using BenchFlow's repeated `--include` selection.
+The fixed set is `data-to-d3`, `earthquake-phase-association`, `edit-pdf`,
+`jax-computing-basics`, `organize-messy-files`,
+`pptx-reference-formatting`, `sec-financial-report`,
+`spring-boot-jakarta-migration`, `travel-planning`, and `xlsx-recover-data`.
+The comparator requires that exact selection in the recorded run config.
+Pilot evidence is diagnostic only: it does not replace the full 87-task
+primary campaign and cannot satisfy the SkillsBench report gate for
+Terminal-Bench.
+The Nx benchmark host may resume an existing SkillsBench pilot after a host or
+sandbox failure. Resume is not a new campaign action: it preserves the original
+`pilot` action and `campaignId`, validates the direct-child `results/` path,
+closed metadata, artifact digests, exact task selection, released ACP bundle,
+and per-arm manifest, then reuses the existing BenchFlow `jobs/` directory.
+BenchFlow may reuse scored rollouts and reruns unscored tasks; MOSAIC starts or
+resumes first, and Direct starts or resumes only after MOSAIC has no runtime
+errors. Resume accepts closed, digest-matched evidence from either arm so both
+the current MOSAIC-first order and older Direct-first campaigns remain resumable.
+Resume requires explicit paid
+confirmation, an exclusive campaign lock, and Docker capacity of at least 8
+CPUs and 8 GiB. Before and after every returned arm attempt, duplicate and
+incomplete rollout directories are preserved under `attempts/`, while `jobs/`
+retains only the newest result per task; a successful arm additionally requires
+all ten tasks. Resume never crosses adapter releases, so every rollout in a
+campaign uses the same recorded bundle and manifests. The command mirrors
+BenchFlow stdout and stderr plus explicit host stages to host stderr while
+reserving stdout for the final JSON result. Host-only resume code is built into
+a separate generated Nx dispatcher.
+Terminal-Bench 2, pinned to
+`2fd12b88aafdd04a52c298e3940bcb189f9766d6`, is a secondary confirmation only
+after a valid SkillsBench comparison report, which is an explicit input to a
+paid Terminal-Bench campaign. A comparison is valid only when both arms match
+the closed benchmark source, task manifests, model, skill policy, and adapter
+assets; their recorded BenchFlow run configuration and health artifacts must
+match the campaign contract and their recorded hashes. Every task is scored
+without runtime or verifier errors and has trusted positive usage and cost
+telemetry. The comparison's primary decision is the paired quality delta:
+MOSAIC wins when it has a higher mean public-benchmark reward than the direct
+agent. The efficiency reading is total model cost per accumulated reward unit.
+Task-level MOSAIC wins, regressions, and ties are diagnostic evidence. A
+higher-reward/lower-total-cost strict Pareto win remains a separate aspirational
+indicator, not the sole useful result. Valid evidence with a quality win exits
+zero; valid evidence without a quality win exits one; invalid evidence exits
+two. Paid smoke, pilot, and full campaigns require explicit `--yes-paid-run`;
+credentials remain runtime-only and are never persisted or logged. The free
+preflight discards release-asset probes through Node's OS-specific null device,
+so remote-asset validation is equivalent on Windows and POSIX hosts.
+
 `agents/doric` receives complete singleton configuration replacements through
 `PUT /config`. It persists only provider IDs, HTTP(S) base URLs,
 credential environment-variable names ending in `_API_KEY`, one
@@ -285,7 +804,7 @@ session creation, cursor listing, detail, FIFO prompt acceptance through
 `/sessions`. A public session contains only its ID, state, captured config
 revision, last sequence, timestamps, and an error code when applicable; list
 and detail use the same representation. It never contains prompts, messages,
-events, results, or SSH credentials.
+events, results, or SSH credentials. The `/mosaic` REST aliases do not exist.
 
 Socket.IO namespace `/sessions` requires `sessionId` in the connection query
 and accepts an optional `afterSequence`. It emits `session:snapshot` after full
@@ -323,7 +842,7 @@ reasoning, provider replay, tool input/output, results, and serialized errors;
 configured credential values are redacted before persistence. Event bodies are
 never written to operational logs.
 
-Sandpool and each repository-owned LLM provider require an injected
+Sandpool, each repository-owned LLM provider, and Victor require an injected
 `pino.Logger` and create their own component child logger. They emit only safe,
 structured `debug` operation logs: lifecycle and allowlisted counts/identifiers,
 never prompts, model inputs or outputs, stored values, vectors, credentials,
@@ -446,33 +965,6 @@ provider events from an invalid turn. A successful transactional finish stores
 and returns text serialized from the accepted composition while keeping raw
 provider replay only in the provider replay field; no repair-specific public
 event is added.
-Agent structured runs expose an optional awaited `onStructuredAttempt`
-callback on `AgentRunOptions`. It receives only schema version, one-based
-structured-submission attempt, runtime acceptance, whether bounded feedback
-will be sent, and an optional safe validation diagnostic. It never receives
-rejected arguments, model reasoning, thrown values, or raw causes. A callback
-failure retains its identity and aborts both complete and stream runs before
-further provider activity.
-Agent runs validate an entire provider tool-call batch before any handler
-executes. Invalid JSON, unknown tools, invalid payloads, and invalid terminal
-submissions share a default two-repair budget, append `incomplete` tool results,
-and may be observed through the safe `onToolCallRepair` counter callback.
-Handler failures are never retried by this protocol repair path. Structured
-runs require a terminal tool call at the runtime validation boundary and
-disable parallel tool calls. They do not force provider `tool_choice`, because
-reasoning models may support tools and reasoning without supporting forced tool
-selection in the same request.
-Every agent requires an injected `ToolCallStorage` in addition to message and
-executable-tool storage. The package-owned in-memory implementation uses
-`crypto.randomUUID` by default and accepts an injected ID factory for tests. It
-rejects empty and within-storage duplicate IDs. Complete and stream runs share
-one executable-tool path: validate, execute, serialize input and output, append
-the record, store a short Markdown result envelope carrying the opaque ID, and
-emit the finished lifecycle with that record. The awaited `onToolEvent` callback
-receives started, finished, and failed events in both modes; streamed
-`tool.finished` also exposes the record. Rejected calls, reserved terminal calls,
-thrown handlers, and serialization failures create no record. Valid operational
-failure values such as non-zero command exit codes remain ordinary records.
 Agent runs may declare an optional positive safe-integer `maxTurns`; omission
 keeps the loop unbounded. Invalid values fail with `TypeError` before message
 storage or provider activity. The budget is checked immediately before every

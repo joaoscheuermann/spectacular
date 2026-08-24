@@ -1,0 +1,28 @@
+\begin{table}[H]
+\centering
+\caption*{\textbf{Quadro 2 - Posição da MOSAIC em relação aos trabalhos-base}}
+\footnotesize
+\renewcommand{\arraystretch}{1.16}
+\begin{tabularx}{\linewidth}{|p{0.15\linewidth}|p{0.18\linewidth}|p{0.27\linewidth}|Y|}
+\hline
+\textbf{Trabalho} & \textbf{Unidade principal} &
+\textbf{Relação entre tarefa e skill} & \textbf{Decisão aproveitada pela MOSAIC} \\
+\hline
+Agent Skills & arquivo ou diretório de instruções & ativação de uma skill &
+\texttt{SKILL.md} como fonte canônica \\
+\hline
+SkillRouter & consulta de retrieval & seleção e reranking de skills &
+body completo como sinal de roteamento \\
+\hline
+SkillWeaver & subtarefa atômica & uma skill por subtarefa &
+feedback de retrieval para a decomposição \\
+\hline
+ReAct & trajetória de ação e observação & não define catálogo de skills &
+revisão após observações \\
+\hline
+MOSAIC 0.2 & objetivo orientado a resultado & zero, uma ou várias skills por objetivo &
+composição many-to-many e evidência capturada pelo runtime \\
+\hline
+\end{tabularx}
+\par\smallskip\raggedright\small Fonte: elaboração própria (2026).
+\end{table}

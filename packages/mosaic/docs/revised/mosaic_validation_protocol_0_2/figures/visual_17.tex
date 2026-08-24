@@ -1,0 +1,25 @@
+\begin{figure}[H]
+\centering
+\caption*{\textbf{Figura 5 - Fases recomendadas da validação}}
+\begin{tikzpicture}[node distance=4.5mm]
+\node[mosaicbox, text width=7.8cm] (p0) {Fase 0 - protocolo\\claims, condições e análise};
+\node[mosaicbox, text width=7.8cm, below=of p0] (p1)
+  {Fase 1 - testes de contrato\\schemas, correlação, DAG, menu e estado};
+\node[mosaicbox, text width=7.8cm, below=of p1] (p2)
+  {Fase 2 - conformidade MOSAIC 0.2\\casos determinísticos};
+\node[mosaicbox, text width=7.8cm, below=of p2] (p3) {Fase 3 - piloto\\cerca de 60 casos};
+\node[mosaicbox, text width=7.8cm, below=of p3] (p4)
+  {Fase 4 - freeze\\benchmark, golds, prompts e análise};
+\node[mosaicbox, text width=7.8cm, below=of p4] (p5)
+  {Fase 5 - execução principal\\meta inicial: 240 casos};
+\node[mosaicbox, text width=7.8cm, below=of p5] (p6)
+  {Fase 6 - análise e relatório\\efeitos, custo e atribuição causal};
+\node[mosaicbox, text width=7.8cm, below=of p6] (p7)
+  {Fase 7 - replicação\\outro modelo, catálogo ou domínio};
+\foreach \a/\b in {p0/p1,p1/p2,p2/p3,p3/p4,p4/p5,p5/p6,p6/p7}
+  \draw[mosaicarrow] (\a) -- (\b);
+\draw[mosaicdash] (p3.east) .. controls +(2.1,0) and +(2.1,0) ..
+  node[right, font=\scriptsize, align=left] {corrigir instrumentos\\antes do freeze} (p1.east);
+\end{tikzpicture}
+\par\smallskip\raggedright\small Fonte: elaboração própria (2026).
+\end{figure}

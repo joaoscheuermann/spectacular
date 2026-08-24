@@ -1,0 +1,47 @@
+\begin{figure}[H]
+\centering
+\caption*{\textbf{Figura 3 - Arquitetura mínima da MOSAIC 0.2}}
+\resizebox{0.94\linewidth}{!}{%
+\begin{tikzpicture}[node distance=7mm and 18mm]
+\node[mosaicbox, text width=3.0cm] (request) {Pedido};
+\node[mosaicbox, text width=4.4cm, below=of request] (planner)
+  {1. Planner de objetivos\\DAG por resultados};
+\node[mosaicbox, text width=5.0cm, right=of planner] (catalog)
+  {Catálogo canônico\\\texttt{SKILL.md}: metadados, body e tools};
+\node[mosaicbox, text width=4.4cm, below=of planner] (feedback)
+  {2. Feedback body-aware\\hints e uma revisão P0 \(\rightarrow\) P1};
+\node[mosaicbox, text width=4.4cm, below=of feedback] (router)
+  {3. Retrieval, reranking e bundle ordenado};
+\node[mosaicbox, text width=4.0cm, right=of router] (menu)
+  {4. Menu de tools\\\(T_{\mathrm{base}}\cup\) tools do bundle};
+\node[mosaicbox, text width=4.4cm, below=of router] (executor)
+  {5. Executor do nó\\modelo produz decisão semântica};
+\node[mosaicbox, text width=4.6cm, right=of executor] (runtime)
+  {Runtime correlaciona retornos\\e cria observações ordenadas};
+\node[mosaicbox, text width=4.4cm, below=of executor] (outcome)
+  {Resultado materializado\\decisão + todas as observações};
+\node[mosaicbox, text width=4.4cm, below=of outcome] (state)
+  {Estado\\resultados, observações e revisões};
+\node[mosaicbox, text width=4.4cm, below=of state] (final)
+  {6. Compositor determinístico\\resultados terminais};
+\node[mosaicbox, text width=3.0cm, below=of final] (answer) {Resposta final};
+
+\draw[mosaicarrow] (request) -- (planner);
+\draw[mosaicdash] (catalog) -- node[above, font=\scriptsize] {hints após P0} (planner);
+\draw[mosaicarrow] (catalog) -- (feedback);
+\draw[mosaicarrow] (planner) -- (feedback);
+\draw[mosaicarrow] (feedback) -- (router);
+\draw[mosaicarrow] (catalog) |- (router);
+\draw[mosaicarrow] (router) -- (executor);
+\draw[mosaicarrow] (router) -- (menu);
+\draw[mosaicarrow] (menu) -- (executor);
+\draw[mosaicarrow] (executor) -- (runtime);
+\draw[mosaicarrow] (runtime) -- (outcome);
+\draw[mosaicarrow] (outcome) -- (state);
+\draw[mosaicdash] (state.west) .. controls +(-3.0,0) and +(-3.0,0) ..
+  node[left, font=\scriptsize, align=center] {revisão localizada\\com evidência completa} (router.west);
+\draw[mosaicarrow] (state) -- (final);
+\draw[mosaicarrow] (final) -- (answer);
+\end{tikzpicture}}
+\par\smallskip\raggedright\small Fonte: elaboração própria (2026).
+\end{figure}

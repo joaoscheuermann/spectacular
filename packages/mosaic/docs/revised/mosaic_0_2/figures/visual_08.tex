@@ -1,0 +1,22 @@
+\begin{figure}[H]
+\centering
+\caption*{\textbf{Figura 5 - Semântica mínima da seleção de bundle}}
+\begin{tikzpicture}[node distance=8mm and 16mm]
+\node[mosaicbox, text width=5.2cm] (ranked)
+  {Candidatas reranqueadas\\procedimento de domínio\\regra de evidência\\resumo genérico\\previsão não solicitada};
+\node[mosaicdecision, below=of ranked, text width=3.3cm] (needed)
+  {Acrescenta comportamento distinto e necessário?};
+\node[mosaicbox, below left=of needed, text width=3.6cm] (bundle)
+  {Bundle \(B(g)\)\\itens aceitos na ordem do reranking};
+\node[mosaicbox, below right=of needed, text width=3.4cm] (rejected)
+  {Rejeitadas\\redundante, fora do objetivo ou conflitante};
+\node[mosaicbox, below=of bundle, text width=5.1cm] (rule)
+  {Ordem final: posição do reranking; empate por nome canônico;
+  cardinalidade máxima \(K_{\max}\).};
+\draw[mosaicarrow] (ranked) -- (needed);
+\draw[mosaicarrow] (needed) -- node[above left, font=\scriptsize] {sim} (bundle);
+\draw[mosaicarrow] (needed) -- node[above right, font=\scriptsize] {não} (rejected);
+\draw[mosaicdash] (bundle) -- (rule);
+\end{tikzpicture}
+\par\smallskip\raggedright\small Fonte: elaboração própria (2026).
+\end{figure}
