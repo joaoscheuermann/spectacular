@@ -22,9 +22,6 @@
       "path": "./packages/oauth"
     },
     {
-      "path": "./packages/state-machine"
-    },
-    {
       "path": "./packages/agent"
     },
     {
@@ -55,16 +52,10 @@
       "path": "./packages/okf"
     },
     {
-      "path": "./packages/victor"
-    },
-    {
       "path": "./packages/bundle"
     },
     {
       "path": "./packages/tool"
-    },
-    {
-      "path": "./packages/mosaic"
     },
     {
       "path": "./bundles/core"
@@ -74,9 +65,6 @@
     },
     {
       "path": "./packages/firecracker"
-    },
-    {
-      "path": "./benchmarks/mosaic"
     },
     {
       "path": "./bundles/git"

@@ -37,10 +37,6 @@
       "alwaysAvailable": true
     },
     {
-      "path": "skills/capability-authoring/SKILL.md",
-      "alwaysAvailable": false
-    },
-    {
       "path": "skills/workspace-discovery/SKILL.md",
       "alwaysAvailable": false
     },
