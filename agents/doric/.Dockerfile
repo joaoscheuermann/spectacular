@@ -18,7 +18,6 @@ COPY apps ./apps
 COPY bundles ./bundles
 COPY packages ./packages
 COPY tools ./tools
-COPY workflows ./workflows
 
 # Lifecycle scripts are initially disabled because dependencies are untrusted
 # build inputs. Nx's required setup is then invoked explicitly. Direct tsc
@@ -43,6 +42,74 @@ RUN npm ci --ignore-scripts \
  && cp -R bundles/core/skills agents/doric/dist/bundles/core/ \
  && cp bundles/git/manifest.json bundles/git/package.json agents/doric/dist/bundles/git/ \
  && cp -R bundles/git/skills agents/doric/dist/bundles/git/
+
+# Migration only needs the compiled workspace.
+FROM ${BASE_IMAGE} AS agent-runtime
+COPY --from=agent-builder /workspace /workspace
+WORKDIR /workspace
+ENV DORIC_HOST=0.0.0.0 \
+    DORIC_PORT=3000
+EXPOSE 3000
+CMD ["node", "agents/doric/dist/src/index.js"]
+
+# Compile static Dropbear first because both providers inject it into the
+# selected OCI image for SSH access.
+FROM ${BASE_IMAGE} AS dropbear-tools
+ARG DROPBEAR_TAG=DROPBEAR_2026.94
+ARG DROPBEAR_SHA256=827d3f6e510e7554ee18d5c6a00dfee1a6a555559495e65e2e8f8d41c79eed84
+# The build uses a stable identity and timestamp.
+ARG SOURCE_DATE_EPOCH=1767225600
+ENV KBUILD_BUILD_HOST=doric \
+    KBUILD_BUILD_TIMESTAMP=@${SOURCE_DATE_EPOCH} \
+    KBUILD_BUILD_USER=doric \
+    SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
+# This compiler toolchain is isolated to the builder stage. cpio and bzip2
+# unpack sources, while zlib headers satisfy configure-time checks.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends build-essential ca-certificates curl cpio bzip2 zlib1g-dev \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /build
+
+# Dropbear provides both key generation and the key-only SSH server in one
+# static multi-call binary. Login-accounting, zlib, and incompatible static
+# link hardening features are disabled to keep it self-contained and avoid
+# writes to host-style accounting files inside disposable guests.
+RUN curl -fsSLo dropbear.tar.gz "https://codeload.github.com/mkj/dropbear/tar.gz/refs/tags/${DROPBEAR_TAG}" \
+ && echo "${DROPBEAR_SHA256}  dropbear.tar.gz" | sha256sum -c - \
+ && tar -xzf dropbear.tar.gz \
+ && cd "dropbear-${DROPBEAR_TAG}" \
+ && ./configure --disable-harden --disable-lastlog --disable-utmp --disable-utmpx --disable-wtmp --disable-wtmpx --disable-zlib \
+ && make -j"$(nproc)" PROGRAMS="dropbear dropbearkey" MULTI=1 STATIC=1 \
+ && install -m 0755 dropbearmulti /dropbearmulti
+
+# The Docker runtime adds the host utilities and static Dropbear binary
+# required by that provider.
+FROM agent-runtime AS docker-runtime
+ARG NFTABLES_VERSION=1.0.6-2+deb12u2
+ARG OPENSSH_VERSION=1:9.2p1-2+deb12u10
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      ca-certificates \
+      "nftables=${NFTABLES_VERSION}" \
+      "openssh-client=${OPENSSH_VERSION}" \
+ && rm -rf /var/lib/apt/lists/*
+COPY --from=dropbear-tools /dropbearmulti /opt/doric/firecracker/dropbearmulti
+ENV DORIC_SANDBOX_SSH=true
+
+# Firecracker additionally needs static BusyBox applets during early boot.
+# Keep this stage after docker-runtime so legacy Docker builders targeting the
+# Docker provider never compile Firecracker-only guest tooling.
+FROM dropbear-tools AS guest-tools
+ARG BUSYBOX_VERSION=1.37.0
+ARG BUSYBOX_SHA256=3311dff32e746499f4df0d5df04d7eb396382d7e108bb9250e7b519b837043a4
+RUN curl -fsSLo busybox.tar.bz2 "https://busybox.net/downloads/busybox-${BUSYBOX_VERSION}.tar.bz2" \
+ && echo "${BUSYBOX_SHA256}  busybox.tar.bz2" | sha256sum -c - \
+ && tar -xjf busybox.tar.bz2 \
+ && cd "busybox-${BUSYBOX_VERSION}" \
+ && make defconfig \
+ && sed -i 's/^# CONFIG_STATIC is not set$/CONFIG_STATIC=y/' .config \
+ && make -j"$(nproc)" busybox \
+ && install -m 0755 busybox /busybox
 
 # Fetch the Firecracker VMM and jailer directly from the pinned upstream
 # release. The recorded checksum makes a changed or corrupted archive fail the
@@ -113,50 +180,6 @@ RUN make x86_64_defconfig \
       --set-str SYSTEM_TRUSTED_KEYS "" \
  && make olddefconfig \
  && make -j"$(nproc)" vmlinux
-
-# Compile small static guest utilities so provisioning, readiness, file
-# transfer, and SSH never depend on commands supplied by the selected OCI
-# image. The same Dropbear binary is also injected by the Docker provider.
-FROM ${BASE_IMAGE} AS guest-tools
-ARG BUSYBOX_VERSION=1.37.0
-ARG BUSYBOX_SHA256=3311dff32e746499f4df0d5df04d7eb396382d7e108bb9250e7b519b837043a4
-ARG DROPBEAR_TAG=DROPBEAR_2026.94
-ARG DROPBEAR_SHA256=827d3f6e510e7554ee18d5c6a00dfee1a6a555559495e65e2e8f8d41c79eed84
-# BusyBox and Dropbear builds also use a stable identity and timestamp.
-ARG SOURCE_DATE_EPOCH=1767225600
-ENV KBUILD_BUILD_HOST=doric \
-    KBUILD_BUILD_TIMESTAMP=@${SOURCE_DATE_EPOCH} \
-    KBUILD_BUILD_USER=doric \
-    SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
-# This compiler toolchain is isolated to the builder stage. cpio and bzip2
-# unpack sources, while zlib headers satisfy configure-time checks.
-RUN apt-get update \
- && apt-get install -y --no-install-recommends build-essential ca-certificates curl cpio bzip2 zlib1g-dev \
- && rm -rf /var/lib/apt/lists/*
-WORKDIR /build
-
-# BusyBox supplies a static, predictable set of early-boot commands before the
-# OCI root filesystem is mounted.
-RUN curl -fsSLo busybox.tar.bz2 "https://busybox.net/downloads/busybox-${BUSYBOX_VERSION}.tar.bz2" \
- && echo "${BUSYBOX_SHA256}  busybox.tar.bz2" | sha256sum -c - \
- && tar -xjf busybox.tar.bz2 \
- && cd "busybox-${BUSYBOX_VERSION}" \
- && make defconfig \
- && sed -i 's/^# CONFIG_STATIC is not set$/CONFIG_STATIC=y/' .config \
- && make -j"$(nproc)" busybox \
- && install -m 0755 busybox /busybox
-
-# Dropbear provides both key generation and the key-only SSH server in one
-# static multi-call binary. Login-accounting, zlib, and incompatible static
-# link hardening features are disabled to keep it self-contained and avoid
-# writes to host-style accounting files inside disposable guests.
-RUN curl -fsSLo dropbear.tar.gz "https://codeload.github.com/mkj/dropbear/tar.gz/refs/tags/${DROPBEAR_TAG}" \
- && echo "${DROPBEAR_SHA256}  dropbear.tar.gz" | sha256sum -c - \
- && tar -xzf dropbear.tar.gz \
- && cd "dropbear-${DROPBEAR_TAG}" \
- && ./configure --disable-harden --disable-lastlog --disable-utmp --disable-utmpx --disable-wtmp --disable-wtmpx --disable-zlib \
- && make -j"$(nproc)" PROGRAMS="dropbear dropbearkey" MULTI=1 STATIC=1 \
- && install -m 0755 dropbearmulti /dropbearmulti
 
 # Assemble the minimal initial filesystem that runs before the OCI image. It
 # mounts the immutable base and writable ext4 disk as OverlayFS, configures the

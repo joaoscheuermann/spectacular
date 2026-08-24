@@ -22,6 +22,7 @@ services:
     build:
       context: ../..
       dockerfile: agents/doric/.Dockerfile
+      target: agent-runtime
     command: npx prisma migrate deploy --config agents/doric/prisma.config.ts
     environment:
       DORIC_DATABASE_URL: postgresql://${DORIC_POSTGRES_USER}:${DORIC_POSTGRES_PASSWORD}@postgres:5432/${DORIC_POSTGRES_DB}
@@ -61,6 +62,7 @@ services:
     build:
       context: ../..
       dockerfile: agents/doric/.Dockerfile
+      target: docker-runtime
     environment:
       DORIC_DATABASE_URL: postgresql://${DORIC_POSTGRES_USER}:${DORIC_POSTGRES_PASSWORD}@127.0.0.1:${DORIC_POSTGRES_PORT:-5432}/${DORIC_POSTGRES_DB}
       DORIC_HOST: 0.0.0.0
