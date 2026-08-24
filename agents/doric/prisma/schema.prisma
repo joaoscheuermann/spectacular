@@ -8,11 +8,7 @@ datasource db {
 }
 
 enum ModelRole {
-  PLANNING
-  REVISION
   EXECUTION
-  RERANKER
-  EMBEDDER
 }
 
 enum SessionState {
@@ -25,17 +21,13 @@ enum SessionState {
 }
 
 model DoricConfiguration {
-  id                     Int                     @id @default(1)
-  revision               Int                     @default(1)
-  generation             String                  @db.Uuid
-  maxHintCandidates      Int                     @map("max_hint_candidates")
-  maxRetrievedCandidates Int                     @map("max_retrieved_candidates")
-  maxSkills              Int                     @map("max_skills")
-  maxTurns               Int                     @map("max_turns")
-  maxRevisions           Int                     @map("max_revisions")
-  updatedAt              DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
-  providers              ProviderConfiguration[]
-  models                 ModelConfiguration[]
+  id         Int                     @id @default(1)
+  revision   Int                     @default(1)
+  generation String                  @db.Uuid
+  maxTurns   Int                     @map("max_turns")
+  updatedAt  DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  providers  ProviderConfiguration[]
+  models     ModelConfiguration[]
 
   @@map("doric_configuration")
 }
@@ -57,8 +49,7 @@ model ModelConfiguration {
   role            ModelRole
   providerId      String                @map("provider_id")
   model           String
-  effort          String?
-  dimensions      Int?
+  effort          String
   configuration   DoricConfiguration    @relation(fields: [configurationId], references: [id], onDelete: Cascade)
   provider        ProviderConfiguration @relation(fields: [configurationId, providerId], references: [configurationId, id])
 

@@ -88,16 +88,6 @@ test('uses an exclusive event cursor and prohibits replay caching', async () => 
   }
 });
 
-test('does not expose legacy Mosaic session aliases', async () => {
-  const host = await serveSessions({});
-
-  try {
-    assert.equal((await fetch(`${host.url}/mosaic/sessions`)).status, 404);
-  } finally {
-    await host.close();
-  }
-});
-
 test('rejects a prompt with an invalid session identifier', async () => {
   const host = await serveSessions({});
 

@@ -575,8 +575,7 @@ text are redacted while validated state remains available through graph,
 decision, and outcome events. Existing Mosaic
 logs remain allowlisted structural projections. Safe `tool.repair` events carry
 only stage identity and attempt counters. `tool.finished` carries the same
-`observationId` stored on its producing node. Doric persists v3 objects as JSONB
-without a database migration; older event objects remain replayable unchanged.
+`observationId` stored on its producing node.
 
 `mosaic/evaluation` is the benchmark-only interception entrypoint over the
 same validated engine. Its optional initial-plan, feedback-plan, skill-view,
@@ -586,21 +585,6 @@ the normal complete schemas and runtime invariants before state mutation. An
 adapter with no hooks is behaviorally neutral. A feedback hook may return
 `unchanged`; Mosaic then performs no hint or P1 provider call and materializes
 revision 1 as a validated plan identical to P0.
-
-`models/skillrouter-embedding` is the user-approved Nx/uv conversion utility
-for the pinned SkillRouter checkpoint. Only its export target may fetch
-upstream model bytes. Its `artifact/` directory and ONNX sidecars are ignored,
-non-committed generated output; the converter source, pinned revision, and
-`uv.lock` provide provenance. It remains a standalone utility. Doric's default
-persisted configuration composes an OpenAI Responses-compatible OpenRouter
-provider with `qwen/qwen3.7-flash` at `low` for
-planning, `google/gemini-3.6-flash` at `low` for localized revision, and
-`deepseek/deepseek-v4-flash-0731` at `low` for node execution. Its per-node
-model-turn limit is 32. It uses
-`voyageai/rerank-2.5-lite` for reranking and
-`voyageai/voyage-4-large` for 2,048-dimensional embeddings. Doric fails when
-the configured endpoint is unavailable, rejects the request, or returns no
-embedding.
 
 `benchmarks/mosaic` is the user-approved private Nx application for the minimal
 public-benchmark comparison of MOSAIC. The former custom empirical study is
@@ -804,12 +788,9 @@ durable structured log storage.
 
 `agents/doric` receives complete singleton configuration replacements through
 `PUT /config`. It persists only provider IDs, HTTP(S) base URLs,
-credential environment-variable names ending in `_API_KEY`, model profiles,
-and bounded routing/execution/revision settings. Credential values remain
-process environment inputs. The Direct runtime consumes only
-`models.execution` and `execution.maxTurns`; the other persisted profiles and
-limits remain part of the unchanged public configuration schema but are
-inactive in this composition. Each session created by `POST /sessions`
+credential environment-variable names ending in `_API_KEY`, one
+`models.execution` profile, and `execution.maxTurns`. Credential values remain
+process environment inputs. Each session created by `POST /sessions`
 captures the active configuration generation and an immutable JSONB snapshot;
 later replacements affect only new sessions.
 
@@ -922,9 +903,8 @@ and versioned PostgreSQL migrations. Production uses one adapter-pg Prisma
 client per process and never applies migrations implicitly during HTTP startup.
 PostgreSQL stores the singleton configuration, normalized provider/model rows,
 generic session snapshots, persisted provider-ready message history, and
-ordered JSONB events. The destructive Direct migration drops the former
-`mosaic_session` and `mosaic_event` tables while preserving configuration
-tables. Startup marks every
+ordered JSONB events. The initial Direct migration creates that complete schema
+from an empty database. Startup marks every
 non-terminal session failed with the sanitized `process_interrupted` code;
 events remain replayable and explicit terminal deletion cascades to events.
 The local Compose surface pins PostgreSQL 18.4, mounts its PostgreSQL-18 volume

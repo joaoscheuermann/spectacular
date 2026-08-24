@@ -53,15 +53,12 @@ becomes the next prompt's history.
 | `GET`    | `/vms`                    | `200`   | List provisioned runtimes.                   |
 | `GET`    | `/vms/:id/ssh`            | `200`   | Return SSH access for a currently leased VM. |
 
-There are no `/mosaic` compatibility aliases.
-
 ### Configuration
 
-The `GET/PUT /config` schema is unchanged. Provider URLs, credential
-environment-variable names, all five model profiles, routing limits, execution
-limits, and revision limits continue to be stored and returned. Direct uses
-only `models.execution` and `execution.maxTurns`; other profiles and limits are
-currently inactive.
+The `GET/PUT /config` schema stores provider URLs, credential
+environment-variable names, one `models.execution` profile, and
+`execution.maxTurns`. Direct uses that execution profile for every prompt in a
+session.
 
 Credential values are resolved from the named environment variables at
 runtime. They are never stored in the configuration tables.
@@ -163,16 +160,14 @@ The server emits:
 The subscription is registered before PostgreSQL replay. Events published
 during replay are buffered and deduplicated by sequence before live delivery.
 
-## Persistence and migration
+## Persistence
 
 The Prisma schema uses generic `Session` and `SessionEvent` models. Messages
 and event bodies are JSONB, event sequences are contiguous per session, and
 deleting a terminal session cascades to its events.
 
-Migration `20260824000000_direct_sessions` intentionally drops
-`mosaic_session`, `mosaic_event`, and their data before creating the generic
-tables. It preserves the existing configuration and provider/model tables.
-Back up PostgreSQL before deployment if the old event history is needed.
+Migration `20260824000000_direct_sessions` creates the complete Direct
+configuration, session, and event schema from an empty PostgreSQL database.
 
 Production startup never runs migrations implicitly. Apply them separately:
 

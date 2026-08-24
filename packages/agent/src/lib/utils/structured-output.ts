@@ -49,9 +49,8 @@ type ValidationIssue = {
 };
 
 /**
- * Creates a collision-free strict tool for terminal structured output. MOSAIC
- * Algorithm 1 deliberately leaves the tool-calling protocol open; this helper
- * is the agent package's provider-neutral implementation, not a MOSAIC tool.
+ * Creates a collision-free strict tool for terminal structured output through
+ * the provider-neutral Agent API.
  */
 export const createStructuredOutputTool = (
   provider: string,

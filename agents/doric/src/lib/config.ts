@@ -33,37 +33,16 @@ const reasoningModel = z
   })
   .strict();
 
-const plainModel = z
-  .object({
-    providerId: identifier,
-    model,
-  })
-  .strict();
-
-const embedderModel = plainModel.extend({ dimensions: limit }).strict();
-
 /** Complete credential-free configuration accepted by the REST API. */
 export const ConfigInputSchema = z
   .object({
     providers: z.array(provider).min(1),
     models: z
       .object({
-        planning: reasoningModel,
-        revision: reasoningModel,
         execution: reasoningModel,
-        reranker: plainModel,
-        embedder: embedderModel,
-      })
-      .strict(),
-    routing: z
-      .object({
-        maxHintCandidates: limit,
-        maxRetrievedCandidates: limit,
-        maxSkills: z.number().int().safe().nonnegative(),
       })
       .strict(),
     execution: z.object({ maxTurns: limit }).strict(),
-    revision: z.object({ max: z.number().int().safe().nonnegative() }).strict(),
   })
   .strict()
   .superRefine((value, context) => {
@@ -79,21 +58,11 @@ export const ConfigInputSchema = z
       ids.add(id);
     });
 
-    Object.entries(value.models).forEach(([role, profile]) => {
-      if (!ids.has(profile.providerId)) {
-        context.addIssue({
-          code: 'custom',
-          message: 'Model references an unavailable provider.',
-          path: ['models', role, 'providerId'],
-        });
-      }
-    });
-
-    if (value.routing.maxSkills > value.routing.maxRetrievedCandidates) {
+    if (!ids.has(value.models.execution.providerId)) {
       context.addIssue({
         code: 'custom',
-        message: 'maxSkills must not exceed maxRetrievedCandidates.',
-        path: ['routing', 'maxSkills'],
+        message: 'Model references an unavailable provider.',
+        path: ['models', 'execution', 'providerId'],
       });
     }
   });
@@ -115,36 +84,11 @@ export const defaultConfig: ConfigInput = {
     },
   ],
   models: {
-    planning: {
-      providerId: 'openrouter',
-      model: 'qwen/qwen3.7-flash',
-      effort: 'low',
-    },
-    revision: {
-      providerId: 'openrouter',
-      model: 'google/gemini-3.6-flash',
-      effort: 'low',
-    },
     execution: {
       providerId: 'openrouter',
       model: 'deepseek/deepseek-v4-flash-0731',
       effort: 'low',
     },
-    reranker: {
-      providerId: 'openrouter',
-      model: 'voyageai/rerank-2.5-lite',
-    },
-    embedder: {
-      providerId: 'openrouter',
-      model: 'voyageai/voyage-4-large',
-      dimensions: 2048,
-    },
-  },
-  routing: {
-    maxHintCandidates: 5,
-    maxRetrievedCandidates: 5,
-    maxSkills: 5,
   },
   execution: { maxTurns: 32 },
-  revision: { max: 3 },
 };

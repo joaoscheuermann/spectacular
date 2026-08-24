@@ -52,11 +52,7 @@ export const createConfigStore = (database: Database): ConfigStore => ({
           data: {
             revision: { increment: 1 },
             generation: randomUUID(),
-            maxHintCandidates: config.routing.maxHintCandidates,
-            maxRetrievedCandidates: config.routing.maxRetrievedCandidates,
-            maxSkills: config.routing.maxSkills,
             maxTurns: config.execution.maxTurns,
-            maxRevisions: config.revision.max,
           },
           include: { providers: true, models: true },
         });
@@ -67,67 +63,35 @@ export const createConfigStore = (database: Database): ConfigStore => ({
   },
 });
 
-const modelRows = (config: ConfigInput) => [
-  modelRow(ModelRole.PLANNING, config.models.planning),
-  modelRow(ModelRole.REVISION, config.models.revision),
-  modelRow(ModelRole.EXECUTION, config.models.execution),
-  modelRow(ModelRole.RERANKER, config.models.reranker),
-  modelRow(ModelRole.EMBEDDER, config.models.embedder),
-];
+const modelRows = (config: ConfigInput) => [modelRow(config.models.execution)];
 
-const modelRow = (
-  role: ModelRole,
-  profile: ConfigInput['models'][keyof ConfigInput['models']],
-) => ({
+const modelRow = (profile: ConfigInput['models']['execution']) => ({
   configurationId: singletonId,
-  role,
+  role: ModelRole.EXECUTION,
   providerId: profile.providerId,
   model: profile.model,
-  effort: 'effort' in profile ? profile.effort : null,
-  dimensions: 'dimensions' in profile ? profile.dimensions : null,
+  effort: profile.effort,
 });
 
 const fromStored = (stored: StoredConfig): DoricConfig => {
   const models = new Map(stored.models.map((model) => [model.role, model]));
   const reasoning = (role: ModelRole) => {
     const profile = required(models, role);
-    if (profile.effort === null)
-      throw new Error('Stored reasoning effort is missing.');
     return {
       providerId: profile.providerId,
       model: profile.model,
-      effort: profile.effort as ConfigInput['models']['planning']['effort'],
+      effort: profile.effort as ConfigInput['models']['execution']['effort'],
     };
   };
-  const plain = (role: ModelRole) => {
-    const profile = required(models, role);
-    return { providerId: profile.providerId, model: profile.model };
-  };
-  const embedding = required(models, ModelRole.EMBEDDER);
-  if (embedding.dimensions === null)
-    throw new Error('Stored embedding dimensions are missing.');
 
   const configuration = ConfigInputSchema.parse({
     providers: stored.providers
       .map(({ id, baseUrl, apiKeyEnv }) => ({ id, baseUrl, apiKeyEnv }))
       .sort((left, right) => left.id.localeCompare(right.id)),
     models: {
-      planning: reasoning(ModelRole.PLANNING),
-      revision: reasoning(ModelRole.REVISION),
       execution: reasoning(ModelRole.EXECUTION),
-      reranker: plain(ModelRole.RERANKER),
-      embedder: {
-        ...plain(ModelRole.EMBEDDER),
-        dimensions: embedding.dimensions,
-      },
-    },
-    routing: {
-      maxHintCandidates: stored.maxHintCandidates,
-      maxRetrievedCandidates: stored.maxRetrievedCandidates,
-      maxSkills: stored.maxSkills,
     },
     execution: { maxTurns: stored.maxTurns },
-    revision: { max: stored.maxRevisions },
   });
 
   return {

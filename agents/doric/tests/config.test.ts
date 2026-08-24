@@ -40,9 +40,8 @@ test('rejects model profiles that reference an unavailable provider', () => {
   assert.equal(ConfigInputSchema.safeParse(invalid).success, false);
 });
 
-test('rejects routing limits that select more skills than retrieved', () => {
-  const invalid = structuredClone(defaultConfig);
-  invalid.routing.maxSkills = invalid.routing.maxRetrievedCandidates + 1;
+test('rejects fields outside the Direct configuration contract', () => {
+  const invalid = { ...structuredClone(defaultConfig), routing: {} };
   assert.equal(ConfigInputSchema.safeParse(invalid).success, false);
 });
 
@@ -65,7 +64,7 @@ test('serializes concurrent replacements in request order', async () => {
   await Promise.all([firstWrite, secondWrite]);
   assert.deepEqual(harness.writes, ['first', 'second']);
   assert.equal(
-    harness.service.current().snapshot.configuration.models.planning.model,
+    harness.service.current().snapshot.configuration.models.execution.model,
     'second',
   );
 });
@@ -76,14 +75,14 @@ test('keeps the active generation and accepts later replacements after a build f
   await assert.rejects(harness.service.replace(configured('broken-build')));
   assert.deepEqual(harness.writes, []);
   assert.equal(
-    harness.service.current().snapshot.configuration.models.planning.model,
-    defaultConfig.models.planning.model,
+    harness.service.current().snapshot.configuration.models.execution.model,
+    defaultConfig.models.execution.model,
   );
 
   await harness.service.replace(configured('recovered'));
   assert.deepEqual(harness.writes, ['recovered']);
   assert.equal(
-    harness.service.current().snapshot.configuration.models.planning.model,
+    harness.service.current().snapshot.configuration.models.execution.model,
     'recovered',
   );
 });
@@ -94,8 +93,8 @@ test('keeps the active generation when persistent replacement fails', async () =
   await assert.rejects(harness.service.replace(configured('broken-store')));
   assert.deepEqual(harness.writes, []);
   assert.equal(
-    harness.service.current().snapshot.configuration.models.planning.model,
-    defaultConfig.models.planning.model,
+    harness.service.current().snapshot.configuration.models.execution.model,
+    defaultConfig.models.execution.model,
   );
 });
 
@@ -119,14 +118,14 @@ const configHarness = async ({
   const store = {
     load: async () => snapshot(defaultConfig, revision),
     replace: async (configuration: typeof defaultConfig) => {
-      const model = configuration.models.planning.model;
+      const model = configuration.models.execution.model;
       if (model === failedWrite) throw new Error('store unavailable');
       writes.push(model);
       return snapshot(configuration, ++revision);
     },
   };
   const build = async ({ snapshot: current }: { snapshot: DoricConfig }) => {
-    const model = current.configuration.models.planning.model;
+    const model = current.configuration.models.execution.model;
     if (model === blockedBuild) await buildGate;
     if (model === failedBuild) throw new Error('generation unavailable');
     return { snapshot: current, marker: model } as unknown as Generation;
@@ -142,7 +141,7 @@ const configHarness = async ({
 
 const configured = (model: string) => {
   const config = structuredClone(defaultConfig);
-  config.models.planning.model = model;
+  config.models.execution.model = model;
   return config;
 };
 
