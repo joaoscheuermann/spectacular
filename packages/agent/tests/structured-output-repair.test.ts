@@ -122,7 +122,7 @@ const invalidSubmissions: readonly InvalidSubmission[] = [
 
 for (const mode of ['complete', 'stream'] as const) {
   for (const submission of invalidSubmissions) {
-    test(`${mode} repairs ${submission.name} without executing it and preserves replay`, async () => {
+    test(`${mode} repairs ${submission.name} without executing it`, async () => {
       const fake = createProvider({
         complete: (request, index) =>
           index === 0

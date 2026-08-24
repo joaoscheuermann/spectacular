@@ -51,6 +51,9 @@ jobs:
           DORIC_TEST_DATABASE_URL: postgresql://doric:doric@127.0.0.1:5432/doric
         run: npx nx test doric
 
+      - name: Run Agent tests
+        run: npx nx test agent
+
       # Set up Rust toolchain and clippy for Nx Rust lint targets
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:

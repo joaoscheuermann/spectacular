@@ -246,6 +246,7 @@ export const createAgent = (options: AgentOptions): Agent => {
 
             if (submission.type === 'invalid') {
               storeAssistant(finish);
+              pushIncompleteToolResults(finish, pushToolResult);
               let repair;
               try {
                 repair = nextStructuredOutputRepair(
@@ -278,7 +279,6 @@ export const createAgent = (options: AgentOptions): Agent => {
               });
               invalidSubmissions = repair.invalidSubmissions;
               baseline = submission.baseline;
-              pushIncompleteToolResults(finish, pushToolResult);
               await notifyToolCallRepair(runOptions, {
                 attempt: invalidSubmissions,
                 maxAttempts: maxRepairs,
@@ -315,9 +315,9 @@ export const createAgent = (options: AgentOptions): Agent => {
           try {
             calls = validatedCalls(finish);
           } catch (error) {
+            pushIncompleteToolResults(finish, pushToolResult);
             if (invalidSubmissions >= maxRepairs) throw error;
             invalidSubmissions += 1;
-            pushIncompleteToolResults(finish, pushToolResult);
             await notifyToolCallRepair(runOptions, {
               attempt: invalidSubmissions,
               maxAttempts: maxRepairs,
@@ -377,6 +377,7 @@ export const createAgent = (options: AgentOptions): Agent => {
 
                 if (submission.type === 'invalid') {
                   storeAssistant(event.finish);
+                  pushIncompleteToolResults(event.finish, pushToolResult);
                   let repair;
                   try {
                     repair = nextStructuredOutputRepair(
@@ -409,7 +410,6 @@ export const createAgent = (options: AgentOptions): Agent => {
                   });
                   invalidSubmissions = repair.invalidSubmissions;
                   baseline = submission.baseline;
-                  pushIncompleteToolResults(event.finish, pushToolResult);
                   await notifyToolCallRepair(runOptions, {
                     attempt: invalidSubmissions,
                     maxAttempts: maxRepairs,
@@ -455,8 +455,6 @@ export const createAgent = (options: AgentOptions): Agent => {
             });
           }
 
-          for (const event of buffered) yield event;
-
           storeAssistant(finish);
 
           /** Ordinary calls cannot inherit a prior structured repair baseline. */
@@ -467,9 +465,9 @@ export const createAgent = (options: AgentOptions): Agent => {
           try {
             calls = validatedCalls(finish);
           } catch (error) {
+            pushIncompleteToolResults(finish, pushToolResult);
             if (invalidSubmissions >= maxRepairs) throw error;
             invalidSubmissions += 1;
-            pushIncompleteToolResults(finish, pushToolResult);
             await notifyToolCallRepair(runOptions, {
               attempt: invalidSubmissions,
               maxAttempts: maxRepairs,
@@ -477,6 +475,8 @@ export const createAgent = (options: AgentOptions): Agent => {
             correction = toolCallCorrection;
             continue;
           }
+
+          for (const event of buffered) yield event;
 
           if (calls.length === 0) {
             const response = responseFromFinish(finish);
