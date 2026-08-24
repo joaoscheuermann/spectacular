@@ -13,7 +13,6 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@monodon/rust": "^2.3.0",
     "@nx/js": "^22.6.5",
     "@nxlv/python": "^22.2.2",
     "@swc-node/register": "1.11.1",

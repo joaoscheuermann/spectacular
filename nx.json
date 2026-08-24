@@ -23,7 +23,6 @@
         }
       }
     },
-    "@monodon/rust",
     "@nxlv/python"
   ],
   "neverConnectToCloud": true,

@@ -54,20 +54,5 @@ jobs:
       - name: Run Agent tests
         run: npx nx test agent
 
-      # Set up Rust toolchain and clippy for Nx Rust lint targets
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          cache: true
-          components: clippy
-
-      # Install cargo-nextest for faster/parallel test execution
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-
-      # Run all Rust tests via cargo nextest (runs inline #[test], #[cfg(test)], integration tests under tests/)
-      - name: Run all Rust tests
-        run: cargo nextest run --workspace --all-features
-
       # Run Nx targets for lint, build, typecheck
       - run: npx nx run-many -t lint build typecheck
