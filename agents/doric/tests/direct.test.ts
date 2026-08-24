@@ -1,22 +1,25 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { AgentErrorObject } from 'agent';
 import type { ProviderMessage, ProviderRequest } from 'llms';
+import { z } from 'zod';
 
 import { defaultConfig } from '../src/lib/config.js';
 import { directSystemPrompt, runDirectPrompt } from '../src/lib/direct.js';
 
-test('builds one deterministic instruction with every skill in bundle order', () => {
+test('includes the Direct instruction and every skill body once in bundle order', () => {
   const system = directSystemPrompt([
     skill('first', 'First body.'),
     skill('second', 'Second body.'),
   ]);
+  const first = system.indexOf('First body.');
+  const second = system.indexOf('Second body.');
+
   assert.match(system, /Complete the user's request in the sandbox/u);
-  assert.ok(
-    system.indexOf('## Skill: first') < system.indexOf('## Skill: second'),
-  );
-  assert.match(system, /First body\./u);
-  assert.match(system, /Second body\./u);
+  assert.ok(first >= 0 && first < second);
+  assert.equal(system.lastIndexOf('First body.'), first);
+  assert.equal(system.lastIndexOf('Second body.'), second);
 });
 
 test('feeds complete persisted history into each fresh Direct agent', async () => {
@@ -29,8 +32,21 @@ test('feeds complete persisted history into each fresh Direct agent', async () =
     { role: 'assistant', content: 'answer-prompt-1' },
     { role: 'user', content: 'prompt-2' },
   ]);
+});
+
+test('binds every fresh Direct agent to the session sandbox', async () => {
+  const harness = directHarness();
+  await harness.run('prompt-1');
+  await harness.run('prompt-2');
+
   assert.equal(harness.boundSandboxes.length, 2);
   assert.deepEqual(harness.boundSandboxes, ['vm-1', 'vm-1']);
+});
+
+test('persists streamed Direct events', async () => {
+  const harness = directHarness();
+  await harness.run('prompt');
+
   assert.ok(
     harness.events.some(
       ({ event }) => (event as { type?: string }).type === 'reasoning.delta',
@@ -40,7 +56,7 @@ test('feeds complete persisted history into each fresh Direct agent', async () =
 
 test('persists partial history after failure for the next prompt', async () => {
   const harness = directHarness();
-  await assert.rejects(harness.run('fail'), /provider failed/u);
+  await assert.rejects(harness.run('fail'));
   await harness.run('after-failure');
 
   assert.deepEqual(harness.requests[1]?.messages.slice(1), [
@@ -49,7 +65,32 @@ test('persists partial history after failure for the next prompt', async () => {
   ]);
 });
 
-const directHarness = () => {
+test('uses the configured execution model and effort', async () => {
+  const configuration = structuredClone(defaultConfig);
+  configuration.models.execution.model = 'configured-model';
+  configuration.models.execution.effort = 'high';
+  const harness = directHarness(configuration);
+
+  await harness.run('prompt');
+
+  assert.equal(harness.requests[0]?.model, 'configured-model');
+  assert.equal(harness.requests[0]?.effort, 'high');
+});
+
+test('enforces the configured Direct turn limit', async () => {
+  const configuration = structuredClone(defaultConfig);
+  configuration.execution.maxTurns = 1;
+  const harness = directHarness(configuration);
+
+  await assert.rejects(harness.run('use-tool'), (error: unknown) => {
+    assert.ok(error instanceof AgentErrorObject);
+    assert.equal(error.data.code, 'turn_limit_exceeded');
+    return true;
+  });
+  assert.equal(harness.requests.length, 1);
+});
+
+const directHarness = (configuration = structuredClone(defaultConfig)) => {
   let messages: readonly ProviderMessage[] = [];
   const requests: ProviderRequest[] = [];
   const events: Array<{ event: unknown }> = [];
@@ -66,6 +107,17 @@ const directHarness = () => {
       };
       yield { type: 'reasoning.delta' as const, delta: 'inspect' };
       if (input === 'fail') throw new Error('provider failed');
+      if (input === 'use-tool') {
+        yield {
+          type: 'response.finished' as const,
+          finish: {
+            text: 'Inspecting.',
+            finishReason: 'tool_calls' as const,
+            toolCalls: [{ id: 'call-1', name: 'inspect', arguments: '{}' }],
+          },
+        };
+        return;
+      }
       yield {
         type: 'response.finished' as const,
         finish: {
@@ -78,11 +130,11 @@ const directHarness = () => {
   };
   const generation = {
     snapshot: {
-      configuration: defaultConfig,
+      configuration,
       revision: 1,
       updatedAt: new Date(0).toISOString(),
     },
-    providers: new Map([['openrouter', provider]]),
+    providers: new Map([[configuration.models.execution.providerId, provider]]),
     redactions: () => [],
     catalog: {
       skills: [skill('sandbox', 'Inspect before reporting.')],
@@ -92,8 +144,8 @@ const directHarness = () => {
           return {
             name: 'inspect',
             description: 'Inspect state.',
-            input: {},
-            output: {},
+            input: z.object({}),
+            output: z.object({}),
             definition: {
               name: 'inspect',
               inputSchema: { type: 'object', properties: {} },

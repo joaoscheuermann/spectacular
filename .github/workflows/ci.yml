@@ -13,6 +13,20 @@ permissions:
 jobs:
   main:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.4-alpine3.24@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
+        env:
+          POSTGRES_DB: doric
+          POSTGRES_PASSWORD: doric
+          POSTGRES_USER: doric
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U doric -d doric"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -26,6 +40,16 @@ jobs:
           cache: 'npm'
 
       - run: npm ci
+
+      - name: Apply Doric test migrations
+        env:
+          DORIC_DATABASE_URL: postgresql://doric:doric@127.0.0.1:5432/doric
+        run: npx nx run doric:migrate
+
+      - name: Run Doric tests
+        env:
+          DORIC_TEST_DATABASE_URL: postgresql://doric:doric@127.0.0.1:5432/doric
+        run: npx nx test doric
 
       # Set up Rust toolchain and clippy for Nx Rust lint targets
       - uses: actions-rust-lang/setup-rust-toolchain@v1

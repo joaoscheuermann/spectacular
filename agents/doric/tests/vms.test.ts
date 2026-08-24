@@ -45,11 +45,82 @@ test('tracks provisioned VMs until disposal completes', async () => {
   await second.dispose();
 });
 
-test('returns running VMs and exposes SSH only for a leased VM', async () => {
-  const vms = [
-    { id: 'vm-1', provider: 'firecracker' as const },
-    { id: 'vm-2', provider: 'firecracker' as const },
-  ];
+test('keeps a VM registered when disposal fails', async () => {
+  const provider: SandboxProvider = {
+    provision: async () => ({
+      ...runtime('vm-1'),
+      dispose: async () => {
+        throw new Error('disposal failed');
+      },
+    }),
+  };
+  const registry = createVmRegistry('docker', provider);
+  const tracked = await registry.provider.provision(input);
+
+  await assert.rejects(tracked.dispose());
+  assert.deepEqual(registry.list(), [{ id: 'vm-1', provider: 'docker' }]);
+});
+
+test('returns every running VM', async () => {
+  const host = await serveVms();
+
+  try {
+    const response = await fetch(`${host.url}/vms`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), vms);
+  } finally {
+    await host.close();
+  }
+});
+
+test('returns leased VM SSH access without permitting caches', async () => {
+  const host = await serveVms();
+
+  try {
+    const response = await fetch(`${host.url}/vms/vm-1/ssh`);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.deepEqual(await response.json(), {
+      vm: vms[0],
+      sessionId,
+      ssh: access,
+    });
+  } finally {
+    await host.close();
+  }
+});
+
+test('rejects SSH access for an idle VM', async () => {
+  const host = await serveVms();
+
+  try {
+    const response = await fetch(`${host.url}/vms/vm-2/ssh`);
+    assert.equal(response.status, 409);
+    assert.equal(
+      ((await response.json()) as { error: { code: string } }).error.code,
+      'vm_ssh_unavailable',
+    );
+  } finally {
+    await host.close();
+  }
+});
+
+test('reports missing VMs through the stable error code', async () => {
+  const host = await serveVms();
+
+  try {
+    const response = await fetch(`${host.url}/vms/missing/ssh`);
+    assert.equal(response.status, 404);
+    assert.equal(
+      ((await response.json()) as { error: { code: string } }).error.code,
+      'vm_not_found',
+    );
+  } finally {
+    await host.close();
+  }
+});
+
+const serveVms = async () => {
   const app = express();
   app.use(
     '/vms',
@@ -66,48 +137,18 @@ test('returns running VMs and exposes SSH only for a leased VM', async () => {
     server.once('error', reject);
     server.listen(0, '127.0.0.1', resolve);
   });
-
-  try {
-    const address = server.address();
-    assert.notEqual(address, null);
-    assert.equal(typeof address, 'object');
-    if (address === null || typeof address !== 'object') return;
-
-    const response = await fetch(
-      `http://127.0.0.1:${String(address.port)}/vms`,
-    );
-
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), vms);
-
-    const ssh = await fetch(
-      `http://127.0.0.1:${String(address.port)}/vms/vm-1/ssh`,
-    );
-    assert.equal(ssh.status, 200);
-    assert.equal(ssh.headers.get('cache-control'), 'no-store');
-    assert.deepEqual(await ssh.json(), {
-      vm: vms[0],
-      sessionId,
-      ssh: access,
-    });
-
-    const idle = await fetch(
-      `http://127.0.0.1:${String(address.port)}/vms/vm-2/ssh`,
-    );
-    assert.equal(idle.status, 409);
-
-    const missing = await fetch(
-      `http://127.0.0.1:${String(address.port)}/vms/missing/ssh`,
-    );
-    assert.equal(missing.status, 404);
-  } finally {
-    await new Promise<void>((resolve, reject) =>
-      server.close((cause) =>
-        cause === undefined ? resolve() : reject(cause),
+  const address = server.address();
+  assert.ok(address !== null && typeof address === 'object');
+  return {
+    url: `http://127.0.0.1:${String(address.port)}`,
+    close: () =>
+      new Promise<void>((resolve, reject) =>
+        server.close((cause) =>
+          cause === undefined ? resolve() : reject(cause),
+        ),
       ),
-    );
-  }
-});
+  };
+};
 
 const runtime = (id: string): SandboxRuntime => ({
   id,
@@ -125,6 +166,10 @@ const runtime = (id: string): SandboxRuntime => ({
 });
 
 const sessionId = '018f47d2-e3b1-7b4f-8b2c-1f5a7fdf1601';
+const vms = [
+  { id: 'vm-1', provider: 'firecracker' as const },
+  { id: 'vm-2', provider: 'firecracker' as const },
+];
 const access = {
   host: '127.0.0.1',
   port: 2200,

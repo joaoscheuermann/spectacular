@@ -47,6 +47,14 @@ real files before acting.
   built-in tools, event streaming, user-input handling, session persistence,
   config schema, runtime behavior, or vendored dependency strategy.
 
+## Testing
+
+For every task whose scope includes tests, load and follow
+`.agents/skills/behavioral-testing/SKILL.md` before test-specific work. This
+includes planning, writing, changing, reviewing, diagnosing, evaluating, or
+running tests. Apply it together with applicable repository and language
+conventions.
+
 ## Prompt Authoring
 
 Use `.agents/skills/write-agent-prompts/SKILL.md` when writing or materially

@@ -9,43 +9,126 @@ import {
 import { createConfigService } from '../src/lib/config-service.js';
 import type { Generation } from '../src/lib/generation.js';
 
-test('accepts the complete default and rejects unsafe or inconsistent config', () => {
+test('accepts the complete default configuration', () => {
   assert.equal(ConfigInputSchema.safeParse(defaultConfig).success, true);
+});
 
+test('rejects credential values embedded in provider configuration', () => {
   const secret = structuredClone(defaultConfig) as unknown as Record<
     string,
     unknown
   >;
   (secret.providers as Record<string, unknown>[])[0]!.apiKey = 'private';
   assert.equal(ConfigInputSchema.safeParse(secret).success, false);
+});
 
+test('rejects credential environment names outside the API key convention', () => {
   const invalid = structuredClone(defaultConfig);
   invalid.providers[0]!.apiKeyEnv = 'TOKEN';
+  assert.equal(ConfigInputSchema.safeParse(invalid).success, false);
+});
+
+test('rejects provider URLs outside HTTP and HTTPS', () => {
+  const invalid = structuredClone(defaultConfig);
   invalid.providers[0]!.baseUrl = 'file:///tmp/provider';
+  assert.equal(ConfigInputSchema.safeParse(invalid).success, false);
+});
+
+test('rejects model profiles that reference an unavailable provider', () => {
+  const invalid = structuredClone(defaultConfig);
   invalid.models.execution.providerId = 'missing';
+  assert.equal(ConfigInputSchema.safeParse(invalid).success, false);
+});
+
+test('rejects routing limits that select more skills than retrieved', () => {
+  const invalid = structuredClone(defaultConfig);
   invalid.routing.maxSkills = invalid.routing.maxRetrievedCandidates + 1;
   assert.equal(ConfigInputSchema.safeParse(invalid).success, false);
 });
 
-test('serializes replacements and preserves the active generation after failure', async () => {
+test('rejects duplicate provider identifiers', () => {
+  const invalid = structuredClone(defaultConfig);
+  invalid.providers.push(structuredClone(invalid.providers[0]!));
+  assert.equal(ConfigInputSchema.safeParse(invalid).success, false);
+});
+
+test('serializes concurrent replacements in request order', async () => {
+  const harness = await configHarness({ blockedBuild: 'first' });
+  const first = configured('first');
+  const second = configured('second');
+  const firstWrite = harness.service.replace(first);
+  const secondWrite = harness.service.replace(second);
+  await Promise.resolve();
+  assert.deepEqual(harness.writes, []);
+
+  harness.releaseBuild();
+  await Promise.all([firstWrite, secondWrite]);
+  assert.deepEqual(harness.writes, ['first', 'second']);
+  assert.equal(
+    harness.service.current().snapshot.configuration.models.planning.model,
+    'second',
+  );
+});
+
+test('keeps the active generation and accepts later replacements after a build failure', async () => {
+  const harness = await configHarness({ failedBuild: 'broken-build' });
+
+  await assert.rejects(harness.service.replace(configured('broken-build')));
+  assert.deepEqual(harness.writes, []);
+  assert.equal(
+    harness.service.current().snapshot.configuration.models.planning.model,
+    defaultConfig.models.planning.model,
+  );
+
+  await harness.service.replace(configured('recovered'));
+  assert.deepEqual(harness.writes, ['recovered']);
+  assert.equal(
+    harness.service.current().snapshot.configuration.models.planning.model,
+    'recovered',
+  );
+});
+
+test('keeps the active generation when persistent replacement fails', async () => {
+  const harness = await configHarness({ failedWrite: 'broken-store' });
+
+  await assert.rejects(harness.service.replace(configured('broken-store')));
+  assert.deepEqual(harness.writes, []);
+  assert.equal(
+    harness.service.current().snapshot.configuration.models.planning.model,
+    defaultConfig.models.planning.model,
+  );
+});
+
+type ConfigHarnessOptions = {
+  readonly blockedBuild?: string;
+  readonly failedBuild?: string;
+  readonly failedWrite?: string;
+};
+
+const configHarness = async ({
+  blockedBuild,
+  failedBuild,
+  failedWrite,
+}: ConfigHarnessOptions = {}) => {
   let revision = 1;
   const writes: string[] = [];
-  const initial = snapshot(defaultConfig, revision);
+  let releaseBuild: () => void = () => undefined;
+  const buildGate = new Promise<void>((resolve) => {
+    releaseBuild = resolve;
+  });
   const store = {
-    load: async () => initial,
+    load: async () => snapshot(defaultConfig, revision),
     replace: async (configuration: typeof defaultConfig) => {
-      writes.push(configuration.models.planning.model);
+      const model = configuration.models.planning.model;
+      if (model === failedWrite) throw new Error('store unavailable');
+      writes.push(model);
       return snapshot(configuration, ++revision);
     },
   };
-  let releaseFirst: () => void = () => undefined;
-  const firstGate = new Promise<void>((resolve) => {
-    releaseFirst = resolve;
-  });
   const build = async ({ snapshot: current }: { snapshot: DoricConfig }) => {
     const model = current.configuration.models.planning.model;
-    if (model === 'first') await firstGate;
-    if (model === 'broken') throw new Error('reindex failed');
+    if (model === blockedBuild) await buildGate;
+    if (model === failedBuild) throw new Error('generation unavailable');
     return { snapshot: current, marker: model } as unknown as Generation;
   };
   const service = await createConfigService({
@@ -54,30 +137,8 @@ test('serializes replacements and preserves the active generation after failure'
     logger: {} as never,
     buildGeneration: build as never,
   });
-  const first = configured('first');
-  const second = configured('second');
-  const firstWrite = service.replace(first);
-  const secondWrite = service.replace(second);
-  await Promise.resolve();
-  assert.deepEqual(writes, []);
-  releaseFirst();
-  await Promise.all([firstWrite, secondWrite]);
-  assert.deepEqual(writes, ['first', 'second']);
-  assert.equal(
-    service.current().snapshot.configuration.models.planning.model,
-    'second',
-  );
-
-  await assert.rejects(
-    service.replace(configured('broken')),
-    /reindex failed/u,
-  );
-  assert.deepEqual(writes, ['first', 'second']);
-  assert.equal(
-    service.current().snapshot.configuration.models.planning.model,
-    'second',
-  );
-});
+  return { service, writes, releaseBuild };
+};
 
 const configured = (model: string) => {
   const config = structuredClone(defaultConfig);

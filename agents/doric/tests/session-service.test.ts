@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import type { ProviderMessage } from 'llms';
+
 import { defaultConfig } from '../src/lib/config.js';
 import { createSessionService } from '../src/lib/session-service.js';
 import type {
   Session,
   SessionEvent,
   SessionState,
+  SessionStore,
 } from '../src/lib/sessions.js';
 
 test('uses one lease and executes simultaneous prompts in FIFO order', async () => {
@@ -51,9 +54,8 @@ test('uses one lease and executes simultaneous prompts in FIFO order', async () 
   assert.deepEqual(calls, ['first']);
 
   unblockFirst();
-  await waitUntil(
-    () => calls.length === 2 && harness.current().state === 'ready',
-  );
+  await waitUntil(() => calls.length === 2);
+  await harness.waitFor('ready');
   assert.deepEqual(calls, ['first', 'second']);
   assert.deepEqual(sandboxes, ['vm-1', 'vm-1']);
   assert.equal(acquisitions, 1);
@@ -62,7 +64,7 @@ test('uses one lease and executes simultaneous prompts in FIFO order', async () 
   await service.terminate(created.id);
   await service.dispose();
   assert.equal(releases, 1);
-  assert.equal(harness.current().state, 'cancelled');
+  assert.equal((await service.find(created.id))?.state, 'cancelled');
 });
 
 test('keeps processing queued prompts after one prompt fails', async () => {
@@ -83,9 +85,8 @@ test('keeps processing queued prompts after one prompt fails', async () => {
   const second = await service.prompt(created.id, 'next');
   assert.equal(first.status, 'accepted');
   assert.equal(second.status, 'accepted');
-  await waitUntil(
-    () => calls.length === 2 && harness.current().state === 'ready',
-  );
+  await waitUntil(() => calls.length === 2);
+  await harness.waitFor('ready');
 
   const failure = harness.events().find(({ type }) => type === 'agent.failed');
   assert.ok(failure !== undefined && first.status === 'accepted');
@@ -132,7 +133,7 @@ test('cancels the active prompt and every queued prompt before one release', asy
     ),
   );
   assert.equal(releases, 1);
-  assert.equal(harness.current().state, 'cancelled');
+  assert.equal((await service.find(created.id))?.state, 'cancelled');
 });
 
 test('fails a queued session when sandbox acquisition is exhausted', async () => {
@@ -149,7 +150,10 @@ test('fails a queued session when sandbox acquisition is exhausted', async () =>
   const created = await service.create();
   assert.equal(created.state, 'queued');
   await harness.waitFor('failed');
-  assert.equal(harness.current().errorCode, 'sandbox_acquisition_failed');
+  assert.equal(
+    (await service.find(created.id))?.errorCode,
+    'sandbox_acquisition_failed',
+  );
   await service.dispose();
   assert.deepEqual(await service.ssh(created.id), { status: 'expired' });
 });
@@ -189,9 +193,50 @@ test('captures the configuration generation when the session is created', async 
   await service.dispose();
 });
 
+test('terminates an active session idempotently', async () => {
+  const harness = createHarness();
+  const service = createSessionService({
+    ...harness.dependencies,
+    pool: leasePool(),
+  });
+
+  const created = await service.create();
+  await harness.waitFor('ready');
+  assert.equal((await service.terminate(created.id))?.state, 'cancelling');
+  assert.equal((await service.terminate(created.id))?.state, 'cancelling');
+  await service.dispose();
+  assert.equal((await service.find(created.id))?.state, 'cancelled');
+});
+
+test('exposes SSH only while a VM is leased to the active session', async () => {
+  const harness = createHarness();
+  const service = createSessionService({
+    ...harness.dependencies,
+    pool: leasePool(),
+  });
+
+  const created = await service.create();
+  await harness.waitFor('ready');
+  assert.deepEqual(await service.ssh(created.id), {
+    status: 'ready',
+    vmId: sandbox.id,
+    ssh: sshAccess,
+  });
+  assert.deepEqual(await service.sshForVm(sandbox.id), {
+    sessionId: created.id,
+    ssh: sshAccess,
+  });
+  assert.equal(await service.sshForVm('different-vm'), undefined);
+
+  await service.terminate(created.id);
+  await service.dispose();
+  assert.equal(await service.sshForVm(sandbox.id), undefined);
+  assert.deepEqual(await service.ssh(created.id), { status: 'expired' });
+});
+
 const createHarness = () => {
   let value = session('queued');
-  let messages: readonly never[] = [];
+  let messages: readonly ProviderMessage[] = [];
   const storedEvents: SessionEvent[] = [];
   const waiters: Array<{ state: SessionState; resolve: () => void }> = [];
   const update = (state: SessionState, errorCode?: string): Session => {
@@ -201,20 +246,18 @@ const createHarness = () => {
       .forEach(({ resolve }) => resolve());
     return value;
   };
-  const store = {
+  const store: SessionStore = {
     create: async () => ({ session: value, snapshot, messages }),
     find: async () => ({ session: value, snapshot, messages }),
-    list: async () => ({ sessions: [value] }),
-    markReady: async () =>
-      update(value.state === 'queued' ? 'ready' : value.state),
-    markRunning: async () =>
-      update(value.state === 'ready' ? 'running' : value.state),
-    finishPrompt: async (_id: string, next: readonly never[]) => {
+    list: async () => ({ sessions: [value], nextCursor: undefined }),
+    reconcile: async () => 0,
+    markReady: async () => update('ready'),
+    markRunning: async () => update('running'),
+    finishPrompt: async (_id: string, next: readonly ProviderMessage[]) => {
       messages = next;
-      return update(value.state === 'running' ? 'ready' : value.state);
+      return update('ready');
     },
     acceptPrompt: async (_id: string, promptId: string) => {
-      if (terminal.has(value.state)) return { status: 'inactive' as const };
       const accepted = storedEvent(
         promptId,
         'prompt.accepted',
@@ -224,13 +267,12 @@ const createHarness = () => {
       value = session(value.state, value.errorCode, storedEvents.length);
       return { status: 'accepted' as const, event: accepted };
     },
-    requestCancellation: async () =>
-      terminal.has(value.state) ? value : update('cancelling'),
+    requestCancellation: async () => update('cancelling'),
     finish: async (
       _id: string,
       target: 'failed' | 'cancelled',
       errorCode?: string,
-    ) => update(value.state === 'cancelling' ? 'cancelled' : target, errorCode),
+    ) => update(target, errorCode),
     appendEvent: async (_id: string, promptId: string, event: unknown) => {
       const type = (event as { type: string }).type;
       const stored = storedEvent(
@@ -248,14 +290,28 @@ const createHarness = () => {
     delete: async () => 'active' as const,
   };
   return {
-    current: () => value,
     events: () => [...storedEvents],
     waitFor: (state: SessionState) => {
       if (value.state === state) return Promise.resolve();
-      return new Promise<void>((resolve) => waiters.push({ state, resolve }));
+      return new Promise<void>((resolve, reject) => {
+        let timeout: ReturnType<typeof setTimeout>;
+        const waiter = {
+          state,
+          resolve: () => {
+            clearTimeout(timeout);
+            resolve();
+          },
+        };
+        timeout = setTimeout(() => {
+          const index = waiters.indexOf(waiter);
+          if (index >= 0) waiters.splice(index, 1);
+          reject(new Error(`Timed out waiting for session state ${state}.`));
+        }, 1_000);
+        waiters.push(waiter);
+      });
     },
     dependencies: {
-      store: store as never,
+      store,
       config: { current: () => generation('current') } as never,
       publisher: {
         event: () => undefined,
@@ -273,7 +329,6 @@ const snapshot = {
   revision: 1,
   updatedAt: new Date(0).toISOString(),
 };
-const terminal = new Set<SessionState>(['failed', 'cancelled', 'cancelling']);
 const generation = (marker: string) => ({
   snapshot,
   marker,
@@ -309,14 +364,15 @@ const storedEvent = (
 });
 const sandbox = {
   id: 'vm-1',
-  ssh: async () => ({
-    host: '127.0.0.1',
-    port: 2200,
-    username: 'root' as const,
-    privateKey: 'key',
-    knownHosts: 'known',
-    hostKeyFingerprint: 'fingerprint',
-  }),
+  ssh: async () => sshAccess,
+};
+const sshAccess = {
+  host: '127.0.0.1',
+  port: 2200,
+  username: 'root' as const,
+  privateKey: 'key',
+  knownHosts: 'known',
+  hostKeyFingerprint: 'fingerprint',
 };
 const leasePool = (release: () => void = () => undefined) =>
   ({
