@@ -1,253 +1,97 @@
-# Spectacular
+# Doric
 
-Spectacular is a terminal AI assistant for working inside a local codebase.
-It runs as a native chat loop, streams model output, keeps session history, and
-lets the model use built-in tools to inspect, edit, search, and run commands in
-the current workspace.
+Doric is a TypeScript coding agent that keeps a conversation and its working
+environment alive across multiple prompts.
 
-The main product surface is bare `spectacular`. The longer-term direction is
-spec-driven development, but the current working functionality is centered on
-chat, tool use, sessions, provider configuration, and repository workflows.
+## How Direct works
 
-## Functionality
+1. A client creates a session through the REST API.
+2. Doric reserves one isolated Docker or Firecracker sandbox for that session.
+3. Prompts enter a FIFO queue and run one at a time in the same sandbox.
+4. Each prompt gets a fresh Agent instance with the configured model, persisted
+   conversation history, built-in skills, and sandbox-bound tools.
+5. PostgreSQL stores configuration, sessions, messages, and the ordered event
+   stream. Socket.IO replays stored events before delivering live updates.
+6. The sandbox remains reserved until the session is terminated. Sessions do
+   not expire automatically.
 
-### Terminal Chat
+## Start Direct locally
 
-Start a fresh IOCraft TUI chat session:
+With PostgreSQL and Docker running:
 
-```sh
-npx nx run spectacular:run
-```
-
-When using the built binary directly, run `spectacular` with no subcommand.
-
-The chat experience runs in the IOCraft terminal UI. User prompts, assistant
-responses, tool calls, session state, and command output stay in one interactive
-terminal surface.
-
-The prompt supports:
-
-- Multiline input.
-- Bracketed paste and fallback paste-burst handling.
-- Slash-command suggestions.
-- Tab completion for command names.
-- Quoted command arguments.
-- `Enter` to submit.
-- `Shift+Enter`, `Alt+Enter`, `Ctrl+Enter`, or `Ctrl+J` to insert a newline.
-- `Ctrl+C` to clear the current prompt, or exit when the prompt is empty.
-
-The TUI owns clipboard shortcuts inside the app:
-
-- `Ctrl+C` copies the focused prompt selection.
-- `Ctrl+X` cuts the focused prompt selection.
-- `Ctrl+V` pastes from the OS clipboard with paste guardrails.
-- `Shift+Left/Right/Up/Down` extends prompt text selection when the terminal
-  passes those key events through to the app.
-- Terminal-native paste shows `Use Ctrl+V to paste`.
-- `Esc` cancels a running request, clears prompt selection/text while idle, or exits when the prompt is empty.
-- `Ctrl+Q` exits explicitly.
-
-Some terminal hosts reserve selection shortcuts before console applications can
-read them. On Windows Terminal, `Shift+Up/Down` may be handled by the terminal
-instead of delivered as key events, while `Shift+Left/Right` still reaches the
-app. In that case Spectacular cannot select vertically from the app side because
-there is no `Up` or `Down` event to handle.
-
-The fullscreen TUI uses a solid white cursor. Text selections use a 70% white
-background approximation (`#B3B3B3`), since terminal colors do not carry alpha.
-By default, selected text uses the RGB complement of the selection background
-(`#4C4C4C` for `#B3B3B3`). Selection colors can be customized at startup with
-environment variables:
-
-- `SPECTACULAR_TUI_SELECTION_TEXT_COLOR`
-- `SPECTACULAR_TUI_SELECTION_BACKGROUND_COLOR`
-
-Both accept RGB hex values as `#RRGGBB` or `RRGGBB`, case-insensitive. Invalid
-values fall back independently. If the selected-text color variable is unset or
-invalid, selected text uses the RGB complement of the resolved selection
-background.
-
-### Slash Commands
-
-Slash commands are strict. Empty commands, uppercase command names, unknown
-commands, and unterminated quotes are errors.
-
-| Command | What it does |
-| ------- | ------------ |
-| `/new` | Starts a new chat session. |
-| `/history [page|start-end]` | Lists saved sessions. |
-| `/resume <session-id>` | Resumes a saved session by id or unique prefix. |
-| `/clear` | Clears the visible terminal output. |
-| `/exit` | Exits chat. |
-| `/provider [configured-provider-id]` | Shows or switches the active provider. |
-| `/model [model-id none|low|medium|high]` | Shows or updates the coding model and reasoning level. |
-| `/reasoning [none|low|medium|high]` | Shows or updates coding reasoning. |
-| `/retry` | Replays the latest prompt after truncating the previous response. |
-| `/git status` | Shows working tree status and staged diff stats. |
-| `/git commit` | Generates a conventional commit message for staged changes and commits them. |
-
-### Built-In Tools
-
-The main chat agent exposes these tools to the model:
-
-| Tool | What it does |
-| ---- | ------------ |
-| `find` | Finds files by glob, respecting `.gitignore`. |
-| `grep` | Searches file contents with regex or literal matching. |
-| `tree` | Prints a gitignore-aware ASCII directory tree. |
-| `terminal` | Runs shell commands and returns stdout, stderr, and exit code. |
-| `edit` | Applies exact text replacements to existing files. |
-| `write` | Creates or overwrites files, including parent directories. |
-| `web` | Searches the web, opens pages, and finds text in pages. |
-
-Tool calls are model-facing and currently run without an approval prompt. Use
-Spectacular in workspaces where file writes and command execution are intended.
-
-### Sessions
-
-Chat sessions are persisted as structured JSONL records. A session can include:
-
-- The session id and title.
-- Provider and model changes.
-- User prompts and assistant deltas.
-- Reasoning deltas.
-- Tool calls and tool results.
-- Usage metadata.
-- Errors, cancellations, and finish reasons.
-
-Useful session behavior:
-
-- `spectacular` starts a fresh session by default.
-- `/history` lists recent saved sessions.
-- `/resume <session-id>` restores a previous session.
-- `/retry` truncates after the latest user prompt and reruns it.
-- Titles are generated in the background after the first assistant response.
-
-### Provider And Model Configuration
-
-OpenRouter is the enabled provider implementation in this checkout.
-
-Spectacular stores provider settings locally and supports three model slots:
-
-- `coding`: used by `spectacular`.
-- `labeling`: used for background session titles when configured.
-- `planning`: reserved for the planning route.
-
-Reasoning levels:
-
-- `none`
-- `low`
-- `medium`
-- `high`
-
-Show current configuration:
-
-```sh
-npx nx run spectacular:run --args='config'
-```
-
-Configure OpenRouter:
-
-```sh
-npx nx run spectacular:run --args='config --provider openrouter --key sk-or-v1-your-key'
-npx nx run spectacular:run --args='config --use openrouter'
-npx nx run spectacular:run --args='config --provider openrouter --task coding --model openrouter/your-model --reasoning medium'
-```
-
-Optional title model:
-
-```sh
-npx nx run spectacular:run --args='config --provider openrouter --task labeling --model openrouter/title-model --reasoning none'
-```
-
-
-## Quick Start
-
-Prerequisites:
-
-- Node.js 20+
-- npm
-- Rust stable
-- OpenRouter API key
-
-Install dependencies:
-
-```sh
+```console
 npm ci
+# Set DORIC_DATABASE_URL and OPENROUTER_API_KEY in .env.
+npx nx run doric:migrate
+npx nx serve doric
 ```
 
-Build:
+Doric listens on `0.0.0.0:3000` by default. The API is unauthenticated, so keep
+it on a trusted network.
 
-```sh
-cargo build -p spectacular
-```
+See [`agents/doric/README.md`](agents/doric/README.md) for the API, event, and
+persistence contracts.
 
-Configure the chat model:
+## Workspace guide
 
-```sh
-npx nx run spectacular:run --args='config --provider openrouter --key sk-or-v1-your-key'
-npx nx run spectacular:run --args='config --use openrouter'
-npx nx run spectacular:run --args='config --provider openrouter --task coding --model openrouter/your-model --reasoning medium'
-```
+Each Nx project owns a README with its public contract, usage, and development
+commands.
 
-Start chat:
+### Agent
 
-```sh
-npx nx run spectacular:run
-```
+- [`agents/doric`](agents/doric/README.md) — Direct REST and Socket.IO host,
+  PostgreSQL persistence, and long-lived sandbox sessions.
 
-## Local Data
+### Built-in bundles
 
-Configuration and sessions are stored outside the repo.
+- [`bundles/core`](bundles/core/README.md) — filesystem, shell, and web tools
+  plus general execution skills.
+- [`bundles/git`](bundles/git/README.md) — structured Git execution and focused
+  Git workflow skills.
 
-Windows:
+### Libraries
 
-```text
-%APPDATA%\spectacular\config.json
-%APPDATA%\spectacular\sessions\*.jsonl
-```
+- [`packages/agent`](packages/agent/README.md) — provider-neutral agent loop.
+- [`packages/bundle`](packages/bundle/README.md) — strict runtime loader for
+  bundle manifests, tools, and skills.
+- [`packages/config`](packages/config/README.md) — parser for message-carried
+  agent configuration.
+- [`packages/docker`](packages/docker/README.md) — Docker implementation of the
+  sandbox provider contract.
+- [`packages/firecracker`](packages/firecracker/README.md) — direct
+  Firecracker/KVM sandbox provider.
+- [`packages/jsonl`](packages/jsonl/README.md) — streaming JSON Lines storage.
+- [`packages/llms`](packages/llms/README.md) — model-provider integrations.
+- [`packages/messages`](packages/messages/README.md) — provider-neutral message
+  storage and normalization.
+- [`packages/oauth`](packages/oauth/README.md) — OAuth 2 authorization-code and
+  PKCE helpers.
+- [`packages/okf`](packages/okf/README.md) — Open Knowledge Format bundle
+  generator.
+- [`packages/sandbox`](packages/sandbox/README.md) — provider-neutral isolated
+  workspace contract and helpers.
+- [`packages/sandpool`](packages/sandpool/README.md) — warmed FIFO pool of
+  sandbox sessions.
+- [`packages/session`](packages/session/README.md) — process-local keyed session
+  store.
+- [`packages/tool`](packages/tool/README.md) — tool definitions, binding,
+  validation, and execution.
 
-macOS:
+### Standalone tools
 
-```text
-~/Library/Application Support/spectacular/config.json
-~/Library/Application Support/spectacular/sessions/*.jsonl
-```
+- [`tools/okf`](tools/okf/README.md) — read-only search over workspace OKF
+  bundles.
 
-Linux:
+## Work in the repository
 
-```text
-$XDG_CONFIG_HOME/spectacular/config.json
-$XDG_CONFIG_HOME/spectacular/sessions/*.jsonl
-```
+Install dependencies once, then use Nx project names from the guide above:
 
-If `XDG_CONFIG_HOME` is not set, Linux uses `~/.config/spectacular`.
-
-API keys are stored as plain text in `config.json`.
-
-## Development
-
-Spectacular is an Nx workspace backed by a Rust Cargo workspace.
-
-| Package | Purpose |
-| ------- | ------- |
-| `spectacular` | CLI, chat loop, prompt editor, renderer, sessions, and chat commands. |
-| `spectacular-agent` | Agent runtime, streaming, retries, continuation, tool loop, and store. |
-| `spectacular-llms` | Provider traits, provider types, registry, and OpenRouter. |
-| `spectacular-tools` | Built-in file, terminal, web, search, edit, and write tools. |
-| `spectacular-commands` | Slash-command parsing, metadata, fuzzy search, and errors. |
-| `spectacular-config` | Config schema, persistence, validation, and migration. |
-
-Common commands:
-
-```sh
+```console
+npm ci
 npx nx show projects
-npx nx test spectacular
-npx nx run-many -t lint build test
-cargo test --workspace
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
+npx nx show project <project>
+npx nx test <project>
 ```
 
-CI runs `cargo nextest run --workspace --all-features` and Nx `lint`, `build`,
-and `typecheck`.
+The project README lists any additional build, run, typecheck, or e2e targets
+and their prerequisites.

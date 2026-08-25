@@ -1,0 +1,25 @@
+#!/.doric/bin/busybox sh
+set -eu
+
+BUSYBOX=/.doric/bin/busybox
+DROPBEAR=/.doric/bin/dropbearmulti
+CONFIG=/doric-config
+
+$BUSYBOX mount -t proc proc /proc 2>/dev/null || true
+$BUSYBOX mount -t sysfs sysfs /sys 2>/dev/null || true
+$BUSYBOX mkdir -p /workspace /root/.ssh /run/dropbear /etc
+$BUSYBOX chmod 0700 /root/.ssh
+$BUSYBOX cp "$CONFIG/authorized_keys" /root/.ssh/authorized_keys
+$BUSYBOX chmod 0600 /root/.ssh/authorized_keys
+$BUSYBOX cp "$CONFIG/dropbear_host_key" /run/dropbear/dropbear_host_key
+$BUSYBOX chmod 0600 /run/dropbear/dropbear_host_key
+$BUSYBOX ip link set lo up
+$BUSYBOX ip addr add "$($BUSYBOX cat "$CONFIG/guest_cidr")" dev eth0
+$BUSYBOX ip link set eth0 up
+$BUSYBOX ip route add default via "$($BUSYBOX cat "$CONFIG/gateway")"
+$BUSYBOX cp "$CONFIG/resolv.conf" /etc/resolv.conf
+
+exec $DROPBEAR dropbear \
+  -F -E -s -g -j -k \
+  -p 22 \
+  -r /run/dropbear/dropbear_host_key

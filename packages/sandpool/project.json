@@ -1,0 +1,32 @@
+{
+  "name": "sandpool",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/sandpool/src",
+  "projectType": "library",
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "outputs": ["{projectRoot}/dist-tests"],
+      "options": {
+        "commands": [
+          "tsc -p packages/sandpool/tsconfig.spec.json",
+          "node --test packages/sandpool/dist-tests/tests/*.test.js"
+        ],
+        "parallel": false
+      }
+    },
+    "e2e": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build", "^build"],
+      "outputs": ["{projectRoot}/dist-e2e"],
+      "options": {
+        "commands": [
+          "tsc -p packages/sandpool/tsconfig.e2e.json",
+          "node --test packages/sandpool/dist-e2e/tests/*.e2e.js"
+        ],
+        "parallel": false
+      }
+    }
+  },
+  "tags": []
+}

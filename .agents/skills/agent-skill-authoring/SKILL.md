@@ -1,6 +1,7 @@
 ---
 name: agent-skill-authoring
 description: Guidelines for creating and refactoring Agent Skills optimized for GPT-5.5. Covers the Agent Skills directory structure, YAML frontmatter specification, outcome-first prompting, retrieval budgets, and progressive disclosure rules. Load when scaffolding a new skill or refactoring an existing one.
+allowed-tools: read, write, replace, find
 ---
 
 # Agent Skill Authoring

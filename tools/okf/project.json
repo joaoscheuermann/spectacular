@@ -1,0 +1,20 @@
+{
+  "name": "tool-okf",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "tools/okf/src",
+  "projectType": "library",
+  "tags": [],
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "outputs": ["{projectRoot}/dist-tests"],
+      "options": {
+        "commands": [
+          "tsc -p tools/okf/tsconfig.spec.json",
+          "node --test tools/okf/dist-tests/tests/*.test.js"
+        ],
+        "parallel": false
+      }
+    }
+  }
+}

@@ -2,5 +2,60 @@
   "extends": "./tsconfig.base.json",
   "compileOnSave": false,
   "files": [],
-  "references": []
+  "references": [
+    {
+      "path": "./packages/jsonl"
+    },
+    {
+      "path": "./packages/docker"
+    },
+    {
+      "path": "./packages/sandbox"
+    },
+    {
+      "path": "./packages/llms"
+    },
+    {
+      "path": "./packages/messages"
+    },
+    {
+      "path": "./packages/oauth"
+    },
+    {
+      "path": "./packages/agent"
+    },
+    {
+      "path": "./agents/doric"
+    },
+    {
+      "path": "./packages/config"
+    },
+    {
+      "path": "./packages/session"
+    },
+    {
+      "path": "./tools/okf"
+    },
+    {
+      "path": "./packages/okf"
+    },
+    {
+      "path": "./packages/bundle"
+    },
+    {
+      "path": "./packages/tool"
+    },
+    {
+      "path": "./bundles/core"
+    },
+    {
+      "path": "./packages/sandpool"
+    },
+    {
+      "path": "./packages/firecracker"
+    },
+    {
+      "path": "./bundles/git"
+    }
+  ]
 }

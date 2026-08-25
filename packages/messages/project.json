@@ -1,0 +1,21 @@
+{
+  "name": "messages",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/messages/src",
+  "projectType": "library",
+  "tags": [],
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["^build"],
+      "outputs": ["{projectRoot}/dist-tests"],
+      "options": {
+        "commands": [
+          "tsc -p packages/messages/tsconfig.spec.json",
+          "node --test packages/messages/dist-tests/tests/*.test.js"
+        ],
+        "parallel": false
+      }
+    }
+  }
+}

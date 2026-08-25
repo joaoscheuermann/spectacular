@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ModelRole {
+  EXECUTION
+}
+
+enum SessionState {
+  QUEUED
+  READY
+  RUNNING
+  CANCELLING
+  FAILED
+  CANCELLED
+}
+
+model DoricConfiguration {
+  id         Int                     @id @default(1)
+  revision   Int                     @default(1)
+  generation String                  @db.Uuid
+  maxTurns   Int                     @map("max_turns")
+  updatedAt  DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  providers  ProviderConfiguration[]
+  models     ModelConfiguration[]
+
+  @@map("doric_configuration")
+}
+
+model ProviderConfiguration {
+  configurationId Int                  @map("configuration_id")
+  id              String
+  baseUrl         String               @map("base_url")
+  apiKeyEnv       String               @map("api_key_env")
+  configuration   DoricConfiguration   @relation(fields: [configurationId], references: [id], onDelete: Cascade)
+  models          ModelConfiguration[]
+
+  @@id([configurationId, id])
+  @@map("provider_configuration")
+}
+
+model ModelConfiguration {
+  configurationId Int                   @map("configuration_id")
+  role            ModelRole
+  providerId      String                @map("provider_id")
+  model           String
+  effort          String
+  configuration   DoricConfiguration    @relation(fields: [configurationId], references: [id], onDelete: Cascade)
+  provider        ProviderConfiguration @relation(fields: [configurationId, providerId], references: [configurationId, id])
+
+  @@id([configurationId, role])
+  @@map("model_configuration")
+}
+
+model Session {
+  id             String         @id @default(uuid()) @db.Uuid
+  state          SessionState   @default(QUEUED)
+  configRevision Int            @map("config_revision")
+  configSnapshot Json           @map("config_snapshot") @db.JsonB
+  messages       Json           @default("[]") @db.JsonB
+  errorCode      String?        @map("error_code")
+  lastSequence   Int            @default(0) @map("last_sequence")
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  startedAt      DateTime?      @map("started_at") @db.Timestamptz(3)
+  finishedAt     DateTime?      @map("finished_at") @db.Timestamptz(3)
+  events         SessionEvent[]
+
+  @@index([createdAt, id])
+  @@map("session")
+}
+
+model SessionEvent {
+  sessionId String   @map("session_id") @db.Uuid
+  promptId  String   @map("prompt_id") @db.Uuid
+  sequence  Int
+  type      String
+  event     Json     @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@id([sessionId, sequence])
+  @@map("session_event")
+}

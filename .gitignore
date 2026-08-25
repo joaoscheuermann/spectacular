@@ -2,11 +2,18 @@
 
 # compiled output
 dist
+dist-tests
+dist-e2e
 tmp
 out-tsc
+.doric
+*.log
+/.env
 
 # dependencies
 node_modules
+local_cache
+/.cache/
 
 # IDEs and editors
 /.idea
@@ -33,6 +40,7 @@ npm-debug.log
 yarn-error.log
 testem.log
 /typings
+/agents/doric/src/generated/prisma/
 
 # System Files
 .DS_Store
@@ -48,3 +56,10 @@ Thumbs.db
 .nx/polygraph
 
 .journal
+
+# generated local model artifacts
+/models/skillrouter-embedding/artifact/
+/models/skillrouter-embedding/artifact.previous/
+/models/skillrouter-embedding/.venv/
+/models/skillrouter-embedding/.ruff_cache/
+/models/skillrouter-embedding/skillrouter-export-*/

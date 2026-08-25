@@ -1,0 +1,27 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "okf",
+  "projectType": "library",
+  "sourceRoot": "packages/okf/src",
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "outputs": ["{projectRoot}/dist-tests"],
+      "dependsOn": ["build"],
+      "options": {
+        "commands": [
+          "tsc -p packages/okf/tsconfig.spec.json",
+          "node --test packages/okf/dist-tests/tests/generate.test.js packages/okf/dist-tests/tests/interface.test.js packages/okf/dist-tests/tests/pipeline.test.js packages/okf/dist-tests/tests/tree.test.js packages/okf/dist-tests/tests/walk.test.js"
+        ],
+        "parallel": false
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p packages/okf/tsconfig.lib.json --noEmit"
+      }
+    }
+  },
+  "tags": []
+}
