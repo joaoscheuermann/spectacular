@@ -28,7 +28,6 @@
   },
   "workspaces": [
     "bundles/*",
-    "apps/*",
     "agents/*",
     "packages/*",
     "tools/*",

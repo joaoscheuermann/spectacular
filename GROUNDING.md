@@ -1,6 +1,6 @@
 # Doric Grounding
 
-Last reviewed: 2026-08-13
+Last reviewed: 2026-08-24
 
 This is Doric's repository validity contract. Every agent working in this
 repository must read it before non-trivial planning, reviewing, artifact
@@ -79,12 +79,6 @@ results are output-validated before execution resolves, with sanitized
 `invalid_output` failures. Providers transmit only their supported tool fields
 and use `inputSchema` as function parameters. Model-generated graph nodes use
 tool metadata rather than executable tools or arbitrary tool input schemas.
-
-`apps/cli` is the explicitly requested Node.js command-line host surface for
-interacting with the Doric A2A agent. The CLI is scoped to A2A message
-submission, session listing, session replay/connection, and best-effort session
-kill behavior. This does not by itself reintroduce the former Rust CLI, daemon,
-worker, lifecycle service, TUI, slash-command, or multi-process architecture.
 
 `packages/okf` is the explicitly requested embeddable TypeScript library for
 generating local Open Knowledge Format bundles. Its public `generate` API
@@ -188,84 +182,6 @@ tolerates unknown producer fields and concept types, skips malformed concepts
 and reserved index/log files, does not follow symbolic links, and does not
 write files or access the network. The tool is a standalone package and is not
 registered with a built-in workflow or agent composition by this scope.
-
-`apps/evolution` is the explicitly requested Node.js prompt-evolution CLI. Its
-installed root command is `evolution`, with `init [directory]` and
-`evolve <config-path> [--dry-run]` subcommands. Init resolves its directory from
-the caller's current working directory, defaults to `.`, and non-destructively
-ensures a real `scenarios` directory plus a credential-free default
-`evolution.config.json`; it does not create a default prompt. Relative evolve
-config paths resolve from the caller's current working directory, allowing
-invocation from anywhere. The config file's parent directory is the workspace
-root for all input and output: manually authored scenario definitions under
-`scenarios`, exactly one immutable original `SYSTEM_PROMPT.md` or
-`SYSTEM_PROMPT.txt` under `default`, and model-specific prompts and append-only
-`evolution.history.jsonl` files under each target model ID. The config, default
-prompt, and scenario definitions are read-only during evolution. The CLI
-composes configured target models, one optimizer, and one binary judge through
-any raw provider integration exported by `packages/llms`: OpenAI, OpenRouter,
-LM Studio native, LM Studio OpenAI compatibility, or Codex. The unified
-OpenRouter provider is a Doric composition policy rather than an Evolution
-config variant.
-Non-secret provider and model settings live in the passed JSON config;
-credential values are resolved only at runtime from configured
-environment-variable names and are never persisted or logged. Each target
-model evolves independently from the original prompt; target failures do not
-prevent other targets from running. Scenarios carry an explicit training or
-validation split and combine config-level binary assertions with optional
-scenario-local assertions. An incomplete suite, including a missing split or
-a scenario without an effective assertion, fails before provider calls; the
-CLI never generates, accepts, snapshots, merges, or writes scenarios.
-
-For each scenario, the target is sampled with exactly three independent text
-calls. Every effective assertion/sample pair is evaluated by its own structured
-judge call, which returns one binary verdict; scenario accuracy covers all
-pair verdicts, and overall accuracy is the mean of scenario accuracies so
-scenarios are equally weighted. Evaluation defaults to one complete scenario
-at a time and one global judge request at a time. Positive-integer concurrency
-settings may raise either sliding limit; each active scenario still starts its
-three target samples concurrently, while one evaluation-wide judge pool caps
-judgments across all active scenarios. Scheduling settings do not change the
-history fingerprint. Only training scenarios, training failures, and matching
-bounded history inform optimization. Normal
-optimizer calls use temperature `0.2`; after the configured
-`evolution.patience.epochs` unsuccessful normal epochs, one `0.8`
-plateau-escape attempt runs. Codex optimizer requests
-omit unsupported temperature and emit one stderr warning. Candidates are
-accepted only on strict training improvement, subject to a hard epoch cap.
-
-Application-generated optimizer, compression, and judge user messages are
-deterministic Markdown documents. Every authored or historical text value is
-preserved inside a collision-safe Markdown fence. Optimizer messages exclude
-application-injected target identity entirely: target ID, provider, and model
-remain available for routing, progress, history, and fingerprints but are not
-sent to the optimizer. Raw target scenario inputs remain unchanged, and all
-structured optimizer and judge responses remain schema-validated JSON.
-
-After training reaches the configured accuracy, one `0.2` compression attempt
-may replace the prompt only when it is 20–30 percent shorter by trimmed
-character count and still meets training accuracy. The selected prompt is then
-evaluated once against the isolated validation split; validation inputs,
-outputs, reasoning, and failures are never exposed to optimization or
-compression. Prompt files are written only for approved targets, and existing
-prompts survive failed runs. Applied runs append fingerprinted attempt and
-terminal records to each target's history; only the newest configured number of
-records matching the versioned evaluation mode, original prompt, training
-contract, global assertions, accuracy threshold, target, and judge are reused.
-A dry run may read matching history but makes no filesystem writes. Runtime
-progress is rendered through `pino`/`pino-pretty` on stderr with credential
-redaction and without prompt, scenario, model-output, judge-reasoning,
-assertion, strategy, or failure bodies, preserving stdout for the final JSON
-result.
-
-`packages/prompt-kit` owns Doric's command-line prompt abstraction for the
-Node.js CLI host. It provides Doric-owned text, select, and queued prompt APIs
-instead of coupling CLI user-input handling to Inquirer-shaped contracts.
-
-CLI streamed A2A event output is visible console rendering through
-`pino`/`pino-pretty`. Redaction must be applied to message text and structured
-fields before events are handed to the logger, and this rendering is not
-durable structured log storage.
 
 `agents/doric` receives complete singleton configuration replacements through
 `PUT /config`. It persists only provider IDs, HTTP(S) base URLs,
@@ -591,7 +507,7 @@ not forward unsupported public Responses API controls such as `temperature`.
 ## Repository Shape
 
 Doric is an Nx-managed TypeScript workspace with npm workspaces for
-`apps/*`, `agents/*`, `packages/*`, `tools/*`, `workflows/*`, and
+`agents/*`, `packages/*`, `tools/*`, `workflows/*`, `bundles/*`, and
 `benchmarks/*`.
 
 Use current manifests and source as the package inventory. Do not treat this
@@ -600,7 +516,6 @@ file as the source of truth for every package responsibility.
 Durable boundaries:
 
 - product packages live under `packages/*`;
-- application host surfaces live under `apps/*`;
 - agent entry surfaces live under `agents/*`;
 - standalone tool packages live under `tools/*`;
 - workflow packages live under `workflows/*`;

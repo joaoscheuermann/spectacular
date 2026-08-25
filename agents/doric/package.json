@@ -22,7 +22,6 @@
     "@prisma/adapter-pg": "7.9.1",
     "@prisma/client": "7.9.1",
     "agent": "0.0.1",
-    "artifacts": "0.0.1",
     "bundle": "0.0.1",
     "config": "0.0.1",
     "cors": "^2.8.6",

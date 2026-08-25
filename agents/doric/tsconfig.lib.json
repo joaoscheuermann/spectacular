@@ -45,9 +45,6 @@
       "path": "../../packages/bundle/tsconfig.lib.json"
     },
     {
-      "path": "../../packages/artifacts/tsconfig.lib.json"
-    },
-    {
       "path": "../../packages/agent/tsconfig.lib.json"
     }
   ]

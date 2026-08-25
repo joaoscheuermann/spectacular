@@ -28,22 +28,10 @@
       "path": "./agents/doric"
     },
     {
-      "path": "./packages/artifacts"
-    },
-    {
       "path": "./packages/config"
     },
     {
       "path": "./packages/session"
-    },
-    {
-      "path": "./packages/prompt-kit"
-    },
-    {
-      "path": "./apps/cli"
-    },
-    {
-      "path": "./apps/evolution"
     },
     {
       "path": "./tools/okf"
