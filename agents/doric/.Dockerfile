@@ -14,7 +14,6 @@ WORKDIR /workspace
 # references across package boundaries while compiling Doric and its bundles.
 COPY package.json package-lock.json nx.json tsconfig.json tsconfig.base.json ./
 COPY agents ./agents
-COPY apps ./apps
 COPY bundles ./bundles
 COPY packages ./packages
 COPY tools ./tools
