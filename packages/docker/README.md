@@ -4,6 +4,41 @@
 Engine API. It requests CPU, memory, and writable-layer disk limits whenever a
 sandbox is provisioned.
 
+## Use
+
+With a reachable Docker daemon:
+
+```ts
+import { createDockerClient } from 'docker';
+import { createSandbox } from 'sandbox';
+
+const docker = createDockerClient();
+await docker.ping();
+
+const sandbox = await createSandbox({
+  provider: docker,
+  image: 'node:22-bookworm',
+  imagePullPolicy: 'if-not-present',
+  resources: { cpuCount: 2, memoryMiB: 2048, diskMiB: 4096 },
+  network: { mode: 'disabled' },
+});
+
+try {
+  const result = await sandbox.exec({ cmd: ['node', '--version'] });
+  console.log(result.stdout);
+} finally {
+  await sandbox.dispose();
+}
+```
+
+By default the client uses `/var/run/docker.sock` on Unix and Docker's named
+pipe on Windows. Pass `connection` to `createDockerClient` to override it.
+`DOCKER_HOST=unix://...` is also honored on Unix.
+
+Networking is disabled unless the caller requests egress. Linux egress and SSH
+need the host firewall and pinned Dropbear assets described by the Direct
+runtime; Docker Desktop on macOS and Windows uses its native bridge/NAT path.
+
 ## Writable-layer disk limits
 
 Docker accepts a writable-layer limit through `StorageOpt.size` only when its
@@ -18,3 +53,16 @@ can still run sandboxes. In that fallback, CPU and memory limits remain
 enforced, but the sandbox writable layer is not size-limited by Docker.
 
 Use a quota-capable Docker host when writable-layer disk isolation is required.
+
+## Development
+
+```console
+npx nx build docker
+npx nx test docker
+```
+
+The e2e suite provisions real containers and requires a reachable daemon:
+
+```console
+npx nx run docker:e2e
+```

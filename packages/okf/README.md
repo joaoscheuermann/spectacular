@@ -135,7 +135,7 @@ absolute or filesystem paths, provider or filesystem diagnostics, source
 bodies, prompts, model responses, credentials, or caught messages, names,
 stacks, codes, or causes.
 
-## Cache and prompt evolution
+## Cache and prompt variants
 
 The concept `hash` identifies the complete generation recipe: raw-source hash,
 normalized path and type, sorted extracted relationships, parser/extractor,
@@ -158,6 +158,14 @@ prompts/describe/<target>/SYSTEM_PROMPT.md
 prompts/tags/<target>/SYSTEM_PROMPT.md
 ```
 
-Omitting `promptTarget` selects `default`. Add an evolution workspace beside
-the relevant target directory as described by `apps/evolution/README.md`; OKF
-does not fall back when a selected target is missing.
+Omitting `promptTarget` selects `default`. Additional targets use the same
+three-file layout under their own target directory; OKF does not fall back when
+a selected target is missing.
+
+## Development
+
+```console
+npx nx build okf
+npx nx typecheck okf
+npx nx test okf
+```
