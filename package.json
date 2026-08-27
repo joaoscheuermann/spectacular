@@ -5,6 +5,8 @@
   "scripts": {
     "doric:spawn-agent": "node scripts/spawn-agent.mjs",
     "codex:oauth": "node --conditions=@org/source --import @swc-node/register/esm-register scripts/codex-oauth.mjs",
+    "llm:full-skill-vs-hints": "node --env-file=.env --conditions=@org/source --import @swc-node/register/esm-register scripts/full-skill-vs-hints/index.mjs",
+    "llm:direct-skill-planning": "node --env-file=.env --conditions=@org/source --import @swc-node/register/esm-register scripts/direct-skill-planning/index.mjs",
     "okf": "node --conditions=@org/source --import @swc-node/register/esm-register scripts/okf.mjs"
   },
   "private": true,
@@ -13,6 +15,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@clack/prompts": "^1.7.0",
     "@nx/js": "^22.6.5",
     "@nxlv/python": "^22.2.2",
     "@swc-node/register": "1.11.1",
