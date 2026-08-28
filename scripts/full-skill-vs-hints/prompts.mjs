@@ -13,6 +13,7 @@ A good observable goal:
 - Can later be evaluated using tests, files, behavior, measurements, or other evidence.
 - Avoids prescribing implementation unless the user explicitly requires it.
 - Does not introduce assumptions absent from the request or supplied evidence.
+- Does not fabricate data or invent information.
 `.trim();
 
 export const reviewSkillsSystem = (objective, skills) =>

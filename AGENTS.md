@@ -46,6 +46,10 @@ real files before acting.
   package responsibilities, dependency direction, provider composition,
   built-in tools, event streaming, user-input handling, session persistence,
   config schema, runtime behavior, or vendored dependency strategy.
+- Never add backwards compatibility unless strictly required.
+- Always implement the simplest and more clean code possible.
+- Use `.agents/skills/behavioral-testing` when writing tests.
+- Never write tests for `scripts`;
 
 ## Testing
 

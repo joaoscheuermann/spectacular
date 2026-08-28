@@ -1,6 +1,6 @@
 # Doric Grounding
 
-Last reviewed: 2026-08-24
+Last reviewed: 2026-08-27
 
 This is Doric's repository validity contract. Every agent working in this
 repository must read it before non-trivial planning, reviewing, artifact
@@ -563,6 +563,30 @@ retrieval counts. Progress exposes only case, condition, and operation IDs plus
 counts and booleans; it excludes prompts, model outputs, validation diagnostics,
 credentials, and caught failures. The same-model semantic judge is an explicit
 diagnostic limitation, not hidden ground truth.
+
+The private `scripts/direct-skill-planning` diagnostic lab compares request-
+and P0-goal-level retrieval across direct generation and P0 revision. Judge
+mode evaluates its five diagnostic pairs in both A/B orientations with two
+independent models. Every planning, judging, embedding, and reranking operation
+has at most five total attempts, with 5, 10, 20, and 30 seconds before attempts
+two through five; an explicitly non-retryable provider failure exhausts after
+its first recorded attempt without delay. Planning and judging omit
+`temperature` so strict OpenRouter routing cannot reject a reasoning-model
+endpoint for that unsupported optional control. The lab has no request pool or
+leasing layer.
+Exhausted judge orientations are retained as safe-code `partial` or `failed`
+comparisons without cancelling other judge work, and the run ends as
+`completed_with_failures`; exhausted planning or retrieval pauses the run. A
+serialized atomic checkpoint writer preserves each completed case-round in
+task order. Every failed attempt is also persisted before its delay and printed
+as an allowlisted record containing operation and model identity, provider,
+safe code, attempt state, next-delay milliseconds when applicable, optional
+HTTP status and retryability, and applicable case, round, arm, retrieval,
+goal-index, skill, pair, or orientation identifiers. The run boundary retains
+the final safe failure record. These records exclude URLs, HTTP bodies and
+headers, prompts, model inputs and outputs, diagnostics, messages, causes,
+stacks, and credentials. This authored lab remains diagnostic and is not
+confirmatory benchmark evidence.
 
 The SkillsBench composition condition scans a caller-verified clean checkout of
 the existing v1.1 pin into a deterministic global catalog, hashes every package,
