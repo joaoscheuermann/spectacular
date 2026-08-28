@@ -1,0 +1,35 @@
+\begin{table}[H]
+\centering
+\caption*{\textbf{Quadro 1 - Decisões centrais da MOSAIC 0.3}}
+\small
+\renewcommand{\arraystretch}{1.18}
+\begin{tabularx}{\linewidth}{|>{\bfseries\raggedright\arraybackslash}p{0.31\linewidth}|Y|}
+\hline
+Decisão & Efeito arquitetural \\
+\hline
+Planejar por objetivos orientados a resultados &
+A granularidade do plano não copia tools nem arquivos de skills. \\
+\hline
+Filtrar o feedback de P0 e preservar full bodies em P1 &
+Um gate semântico reduz ruído sem substituir instruções canônicas por resumos. \\
+\hline
+Tratar skills como instruções e tools como operações &
+O modelo continua responsável por interpretação, transformação e decisão. \\
+\hline
+Selecionar bundles ordenados de zero a várias skills &
+Um objetivo combina comportamentos complementares sem virar vários nós. \\
+\hline
+Formar o menu por \(T_{\mathrm{base}}\) e pelas tools do bundle &
+Um bundle vazio pode usar operações gerais sem exigir uma skill artificial. \\
+\hline
+Capturar observações no runtime &
+Cada retorno serializável de tool executável vira evidência ordenada com ID opaco;
+critérios citam IDs locais ou causalmente projetados. \\
+\hline
+Associar revisão ao conjunto completo de evidências &
+Uma revisão localizada recebe todas as observações do nó e preserva os
+resultados já concluídos. \\
+\hline
+\end{tabularx}
+\par\smallskip\raggedright\small Fonte: elaboração própria (2026).
+\end{table}

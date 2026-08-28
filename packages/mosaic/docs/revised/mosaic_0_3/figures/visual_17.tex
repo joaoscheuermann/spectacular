@@ -1,0 +1,21 @@
+\begin{figure}[H]
+\centering
+\caption*{\textbf{Figura 10 - Fronteira entre a MOSAIC 0.3 e extensões operacionais}}
+\begin{tikzpicture}[node distance=7mm and 18mm]
+\node[mosaicbox, text width=4.6cm] (outside1)
+  {Fora da especificação mínima\\autorização e least privilege\\defesas contra prompt injection\\sandbox e isolamento};
+\node[mosaicbox, text width=4.6cm, right=of outside1] (outside2)
+  {Fora da especificação mínima\\scripts, referências e assets\\retries e taxonomia extensa\\scheduler distribuído};
+\node[mosaicbox, text width=7.0cm, below=18mm of $(outside1)!0.5!(outside2)$] (mosaic)
+  {MOSAIC 0.3\\\texttt{SKILL.md} canônico; plano por objetivos;
+  retrieval e gate pré-P1 com full bodies; bundle ordenado; menu composto; decisão semântica;
+  observações do runtime; revisão localizada; entrega determinística};
+\node[mosaicbox, text width=6.0cm, below=of mosaic] (extensions)
+  {Extensões opcionais\\providers, tool router, verificador separado,
+  otimização de bundles, segurança, treinamento e avaliação};
+\draw[mosaicdash] (outside1) -- (mosaic);
+\draw[mosaicdash] (outside2) -- (mosaic);
+\draw[mosaicdash] (mosaic) -- (extensions);
+\end{tikzpicture}
+\par\smallskip\raggedright\small Fonte: elaboração própria (2026).
+\end{figure}

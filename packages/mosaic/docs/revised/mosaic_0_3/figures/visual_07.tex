@@ -1,0 +1,36 @@
+\begin{figure}[H]
+\centering
+\caption*{\textbf{Figura 4 - Feedback pré-execução da MOSAIC 0.3}}
+\resizebox{0.98\linewidth}{!}{%
+\begin{tikzpicture}[node distance=7mm and 11mm]
+\node[mosaicbox, text width=2.7cm] (p0)
+  {P0 sem nomes de skills};
+\node[mosaicbox, text width=3.7cm, right=of p0] (retrieve)
+  {Retrieval por objetivo\\alta cobertura};
+\node[mosaicbox, text width=3.7cm, right=of retrieve] (rerank)
+  {Reranking body-aware\\até \(K_{\mathrm{plan}}\) por objetivo};
+\node[mosaicbox, text width=3.7cm, below=of rerank] (union)
+  {União canônica \(C_0\)\\matches, ranks e scores auditáveis};
+\node[mosaicdecision, text width=3.4cm, left=of union] (gate)
+  {O body melhora materialmente P1?};
+\node[mosaicbox, text width=3.3cm, below left=of gate] (drop)
+  {\texttt{drop}\\sem valor material, redundante, conflitante ou não sustentada};
+\node[mosaicbox, text width=3.3cm, below right=of gate] (keep)
+  {\texttt{keep}\\contribuição distinta ou utilidade material incerta};
+\node[mosaicbox, text width=5.0cm, below=18mm of $(drop)!0.5!(keep)$] (p1)
+  {Revisão P1\\P0 + bodies canônicos\\completos mantidos};
+\node[mosaicbox, text width=4.8cm, below=of p1] (route)
+  {Roteamento final\\independente por objetivo de P1};
+
+\draw[mosaicarrow] (p0) -- (retrieve);
+\draw[mosaicarrow] (retrieve) -- (rerank);
+\draw[mosaicarrow] (rerank) -- (union);
+\draw[mosaicarrow] (union) -- (gate);
+\draw[mosaicarrow] (gate) -- node[above left, font=\scriptsize] {não} (drop);
+\draw[mosaicarrow] (gate) -- node[above right, font=\scriptsize] {sim / incerto} (keep);
+\draw[mosaicdash] (drop) -- (p1);
+\draw[mosaicarrow] (keep) -- node[right, font=\scriptsize] {body canônico} (p1);
+\draw[mosaicarrow] (p1) -- (route);
+\end{tikzpicture}}
+\par\smallskip\raggedright\small Fonte: elaboração própria a partir dos experimentos diagnósticos (2026).
+\end{figure}
