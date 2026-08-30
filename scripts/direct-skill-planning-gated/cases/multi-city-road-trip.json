@@ -1,0 +1,16 @@
+{
+  "name": "multi-city road trip",
+  "objective": "Build a seven-day itinerary for two people leaving Minneapolis and visiting three Ohio cities within a $5,100 budget. Accommodations must be pet-friendly, meals must cover four requested cuisines, and the trip must not use flights. Use real-world data rather than remembered places.",
+  "skills": {
+    "expected": [
+      "feasible-trip-plan",
+      "real-world-travel-research",
+      "road-trip-routing",
+      "search-accommodations",
+      "search-attractions",
+      "search-cities",
+      "search-driving-distance",
+      "search-restaurants"
+    ]
+  }
+}

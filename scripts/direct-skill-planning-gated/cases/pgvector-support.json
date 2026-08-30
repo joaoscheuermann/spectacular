@@ -1,0 +1,7 @@
+{
+  "name": "pgvector support",
+  "objective": "Clone \"https://github.com/joaoscheuermann/doric\" and add pgvector support to package/victor.",
+  "skills": {
+    "expected": ["coding-workflow", "vector-database-integration"]
+  }
+}

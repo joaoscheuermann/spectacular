@@ -1,0 +1,11 @@
+{
+  "name": "citation check",
+  "objective": "Inspect /root/test.bib, identify fake or hallucinated academic citations, and write /root/answer.json containing only their cleaned titles in a sorted fake_citations array.",
+  "skills": {
+    "expected": [
+      "citation-management",
+      "citation-verification",
+      "strict-json-delivery"
+    ]
+  }
+}

@@ -588,6 +588,25 @@ headers, prompts, model inputs and outputs, diagnostics, messages, causes,
 stacks, and credentials. This authored lab remains diagnostic and is not
 confirmatory benchmark evidence.
 
+The sibling private `scripts/direct-skill-planning-gated` diagnostic keeps all
+of its runtime logic in one `index.mjs`, its prompt text in one `prompt.mjs`,
+its two-message construction helper in one `utils.mjs`, and its Zod contracts
+in one `schemas.mjs`. Authored JSON cases contain only a name, objective, and
+expected skill names. The complete skill catalog is materialized below
+`cases/skills`; runtime execution never downloads skills.
+One provider generates P0, independently retrieves up to 20 vector candidates
+and reranks the top 10 for every P0 goal using the case objective plus that
+goal, evaluates every retrieved goal-skill pair independently as `keep | drop`
+with a reason using only the case objective, that goal, and that complete skill
+body, then merges by skill name and keeps a skill when at least one goal keeps
+it. P1 receives each complete kept body once.
+All cases execute concurrently. The diagnostic reports, per case and in
+aggregate, how many expected skills reached the final kept bundle, renders all
+Pino output in the console, and appends it as JSON Lines to `output.log` in the
+experiment directory. It
+has no comparison judges, rounds, retries, replay, checkpoints, similarity
+grouping, redundancy adjudication, or historical evidence pipeline.
+
 The SkillsBench composition condition scans a caller-verified clean checkout of
 the existing v1.1 pin into a deterministic global catalog, hashes every package,
 namespaces same-name/different-body collisions, and preserves task-to-skill gold

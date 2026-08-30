@@ -1,0 +1,14 @@
+{
+  "name": "Spring Boot migration",
+  "objective": "Migrate a user-management microservice from Java 8 and Spring Boot 2.7 to Java 21 and Spring Boot 3.2. Preserve CRUD, JWT authentication, role-based access, JPA persistence, validation, and external API behavior. Handle Jakarta namespaces, Hibernate 6, Spring Security 6, replace RestTemplate with RestClient, and pass mvn clean compile and mvn test.",
+  "skills": {
+    "expected": [
+      "coding-workflow",
+      "hibernate-upgrade",
+      "jakarta-namespace",
+      "restclient-migration",
+      "spring-boot-migration",
+      "spring-security-6"
+    ]
+  }
+}

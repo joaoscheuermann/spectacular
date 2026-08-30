@@ -1,0 +1,7 @@
+{
+  "name": "budget trip",
+  "objective": "Plan a five-day trip to Santiago for two people with a total budget of R$7,000, central lodging, and one winery day trip.",
+  "skills": {
+    "expected": ["feasible-trip-plan", "real-world-travel-research"]
+  }
+}
