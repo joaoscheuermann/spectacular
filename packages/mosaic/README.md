@@ -345,9 +345,13 @@ status-and-node-ID log.
 
 ## Correspondence with the MOSAIC paper
 
-The normative architecture is MOSAIC 0.2, available as the revised
-[PDF](docs/revised/mosaic_0_2/mosaic_0_2.pdf) and editable
-[LaTeX source](docs/revised/mosaic_0_2/mosaic_0_2.tex). The companion empirical
+The latest architecture paper is MOSAIC 0.3, available as the
+[PDF](docs/revised/mosaic_0_3/mosaic_0_3.pdf) and editable
+[LaTeX source](docs/revised/mosaic_0_3/mosaic_0_3.tex). It replaces extracted
+planning hints with a conservative full-body planning gate and records the
+diagnostic evidence for that decision. The current runtime and the
+correspondence table below still target MOSAIC 0.2 until that planning change
+is implemented. The companion empirical
 protocol 0.2 is historical and archived; it is not the active evaluation
 surface. The current minimal public-benchmark comparison lives in
 [`benchmarks/mosaic`](../../benchmarks/mosaic). The supplied MOSAIC 0.1 editions
