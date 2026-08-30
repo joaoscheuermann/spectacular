@@ -28,7 +28,7 @@ request when any transmitted parameter is unsupported.
 
 All policies use `victor` for in-memory cosine vector search with
 `voyageai/voyage-4-large` embeddings. Each query produces a vector shortlist of
-up to 10 skills. `voyageai/rerank-2.5` returns at most six, after which the
+up to 20 skills. `voyageai/rerank-2.5` returns at most ten, after which the
 default `0.30` minimum relevance score may reduce the final set further. The
 skill catalog is embedded once per run and reused by every request and goal
 query.
@@ -79,7 +79,7 @@ orientations. A judge sees only the initial request, the case's predeclared
 expected skills, and the two final goal lists. It does not receive P0,
 retrieval traces, policy identities, or the other judge's result. The judges
 are `google/gemini-3.7-flash`, matching `scripts/full-skill-vs-hints`, and
-`anthropic/claude-sonnet-5`.
+`openai/gpt-5.6-sol`.
 
 `both`, `neither`, and position-sensitive `inconsistent` outcomes are reported
 separately rather than forced into policy wins. Repeated rounds measure judge
@@ -106,6 +106,87 @@ HTTP status and retryability, plus applicable allowlisted context such as case,
 round, arm, retrieval kind, goal index, skill, pair, and orientation. They never
 contain HTTP bodies or headers, URLs, prompts, model inputs or outputs,
 diagnostics, messages, causes, stacks, or credentials.
+
+## Recorded Results
+
+The checked-in evidence contains two complete judge-mode runs made on
+2026-08-28 after correcting the judge prompt:
+
+- [`88a74c54-fa6e-456b-b6ae-b963205667fd.json`](evidence/88a74c54-fa6e-456b-b6ae-b963205667fd.json), SHA-256
+  `89508e72020cdfd13acb34235fda53369972bbeff2493bd93c3c54eefd4a676a`;
+- [`aaaa645e-a9b2-4d2c-a3bd-119f13cc7879.json`](evidence/aaaa645e-a9b2-4d2c-a3bd-119f13cc7879.json), SHA-256
+  `23b235cc0cfe3a79a264f28d7fdf82a66b8816f1647cafff7419a42bf2dfae0e`.
+
+Both runs completed all 18 case-round evaluations with no provider failures.
+They used the same six authored cases, three rounds, planning model
+`deepseek/deepseek-v4-pro`, judges `google/gemini-3.7-flash` and
+`openai/gpt-5.6-sol`, top-10 reranking, and the `0.30` minimum reranker score.
+
+### Primary Comparison
+
+The primary Direct versus Goal P1 outcomes were:
+
+| Run           | Judge            | Direct | Goal P1 | Inconsistent |
+| ------------- | ---------------- | -----: | ------: | -----------: |
+| `88a74c54…`   | Gemini 3.7 Flash |      3 |      12 |            3 |
+| `88a74c54…`   | GPT-5.6 Sol      |      5 |      12 |            1 |
+| `aaaa645e…`   | Gemini 3.7 Flash |      5 |      11 |            2 |
+| `aaaa645e…`   | GPT-5.6 Sol      |      7 |       9 |            2 |
+| **Aggregate** | **Both judges**  | **20** |  **44** |        **8** |
+
+Goal P1 therefore received 44 of the 64 stable single-policy selections
+(68.75%). This diagnostic evidence favors P0 followed by body-aware P1 revision
+over request-level retrieval followed by direct generation.
+
+### Factor Comparisons
+
+Aggregating both runs and judges gives:
+
+| Comparison            | Left wins | Right wins | Both | Inconsistent |
+| --------------------- | --------: | ---------: | ---: | -----------: |
+| Direct × Request P1   |        15 |         44 |    0 |           13 |
+| Direct × Direct Goal  |        30 |         27 |    0 |           15 |
+| Request P1 × Goal P1  |        18 |         39 |    5 |           10 |
+| Direct Goal × Goal P1 |        18 |         43 |    0 |           11 |
+| Direct × Goal P1      |        20 |         44 |    0 |            8 |
+
+The comparisons that hold retrieval evidence constant favor P1 revision:
+Request P1 beats Direct 44–15, and Goal P1 beats Direct Goal 43–18. Direct
+versus Direct Goal is nearly split at 30–27. The strongest observed factor is
+therefore P0 anchoring plus revision, not request-level versus per-goal
+retrieval by itself.
+
+### Retrieval Noise And Threshold Sweep
+
+Across the 36 evaluations in both runs, the authored cases contain 132 expected
+skill occurrences. At the configured `0.30` threshold, the union of per-goal
+retrieval selected 233 skill occurrences and recovered all 132 expected ones.
+The remaining 101 selections show the size of the possible noise surface, but
+they are not proven false positives because the authored expected-skill lists
+are intentionally incomplete.
+
+Recomputing selection from the persisted reranker traces gives this per-goal
+union sweep:
+
+| Threshold | Selected | Expected hits | Authored-set precision | Authored-set recall |
+| --------: | -------: | ------------: | ---------------------: | ------------------: |
+|     0.300 |      233 |           132 |                  56.7% |              100.0% |
+|     0.325 |      199 |           129 |                  64.8% |               97.7% |
+|     0.350 |      157 |           124 |                  79.0% |               93.9% |
+|     0.375 |      135 |           115 |                  85.2% |               87.1% |
+|     0.400 |      126 |           111 |                  88.1% |               84.1% |
+
+Increasing the threshold removes many extra candidates, but it also loses
+expected skills quickly. Threshold tuning is therefore a useful baseline, not
+a sufficient filter. These results motivate a separate semantic gate that may
+select no skill, removes irrelevant or redundant candidates by marginal
+planning utility, and passes the unchanged full bodies of retained skills to
+P1.
+
+These are diagnostic results from six authored cases. Repeated rounds are not
+independent tasks, judge outputs are model-based assessments, and authored
+expected skills are incomplete relevance labels. The evidence does not support
+a confirmatory general claim.
 
 ## Usage
 
@@ -142,8 +223,8 @@ never sent to a judge or to the Direct Goal final planning call.
 
 Every request and goal retrieval trace stores all three stages separately:
 
-- `vectorShortlist`: all ten Victor candidates with vector rank and score;
-- `reranked`: the reranker's full top-six result with relevance scores;
+- `vectorShortlist`: all 20 Victor candidates with vector rank and score;
+- `reranked`: the reranker's full top-ten result with relevance scores;
 - `selected`: the candidates that also passed the minimum reranker score and
   were supplied to the planning call.
 
@@ -152,13 +233,13 @@ The command requires network access to the pinned SkillsBench raw files plus
 controlled by:
 
 - `LLM_LAB_ROUNDS` (default `3`);
-- `LLM_LAB_TOP_K` (default `6`, maximum `10`);
+- `LLM_LAB_TOP_K` (default `10`, maximum `20`);
 - `LLM_LAB_MIN_RERANKER_SCORE` (default `0.30`);
 - `LLM_LAB_MODEL` (default `deepseek/deepseek-v4-pro`);
 - `LLM_LAB_JUDGE_MODEL` (primary judge, default
   `google/gemini-3.7-flash`).
 
-The secondary judge is fixed to `anthropic/claude-sonnet-5` so every judge-mode
+The secondary judge is fixed to `openai/gpt-5.6-sol` so every judge-mode
 run produces both analyses.
 
 Judge-mode checkpoints are written after each case-round evaluation finishes,
