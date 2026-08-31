@@ -249,7 +249,7 @@ const rerank =
       durationMs: runtime.duration(timer),
       ...(nodeId === undefined ? {} : { nodeId }),
       ...(revision === undefined ? {} : { revision }),
-      ...(runtime.capture === 'io' ? { content: response } : {}),
+      ...(runtime.capture === 'io' ? { content: response.results } : {}),
     });
     return response;
   };

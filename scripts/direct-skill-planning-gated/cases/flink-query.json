@@ -1,17 +1,8 @@
 {
-  "name": "multi-city road trip",
-  "objective": "Build a seven-day itinerary for two people leaving Minneapolis and visiting three Ohio cities within a $5,100 budget. Accommodations must be pet-friendly, meals must cover four requested cuisines, and the trip must not use flights. Use real-world data rather than remembered places.",
+  "name": "Flink longest job stage",
+  "objective": "Read the supplied format.pdf and schema notes, then implement the Java Flink job to identify per-job stages separated by ten minutes without SUBMIT events, count resubmissions separately, output each job ID and its longest-stage task count, and preserve the supplied class and pom.xml contracts.",
   "skills": {
-    "expected": [
-      "feasible-trip-plan",
-      "real-world-travel-research",
-      "road-trip-routing",
-      "search-accommodations",
-      "search-attractions",
-      "search-cities",
-      "search-driving-distance",
-      "search-restaurants"
-    ],
+    "expected": ["coding-workflow", "pdf"],
     "useful": [],
     "noise": {
       "13f-analyzer": {
@@ -23,16 +14,16 @@
       "citation-verification": {
         "type": "irrelevant"
       },
-      "coding-workflow": {
-        "type": "irrelevant"
-      },
       "d3-visualization": {
         "type": "irrelevant"
       },
       "data-reconciliation": {
-        "type": "no_operational_value"
+        "type": "irrelevant"
       },
       "docx": {
+        "type": "irrelevant"
+      },
+      "feasible-trip-plan": {
         "type": "irrelevant"
       },
       "file-organizer": {
@@ -45,18 +36,15 @@
         "type": "irrelevant"
       },
       "hibernate-upgrade": {
-        "type": "irrelevant"
+        "type": "no_operational_value"
       },
       "jakarta-namespace": {
-        "type": "irrelevant"
+        "type": "no_operational_value"
       },
       "jax-skills": {
         "type": "irrelevant"
       },
       "obspy-data-api": {
-        "type": "irrelevant"
-      },
-      "pdf": {
         "type": "irrelevant"
       },
       "pdf-editing": {
@@ -68,14 +56,35 @@
       "pptx": {
         "type": "irrelevant"
       },
+      "real-world-travel-research": {
+        "type": "irrelevant"
+      },
       "restclient-migration": {
+        "type": "no_operational_value"
+      },
+      "road-trip-routing": {
         "type": "irrelevant"
       },
       "safe-database-release": {
         "type": "irrelevant"
       },
+      "search-accommodations": {
+        "type": "irrelevant"
+      },
+      "search-attractions": {
+        "type": "irrelevant"
+      },
+      "search-cities": {
+        "type": "irrelevant"
+      },
+      "search-driving-distance": {
+        "type": "irrelevant"
+      },
       "search-flights": {
-        "type": "conflicting"
+        "type": "irrelevant"
+      },
+      "search-restaurants": {
+        "type": "irrelevant"
       },
       "seisbench-model-api": {
         "type": "irrelevant"
@@ -84,10 +93,10 @@
         "type": "irrelevant"
       },
       "spring-boot-migration": {
-        "type": "irrelevant"
+        "type": "no_operational_value"
       },
       "spring-security-6": {
-        "type": "irrelevant"
+        "type": "no_operational_value"
       },
       "strict-json-delivery": {
         "type": "irrelevant"
@@ -96,10 +105,10 @@
         "type": "irrelevant"
       },
       "vector-database-integration": {
-        "type": "irrelevant"
+        "type": "no_operational_value"
       },
       "xlsx": {
-        "type": "no_operational_value"
+        "type": "irrelevant"
       }
     }
   }

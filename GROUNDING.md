@@ -588,24 +588,65 @@ headers, prompts, model inputs and outputs, diagnostics, messages, causes,
 stacks, and credentials. This authored lab remains diagnostic and is not
 confirmatory benchmark evidence.
 
-The sibling private `scripts/direct-skill-planning-gated` diagnostic keeps all
-of its runtime logic in one `index.mjs`, its prompt text in one `prompt.mjs`,
-its two-message construction helper in one `utils.mjs`, and its Zod contracts
-in one `schemas.mjs`. Authored JSON cases contain only a name, objective, and
-expected skill names. The complete skill catalog is materialized below
-`cases/skills`; runtime execution never downloads skills.
-One provider generates P0, independently retrieves up to 20 vector candidates
-and reranks the top 10 for every P0 goal using the case objective plus that
-goal, evaluates every retrieved goal-skill pair independently as `keep | drop`
-with a reason using only the case objective, that goal, and that complete skill
-body, then merges by skill name and keeps a skill when at least one goal keeps
-it. P1 receives each complete kept body once.
-All cases execute concurrently. The diagnostic reports, per case and in
-aggregate, how many expected skills reached the final kept bundle, renders all
-Pino output in the console, and appends it as JSON Lines to `output.log` in the
-experiment directory. It
-has no comparison judges, rounds, retries, replay, checkpoints, similarity
-grouping, redundancy adjudication, or historical evidence pipeline.
+The sibling private `scripts/direct-skill-planning-gated` diagnostic keeps its
+pipeline logic in one `index.mjs`, its output scoring, provider-usage
+aggregation, run identity, and persistence in one `output.mjs`, its prompt text
+in one `prompt.mjs`, its two-message
+construction helper in one `utils.mjs`, and its Zod contracts in one
+`schemas.mjs`. Each authored JSON case contains a name, objective, and an
+exhaustive partition of the complete local catalog: `skills.expected` lists
+required useful skills, `skills.useful` lists acceptable supplementary skills,
+and `skills.noise` maps every remaining skill to `irrelevant`,
+`no_operational_value`, or `conflicting`. These gold labels are used only to
+evaluate the final bundle and never enter retrieval, gating, or planning. The
+complete skill catalog is materialized below `cases/skills`; runtime execution
+never downloads skills.
+One provider generates P0 and independently retrieves lexical and semantic
+rankings for every P0 goal using the case objective plus that goal. The BM25
+lexical index searches each canonical skill name and complete body. Semantic
+retrieval takes up to 20 vector candidates and removes those with cosine
+similarity below the inclusive `0.3` minimum. Victor fuses the lexical and
+retained semantic rankings through equal-weight reciprocal rank fusion, bounded
+to 20 candidates, and the provider reranks up to the top 10 fused candidates.
+Each goal trace preserves the lexical ranking, every pre-threshold vector score,
+removed vector candidate, fused hybrid ranking, and structural reranker input
+and output; catalog-bound names and positions identify reranker documents
+without duplicating complete skill bodies. It evaluates every reranked goal-skill pair
+independently as `keep | drop` with a reason using only the case objective, that
+goal, and that complete skill body, then merges by skill name and keeps a skill
+when at least one goal keeps it. P1 receives each complete kept body once.
+Every logged pipeline action opts into a generic step-level retry with five
+total attempts and exponential backoff. It waits 15, 30, 60, and 120 seconds
+before attempts two through five, retries any thrown failure without consulting
+provider retryability, rethrows the final failure unchanged, and logs only
+structural attempt progress before each delay. Catalog indexing constructs a
+fresh local index inside each attempt so a partially indexed attempt is
+discarded rather than duplicated.
+All cases execute concurrently. Per-case results report final-bundle recall,
+noise rate, precision, and F1, plus noise removal, relevant retention, and
+selection F1 from the unique recovered-skill union before gating to the selected
+bundle after gating. Results also include counts, missing expected skills,
+selected useful skills, selected noise classifications, and removed noise
+classifications. The aggregate sums case counts and recomputes the same rates as
+micro metrics. Recall uses only required expected skills; precision and relevant
+retention accept both expected and supplementary useful skills. F1 combines
+precision with required-skill recall; selection F1 combines precision with
+relevant retention. A zero metric denominator produces zero. Before provider
+use, the diagnostic creates a unique UUID directory below its ignored local
+`output/` tree. Its manifest records the run status and timestamps, effective
+configuration, Git commit and dirty-worktree flag, SHA-256 identities and
+counts for the cases and skill catalog, a SHA-256 identity covering the
+experiment sources and package metadata, and the Node.js environment; it
+excludes credentials. The diagnostic renders all Pino output in the console
+and appends it as JSON Lines to that run's `output.log`. A successful run also
+writes complete per-case results, aggregate metrics, and aggregate provider
+usage to `results.json`, then marks the manifest completed. Provider usage is
+logged per successful call and aggregated into successful and failed manifests
+with call coverage, tokens, search units, and provider-reported costs;
+OpenRouter costs retain their `credits` unit. A failed run marks its manifest
+failed. It has no
+comparison judges, rounds, replay, checkpoints, similarity grouping,
+redundancy adjudication, or historical evidence pipeline.
 
 The SkillsBench composition condition scans a caller-verified clean checkout of
 the existing v1.1 pin into a deterministic global catalog, hashes every package,
@@ -936,9 +977,14 @@ and text-document reranking through `/rerank` below the configured base URL.
 Embedding requests may include optional positive-integer `dimensions`, which
 the compatible providers forward unchanged to the endpoint.
 Rerank requests carry a model, query, non-empty document list, and optional
-positive `topN`; successful results expose each original document index and
-finite relevance score. Codex and LM Studio native support neither embeddings
-nor reranking.
+positive `topN`. Successful embedding and rerank responses use explicit result
+envelopes and preserve provider-reported usage when present. Usage may include
+input, output, total, reasoning, cached-input, and cache-write token counts,
+rerank search units, and normalized cost metadata with amount, optional unit,
+and optional upstream amount. OpenRouter costs use the `credits` unit.
+Successful rerank results expose each original document index and finite
+relevance score. Codex and LM Studio native support neither embeddings nor
+reranking.
 `packages/llms` also exposes a generic OpenAI Responses-compatible factory with
 caller-configured provider identity and base URL. Its `/responses`, `/models`,
 `/embeddings`, and `/rerank` operations preserve that identity in metadata,

@@ -1,16 +1,11 @@
 {
-  "name": "multi-city road trip",
-  "objective": "Build a seven-day itinerary for two people leaving Minneapolis and visiting three Ohio cities within a $5,100 budget. Accommodations must be pet-friendly, meals must cover four requested cuisines, and the trip must not use flights. Use real-world data rather than remembered places.",
+  "name": "seismic phase picking",
+  "objective": "Process 100 supplied NPZ earthquake traces, choose and apply methods that maximize P- and S-arrival F1, and write file_name, phase, and pick_idx rows to /root/results.csv with P F1 at least 0.7 and S F1 at least 0.6.",
   "skills": {
     "expected": [
-      "feasible-trip-plan",
-      "real-world-travel-research",
-      "road-trip-routing",
-      "search-accommodations",
-      "search-attractions",
-      "search-cities",
-      "search-driving-distance",
-      "search-restaurants"
+      "obspy-data-api",
+      "seisbench-model-api",
+      "seismic-picker-selection"
     ],
     "useful": [],
     "noise": {
@@ -30,9 +25,12 @@
         "type": "irrelevant"
       },
       "data-reconciliation": {
-        "type": "no_operational_value"
+        "type": "irrelevant"
       },
       "docx": {
+        "type": "irrelevant"
+      },
+      "feasible-trip-plan": {
         "type": "irrelevant"
       },
       "file-organizer": {
@@ -42,7 +40,7 @@
         "type": "irrelevant"
       },
       "gamma-phase-associator": {
-        "type": "irrelevant"
+        "type": "no_operational_value"
       },
       "hibernate-upgrade": {
         "type": "irrelevant"
@@ -51,15 +49,12 @@
         "type": "irrelevant"
       },
       "jax-skills": {
-        "type": "irrelevant"
+        "type": "no_operational_value"
       },
-      "obspy-data-api": {
+      "pdf-editing": {
         "type": "irrelevant"
       },
       "pdf": {
-        "type": "irrelevant"
-      },
-      "pdf-editing": {
         "type": "irrelevant"
       },
       "planning-with-files": {
@@ -68,19 +63,34 @@
       "pptx": {
         "type": "irrelevant"
       },
+      "real-world-travel-research": {
+        "type": "irrelevant"
+      },
       "restclient-migration": {
+        "type": "irrelevant"
+      },
+      "road-trip-routing": {
         "type": "irrelevant"
       },
       "safe-database-release": {
         "type": "irrelevant"
       },
-      "search-flights": {
-        "type": "conflicting"
-      },
-      "seisbench-model-api": {
+      "search-accommodations": {
         "type": "irrelevant"
       },
-      "seismic-picker-selection": {
+      "search-attractions": {
+        "type": "irrelevant"
+      },
+      "search-cities": {
+        "type": "irrelevant"
+      },
+      "search-driving-distance": {
+        "type": "irrelevant"
+      },
+      "search-flights": {
+        "type": "irrelevant"
+      },
+      "search-restaurants": {
         "type": "irrelevant"
       },
       "spring-boot-migration": {
@@ -99,7 +109,7 @@
         "type": "irrelevant"
       },
       "xlsx": {
-        "type": "no_operational_value"
+        "type": "irrelevant"
       }
     }
   }

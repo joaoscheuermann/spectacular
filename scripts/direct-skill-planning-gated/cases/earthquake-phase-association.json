@@ -1,18 +1,13 @@
 {
-  "name": "multi-city road trip",
-  "objective": "Build a seven-day itinerary for two people leaving Minneapolis and visiting three Ohio cities within a $5,100 budget. Accommodations must be pet-friendly, meals must cover four requested cuisines, and the trip must not use flights. Use real-world data rather than remembered places.",
+  "name": "earthquake phase association",
+  "objective": "Load the supplied MiniSEED waveforms and station CSV, pick P and S phases with SeisBench, associate picks into unique earthquake events using station data, and write ISO event times to /root/results.csv with F1 of at least 0.6.",
   "skills": {
     "expected": [
-      "feasible-trip-plan",
-      "real-world-travel-research",
-      "road-trip-routing",
-      "search-accommodations",
-      "search-attractions",
-      "search-cities",
-      "search-driving-distance",
-      "search-restaurants"
+      "gamma-phase-associator",
+      "obspy-data-api",
+      "seisbench-model-api"
     ],
-    "useful": [],
+    "useful": ["seismic-picker-selection"],
     "noise": {
       "13f-analyzer": {
         "type": "irrelevant"
@@ -35,13 +30,13 @@
       "docx": {
         "type": "irrelevant"
       },
+      "feasible-trip-plan": {
+        "type": "irrelevant"
+      },
       "file-organizer": {
         "type": "irrelevant"
       },
       "fuzzy-name-search": {
-        "type": "irrelevant"
-      },
-      "gamma-phase-associator": {
         "type": "irrelevant"
       },
       "hibernate-upgrade": {
@@ -51,15 +46,12 @@
         "type": "irrelevant"
       },
       "jax-skills": {
-        "type": "irrelevant"
+        "type": "no_operational_value"
       },
-      "obspy-data-api": {
+      "pdf-editing": {
         "type": "irrelevant"
       },
       "pdf": {
-        "type": "irrelevant"
-      },
-      "pdf-editing": {
         "type": "irrelevant"
       },
       "planning-with-files": {
@@ -68,19 +60,34 @@
       "pptx": {
         "type": "irrelevant"
       },
+      "real-world-travel-research": {
+        "type": "irrelevant"
+      },
       "restclient-migration": {
+        "type": "irrelevant"
+      },
+      "road-trip-routing": {
         "type": "irrelevant"
       },
       "safe-database-release": {
         "type": "irrelevant"
       },
-      "search-flights": {
-        "type": "conflicting"
-      },
-      "seisbench-model-api": {
+      "search-accommodations": {
         "type": "irrelevant"
       },
-      "seismic-picker-selection": {
+      "search-attractions": {
+        "type": "irrelevant"
+      },
+      "search-cities": {
+        "type": "irrelevant"
+      },
+      "search-driving-distance": {
+        "type": "irrelevant"
+      },
+      "search-flights": {
+        "type": "irrelevant"
+      },
+      "search-restaurants": {
         "type": "irrelevant"
       },
       "spring-boot-migration": {
@@ -99,7 +106,7 @@
         "type": "irrelevant"
       },
       "xlsx": {
-        "type": "no_operational_value"
+        "type": "irrelevant"
       }
     }
   }

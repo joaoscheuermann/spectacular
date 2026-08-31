@@ -1,27 +1,18 @@
 {
-  "name": "multi-city road trip",
-  "objective": "Build a seven-day itinerary for two people leaving Minneapolis and visiting three Ohio cities within a $5,100 budget. Accommodations must be pet-friendly, meals must cover four requested cuisines, and the trip must not use flights. Use real-world data rather than remembered places.",
+  "name": "academic paper anonymization",
+  "objective": "Redact names, affiliations, arXiv identifiers, accepted venues, and any other authorship leaks from /root/paper1.pdf through /root/paper3.pdf, while allowing self-citations after other identity clues are removed, and save the redacted PDFs under /root/redacted/.",
   "skills": {
-    "expected": [
-      "feasible-trip-plan",
-      "real-world-travel-research",
-      "road-trip-routing",
-      "search-accommodations",
-      "search-attractions",
-      "search-cities",
-      "search-driving-distance",
-      "search-restaurants"
-    ],
-    "useful": [],
+    "expected": ["pdf-editing"],
+    "useful": ["pdf"],
     "noise": {
       "13f-analyzer": {
         "type": "irrelevant"
       },
       "citation-management": {
-        "type": "irrelevant"
+        "type": "no_operational_value"
       },
       "citation-verification": {
-        "type": "irrelevant"
+        "type": "no_operational_value"
       },
       "coding-workflow": {
         "type": "irrelevant"
@@ -30,13 +21,16 @@
         "type": "irrelevant"
       },
       "data-reconciliation": {
-        "type": "no_operational_value"
+        "type": "irrelevant"
       },
       "docx": {
         "type": "irrelevant"
       },
-      "file-organizer": {
+      "feasible-trip-plan": {
         "type": "irrelevant"
+      },
+      "file-organizer": {
+        "type": "no_operational_value"
       },
       "fuzzy-name-search": {
         "type": "irrelevant"
@@ -56,26 +50,41 @@
       "obspy-data-api": {
         "type": "irrelevant"
       },
-      "pdf": {
-        "type": "irrelevant"
-      },
-      "pdf-editing": {
-        "type": "irrelevant"
-      },
       "planning-with-files": {
         "type": "no_operational_value"
       },
       "pptx": {
         "type": "irrelevant"
       },
+      "real-world-travel-research": {
+        "type": "irrelevant"
+      },
       "restclient-migration": {
+        "type": "irrelevant"
+      },
+      "road-trip-routing": {
         "type": "irrelevant"
       },
       "safe-database-release": {
         "type": "irrelevant"
       },
+      "search-accommodations": {
+        "type": "irrelevant"
+      },
+      "search-attractions": {
+        "type": "irrelevant"
+      },
+      "search-cities": {
+        "type": "irrelevant"
+      },
+      "search-driving-distance": {
+        "type": "irrelevant"
+      },
       "search-flights": {
-        "type": "conflicting"
+        "type": "irrelevant"
+      },
+      "search-restaurants": {
+        "type": "irrelevant"
       },
       "seisbench-model-api": {
         "type": "irrelevant"
@@ -99,7 +108,7 @@
         "type": "irrelevant"
       },
       "xlsx": {
-        "type": "no_operational_value"
+        "type": "irrelevant"
       }
     }
   }

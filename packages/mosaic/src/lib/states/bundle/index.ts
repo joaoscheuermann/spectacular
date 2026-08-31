@@ -239,7 +239,7 @@ const rerank = async ({
   const { providers, models } = options;
 
   // The reranker sees the full routing context and complete canonical skill bodies.
-  const ranking = await (
+  const { results: ranking } = await (
     runtime?.provider(providers.reranker, 'bundle', node.id, graph.revision) ??
     providers.reranker
   ).rerank({

@@ -1,6 +1,6 @@
 const planningSystem = `Decompose the objective into observable goals.
 
-Each goal must describe a verifiable outcome, preserve the objective, avoid unsupported assumptions, and state what must become true rather than an activity to perform.`;
+Each goal must describe a verifiable outcome, preserve the objective, avoid any unsupported assumptions, and state what must become true rather than an activity to perform.`;
 
 const goalsList = (goals) =>
   goals.map((goal, index) => `${index + 1}. ${goal}`).join('\n');
@@ -16,11 +16,13 @@ export const p0System = planningSystem;
 export const p0User = (objective) => `# Objective
 ${objective}`;
 
-export const retrievalQuery = (objective, goal) => `# Objective
+export const retrievalQuery = (objective, goal) => `
+# Objective
 ${objective}
 
 # Goal
-${goal}`;
+${goal}
+`;
 
 export const gateSystem = `Decide whether one retrieved skill materially helps execute or verify the current goal within the objective.
 

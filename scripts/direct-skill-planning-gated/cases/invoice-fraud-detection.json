@@ -1,21 +1,12 @@
 {
-  "name": "multi-city road trip",
-  "objective": "Build a seven-day itinerary for two people leaving Minneapolis and visiting three Ohio cities within a $5,100 budget. Accommodations must be pet-friendly, meals must cover four requested cuisines, and the trip must not use flights. Use real-world data rather than remembered places.",
+  "name": "invoice fraud detection",
+  "objective": "Cross-check invoice pages in /root/invoices.pdf against approved vendors in /root/vendors.xlsx and purchase orders in CSV, apply the stated fuzzy-name and ordered fraud rules, and write only flagged invoices to /root/fraud_report.json in the required schema.",
   "skills": {
-    "expected": [
-      "feasible-trip-plan",
-      "real-world-travel-research",
-      "road-trip-routing",
-      "search-accommodations",
-      "search-attractions",
-      "search-cities",
-      "search-driving-distance",
-      "search-restaurants"
-    ],
+    "expected": ["pdf", "strict-json-delivery", "xlsx"],
     "useful": [],
     "noise": {
       "13f-analyzer": {
-        "type": "irrelevant"
+        "type": "no_operational_value"
       },
       "citation-management": {
         "type": "irrelevant"
@@ -35,11 +26,14 @@
       "docx": {
         "type": "irrelevant"
       },
+      "feasible-trip-plan": {
+        "type": "irrelevant"
+      },
       "file-organizer": {
         "type": "irrelevant"
       },
       "fuzzy-name-search": {
-        "type": "irrelevant"
+        "type": "no_operational_value"
       },
       "gamma-phase-associator": {
         "type": "irrelevant"
@@ -56,11 +50,8 @@
       "obspy-data-api": {
         "type": "irrelevant"
       },
-      "pdf": {
-        "type": "irrelevant"
-      },
       "pdf-editing": {
-        "type": "irrelevant"
+        "type": "no_operational_value"
       },
       "planning-with-files": {
         "type": "no_operational_value"
@@ -68,14 +59,35 @@
       "pptx": {
         "type": "irrelevant"
       },
+      "real-world-travel-research": {
+        "type": "irrelevant"
+      },
       "restclient-migration": {
+        "type": "irrelevant"
+      },
+      "road-trip-routing": {
         "type": "irrelevant"
       },
       "safe-database-release": {
         "type": "irrelevant"
       },
+      "search-accommodations": {
+        "type": "irrelevant"
+      },
+      "search-attractions": {
+        "type": "irrelevant"
+      },
+      "search-cities": {
+        "type": "irrelevant"
+      },
+      "search-driving-distance": {
+        "type": "irrelevant"
+      },
       "search-flights": {
-        "type": "conflicting"
+        "type": "irrelevant"
+      },
+      "search-restaurants": {
+        "type": "irrelevant"
       },
       "seisbench-model-api": {
         "type": "irrelevant"
@@ -89,17 +101,11 @@
       "spring-security-6": {
         "type": "irrelevant"
       },
-      "strict-json-delivery": {
-        "type": "irrelevant"
-      },
       "text-parser": {
         "type": "irrelevant"
       },
       "vector-database-integration": {
         "type": "irrelevant"
-      },
-      "xlsx": {
-        "type": "no_operational_value"
       }
     }
   }

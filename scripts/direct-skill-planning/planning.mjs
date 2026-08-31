@@ -52,9 +52,9 @@ export const indexSkills = async (
   const vectors = createVectorIndex({
     dimensions: config.embeddingDimensions,
     logger,
-    embedding: (input) => {
+    embedding: async (input) => {
       const context = embeddingContext.getStore() ?? {};
-      return retryProvider(
+      const result = await retryProvider(
         () =>
           provider.embedding({
             model: config.embeddingModel,
@@ -69,6 +69,7 @@ export const indexSkills = async (
           onFailure: onProviderFailure,
         },
       );
+      return result.embedding;
     },
   });
 
@@ -134,7 +135,7 @@ const rankSkills = async ({
     ...context,
     operation: 'query_embedding',
   });
-  const results = await retryProvider(
+  const { results } = await retryProvider(
     () =>
       provider.rerank({
         model: config.rerankerModel,

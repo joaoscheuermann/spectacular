@@ -1,17 +1,8 @@
 {
-  "name": "multi-city road trip",
-  "objective": "Build a seven-day itinerary for two people leaving Minneapolis and visiting three Ohio cities within a $5,100 budget. Accommodations must be pet-friendly, meals must cover four requested cuisines, and the trip must not use flights. Use real-world data rather than remembered places.",
+  "name": "embedded Excel table in PowerPoint",
+  "objective": "Extract the embedded currency-rate workbook and nearby update text from /root/input.pptx, change the specified rate while preserving formula cells and all other presentation content, and save /root/results.pptx.",
   "skills": {
-    "expected": [
-      "feasible-trip-plan",
-      "real-world-travel-research",
-      "road-trip-routing",
-      "search-accommodations",
-      "search-attractions",
-      "search-cities",
-      "search-driving-distance",
-      "search-restaurants"
-    ],
+    "expected": ["pptx", "xlsx"],
     "useful": [],
     "noise": {
       "13f-analyzer": {
@@ -35,6 +26,9 @@
       "docx": {
         "type": "irrelevant"
       },
+      "feasible-trip-plan": {
+        "type": "irrelevant"
+      },
       "file-organizer": {
         "type": "irrelevant"
       },
@@ -56,26 +50,44 @@
       "obspy-data-api": {
         "type": "irrelevant"
       },
-      "pdf": {
+      "pdf-editing": {
         "type": "irrelevant"
       },
-      "pdf-editing": {
+      "pdf": {
         "type": "irrelevant"
       },
       "planning-with-files": {
         "type": "no_operational_value"
       },
-      "pptx": {
+      "real-world-travel-research": {
         "type": "irrelevant"
       },
       "restclient-migration": {
         "type": "irrelevant"
       },
+      "road-trip-routing": {
+        "type": "irrelevant"
+      },
       "safe-database-release": {
         "type": "irrelevant"
       },
+      "search-accommodations": {
+        "type": "irrelevant"
+      },
+      "search-attractions": {
+        "type": "irrelevant"
+      },
+      "search-cities": {
+        "type": "irrelevant"
+      },
+      "search-driving-distance": {
+        "type": "irrelevant"
+      },
       "search-flights": {
-        "type": "conflicting"
+        "type": "irrelevant"
+      },
+      "search-restaurants": {
+        "type": "irrelevant"
       },
       "seisbench-model-api": {
         "type": "irrelevant"
@@ -97,9 +109,6 @@
       },
       "vector-database-integration": {
         "type": "irrelevant"
-      },
-      "xlsx": {
-        "type": "no_operational_value"
       }
     }
   }

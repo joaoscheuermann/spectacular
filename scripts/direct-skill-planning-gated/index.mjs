@@ -7,7 +7,11 @@ import { fileURLToPath } from 'node:url';
 import { createFetchTransport, createUnifiedProvider } from 'llms';
 import pino from 'pino';
 import pretty from 'pino-pretty';
-import { createVectorIndex } from 'victor';
+import {
+  createHybridSearch,
+  createLexicalIndex,
+  createVectorIndex,
+} from 'victor';
 
 import {
   gateSystem,
@@ -20,11 +24,11 @@ import {
 } from './prompt.mjs';
 import { caseSchema, gateSchema, goalsSchema } from './schemas.mjs';
 import { messages } from './utils.mjs';
+import { aggregateMetrics, createOutput, scoreBundle } from './output.mjs';
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const casesDirectory = join(directory, 'cases');
 const skillsDirectory = join(casesDirectory, 'skills');
-const logPath = join(directory, 'output.log');
 
 const config = {
   model: 'qwen/qwen3.8-27b',
@@ -33,8 +37,12 @@ const config = {
   embeddingDimensions: 1024,
   rerankerModel: 'voyageai/rerank-2.5',
   retrievalK: 20,
+  minVectorScore: 0.3,
   topK: 10,
+  retry: { attempts: 5, delayMs: 15_000, backoffMultiplier: 2 },
 };
+
+const output = await createOutput({ directory, config });
 
 const logger = pino(
   { level: 'info' },
@@ -47,14 +55,58 @@ const logger = pino(
       }),
     },
     {
-      stream: pino.destination({ dest: logPath, mkdir: true, sync: true }),
+      stream: pino.destination({
+        dest: output.logPath,
+        mkdir: true,
+        sync: true,
+      }),
     },
   ]),
 );
 
-const action = (message, callback) => {
+const recordUsage = (operation, model, usage) =>
+  logger.info(
+    output.recordProviderUsage({ operation, model, usage }),
+    'Provider usage recorded',
+  );
+
+const wait = (milliseconds) =>
+  new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+const action = async (
+  message,
+  callback,
+  { attempts = 1, delayMs = 0, backoffMultiplier = 1 } = {},
+) => {
+  if (!Number.isSafeInteger(attempts) || attempts < 1) {
+    throw new TypeError('Action attempts must be a positive safe integer.');
+  }
+  if (!Number.isSafeInteger(delayMs) || delayMs < 0) {
+    throw new TypeError('Action delay must be a non-negative safe integer.');
+  }
+  if (!Number.isSafeInteger(backoffMultiplier) || backoffMultiplier < 1) {
+    throw new TypeError(
+      'Action backoff multiplier must be a positive safe integer.',
+    );
+  }
+
   logger.info(message);
-  return callback();
+  let attempt = 1;
+
+  while (true) {
+    try {
+      return await callback();
+    } catch (error) {
+      if (attempt === attempts) throw error;
+      const nextDelayMs = delayMs * backoffMultiplier ** (attempt - 1);
+      logger.warn(
+        { action: message, attempt, attempts, nextDelayMs },
+        'Action failed; retrying',
+      );
+      await wait(nextDelayMs);
+      attempt += 1;
+    }
+  }
 };
 
 const createProvider = () => {
@@ -96,7 +148,30 @@ const loadSkills = async () => {
   );
 };
 
-const completeGoals = async (provider, messages) => {
+const validateClassifications = (cases, skills) => {
+  const catalog = new Set(skills.map(({ name }) => name));
+
+  for (const current of cases) {
+    const classified = new Set([
+      ...current.skills.expected,
+      ...current.skills.useful,
+      ...Object.keys(current.skills.noise),
+    ]);
+    const unknown = [...classified].find((name) => !catalog.has(name));
+    if (unknown) throw new Error(`Unknown classified skill: ${unknown}`);
+
+    const missing = skills
+      .map(({ name }) => name)
+      .filter((name) => !classified.has(name));
+    if (missing.length > 0) {
+      throw new Error(
+        `Unclassified skills for ${current.name}: ${missing.join(', ')}`,
+      );
+    }
+  }
+};
+
+const completeGoals = async (provider, messages, operation) => {
   const result = await provider.complete({
     model: config.model,
     effort: config.effort,
@@ -104,59 +179,175 @@ const completeGoals = async (provider, messages) => {
     schema: goalsSchema,
     flags: { sensitiveOutput: true },
   });
+  recordUsage(operation, config.model, result.usage);
   return result.structured.goals;
 };
 
-const createSkillIndex = async (provider, skills) => {
-  const index = createVectorIndex({
-    dimensions: config.embeddingDimensions,
-    logger,
-    embedding: (input) =>
-      provider.embedding({
-        model: config.embeddingModel,
+const createSkillIndexes = (provider, skills) =>
+  action(
+    `Indexing ${skills.length} local skills`,
+    async () => {
+      const lexical = createLexicalIndex({ logger });
+      const vector = createVectorIndex({
         dimensions: config.embeddingDimensions,
-        input,
-        flags: { sensitiveOutput: true },
-      }),
-  });
+        logger,
+        embedding: async (input) => {
+          const result = await provider.embedding({
+            model: config.embeddingModel,
+            dimensions: config.embeddingDimensions,
+            input,
+            flags: { sensitiveOutput: true },
+          });
+          recordUsage('embedding', config.embeddingModel, result.usage);
+          return result.embedding;
+        },
+      });
 
-  await action(`Indexing ${skills.length} local skills`, async () => {
-    for (const skill of skills) await index.add(skill, ({ body }) => body);
-  });
-  return index;
-};
+      for (const skill of skills) {
+        await lexical.add(skill, ({ name, body }) => `${name}\n${body}`);
+        await vector.add(skill, ({ body }) => body);
+      }
+      return { lexical, vector };
+    },
+    config.retry,
+  );
 
-const rankSkills = async (provider, index, objective, goal) => {
+const fixedRanking = (results) => ({
+  search: (_query, topK) => Promise.resolve(results.slice(0, topK)),
+});
+
+const rankResults = (results) =>
+  results.map(({ data, score }, index) => ({
+    data,
+    rank: index + 1,
+    score,
+  }));
+
+const trace = (results) =>
+  results.map(({ data, rank, score }) => ({
+    name: data.name,
+    rank,
+    score,
+  }));
+
+const rankSkills = async (provider, indexes, objective, goal) => {
   const query = retrievalQuery(objective, goal);
-  const shortlist = await index.search(query, config.retrievalK);
-  const reranked = await provider.rerank({
+  const [lexical, vectorScored] = await Promise.all([
+    indexes.lexical.search(query, config.retrievalK).then(rankResults),
+    indexes.vector.search(query, config.retrievalK).then(rankResults),
+  ]);
+  const semantic = vectorScored.filter(
+    ({ score }) => score >= config.minVectorScore,
+  );
+  const vector = {
+    threshold: config.minVectorScore,
+    scored: trace(vectorScored),
+    removed: vectorScored
+      .filter(({ score }) => score < config.minVectorScore)
+      .map(({ data, rank, score }) => ({ name: data.name, rank, score })),
+  };
+  const hybridSearch = createHybridSearch({
+    lexical: fixedRanking(lexical),
+    semantic: fixedRanking(semantic),
+    key: ({ name }) => name,
+    logger,
+  });
+  const shortlist = rankResults(
+    await hybridSearch.search(query, config.retrievalK),
+  );
+  const hybrid = { scored: trace(shortlist) };
+  if (shortlist.length === 0) {
+    return {
+      lexical: { scored: trace(lexical) },
+      vector,
+      hybrid,
+      reranker: null,
+      ranked: [],
+    };
+  }
+
+  const lexicalByName = new Map(
+    lexical.map((entry) => [entry.data.name, entry]),
+  );
+  const vectorByName = new Map(
+    vectorScored.map((entry) => [entry.data.name, entry]),
+  );
+  const input = {
+    query,
+    topN: Math.min(config.topK, shortlist.length),
+    candidates: shortlist.map(({ data, rank, score }, index) => ({
+      index,
+      name: data.name,
+      hybridRank: rank,
+      hybridScore: score,
+      lexicalRank: lexicalByName.get(data.name)?.rank ?? null,
+      lexicalScore: lexicalByName.get(data.name)?.score ?? null,
+      vectorRank: vectorByName.get(data.name)?.rank ?? null,
+      vectorScore: vectorByName.get(data.name)?.score ?? null,
+    })),
+  };
+  const result = await provider.rerank({
     model: config.rerankerModel,
     query,
     documents: shortlist.map(({ data }) => data.body),
-    topN: Math.min(config.topK, shortlist.length),
+    topN: input.topN,
     flags: { sensitiveOutput: true },
   });
+  recordUsage('rerank', config.rerankerModel, result.usage);
 
-  return reranked.map(({ index: resultIndex, relevanceScore }, rank) => {
-    const skill = shortlist[resultIndex]?.data;
-    if (!skill) throw new Error('Reranker returned an unknown skill index.');
-    return { ...skill, rank: rank + 1, score: relevanceScore };
-  });
+  const reranked = result.results.map(
+    ({ index: resultIndex, relevanceScore }, rank) => {
+      const skill = shortlist[resultIndex]?.data;
+      if (!skill) throw new Error('Reranker returned an unknown skill index.');
+      return {
+        index: resultIndex,
+        skill,
+        rank: rank + 1,
+        score: relevanceScore,
+      };
+    },
+  );
+  const selected = reranked.map(({ skill, rank, score }) => ({
+    ...skill,
+    rank,
+    score,
+  }));
+  return {
+    lexical: { scored: trace(lexical) },
+    vector,
+    hybrid,
+    reranker: {
+      input,
+      output: reranked.map(({ index, skill, rank, score }) => ({
+        index,
+        name: skill.name,
+        rank,
+        score,
+      })),
+      usage: result.usage ?? null,
+    },
+    ranked: selected,
+  };
 };
 
 const retrieveSkills = (provider, index, current, p0) =>
   Promise.all(
     p0.map(async (goal, goalIndex) => {
-      const ranked = await action(
+      const retrieval = await action(
         `${current.name}: querying and reranking goal ${goalIndex + 1}/${p0.length}`,
         () => rankSkills(provider, index, current.objective, goal),
+        config.retry,
       );
       logger.info(
         {
           case: current.name,
           goalIndex: goalIndex + 1,
           goal,
-          ranked: ranked.map(({ name, rank, score }) => ({
+          lexical: retrieval.lexical,
+          vector: retrieval.vector,
+          hybrid: retrieval.hybrid,
+          reranker: retrieval.reranker,
+          ranked: retrieval.ranked.map(({ name, rank, score }) => ({
             name,
             rank,
             score,
@@ -164,7 +355,7 @@ const retrieveSkills = (provider, index, current, p0) =>
         },
         'Goal skills reranked',
       );
-      return { goal, ranked };
+      return { goal, ...retrieval };
     }),
   );
 
@@ -176,6 +367,7 @@ const evaluateSkill = async (provider, current, goal, skill) => {
     schema: gateSchema,
     flags: { sensitiveOutput: true },
   });
+  recordUsage('gate', config.model, result.usage);
 
   return { name: skill.name, ...result.structured };
 };
@@ -186,12 +378,20 @@ const reviseGoals = (provider, current, p0, skills) => {
   return completeGoals(
     provider,
     messages(p1System, p1User(current.objective, p0, skills)),
+    'p1',
   );
 };
 
 const runCase = async (provider, index, current) => {
-  const p0 = await action(`${current.name}: generating P0`, () =>
-    completeGoals(provider, messages(p0System, p0User(current.objective))),
+  const p0 = await action(
+    `${current.name}: generating P0`,
+    () =>
+      completeGoals(
+        provider,
+        messages(p0System, p0User(current.objective)),
+        'p0',
+      ),
+    config.retry,
   );
   logger.info({ case: current.name, p0 }, 'P0 generated');
 
@@ -204,6 +404,7 @@ const runCase = async (provider, index, current) => {
         ...(await action(
           `${current.name}: filtering ${skill.name} for goal ${goalIndex + 1}/${p0.length}`,
           () => evaluateSkill(provider, current, goal, skill),
+          config.retry,
         )),
       })),
     ),
@@ -230,26 +431,26 @@ const runCase = async (provider, index, current) => {
     'Goal skills filtered and merged',
   );
 
-  const p1 = await action(`${current.name}: generating P1`, () =>
-    reviseGoals(provider, current, p0, selected),
+  const p1 = await action(
+    `${current.name}: generating P1`,
+    () => reviseGoals(provider, current, p0, selected),
+    config.retry,
   );
-  const selectedExpected = current.skills.expected.filter((name) =>
-    keptNames.has(name),
-  );
-  const metrics = {
-    selectedExpected: selectedExpected.length,
-    expected: current.skills.expected.length,
-    coverage: selectedExpected.length / current.skills.expected.length,
-    missing: current.skills.expected.filter((name) => !keptNames.has(name)),
-  };
+  const metrics = scoreBundle(current, candidates, selected);
   const result = {
     name: current.name,
     objective: current.objective,
     p0,
-    retrieval: byGoal.map(({ goal, ranked }) => ({
-      goal,
-      ranked: ranked.map(({ name, rank, score }) => ({ name, rank, score })),
-    })),
+    retrieval: byGoal.map(
+      ({ goal, lexical, vector, hybrid, reranker, ranked }) => ({
+        goal,
+        lexical,
+        vector,
+        hybrid,
+        reranker,
+        ranked: ranked.map(({ name, rank, score }) => ({ name, rank, score })),
+      }),
+    ),
     bundle: { decisions, selected: selected.map(({ name }) => name) },
     p1,
     metrics,
@@ -260,35 +461,22 @@ const runCase = async (provider, index, current) => {
 
 const main = async () => {
   const [cases, skills] = await Promise.all([loadCases(), loadSkills()]);
-  const names = new Set(skills.map(({ name }) => name));
-  for (const current of cases) {
-    for (const expected of current.skills.expected) {
-      if (!names.has(expected)) {
-        throw new Error(`Unknown expected skill: ${expected}`);
-      }
-    }
-  }
+  validateClassifications(cases, skills);
+  logger.info(
+    { runId: output.id, config, identity: output.identity },
+    'Run started',
+  );
 
   const provider = createProvider();
-  const index = await createSkillIndex(provider, skills);
+  const index = await createSkillIndexes(provider, skills);
   const results = await Promise.all(
     cases.map((current) => runCase(provider, index, current)),
   );
-  const selectedExpected = results.reduce(
-    (total, result) => total + result.metrics.selectedExpected,
-    0,
-  );
-  const expected = results.reduce(
-    (total, result) => total + result.metrics.expected,
-    0,
-  );
+  const metrics = aggregateMetrics(results);
+  const providerUsage = output.providerUsage();
+  await output.complete(results, metrics);
   logger.info(
-    {
-      cases: results.length,
-      selectedExpected,
-      expected,
-      coverage: selectedExpected / expected,
-    },
+    { runId: output.id, cases: results.length, metrics, providerUsage },
     'Run completed',
   );
 };
@@ -297,5 +485,6 @@ try {
   await main();
 } catch (error) {
   logger.error({ err: error }, 'Run failed');
+  await output.fail();
   process.exitCode = 1;
 }

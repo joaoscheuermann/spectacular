@@ -451,13 +451,14 @@ const createHarness = (input: HarnessInput) => {
         readonly documents: readonly string[];
       }) => {
         reranks.push(request);
-        return (
-          input.ranking ??
-          request.documents.map((_, index) => ({
-            index,
-            relevanceScore: request.documents.length - index,
-          }))
-        );
+        return {
+          results:
+            input.ranking ??
+            request.documents.map((_, index) => ({
+              index,
+              relevanceScore: request.documents.length - index,
+            })),
+        };
       },
       complete: async (request: ProviderRequest<unknown>) => {
         terminalTool(request);

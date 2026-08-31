@@ -1,21 +1,12 @@
 {
-  "name": "multi-city road trip",
-  "objective": "Build a seven-day itinerary for two people leaving Minneapolis and visiting three Ohio cities within a $5,100 budget. Accommodations must be pet-friendly, meals must cover four requested cuisines, and the trip must not use flights. Use real-world data rather than remembered places.",
+  "name": "D3 stock visualization",
+  "objective": "Build a standalone D3.js v6 web app from the supplied stock CSV data with a sector-clustered, collision-free market-cap bubble chart, linked 50-stock table, labels, legend, tooltips, and bidirectional row highlighting under /root/output/.",
   "skills": {
-    "expected": [
-      "feasible-trip-plan",
-      "real-world-travel-research",
-      "road-trip-routing",
-      "search-accommodations",
-      "search-attractions",
-      "search-cities",
-      "search-driving-distance",
-      "search-restaurants"
-    ],
+    "expected": ["d3-visualization"],
     "useful": [],
     "noise": {
       "13f-analyzer": {
-        "type": "irrelevant"
+        "type": "no_operational_value"
       },
       "citation-management": {
         "type": "irrelevant"
@@ -24,15 +15,15 @@
         "type": "irrelevant"
       },
       "coding-workflow": {
-        "type": "irrelevant"
-      },
-      "d3-visualization": {
-        "type": "irrelevant"
-      },
-      "data-reconciliation": {
         "type": "no_operational_value"
       },
+      "data-reconciliation": {
+        "type": "irrelevant"
+      },
       "docx": {
+        "type": "irrelevant"
+      },
+      "feasible-trip-plan": {
         "type": "irrelevant"
       },
       "file-organizer": {
@@ -56,10 +47,10 @@
       "obspy-data-api": {
         "type": "irrelevant"
       },
-      "pdf": {
+      "pdf-editing": {
         "type": "irrelevant"
       },
-      "pdf-editing": {
+      "pdf": {
         "type": "irrelevant"
       },
       "planning-with-files": {
@@ -68,14 +59,35 @@
       "pptx": {
         "type": "irrelevant"
       },
+      "real-world-travel-research": {
+        "type": "irrelevant"
+      },
       "restclient-migration": {
+        "type": "irrelevant"
+      },
+      "road-trip-routing": {
         "type": "irrelevant"
       },
       "safe-database-release": {
         "type": "irrelevant"
       },
+      "search-accommodations": {
+        "type": "irrelevant"
+      },
+      "search-attractions": {
+        "type": "irrelevant"
+      },
+      "search-cities": {
+        "type": "irrelevant"
+      },
+      "search-driving-distance": {
+        "type": "irrelevant"
+      },
       "search-flights": {
-        "type": "conflicting"
+        "type": "irrelevant"
+      },
+      "search-restaurants": {
+        "type": "irrelevant"
       },
       "seisbench-model-api": {
         "type": "irrelevant"

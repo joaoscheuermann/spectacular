@@ -60,8 +60,8 @@ export const fakeProvider = (
       yield { type: 'reasoning.delta', delta: 'private reasoning' };
       yield { type: 'response.finished', finish: response };
     },
-    embedding: async () => [],
-    rerank: async () => [],
+    embedding: async () => ({ embedding: [] }),
+    rerank: async () => ({ results: [] }),
     models: async () => [],
     validateModel: async (model: string) => ({ id: model }),
   } as LlmProvider;
