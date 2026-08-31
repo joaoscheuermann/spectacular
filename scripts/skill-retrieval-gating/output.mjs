@@ -241,7 +241,7 @@ export const createOutput = async ({ directory, config }) => {
       'schemas.mjs',
       'utils.mjs',
     ].map((name) => ({
-      name: `scripts/direct-skill-planning-gated/${name}`,
+      name: `scripts/skill-retrieval-gating/${name}`,
       path: join(directory, name),
     })),
     { name: 'package.json', path: join(root, 'package.json') },

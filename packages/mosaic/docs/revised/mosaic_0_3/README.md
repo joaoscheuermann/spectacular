@@ -16,14 +16,14 @@ catalog-independent P0
 ```
 
 The paper records diagnostic evidence from `scripts/full-skill-vs-hints`,
-`scripts/direct-skill-planning`, and `scripts/direct-skill-planning-gated`.
+`scripts/direct-skill-planning`, and `scripts/skill-retrieval-gating`.
 Those results motivate the architecture change but do not establish end-to-end
 MOSAIC performance. The current package implementation still targets MOSAIC
 0.2 until the 0.3 planning gate is implemented.
 
 The latest selection audit is run
 `89ba6c1e-470c-43ea-809b-a34a90f59540` under
-`scripts/direct-skill-planning-gated/output/`. Across 30 exhaustively labeled
+`scripts/skill-retrieval-gating/output/`. Across 30 exhaustively labeled
 cases, hybrid lexical and vector retrieval plus semantic gating recovered all
 65 expected skill occurrences, removed 300 of 310 recovered noise
 occurrences, and retained 78 of 79 recovered relevant occurrences. The paper

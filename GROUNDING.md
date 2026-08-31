@@ -588,7 +588,7 @@ headers, prompts, model inputs and outputs, diagnostics, messages, causes,
 stacks, and credentials. This authored lab remains diagnostic and is not
 confirmatory benchmark evidence.
 
-The sibling private `scripts/direct-skill-planning-gated` diagnostic keeps its
+The sibling private `scripts/skill-retrieval-gating` diagnostic keeps its
 pipeline logic in one `index.mjs`, its output scoring, provider-usage
 aggregation, run identity, and persistence in one `output.mjs`, its prompt text
 in one `prompt.mjs`, its two-message

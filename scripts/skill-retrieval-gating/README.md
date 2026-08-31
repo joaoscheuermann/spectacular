@@ -1,6 +1,8 @@
-# Direct Skill Planning Gated
+# Skill Retrieval Gating
 
-This diagnostic runs every case in parallel through one fixed pipeline:
+This diagnostic tests whether a semantic post-retrieval gate can remove
+recovered skill noise while retaining relevant skills. It runs every case in
+parallel through one fixed pipeline:
 
 1. generate P0;
 2. run lexical and vector retrieval, fuse their rankings, and rerank skills
@@ -47,7 +49,7 @@ precision with retention of all recovered relevant skills. A zero denominator
 produces zero. Set `OPENROUTER_API_KEY` and run:
 
 ```sh
-npm run llm:direct-skill-planning-gated
+npm run llm:skill-retrieval-gating
 ```
 
 Every pipeline action uses up to five total attempts with exponential backoff.
