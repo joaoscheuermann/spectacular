@@ -36,21 +36,21 @@
 \textit{MOSAIC 0.3 — Micro-skill Orchestration through Skill Activation and Instruction Composition:} \textit{a minimal architecture for composing micro-skills over general-purpose tools}
 
 
-\begin{center}\textbf{João Vitor Scheuermann}\\MOSAIC 0.3 — 28 de agosto de 2026 / 28 August 2026\end{center}
+\begin{center}\textbf{João Vitor Scheuermann}\\MOSAIC 0.3 — 30 de agosto de 2026 / 30 August 2026\end{center}
 
 \textit{Documento técnico de arquitetura com evidência diagnóstica de planejamento. Esta versão} \textit{revisa o núcleo conceitual do MOSAIC; ainda não apresenta validação end-to-end.}
 
 
 \section*{RESUMO}
 
-Este artigo especifica a MOSAIC 0.3 (Micro-skill Orchestration through Skill Activation and Instruction Composition), uma arquitetura mínima para agentes de linguagem que combinam micro skills, tools executáveis e a capacidade cognitiva do modelo. A revisão 0.3 altera o feedback pré-execução: depois de um P0 independente do catálogo, o runtime recupera candidatas por objetivo, reranqueia seus bodies completos, aplica um gate semântico global com decisões \texttt{keep} ou \texttt{drop} e entrega ao planejador somente os bodies canônicos mantidos, sem convertê-los em hints. P1 é então revisado uma única vez e o roteamento final volta a ocorrer independentemente para cada objetivo pronto. O perfil preserva bundles ordenados, menus compostos, observações criadas pelo runtime, revisão localizada e entrega determinística. Três laboratórios diagnósticos motivam a mudança: bodies completos foram preferidos a hints em 12 contra 3 avaliações, a revisão P0--P1 foi preferida ao planejamento direto e gates conservadores reduziram aproximadamente 45--48\% do contexto candidato mantendo vantagem agregada de qualidade sobre o contexto integral. Esses resultados sustentam a interação entre os componentes de planejamento, mas não constituem validação end-to-end. \textbf{Palavras-chave:} agentes de linguagem; micro skills; planejamento; seleção semântica; uso de ferramentas; evidência causal; revisão localizada.
+Este artigo especifica a MOSAIC 0.3 (Micro-skill Orchestration through Skill Activation and Instruction Composition), uma arquitetura mínima para agentes de linguagem que combinam micro skills, tools executáveis e a capacidade cognitiva do modelo. A revisão 0.3 altera o feedback pré-execução: depois de um P0 independente do catálogo, o runtime recupera candidatas por objetivo, reranqueia seus bodies completos, aplica um gate semântico global com decisões \texttt{keep} ou \texttt{drop} e entrega ao planejador somente os bodies canônicos mantidos, sem convertê-los em hints. P1 é então revisado uma única vez e o roteamento final volta a ocorrer independentemente para cada objetivo pronto. O perfil preserva bundles ordenados, menus compostos, observações criadas pelo runtime, revisão localizada e entrega determinística. Três laboratórios diagnósticos motivam a mudança: bodies completos foram preferidos a hints em 12 contra 3 avaliações, a revisão P0--P1 foi preferida ao planejamento direto e gates conservadores mantiveram vantagem agregada de qualidade sobre o contexto integral. Em uma auditoria adicional de 30 casos com rótulos exaustivos, retrieval híbrido e gate recuperaram 65/65 skills esperadas, removeram 300/310 ocorrências de ruído e retiveram 78/79 ocorrências relevantes. Esses resultados validam localmente retrieval e seleção, mas ainda não demonstram que o P1 filtrado melhora tarefas completas. \textbf{Palavras-chave:} agentes de linguagem; micro skills; planejamento; seleção semântica; uso de ferramentas; evidência causal; revisão localizada.
 
 
 % Source PDF page 2
 
 \section*{ABSTRACT}
 
-This article specifies MOSAIC 0.3 (Micro-skill Orchestration through Skill Activation and Instruction Composition), a minimal architecture for language agents that combine micro-skills, executable tools, and the model's cognitive capability. Version 0.3 changes pre-execution feedback: after a catalog-independent P0, the runtime retrieves candidates per goal, reranks their complete bodies, applies one global semantic gate with \texttt{keep} or \texttt{drop} decisions, and gives the planner only the retained canonical bodies without converting them into hints. P1 is revised once, after which final routing runs independently for each ready goal. The profile retains ordered bundles, composed tool menus, runtime-created observations, localized revision, and deterministic final delivery. Three diagnostic planning labs motivate this change: complete bodies were preferred to hints in 12 versus 3 evaluations, P0--P1 revision was preferred to direct planning, and conservative gates removed approximately 45--48\% of candidate context while retaining an aggregate quality advantage over the full context. These results support the interaction among the planning components but do not constitute end-to-end validation. \textbf{Keywords:} language agents; micro-skills; planning; semantic selection; tool use; causal evidence; localized revision.
+This article specifies MOSAIC 0.3 (Micro-skill Orchestration through Skill Activation and Instruction Composition), a minimal architecture for language agents that combine micro-skills, executable tools, and the model's cognitive capability. Version 0.3 changes pre-execution feedback: after a catalog-independent P0, the runtime retrieves candidates per goal, reranks their complete bodies, applies one global semantic gate with \texttt{keep} or \texttt{drop} decisions, and gives the planner only the retained canonical bodies without converting them into hints. P1 is revised once, after which final routing runs independently for each ready goal. The profile retains ordered bundles, composed tool menus, runtime-created observations, localized revision, and deterministic final delivery. Three diagnostic planning labs motivate this change: complete bodies were preferred to hints in 12 versus 3 evaluations, P0--P1 revision was preferred to direct planning, and conservative gates retained an aggregate quality advantage over the full context. In an additional 30-case audit with exhaustive labels, hybrid retrieval and gating recovered 65/65 expected skills, removed 300/310 noise occurrences, and retained 78/79 relevant occurrences. These results locally validate retrieval and selection, but do not yet show that filtered P1 improves complete tasks. \textbf{Keywords:} language agents; micro-skills; planning; semantic selection; tool use; causal evidence; localized revision.
 
 
 \section*{1 INTRODUÇÃO}
@@ -136,7 +136,21 @@ ReAct organiza a resolução de tarefas como uma alternância entre decisão, a�
 SkillsBench trata skills como pacotes de conhecimento procedural e mostra que instruções focadas podem ser mais úteis do que documentação acumulada (LI et al., 2026). SkillMOO trata bundles como objetos passíveis de poda e substituição, reforçando que adicionar instruções indis- criminadamente não é equivalente a melhorar o agente (GONG et al., 2026). ToolMenuBench, por sua vez, transforma a construção do menu visível de tools em um problema de primeira classe (BABU; IYER, 2026).
 
 
-Esses trabalhos ajudam a posicionar o MOSAIC, mas não são incorporados como novos
+Esses trabalhos ajudam a posicionar o MOSAIC, mas não são incorporados como novos componentes obrigatórios. Eles reforçam que retrieval, composição de instruções e construção do menu são fronteiras distintas.
+
+
+\subsection*{2.6 Relevância pós-retrieval e ruído contextual}
+
+Reranking relativo responde qual candidata parece mais próxima da consulta, mas não decide se ela acrescenta utilidade material. O RE-RAG introduz um estimador que classifica se cada contexto recuperado é de fato útil, separando essa decisão da ordenação relativa (KIM; LEE, 2024). RAGChecker, por sua vez, avalia retrieval e geração como módulos distintos, evitando inferir qualidade da resposta apenas a partir da cobertura do retriever (RU et al., 2024). O gate pré-P1 do MOSAIC ocupa uma fronteira análoga: retrieval privilegia recall; a decisão semântica posterior estima utilidade operacional para o plano.
+
+Essa separação também é motivada pelo efeito do ruído. Cuconasu et al. (2024) mostram que documentos de alto rank, mas sem resposta, podem prejudicar mais do que ruído aleatório. Amiraz et al. (2025) distinguem passagens irrelevantes benignas de distratores semanticamente próximos e mostram que seu efeito depende da consulta e do modelo. Para skills, a consequência é que similaridade lexical ou semântica não basta: uma candidata pode estar no tema correto e ainda introduzir um procedimento, formato ou artefato desnecessário.
+
+
+\subsection*{2.7 Revisão condicionada por um plano inicial}
+
+Self-Refine condiciona uma segunda passagem na entrada original, na saída anterior e em feedback, obtendo melhora média de aproximadamente 20 pontos percentuais em sete tarefas (MADAAN et al., 2023). Em planejamento interativo, DEPS também revisa planos iniciais a partir de evidência de execução (WANG et al., 2023). Esses resultados sustentam o padrão pedido original, rascunho e nova evidência, mas não isolam causalmente a presença do rascunho.
+
+A ressalva é igualmente importante. Huang et al. (2024) mostram que autocorreção sem feedback externo confiável pode degradar raciocínio. Uma decomposição controlada mais recente separa ganhos da segunda passagem em nova resolução, scaffold e conteúdo do draft; drafts fracos podem prejudicar, enquanto drafts fortes ou estruturalmente úteis podem ajudar (NING; LI; YU, 2026). A MOSAIC, portanto, transporta P0 para P1 como rascunho falível, não como autoridade. O pedido original permanece a fonte de escopo, e os bodies selecionados constituem evidência operacional nova.
 
 
 \input{figures/visual_02.tex}
@@ -305,7 +319,9 @@ F_0 = \Gamma(q, P_0, C_0), \qquad F_0 \subseteq C_0.
 
 \texttt{keep} significa que P1 provavelmente ficaria menos completo, preciso, viável, executável ou verificável sem aquela instrução. \texttt{drop} exige alta confiança de que o body não acrescenta valor material, duplica uma contribuição já mantida, conflita com o pedido ou introduz trabalho não sustentado. Similaridade temática, rank ou a mera menção do mesmo assunto em P0 não bastam para manter nem remover uma skill. Quando a utilidade material permanece incerta, o gate favorece \texttt{keep}; a minimização ocorre somente depois de preservar contribuições distintas.
 
-O planner recebe P0 e os bodies canônicos completos das skills de \(F_0\), na ordem preservada, e pode revisar, rearranjar ou reescrever os objetivos uma única vez. As rationales do gate são evidência de auditoria: não viram hints, não reescrevem bodies e não entram no contexto de revisão. Quando \(F_0 = \varnothing\), o runtime pode materializar P1 como uma cópia validada de P0, com revisão 1, sem uma chamada cognitiva vazia. Depois de P1, o roteamento é executado novamente para os objetivos finais.
+O planner recebe o pedido original, P0 e os bodies canônicos completos das skills de \(F_0\), na ordem preservada, e produz um P1 completo depois de uma única revisão. P0 é um rascunho falível, não uma autoridade nem um contrato de edição mínima. O planner deve confrontar cada objetivo com o pedido e pode remover, fundir, dividir, rearranjar ou reescrever qualquer parte, inclusive quando nenhum body contesta explicitamente o rascunho. O pedido é a única fonte de escopo e de entregáveis solicitados. Os bodies são orientação operacional: podem acrescentar métodos e critérios de verificação materialmente aplicáveis, mas não devem criar entregáveis ou ampliar o escopo sem sustentação no pedido.
+
+As rationales do gate são evidência de auditoria: não viram hints, não reescrevem bodies e não entram no contexto de revisão. Quando \(F_0 = \varnothing\), o runtime pode materializar P1 como uma cópia validada de P0, com revisão 1, sem uma chamada cognitiva vazia, desde que P0 continue satisfazendo o pedido. Depois de P1, o roteamento é executado novamente para os objetivos finais.
 
 
 \input{figures/visual_07.tex}
@@ -768,9 +784,11 @@ A fronteira da Figura 10 não impede extensões. Ela estabelece uma ordem: prime
 
 \subsection*{9.1 Escopo dos experimentos}
 
-A MOSAIC 0.3 é informada por três laboratórios privados de planejamento. Eles não executam tools nem tarefas completas; isolam a transição entre pedido, P0, retrieval, representação das skills, filtragem e P1. Os casos abrangem mudança de código, release com migração de banco, planejamento de viagens e verificação de citações. Os experimentos posteriores usam seis casos, três rodadas por caso, catálogo de 37 skills, o mesmo modelo de planejamento e dois juízes independentes. Cada comparação é apresentada cegamente nas duas orientações A/B; um resultado é inconsistente quando a preferência muda com a posição.
+A MOSAIC 0.3 é informada por três laboratórios privados de planejamento, sendo o terceiro estendido por uma auditoria exaustiva de seleção. Eles não executam tools nem tarefas completas; isolam a transição entre pedido, P0, retrieval, representação das skills, filtragem e P1. Os dois primeiros laboratórios e a fase comparativa do terceiro usam seis casos, três rodadas por caso, catálogo de 37 skills, o mesmo modelo de planejamento e dois juízes independentes. Cada comparação é apresentada cegamente nas duas orientações A/B; um resultado é inconsistente quando a preferência muda com a posição.
 
-As rodadas repetidas do mesmo caso não são tarefas independentes. Os conjuntos de skills esperadas foram escritos para diagnóstico e são incompletos: uma skill adicional pode ser útil mesmo sem pertencer ao conjunto. Os julgamentos são feitos por modelos, não por verificadores end-to-end. Portanto, os números abaixo sustentam decisões locais de arquitetura e revelam modos de falha; não estabelecem superioridade universal nem significância confirmatória.
+A extensão mais recente usa 30 casos autorados nos domínios de software, documentos e artefatos, finanças, viagens e computação científica. Em cada caso, as 37 skills do catálogo formam uma partição exaustiva: \texttt{expected} identifica orientação necessária, \texttt{useful} identifica contribuição suplementar aceitável e \texttt{noise} classifica todo o restante como irrelevante, sem valor operacional ou conflitante. Esses rótulos são usados apenas no scoring offline e nunca entram em P0, retrieval, reranking, gate ou P1.
+
+As rodadas repetidas dos experimentos comparativos não são tarefas independentes. Seus conjuntos de skills esperadas são incompletos e as preferências são produzidas por modelos, não por verificadores end-to-end. A auditoria de 30 casos elimina a ambiguidade entre skill suplementar e ruído no scoring, mas continua sendo um conjunto autorado, com um único run, um catálogo pequeno e um modelo de gate. Portanto, os números abaixo sustentam decisões locais de arquitetura e revelam modos de falha; não estabelecem superioridade universal nem significância confirmatória.
 
 \subsection*{9.2 Full bodies, P0 e revisão}
 
@@ -902,17 +920,60 @@ Os três runs repetem o mesmo efeito direcional: menos contexto não reduz a qua
 
 V2 e v3 não congelaram P0 e retrieval entre si; diferenças numéricas entre versões não podem ser atribuídas causalmente ao schema binário. V3 mostra apenas que \texttt{keep}/\texttt{drop} é suficiente para reproduzir a direção do efeito sem categorias adicionais.
 
-\subsection*{9.5 O que a evidência sustenta}
+\subsection*{9.5 Auditoria exaustiva do retrieval híbrido e do gate}
 
-Os experimentos sustentam quatro decisões encadeadas: P0 antes do catálogo; revisão em vez de geração final direta; preservação de full bodies; e filtragem semântica depois de retrieval de alta cobertura. Mais importante, os laboratórios fatoriais e de gate exercitam a interação entre essas partes, e não apenas cada componente isoladamente. Isso reduz a incerteza antes de uma campanha completa.
+A auditoria de 30 casos complementa a proxy incompleta dos experimentos anteriores com rótulos exaustivos sobre o catálogo. Para cada objetivo de P0, a consulta combina pedido e objetivo. Um índice BM25 sobre nome e body completos e um índice vetorial executam retrieval em paralelo. Candidatas vetoriais abaixo de 0,30 são removidas; as duas listas, limitadas a 20 itens, são fundidas por reciprocal rank fusion de pesos iguais; e um reranker body-aware escolhe até dez candidatas por objetivo. O gate avalia cada par objetivo--skill como \texttt{keep} ou \texttt{drop}; a união final mantém uma skill quando ao menos um objetivo a aprova.
 
-Ainda assim, desempenho local não é uma prova transitiva de desempenho total. Custos de contexto, erros de routing final, menu de tools, execução, projeção de estado e revisão localizada podem introduzir interações novas. A inferência de engenharia é que componentes úteis e interfaces controladas tornam um ganho end-to-end mais plausível; a hipótese científica restante é verificar esse ganho com tarefas completas, tools reais e verificadores externos.
+Agregadas por caso, 389 ocorrências de skills chegaram ao gate: 79 relevantes e 310 de ruído. O bundle final conteve 88 ocorrências: as 65 esperadas, 13 suplementares úteis e dez de ruído. O resultado é resumido no Quadro 13.
+
+\begin{table}[H]
+\centering
+\caption*{\textbf{Quadro 13 - Auditoria exaustiva de retrieval e seleção em 30 casos}}
+\small
+\renewcommand{\arraystretch}{1.12}
+\begin{tabularx}{\linewidth}{|Y|r|r|}
+\hline
+\textbf{Métrica} & \textbf{Contagem} & \textbf{Taxa} \\
+\hline
+Recall das skills esperadas & 65/65 & 100,0\% \\
+\hline
+Precisão do bundle final & 78/88 & 88,6\% \\
+\hline
+F1 de precisão e recall esperado & --- & 94,0\% \\
+\hline
+Retenção de itens relevantes recuperados & 78/79 & 98,7\% \\
+\hline
+Remoção de ruído recuperado & 300/310 & 96,8\% \\
+\hline
+Redução do conjunto recuperado & 301/389 & 77,4\% \\
+\hline
+Selection F1 & --- & 93,4\% \\
+\hline
+\end{tabularx}
+\par\smallskip\raggedright\small Fonte: run \texttt{89ba6c1e-470c-43ea-809b-a34a90f59540}, 30 ago. 2026. Contagens são ocorrências agregadas por caso; relevante significa \texttt{expected} ou \texttt{useful}.
+\end{table}
+
+Vinte dos 30 casos tiveram precisão e retenção relevantes perfeitas. Nove casos mantiveram algum ruído; entre os dez falsos positivos, oito foram classificados como sem valor operacional e dois como irrelevantes. Nenhuma das seis ocorrências conflitantes recuperadas chegou ao bundle. O único falso negativo foi uma skill suplementar útil no caso de associação de fases sísmicas; nenhuma skill obrigatória foi perdida. O perfil residual sugere que a fronteira mais difícil não é reconhecer conflito explícito, mas decidir quando uma orientação tematicamente aplicável acrescenta valor operacional suficiente.
+
+O run usou \nolinkurl{qwen/qwen3.8-27b} com effort alto para P0, gate e P1, \nolinkurl{voyageai/voyage-4-large} com 1.024 dimensões para embeddings e \nolinkurl{voyageai/rerank-2.5} para reranking. As 2.581 chamadas bem-sucedidas reportaram uso e custo, totalizando 14.123.842 tokens contabilizados pelo provedor e 4,77550605 créditos. O manifest persistido registra os hashes das fontes do experimento, dos 30 casos e do catálogo de 37 skills. P1 foi gerado para preservar o trace completo, mas não foi julgado; essas métricas validam seleção, não qualidade downstream.
+
+Um erro revela a interação mais importante para a próxima fase. No caso de viagem com orçamento, P0 transformou a necessidade de controlar custos em um \textit{budget worksheet}, embora o pedido não exigisse uma planilha. Essa formulação tornou a skill \texttt{xlsx} aparentemente aplicável; o gate a manteve e P1 ampliou o requisito para fórmulas e subtotais. Retrieval lexical não criou sozinho esse erro, mas pode reforçar termos introduzidos pelo draft. O caso sustenta a regra da Seção 4.5: P0 deve chegar a P1 como rascunho falível, e uma skill não pode legitimar um entregável sem suporte no pedido.
+
+Por fim, a topologia experimental não é idêntica ao gate global normativo. A auditoria decide por par objetivo--skill e faz união por nome; \(\Gamma\), na especificação, recebe a união canônica e o P0 completo e avalia cada candidata uma vez. O run sustenta retrieval híbrido, reranking body-aware e filtragem semântica pós-retrieval, mas não compara causalmente essas duas topologias de gate.
+
+\subsection*{9.6 O que a evidência sustenta}
+
+Os experimentos sustentam quatro decisões encadeadas: P0 antes do catálogo; revisão em vez de geração final direta; preservação de full bodies; e filtragem semântica depois de retrieval de alta cobertura. A auditoria exaustiva acrescenta evidência direta de que a combinação lexical e vetorial recupera o conjunto obrigatório e de que o gate remove a maior parte do ruído sem sacrificar esse recall. Mais importante, os laboratórios fatoriais e de gate exercitam a interação entre essas partes, e não apenas cada componente isoladamente. Isso reduz a incerteza antes de uma campanha completa.
+
+Ainda assim, desempenho local não é uma prova transitiva de desempenho total. A validação imediatamente seguinte deve congelar pedido, P0, candidatas recuperadas, modelo, effort e contrato de saída e comparar P1 com todos os bodies recuperados contra P1 com o bundle filtrado. Um baseline adicional sem skills mede o ganho sobre P0; um braço \textit{pedido + mesmas skills}, sem mostrar o texto de P0 na síntese, isola o efeito de expor o draft. Como as candidatas desse último braço ainda foram recuperadas a partir dos objetivos de P0, ele não representa um pipeline integralmente independente de P0.
+
+Essa próxima validação deve medir cobertura dos requisitos, contribuições realmente derivadas das skills, regressões, entregáveis não sustentados, verificabilidade e custo. Somente depois dela cabe atribuir ao gate melhora causal de P1. Routing final, menu de tools, execução, projeção de estado e revisão localizada permanecem para uma campanha end-to-end posterior com tarefas completas, tools reais e verificadores externos.
 
 \section*{10 DISCUSSÃO E LIMITAÇÕES}
 
 \subsection*{10.1 Validação parcial, não end-to-end}
 
-O artigo demonstra preferências diagnósticas para mecanismos de planejamento, mas ainda não demonstra que bundles finais superam top-1, que a fórmula de tools aumenta sucesso, que a revisão localizada recupera execuções ou que o MOSAIC completo supera um agente direto. Essas claims exigem uma campanha pareada com o mesmo modelo, as mesmas skills, tools, tarefas e verificadores. A Seção 9 deve ser lida como evidência de desenho e preparação para esse teste, não como seu substituto.
+O artigo demonstra preferências diagnósticas para mecanismos de planejamento e valida retrieval e seleção contra rótulos autorados exaustivos. Ele ainda não demonstra que o bundle filtrado produz P1 melhor do que o contexto integral, que bundles finais superam top-1, que a fórmula de tools aumenta sucesso, que a revisão localizada recupera execuções ou que o MOSAIC completo supera um agente direto. Essas claims exigem comparações pareadas com o mesmo modelo, as mesmas skills, tools, tarefas e verificadores. A Seção 9 deve ser lida como evidência de desenho e preparação para esses testes, não como seu substituto.
 
 
 \subsection*{10.2 Dependência do modelo}
@@ -927,37 +988,42 @@ Retrieval e execução dependem da qualidade do\texttt{ SKILL.md}. Um body vago 
 
 \subsection*{10.4 Gate, conflitos e ordem}
 
-O gate e o seletor evitam conflitos de forma qualitativa, e o bundle preserva a ordem do reranking com desempate determinístico. Falsos drops continuam possíveis, especialmente em tarefas técnicas com várias orientações complementares. A regra conservadora reduz, mas não elimina, esse risco. A ordem de aplicabilidade também não é necessariamente ótima quando instruções possuem tensão implícita. Uma linguagem formal de precedência pode ser necessária em catálogos maiores, porém pertence a um perfil posterior se evidência empírica justificar o custo.
+O gate e o seletor evitam conflitos de forma qualitativa, e o bundle preserva a ordem do reranking com desempate determinístico. Na auditoria exaustiva, nenhum item conflitante foi selecionado, mas dez itens sem utilidade suficiente permaneceram e uma contribuição suplementar útil foi removida. Falsos keeps e falsos drops, portanto, continuam possíveis, especialmente em tarefas técnicas com várias orientações complementares. A regra conservadora reduz, mas não elimina, esse risco. A ordem de aplicabilidade também não é necessariamente ótima quando instruções possuem tensão implícita. Uma linguagem formal de precedência pode ser necessária em catálogos maiores, porém pertence a um perfil posterior se evidência empírica justificar o custo.
 
 
-\subsection*{10.5 Menu simples de tools}
+\subsection*{10.5 Ancoragem e propagação de erros de P0}
+
+Transportar P0 para P1 preserva cobertura e estrutura, e as comparações fatoriais desta versão favoreceram revisão sobre geração direta. Esse ganho não torna P0 correto por definição. Um objetivo inventado pode orientar retrieval, tornar um body aparentemente aplicável e voltar a P1 como requisito reforçado. Busca lexical aumenta a sensibilidade à formulação exata; retrieval vetorial pode reproduzir o mesmo efeito por proximidade semântica. O contrato da Seção 4.5 reduz esse risco ao tornar o pedido a autoridade de escopo e P0 um rascunho livremente revisável. Ele não elimina ancoragem cognitiva, que deve ser medida pelo braço sem exposição textual a P0 descrito na Seção 9.6.
+
+
+\subsection*{10.6 Menu simples de tools}
 
 Tbase pode expor tools que o objetivo não usa. No perfil YOLO máximo, todas as tools ficam visíveis. Essa escolha prioriza simplicidade conceitual e resolve o caso de bundle vazio com tool. Filtragem por estado, custo, causalidade ou risco pertence a arquiteturas de menu mais sofisticadas.
 
 
 % Source PDF page 28
 
-\subsection*{10.6 Subconjunto de Agent Skills}
+\subsection*{10.7 Subconjunto de Agent Skills}
 
 O perfil não executa scripts nem carrega referências e assets. Skills que dependem desses recursos não são integralmente executáveis pelo núcleo. Essa restrição é explícita e evita que o artigo prometa uma camada de resolução que não participa da ideia central.
 
 
-\subsection*{10.7 Revisão localizada}
+\subsection*{10.8 Revisão localizada}
 
 O pedido de revisão pressupõe que o executor reconheça quando uma evidência altera o plano, e que o planner preserve resultados concluídos. Capturar automaticamente todas as observações elimina a autoria do ledger pelo modelo, mas a seleção de \texttt{observationIds} continua sendo semântica: o runtime verifica identidade, unicidade e disponibilidade causal no grafo ativo, não se o subconjunto citado é de fato suficiente. O perfil reduz esse risco com critérios explícitos e projeção causal compacta, sem introduzir verificador separado, reabertura automática de ancestrais ou replanejamento global.
 
 
-\subsection*{10.8 Contratos mínimos não substituem operação de produção}
+\subsection*{10.9 Contratos mínimos não substituem operação de produção}
 
 Os contratos do perfil resolvem ambiguidade entre implementações, mas não especificam persistência distribuída, consistência transacional, retries de infraestrutura, idempotência, observabilidade com- pleta ou recuperação de infraestrutura. A validação local e a recuperação limitada de saídas estruturadas pertencem à correção semântica do runtime e não devem ser confundidas com essas políticas operacionais. Os contratos definem o que deve ser trocado entre os componentes, não como cada componente deve ser operacionalizado.
 
 
 \section*{11 CONSIDERAÇÕES FINAIS}
 
-A MOSAIC 0.3 parte de uma distinção simples: objetivos descrevem resultados; skills ensinam comportamentos; tools executam operações; o modelo toma decisões semânticas; e o runtime detém a evidência operacional. O planner produz P0 sem nomes de skills. Retrieval por objetivo e reranking body-aware formam uma união de alta cobertura; um gate semântico conservador remove apenas candidatas sem utilidade material e P1 recebe os bodies canônicos mantidos. O roteamento final então seleciona, independentemente para cada objetivo pronto, um bundle ordenado de zero a várias instruções e monta um menu composto por \(T_{\mathrm{base}}\) e pelas tools declaradas nesse bundle.
+A MOSAIC 0.3 parte de uma distinção simples: objetivos descrevem resultados; skills ensinam comportamentos; tools executam operações; o modelo toma decisões semânticas; e o runtime detém a evidência operacional. O planner produz P0 sem nomes de skills. Retrieval por objetivo, lexical, vetorial ou híbrido, e reranking body-aware formam uma união de alta cobertura; um gate semântico conservador remove apenas candidatas sem utilidade material e P1 recebe os bodies canônicos mantidos. P0 permanece no contexto como rascunho falível, subordinado ao pedido original. O roteamento final então seleciona, independentemente para cada objetivo pronto, um bundle ordenado de zero a várias instruções e monta um menu composto por \(T_{\mathrm{base}}\) e pelas tools declaradas nesse bundle.
 
 
-A revisão 0.3 preserva os contratos de catálogo, plano, estado, bundle, contexto, decisão semântica, observação e resultado do nó definidos na 0.2. Sua mudança normativa é menor e baseada em evidência: remove \texttt{SkillHint} do caminho de planejamento, introduz um \texttt{PlanningGate} auditável e mantém independentes a seleção pré-P1 e o bundle de execução. A evidência disponível mostra que as partes de planejamento funcionam melhor nessa composição, mas o teste end-to-end continua necessário para medir a arquitetura completa e seu custo.
+A revisão 0.3 preserva os contratos de catálogo, plano, estado, bundle, contexto, decisão semântica, observação e resultado do nó definidos na 0.2. Sua mudança normativa é menor e baseada em evidência: remove \texttt{SkillHint} do caminho de planejamento, introduz um \texttt{PlanningGate} auditável e mantém independentes a seleção pré-P1 e o bundle de execução. Julgamentos pareados favoreceram full bodies, revisão P0--P1 e contexto filtrado; a auditoria exaustiva recuperou todas as 65 skills esperadas e removeu 96,8\% do ruído recuperado. A próxima hipótese é downstream: demonstrar, com P0 e retrieval congelados, que o bundle filtrado produz P1 melhor do que o contexto integral. Somente uma campanha posterior de execução medirá a arquitetura completa e seu custo.
 
 Não há compilador semântico obrigatório, tool router independente, camada de providers, resolvedor de recursos, solver formal de bundles, verificador separado, reabertura automática de nós concluídos ou protocolo operacional completo. A especificação assume execução YOLO e explicita seus limites. Com essa redução, a tese arquitetural pode ser enunciada de forma direta:
 
@@ -969,7 +1035,39 @@ Não há compilador semântico obrigatório, tool router independente, camada de
 
 \section*{REFERÊNCIAS}
 
-AGENT SKILLS.\textbf{ Specification}. [S. l.], 2026. Disponível em: \url{https://agentskills.io/specification}. Acesso em: 29 jul. 2026. BABU, Rahul Suresh; IYER, Laxmipriya Ganesh. ToolMenuBench: benchmarking tool-menu filtering strategies for reliable and efficient LLM agents.\textbf{ arXiv}, 2026. DOI: 10.48550/ar- Xiv.2606.15508. CHO, Hongcheol; KANG, Ryangkyung; KIM, Youngeun. SkillRet: a large-scale benchmark for skill retrieval in LLM agents.\textbf{ arXiv}, 2026. DOI: 10.48550/arXiv.2605.05726. GAO, Xueping. Compositional skill routing for LLM agents: decompose, retrieve, and compose. \textbf{arXiv}, 2026. DOI: 10.48550/arXiv.2606.18051. GONG, Jingzhi et al. SkillMOO: multi-objective optimization of agent skills for software engineering.\textbf{ arXiv}, 2026. DOI: 10.48550/arXiv.2604.09297. LI, Xiangyi et al. SkillsBench: benchmarking how well agent skills work across diverse tasks. \textbf{arXiv}, 2026. DOI: 10.48550/arXiv.2602.12670. SCHICK, Timo et al. Toolformer: language models can teach themselves to use tools. In: ADVANCES IN NEURAL INFORMATION PROCESSING SYSTEMS, 36., 2023. \textbf{Proceedings [...]} [S. l.]: Curran Associates, 2023. Disponível em: https://arxiv.org/abs/ 2302.04761. Acesso em: 29 jul. 2026. YAO, Shunyu et al. ReAct: synergizing reasoning and acting in language models. In: INTERNA- TIONAL CONFERENCE ON LEARNING REPRESENTATIONS, 2023.\textbf{ Proceedings} \textbf{[...]} [S. l.]: ICLR, 2023. DOI: 10.48550/arXiv.2210.03629. ZHENG, YanZhao et al. SkillRouter: retrieve-and-rerank skill selection for LLM agents at scale. \textbf{arXiv}, 2026. DOI: 10.48550/arXiv.2603.22455.
+AGENT SKILLS. \textbf{Specification}. [S. l.], 2026. Disponível em: \href{https://agentskills.io/specification}{agentskills.io/specification}. Acesso em: 29 jul. 2026.
+
+AMIRAZ, Chen et al. The distracting effect: understanding irrelevant passages in RAG. In: ANNUAL MEETING OF THE ASSOCIATION FOR COMPUTATIONAL LINGUISTICS, 63., 2025. \textbf{Proceedings [...]} [S. l.]: ACL, 2025. p. 18228--18258. DOI: 10.18653/v1/2025.acl-long.892.
+
+BABU, Rahul Suresh; IYER, Laxmipriya Ganesh. ToolMenuBench: benchmarking tool-menu filtering strategies for reliable and efficient LLM agents. \textbf{arXiv}, 2026. DOI: 10.48550/arXiv.2606.15508.
+
+CHO, Hongcheol; KANG, Ryangkyung; KIM, Youngeun. SkillRet: a large-scale benchmark for skill retrieval in LLM agents. \textbf{arXiv}, 2026. DOI: 10.48550/arXiv.2605.05726.
+
+CUCONASU, Florin et al. The power of noise: redefining retrieval for RAG systems. In: INTERNATIONAL ACM SIGIR CONFERENCE ON RESEARCH AND DEVELOPMENT IN INFORMATION RETRIEVAL, 47., 2024. \textbf{Proceedings [...]} New York: ACM, 2024. p. 719--729. DOI: 10.1145/3626772.3657834.
+
+GAO, Xueping. Compositional skill routing for LLM agents: decompose, retrieve, and compose. \textbf{arXiv}, 2026. DOI: 10.48550/arXiv.2606.18051.
+
+GONG, Jingzhi et al. SkillMOO: multi-objective optimization of agent skills for software engineering. \textbf{arXiv}, 2026. DOI: 10.48550/arXiv.2604.09297.
+
+HUANG, Jie et al. Large language models cannot self-correct reasoning yet. In: INTERNATIONAL CONFERENCE ON LEARNING REPRESENTATIONS, 2024. \textbf{Proceedings [...]} [S. l.]: ICLR, 2024. DOI: 10.48550/arXiv.2310.01798.
+
+KIM, Kiseung; LEE, Jay-Yoon. RE-RAG: improving open-domain QA performance and interpretability with relevance estimator in retrieval-augmented generation. In: CONFERENCE ON EMPIRICAL METHODS IN NATURAL LANGUAGE PROCESSING, 2024. \textbf{Proceedings [...]} [S. l.]: ACL, 2024. p. 22149--22161. DOI: 10.18653/v1/2024.emnlp-main.1236.
+
+LI, Xiangyi et al. SkillsBench: benchmarking how well agent skills work across diverse tasks. \textbf{arXiv}, 2026. DOI: 10.48550/arXiv.2602.12670.
+
+MADAAN, Aman et al. Self-Refine: iterative refinement with self-feedback. In: ADVANCES IN NEURAL INFORMATION PROCESSING SYSTEMS, 36., 2023. \textbf{Proceedings [...]} [S. l.]: Curran Associates, 2023. DOI: 10.52202/075280-2019.
+
+NING, Jingjie; LI, Xueqi; YU, Chengyu. Revision or re-solving? Decomposing second-pass gains in multi-LLM pipelines. \textbf{arXiv}, 2026. DOI: 10.48550/arXiv.2604.01029.
+
+RU, Dongyu et al. RAGChecker: a fine-grained framework for diagnosing retrieval-augmented generation. In: ADVANCES IN NEURAL INFORMATION PROCESSING SYSTEMS, 37., 2024. \textbf{Proceedings [...]} [S. l.]: Curran Associates, 2024. p. 21999--22027. DOI: 10.52202/079017-0692.
+
+SCHICK, Timo et al. Toolformer: language models can teach themselves to use tools. In: ADVANCES IN NEURAL INFORMATION PROCESSING SYSTEMS, 36., 2023. \textbf{Proceedings [...]} [S. l.]: Curran Associates, 2023. Disponível em: \url{https://arxiv.org/abs/2302.04761}. Acesso em: 29 jul. 2026.
+
+WANG, Zihao et al. Describe, explain, plan and select: interactive planning with LLMs enables open-world multi-task agents. In: ADVANCES IN NEURAL INFORMATION PROCESSING SYSTEMS, 36., 2023. \textbf{Proceedings [...]} [S. l.]: Curran Associates, 2023. DOI: 10.52202/075280-1480.
+
+YAO, Shunyu et al. ReAct: synergizing reasoning and acting in language models. In: INTERNATIONAL CONFERENCE ON LEARNING REPRESENTATIONS, 2023. \textbf{Proceedings [...]} [S. l.]: ICLR, 2023. DOI: 10.48550/arXiv.2210.03629.
+
+ZHENG, YanZhao et al. SkillRouter: retrieve-and-rerank skill selection for LLM agents at scale. \textbf{arXiv}, 2026. DOI: 10.48550/arXiv.2603.22455.
 
 
 % Source PDF page 30

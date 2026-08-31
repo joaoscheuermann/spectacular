@@ -21,6 +21,15 @@ Those results motivate the architecture change but do not establish end-to-end
 MOSAIC performance. The current package implementation still targets MOSAIC
 0.2 until the 0.3 planning gate is implemented.
 
+The latest selection audit is run
+`89ba6c1e-470c-43ea-809b-a34a90f59540` under
+`scripts/direct-skill-planning-gated/output/`. Across 30 exhaustively labeled
+cases, hybrid lexical and vector retrieval plus semantic gating recovered all
+65 expected skill occurrences, removed 300 of 310 recovered noise
+occurrences, and retained 78 of 79 recovered relevant occurrences. The paper
+reports these as retrieval and selection evidence only; comparing filtered and
+unfiltered P1 quality is the next validation.
+
 Build from this directory with the inspected Island of TeX image pinned by
 digest:
 
