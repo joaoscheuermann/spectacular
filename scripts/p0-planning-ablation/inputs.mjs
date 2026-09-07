@@ -5,24 +5,48 @@ import { fileURLToPath } from 'node:url';
 
 import { caseSchema, fixtureSchema } from './schemas.mjs';
 
-export const sourceRunId = '89ba6c1e-470c-43ea-809b-a34a90f59540';
-export const sourceResultsSha256 =
-  'f904b241cc05264c281e017ebfb16cbe52af934c4d4c7bc6b62f71088f5b68db';
-export const frozenFixtureSha256 =
-  '909bfc7d5153a08bfbe516604d68b3255905bbddb267e4334aed7ec94a7d4908';
+export const defaultFixtureName = 'p0.json';
+export const controlFixtureName = 'p0-skill-aware-qwen.json';
+
+const frozenFixtures = Object.freeze({
+  'p0.json': Object.freeze({
+    sha256: '909bfc7d5153a08bfbe516604d68b3255905bbddb267e4334aed7ec94a7d4908',
+    sourceRunId: '89ba6c1e-470c-43ea-809b-a34a90f59540',
+    sourceResultsSha256:
+      'f904b241cc05264c281e017ebfb16cbe52af934c4d4c7bc6b62f71088f5b68db',
+  }),
+  'p0-skill-aware-qwen.json': Object.freeze({
+    sha256: '4d4af3e9de0f002ef7983f5ab31b0c7826a0d80191482e14944abaf2dc6e5323',
+    sourceRunId: 'aaae19f2-6f98-4539-8eda-e72bdf8b4f57',
+    sourceResultsSha256:
+      'd4de560b0a21f4a8dcb185de1751a970e15e9fbe4ba5a72b4e42470047dc6795',
+  }),
+  'p0-skill-aware-gemini.json': Object.freeze({
+    sha256: 'b0bca76f4429b7ec9f2af8fd931f7c19a726c8b74639b92b7859b61a594aeac0',
+    sourceRunId: 'd95fc9dd-42b8-4bfc-8358-7dcfae141198',
+    sourceResultsSha256:
+      'c920e22d338f0d6d2b74f262a883585fb9a9c0e1577e61bd3c7d75c0fe24847e',
+  }),
+});
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const casesDirectory = join(directory, 'cases');
 const skillsDirectory = join(casesDirectory, 'skills');
-const fixturePath = join(directory, 'fixtures', 'p0.json');
 
-const loadFixture = async () => {
+const loadFixture = async (fixtureName) => {
+  const expected = frozenFixtures[fixtureName];
+  if (expected === undefined) {
+    throw new Error(`Unknown frozen fixture: ${fixtureName}`);
+  }
+  const fixturePath = join(directory, 'fixtures', fixtureName);
   const data = await readFile(fixturePath);
   const sha256 = createHash('sha256').update(data).digest('hex');
-  if (sha256 !== frozenFixtureSha256) {
+  if (sha256 !== expected.sha256) {
     throw new Error(`Unexpected frozen fixture hash: ${sha256}`);
   }
-  return fixtureSchema.parse(JSON.parse(data.toString('utf8')));
+  const fixture = fixtureSchema.parse(JSON.parse(data.toString('utf8')));
+  validateFixtureSource(fixture, expected);
+  return fixture;
 };
 
 const loadCases = async () => {
@@ -62,11 +86,11 @@ const uniqueByName = (values, label) => {
   return names;
 };
 
-const validateFixtureSource = (fixture) => {
-  if (fixture.source.runId !== sourceRunId) {
+const validateFixtureSource = (fixture, expected) => {
+  if (fixture.source.runId !== expected.sourceRunId) {
     throw new Error(`Unexpected fixture run ID: ${fixture.source.runId}`);
   }
-  if (fixture.source.resultsSha256 !== sourceResultsSha256) {
+  if (fixture.source.resultsSha256 !== expected.sourceResultsSha256) {
     throw new Error(
       `Unexpected source results hash: ${fixture.source.resultsSha256}`,
     );
@@ -110,10 +134,14 @@ const validateCatalogPartitions = (cases, catalog) => {
   }
 };
 
-const resolveCases = (cases, fixture, catalog) => {
+const resolveCases = (cases, fixture, catalog, controlFixture) => {
   const frozenByName = new Map(
     fixture.cases.map((current) => [current.name, current]),
   );
+  const controlByName =
+    controlFixture === undefined
+      ? undefined
+      : new Map(controlFixture.cases.map((current) => [current.name, current]));
   const catalogByName = new Map(catalog.map((skill) => [skill.name, skill]));
 
   return cases.map((current) => {
@@ -123,6 +151,13 @@ const resolveCases = (cases, fixture, catalog) => {
     }
     if (frozen.objective !== current.objective) {
       throw new Error(`Objective mismatch for case: ${current.name}`);
+    }
+    const control = controlByName?.get(current.name);
+    if (controlByName !== undefined && control === undefined) {
+      throw new Error(`Control fixture is missing case: ${current.name}`);
+    }
+    if (control !== undefined && control.objective !== current.objective) {
+      throw new Error(`Control objective mismatch for case: ${current.name}`);
     }
 
     const goldNames = [...current.skills.expected, ...current.skills.useful];
@@ -142,16 +177,23 @@ const resolveCases = (cases, fixture, catalog) => {
       name: current.name,
       objective: current.objective,
       p0: Object.freeze([...frozen.p0]),
+      ...(control === undefined
+        ? {}
+        : { controlPlan: Object.freeze([...control.p0]) }),
       goldSkills: Object.freeze(goldSkills),
     });
   });
 };
 
-export const loadInputs = async () => {
-  const [cases, catalog, fixture] = await Promise.all([
+export const loadInputs = async ({
+  fixtureName = defaultFixtureName,
+  withControl = false,
+} = {}) => {
+  const [cases, catalog, fixture, controlFixture] = await Promise.all([
     loadCases(),
     loadCatalog(),
-    loadFixture(),
+    loadFixture(fixtureName),
+    withControl ? loadFixture(controlFixtureName) : undefined,
   ]);
 
   if (cases.length !== 30) {
@@ -161,13 +203,19 @@ export const loadInputs = async () => {
     throw new Error(`Expected 37 catalog skills; found ${catalog.length}.`);
   }
   uniqueByName(catalog, 'catalog skill');
-  validateFixtureSource(fixture);
   validateCaseSets(cases, fixture.cases);
+  if (controlFixture !== undefined) {
+    validateCaseSets(cases, controlFixture.cases);
+  }
   validateCatalogPartitions(cases, catalog);
 
   return Object.freeze({
+    fixtureName,
     fixture,
+    ...(controlFixture === undefined
+      ? {}
+      : { controlFixtureName, controlFixture }),
     catalog: Object.freeze(catalog),
-    cases: Object.freeze(resolveCases(cases, fixture, catalog)),
+    cases: Object.freeze(resolveCases(cases, fixture, catalog, controlFixture)),
   });
 };

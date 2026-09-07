@@ -182,19 +182,30 @@ const sourceEntries = (directory) =>
   }));
 
 /** Reads the local immutable inputs without creating a run directory. */
-export const readInputIdentity = async (directory) => {
-  const [caseEntries, catalogEntries, fixtureSha256] = await Promise.all([
-    files(join(directory, 'cases'), '.json', 'cases'),
-    files(join(directory, 'cases', 'skills'), '.md', 'cases/skills'),
-    fileDigest(join(directory, 'fixtures', 'p0.json')),
-  ]);
+export const readInputIdentity = async (
+  directory,
+  fixtureName = 'p0.json',
+  controlFixtureName,
+) => {
+  const [caseEntries, catalogEntries, fixtureSha256, controlSha256] =
+    await Promise.all([
+      files(join(directory, 'cases'), '.json', 'cases'),
+      files(join(directory, 'cases', 'skills'), '.md', 'cases/skills'),
+      fileDigest(join(directory, 'fixtures', fixtureName)),
+      controlFixtureName === undefined
+        ? undefined
+        : fileDigest(join(directory, 'fixtures', controlFixtureName)),
+    ]);
   const [casesSha256, catalogSha256] = await Promise.all([
     digest(caseEntries),
     digest(catalogEntries),
   ]);
 
   return {
-    fixture: { sha256: fixtureSha256 },
+    fixture: { name: fixtureName, sha256: fixtureSha256 },
+    ...(controlFixtureName === undefined
+      ? {}
+      : { control: { name: controlFixtureName, sha256: controlSha256 } }),
     cases: { count: caseEntries.length, sha256: casesSha256 },
     catalog: { count: catalogEntries.length, sha256: catalogSha256 },
   };
@@ -208,6 +219,10 @@ export const createOutput = async ({
   lineage,
   fixtureSource,
   fixtureCases,
+  fixtureName = 'p0.json',
+  controlSource,
+  controlCases,
+  controlFixtureName,
   validatedInputIdentity,
 }) => {
   const id = randomUUID();
@@ -221,7 +236,7 @@ export const createOutput = async ({
   await mkdir(runDirectory, { recursive: true });
 
   const [localInputs, repository] = await Promise.all([
-    readInputIdentity(directory),
+    readInputIdentity(directory, fixtureName, controlFixtureName),
     repositoryIdentity(root),
   ]);
   if (
@@ -242,11 +257,23 @@ export const createOutput = async ({
   const identity = {
     repository,
     fixture: {
+      name: fixtureName,
       cases: fixtureCases,
       runId: fixtureSource.runId,
       sourceResultsSha256: fixtureSource.resultsSha256,
       sha256: localInputs.fixture.sha256,
     },
+    ...(controlSource === undefined
+      ? {}
+      : {
+          control: {
+            name: controlFixtureName,
+            cases: controlCases,
+            runId: controlSource.runId,
+            sourceResultsSha256: controlSource.resultsSha256,
+            sha256: localInputs.control.sha256,
+          },
+        }),
     cases: localInputs.cases,
     catalog: localInputs.catalog,
     experimentSources: { count: sources.length, sha256: sourcesSha256 },

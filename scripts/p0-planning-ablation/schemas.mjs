@@ -104,13 +104,41 @@ export const outcomeSchema = z.enum([
 
 const persistedJudgmentSchema = z
   .object({
-    orientation: z.union([z.literal(1), z.literal(2)]),
+    orientation: z.number().int().min(1).max(4),
     withoutP0Option: z.enum(['a', 'b']),
     choice: judgmentSchema.shape.choice,
     rationale: nonEmptyString,
     winner: outcomeSchema.exclude(['inconsistent']),
   })
   .strict();
+
+const persistedJudgmentsSchema = z
+  .array(persistedJudgmentSchema)
+  .refine((values) => values.length === 2 || values.length === 4, {
+    message: 'A comparison must contain two or four judgments.',
+  })
+  .superRefine((values, context) => {
+    for (const [index, judgment] of values.entries()) {
+      if (judgment.orientation !== index + 1) {
+        context.addIssue({
+          code: 'custom',
+          message: 'Judgment orientations must be contiguous and ordered.',
+          path: [index, 'orientation'],
+        });
+      }
+    }
+    for (let index = 0; index < values.length; index += 2) {
+      if (
+        values[index]?.withoutP0Option === values[index + 1]?.withoutP0Option
+      ) {
+        context.addIssue({
+          code: 'custom',
+          message: 'Each judgment pair must reverse the A/B positions.',
+          path: [index + 1, 'withoutP0Option'],
+        });
+      }
+    }
+  });
 
 const persistedCaseSchema = z
   .object({
@@ -124,7 +152,7 @@ const persistedCaseSchema = z
         withP0: z.array(nonEmptyString).min(1),
       })
       .strict(),
-    judgments: z.array(persistedJudgmentSchema).length(2),
+    judgments: persistedJudgmentsSchema,
     rawOutcome: outcomeSchema,
     outcome: outcomeSchema,
     plansIdentical: z.boolean(),
@@ -153,6 +181,16 @@ export const generationManifestSchema = z
     completedAt: nonEmptyString,
     config: z
       .object({
+        treatment: z.literal('exposure').optional(),
+        design: z.literal('frozen_control').optional(),
+        adjudication: z
+          .object({
+            trigger: z.literal('inconsistent'),
+            extraOrientations: z.literal(2),
+            consensus: z.literal('strict_majority'),
+          })
+          .strict()
+          .optional(),
         planningModel: nonEmptyString,
         planningEffort: nonEmptyString,
         judgeModel: nonEmptyString,
@@ -168,12 +206,23 @@ export const generationManifestSchema = z
           .strict(),
         fixture: z
           .object({
+            name: nonEmptyString.optional(),
             cases: z.literal(30),
             runId: uuidSchema,
             sourceResultsSha256: sha256Schema,
             sha256: sha256Schema,
           })
           .strict(),
+        control: z
+          .object({
+            name: nonEmptyString,
+            cases: z.literal(30),
+            runId: uuidSchema,
+            sourceResultsSha256: sha256Schema,
+            sha256: sha256Schema,
+          })
+          .strict()
+          .optional(),
         cases: hashIdentitySchema,
         catalog: hashIdentitySchema,
         experimentSources: hashIdentitySchema,

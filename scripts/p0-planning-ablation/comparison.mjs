@@ -54,11 +54,16 @@ const samePlan = (left, right) =>
   left.every((goal, index) => goal === right[index]);
 
 export const comparisonOutcome = (plans, judgments) => {
-  const rawOutcome = judgments.every(
-    ({ winner }) => winner === judgments[0].winner,
-  )
-    ? judgments[0].winner
-    : 'inconsistent';
+  if (judgments.length !== 2 && judgments.length !== 4) {
+    throw new Error('A comparison requires two or four judgments.');
+  }
+  const required = Math.floor(judgments.length / 2) + 1;
+  const counts = new Map();
+  for (const { winner } of judgments) {
+    counts.set(winner, (counts.get(winner) ?? 0) + 1);
+  }
+  const consensus = [...counts].find(([, count]) => count >= required);
+  const rawOutcome = consensus?.[0] ?? 'inconsistent';
   const plansIdentical = samePlan(plans.withoutP0, plans.withP0);
 
   return {
@@ -68,9 +73,9 @@ export const comparisonOutcome = (plans, judgments) => {
   };
 };
 
-export const summarizeJudgments = (options, responses) =>
+export const summarizeJudgments = (options, responses, orientationOffset = 0) =>
   responses.map((response, index) => ({
-    orientation: index + 1,
+    orientation: orientationOffset + index + 1,
     withoutP0Option: options[index].withoutP0Option,
     choice: response.choice,
     rationale: response.rationale.trim(),
@@ -88,11 +93,12 @@ export const comparePlans = async ({
   plans,
   options,
   operation = 'judge',
+  orientationOffset = 0,
 }) => {
   const responses = await allFulfilled(
     options.map((current, index) =>
       action(
-        `Judging orientation ${index + 1}`,
+        `Judging orientation ${orientationOffset + index + 1}`,
         async () => {
           recordAttempt(operation, config.judgeModel);
           const result = await provider.complete({
@@ -118,7 +124,7 @@ export const comparePlans = async ({
     ),
     'One or more judge orientations failed.',
   );
-  const judgments = summarizeJudgments(options, responses);
+  const judgments = summarizeJudgments(options, responses, orientationOffset);
 
   return { judgments, ...comparisonOutcome(plans, judgments) };
 };
@@ -143,13 +149,14 @@ export const exactBinomialRightTail = (successes, trials) => {
   return Math.min(1, probability);
 };
 
-export const aggregateComparisons = (results, judgeModel) => {
+const aggregateFor = (results, judgeModel, preferredArm) => {
   const counts = Object.fromEntries(outcomes.map((outcome) => [outcome, 0]));
   for (const result of results) counts[result.outcome] += 1;
 
   const decisive = counts.withoutP0 + counts.withP0;
-  const withP0PreferenceRate = decisive === 0 ? null : counts.withP0 / decisive;
-  const pValue = exactBinomialRightTail(counts.withP0, decisive);
+  const preferenceRate =
+    decisive === 0 ? null : counts[preferredArm] / decisive;
+  const pValue = exactBinomialRightTail(counts[preferredArm], decisive);
   const alpha = 0.05;
   const decision =
     decisive === 0
@@ -162,15 +169,35 @@ export const aggregateComparisons = (results, judgeModel) => {
     primaryJudge: judgeModel,
     counts,
     decisivePreferences: decisive,
-    withP0PreferenceRate,
+    [`${preferredArm}PreferenceRate`]: preferenceRate,
     exactOneSidedBinomialPValue: pValue,
     hypothesis: {
-      null: 'P(primary judge prefers withP0) <= 0.5',
-      alternative: 'P(primary judge prefers withP0) > 0.5',
+      null: `P(primary judge prefers ${preferredArm}) <= 0.5`,
+      alternative: `P(primary judge prefers ${preferredArm}) > 0.5`,
       alpha,
       decision,
     },
     identicalPlans: results.filter(({ plansIdentical }) => plansIdentical)
       .length,
+  };
+};
+
+export const aggregateComparisons = (results, judgeModel) =>
+  aggregateFor(results, judgeModel, 'withP0');
+
+export const aggregateExposureComparisons = (results, judgeModel) => {
+  const aggregate = aggregateFor(results, judgeModel, 'withoutP0');
+  const adjudicated = results.filter(({ judgments }) => judgments.length === 4);
+  const resolved = adjudicated.filter(
+    ({ outcome }) => outcome !== 'inconsistent',
+  );
+
+  return {
+    ...aggregate,
+    adjudication: {
+      initialInconsistentCases: adjudicated.length,
+      resolvedCases: resolved.length,
+      remainingInconsistentCases: adjudicated.length - resolved.length,
+    },
   };
 };

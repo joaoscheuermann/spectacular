@@ -36,21 +36,21 @@
 \textit{MOSAIC 0.3 — Micro-skill Orchestration through Skill Activation and Instruction Composition:} \textit{a minimal architecture for composing micro-skills over general-purpose tools}
 
 
-\begin{center}\textbf{João Vitor Scheuermann}\\MOSAIC 0.3 — 30 de agosto de 2026 / 30 August 2026\end{center}
+\begin{center}\textbf{João Vitor Scheuermann}\\MOSAIC 0.3 — 7 de setembro de 2026 / 7 September 2026\end{center}
 
 \textit{Documento técnico de arquitetura com evidência diagnóstica de planejamento. Esta versão} \textit{revisa o núcleo conceitual do MOSAIC; ainda não apresenta validação end-to-end.}
 
 
 \section*{RESUMO}
 
-Este artigo especifica a MOSAIC 0.3 (Micro-skill Orchestration through Skill Activation and Instruction Composition), uma arquitetura mínima para agentes de linguagem que combinam micro skills, tools executáveis e a capacidade cognitiva do modelo. A revisão 0.3 altera o feedback pré-execução: depois de um P0 independente do catálogo, o runtime recupera candidatas por objetivo, reranqueia seus bodies completos, aplica um gate semântico global com decisões \texttt{keep} ou \texttt{drop} e entrega ao planejador somente os bodies canônicos mantidos, sem convertê-los em hints. P1 é então revisado uma única vez e o roteamento final volta a ocorrer independentemente para cada objetivo pronto. O perfil preserva bundles ordenados, menus compostos, observações criadas pelo runtime, revisão localizada e entrega determinística. Três laboratórios diagnósticos motivam a mudança: bodies completos foram preferidos a hints em 12 contra 3 avaliações, a revisão P0--P1 foi preferida ao planejamento direto e gates conservadores mantiveram vantagem agregada de qualidade sobre o contexto integral. Em uma auditoria adicional de 30 casos com rótulos exaustivos, retrieval híbrido e gate recuperaram 65/65 skills esperadas, removeram 300/310 ocorrências de ruído e retiveram 78/79 ocorrências relevantes. Esses resultados validam localmente retrieval e seleção, mas ainda não demonstram que o P1 filtrado melhora tarefas completas. \textbf{Palavras-chave:} agentes de linguagem; micro skills; planejamento; seleção semântica; uso de ferramentas; evidência causal; revisão localizada.
+Este artigo especifica a MOSAIC 0.3 (Micro-skill Orchestration through Skill Activation and Instruction Composition), uma arquitetura mínima para agentes de linguagem que combinam micro skills, tools executáveis e a capacidade cognitiva do modelo. A revisão 0.3 altera o feedback pré-execução: um P0 independente do catálogo orienta retrieval por objetivo e um gate semântico global com decisões \texttt{keep} ou \texttt{drop}; quando há bodies mantidos, P1 é sintetizado uma vez a partir do pedido e desses bodies canônicos, sem exposição textual a P0. O roteamento final volta a ocorrer independentemente para cada objetivo pronto. Quatro laboratórios diagnósticos motivam a mudança. Bodies completos foram preferidos a hints em 12 contra 3 avaliações; gates conservadores mantiveram vantagem agregada sobre o contexto integral; e uma auditoria de 30 casos recuperou 65/65 skills esperadas, removeu 300/310 ocorrências de ruído e reteve 78/79 ocorrências relevantes. Uma ablação inicial com bundle oráculo não encontrou benefício de expor P0 em quatro células juiz--batch. Uma confirmação posterior usou system prompt neutro, o mesmo controle \texttt{withoutP0} congelado nos três cenários e drafts de três origens: o controle venceu por 16--9 contra o P0 catalog-independent, empatou por 3--3 contra o próprio draft Qwen, com 17 casos equivalentes, e perdeu por 9--13 contra o draft Gemini. Nenhuma célula rejeitou a hipótese nula direcional de dano por P0 (\(p=0{,}1148\), \(0{,}6563\) e \(0{,}8569\)). Os resultados não demonstram dano universal nem benefício robusto; mostram dependência da qualidade e da origem do draft. Como \(\mathrm{P1}(pedido,\ bodies)\) evita essa dependência e nenhum ganho robusto da exposição foi demonstrado, a especificação deixa P0 fora da síntese final e o retém provisoriamente apenas como scaffold upstream de retrieval e gate, papel cuja contribuição incremental ainda não foi isolada. Os diagnósticos ainda não demonstram melhora em tarefas completas. \textbf{Palavras-chave:} agentes de linguagem; micro skills; planejamento; seleção semântica; uso de ferramentas; evidência causal; revisão localizada.
 
 
 % Source PDF page 2
 
 \section*{ABSTRACT}
 
-This article specifies MOSAIC 0.3 (Micro-skill Orchestration through Skill Activation and Instruction Composition), a minimal architecture for language agents that combine micro-skills, executable tools, and the model's cognitive capability. Version 0.3 changes pre-execution feedback: after a catalog-independent P0, the runtime retrieves candidates per goal, reranks their complete bodies, applies one global semantic gate with \texttt{keep} or \texttt{drop} decisions, and gives the planner only the retained canonical bodies without converting them into hints. P1 is revised once, after which final routing runs independently for each ready goal. The profile retains ordered bundles, composed tool menus, runtime-created observations, localized revision, and deterministic final delivery. Three diagnostic planning labs motivate this change: complete bodies were preferred to hints in 12 versus 3 evaluations, P0--P1 revision was preferred to direct planning, and conservative gates retained an aggregate quality advantage over the full context. In an additional 30-case audit with exhaustive labels, hybrid retrieval and gating recovered 65/65 expected skills, removed 300/310 noise occurrences, and retained 78/79 relevant occurrences. These results locally validate retrieval and selection, but do not yet show that filtered P1 improves complete tasks. \textbf{Keywords:} language agents; micro-skills; planning; semantic selection; tool use; causal evidence; localized revision.
+This article specifies MOSAIC 0.3 (Micro-skill Orchestration through Skill Activation and Instruction Composition), a minimal architecture for language agents that combine micro-skills, executable tools, and the model's cognitive capability. Version 0.3 changes pre-execution feedback: a catalog-independent P0 guides per-goal retrieval and one global semantic gate with \texttt{keep} or \texttt{drop} decisions; when bodies are retained, P1 is synthesized once from the request and those canonical bodies, without textual exposure to P0. Final routing then runs independently for each ready goal. Four diagnostic planning labs motivate this change. Complete bodies were preferred to hints in 12 versus 3 evaluations; conservative gates retained an aggregate advantage over the full context; and a 30-case audit recovered 65/65 expected skills, removed 300/310 noise occurrences, and retained 78/79 relevant occurrences. An initial oracle-bundle ablation found no benefit from exposing P0 in four judge--batch cells. A later confirmation used a neutral system prompt, the same frozen \texttt{withoutP0} control in all three conditions, and drafts from three sources: the control won 16--9 against the catalog-independent P0, tied 3--3 against the same Qwen draft with 17 equivalent cases, and lost 9--13 against the Gemini draft. No cell rejected the directional null hypothesis of P0 harm (\(p=0.1148\), \(0.6563\), and \(0.8569\)). The results demonstrate neither universal harm nor robust benefit; they show dependence on draft quality and provenance. Because \(\mathrm{P1}(request,\ bodies)\) removes that dependency and no robust gain from exposure was demonstrated, the specification excludes P0 from final synthesis and provisionally retains it only as an upstream retrieval-and-gating scaffold whose incremental contribution remains unisolated. The diagnostics do not demonstrate improvement on complete tasks. \textbf{Keywords:} language agents; micro-skills; planning; semantic selection; tool use; causal evidence; localized revision.
 
 
 \section*{1 INTRODUÇÃO}
@@ -92,7 +92,7 @@ A MOSAIC 0.3 é uma especificação técnica, não uma implementação de produ�
 
 \noindent \textbullet{} catálogo de skills confiável; \textbullet{} registro de tools confiável; \textbullet{} execução em modo YOLO, sem uma fronteira de autorização definida pelo artigo; \textbullet{} modelo capaz de seguir instruções, produzir saídas estruturadas e chamar tools; \textbullet{} estado suficiente para preservar resultados e observações entre objetivos.\par
 
-Não fazem parte do núcleo: defesas contra prompt injection, sandbox, least privilege, confirmação de efeitos, política de credenciais, retries e recuperação de infraestrutura, idempotência, compensação de ações, execução distribuída, scripts e recursos auxiliares de Agent Skills, treinamento de retrievers e implementação de código. A evidência diagnóstica da Seção 9 informa a revisão arquitetural, mas uma campanha end-to-end, significância estatística e generalização entre modelos permanecem fora do que este artigo demonstra. A correção limitada de uma saída estruturada semanticamente inválida não é retry de infraestrutura: ela pertence à fronteira de conformidade do runtime definida na Seção 4.2.
+Não fazem parte do núcleo: defesas contra prompt injection, sandbox, least privilege, confirmação de efeitos, política de credenciais, retries e recuperação de infraestrutura, idempotência, compensação de ações, execução distribuída, scripts e recursos auxiliares de Agent Skills, treinamento de retrievers e implementação de código. A evidência diagnóstica da Seção 9 informa a revisão arquitetural e inclui testes exatos pré-declarados sobre exposição a P0, mas uma campanha end-to-end, amostragem populacional, replicação com outros planners e juízes e generalização além dos modelos observados permanecem fora do que este artigo demonstra. A correção limitada de uma saída estruturada semanticamente inválida não é retry de infraestrutura: ela pertence à fronteira de conformidade do runtime definida na Seção 4.2.
 
 
 \subsection*{1.5 Status normativo e versão do perfil}
@@ -146,11 +146,11 @@ Reranking relativo responde qual candidata parece mais próxima da consulta, mas
 Essa separação também é motivada pelo efeito do ruído. Cuconasu et al. (2024) mostram que documentos de alto rank, mas sem resposta, podem prejudicar mais do que ruído aleatório. Amiraz et al. (2025) distinguem passagens irrelevantes benignas de distratores semanticamente próximos e mostram que seu efeito depende da consulta e do modelo. Para skills, a consequência é que similaridade lexical ou semântica não basta: uma candidata pode estar no tema correto e ainda introduzir um procedimento, formato ou artefato desnecessário.
 
 
-\subsection*{2.7 Revisão condicionada por um plano inicial}
+\subsection*{2.7 Revisão, re-solving e exposição a um draft}
 
 Self-Refine condiciona uma segunda passagem na entrada original, na saída anterior e em feedback, obtendo melhora média de aproximadamente 20 pontos percentuais em sete tarefas (MADAAN et al., 2023). Em planejamento interativo, DEPS também revisa planos iniciais a partir de evidência de execução (WANG et al., 2023). Esses resultados sustentam o padrão pedido original, rascunho e nova evidência, mas não isolam causalmente a presença do rascunho.
 
-A ressalva é igualmente importante. Huang et al. (2024) mostram que autocorreção sem feedback externo confiável pode degradar raciocínio. Uma decomposição controlada mais recente separa ganhos da segunda passagem em nova resolução, scaffold e conteúdo do draft; drafts fracos podem prejudicar, enquanto drafts fortes ou estruturalmente úteis podem ajudar (NING; LI; YU, 2026). A MOSAIC, portanto, transporta P0 para P1 como rascunho falível, não como autoridade. O pedido original permanece a fonte de escopo, e os bodies selecionados constituem evidência operacional nova.
+A ressalva é igualmente importante. Huang et al. (2024) mostram que autocorreção sem feedback externo confiável pode degradar raciocínio. Uma decomposição controlada mais recente separa ganhos da segunda passagem em nova resolução, scaffold e conteúdo do draft; drafts fracos podem prejudicar, enquanto drafts fortes ou estruturalmente úteis podem ajudar (NING; LI; YU, 2026). As campanhas da Seção 9.6 isolam o efeito composto de expor o bloco P0 sob um bundle oráculo de skills. Elas não encontram benefício robusto e mostram que a direção do efeito muda com a origem do draft; não separam conteúdo, scaffold estrutural e tokens adicionais. A MOSAIC, portanto, usa P0 para consultar o catálogo e filtrar orientação, mas não o transporta para a chamada de P1 condicionada por skills. O pedido original permanece a fonte de escopo, e os bodies selecionados constituem evidência operacional nova.
 
 
 \input{figures/visual_02.tex}
@@ -253,7 +253,7 @@ Na MOSAIC 0.3, a ordem de aplicabilidade é deliberadamente usada como ordem de 
 A MOSAIC 0.3 possui seis estágios de runtime, alimentados por um catálogo canônico e conectados por um estado compartilhado:
 
 
-\noindent 1. planejador de objetivos; 2. retrieval preliminar, gate semântico e revisão única do plano inicial; 3. roteador final de skills e seletor de bundle; 4. montagem do menu de tools; 5. executor do nó; 6. compositor final determinístico.\par
+\noindent 1. planejador de objetivos; 2. retrieval preliminar, gate semântico e síntese final sem exposição textual ao plano inicial; 3. roteador final de skills e seletor de bundle; 4. montagem do menu de tools; 5. executor do nó; 6. compositor final determinístico.\par
 
 O estado preserva resultados e observações criadas pelo runtime. Para cada nó, o modelo produz apenas uma decisão semântica. O runtime correlaciona cada chamada executável ao retorno correspondente, cria observações na ordem dos resultados e mantém o ledger completo no nó produtor, sem duplicá-lo no resultado semântico ou em terminações do runtime. Quando uma dessas evidências invalida uma suposição estrutural, o planejador revisa somente a parte não concluída do plano. O compositor final
 
@@ -307,7 +307,7 @@ P0 e P1 obedecem à mesma fronteira semântica: toda afirmação relevante do ca
 
 % Source PDF page 13
 
-\subsection*{4.5 Retrieval preliminar, gate semântico e revisão única}
+\subsection*{4.5 Retrieval preliminar, gate semântico e síntese final}
 
 Depois de P0, o runtime executa retrieval preliminar para cada objetivo. A consulta combina o pedido original, o resultado desejado e seus critérios \texttt{doneWhen}. O primeiro estágio privilegia cobertura; o segundo reranqueia as candidatas lendo o body completo. Um limite positivo \(K_{\mathrm{plan}}\) restringe quantas candidatas reranqueadas de cada objetivo podem entrar no contexto de seleção. Um threshold de score pode atuar como limite defensivo, mas não substitui a decisão semântica descrita abaixo.
 
@@ -319,9 +319,9 @@ F_0 = \Gamma(q, P_0, C_0), \qquad F_0 \subseteq C_0.
 
 \texttt{keep} significa que P1 provavelmente ficaria menos completo, preciso, viável, executável ou verificável sem aquela instrução. \texttt{drop} exige alta confiança de que o body não acrescenta valor material, duplica uma contribuição já mantida, conflita com o pedido ou introduz trabalho não sustentado. Similaridade temática, rank ou a mera menção do mesmo assunto em P0 não bastam para manter nem remover uma skill. Quando a utilidade material permanece incerta, o gate favorece \texttt{keep}; a minimização ocorre somente depois de preservar contribuições distintas.
 
-O planner recebe o pedido original, P0 e os bodies canônicos completos das skills de \(F_0\), na ordem preservada, e produz um P1 completo depois de uma única revisão. P0 é um rascunho falível, não uma autoridade nem um contrato de edição mínima. O planner deve confrontar cada objetivo com o pedido e pode remover, fundir, dividir, rearranjar ou reescrever qualquer parte, inclusive quando nenhum body contesta explicitamente o rascunho. O pedido é a única fonte de escopo e de entregáveis solicitados. Os bodies são orientação operacional: podem acrescentar métodos e critérios de verificação materialmente aplicáveis, mas não devem criar entregáveis ou ampliar o escopo sem sustentação no pedido.
+Quando \(F_0 \neq \varnothing\), o planner recebe o pedido original e os bodies canônicos completos das skills de \(F_0\), na ordem preservada, e produz um P1 completo em uma única chamada. O texto de P0, os matches de retrieval, scores, ranks, categorias gold e decisões do gate não entram nesse contexto. P1 é uma nova resolução informada por orientação operacional, não uma edição do draft. O pedido é a única fonte de escopo e de entregáveis solicitados. Os bodies podem acrescentar métodos e critérios de verificação materialmente aplicáveis, mas não devem criar entregáveis ou ampliar o escopo sem sustentação no pedido.
 
-As rationales do gate são evidência de auditoria: não viram hints, não reescrevem bodies e não entram no contexto de revisão. Quando \(F_0 = \varnothing\), o runtime pode materializar P1 como uma cópia validada de P0, com revisão 1, sem uma chamada cognitiva vazia, desde que P0 continue satisfazendo o pedido. Depois de P1, o roteamento é executado novamente para os objetivos finais.
+As rationales do gate são evidência de auditoria: não viram hints, não reescrevem bodies e não entram no contexto de síntese. Quando \(F_0 = \varnothing\), o runtime pode materializar P1 como uma cópia validada de P0, com revisão 1, sem uma chamada cognitiva vazia, desde que P0 continue satisfazendo o pedido. Essa exceção não mostra P0 a uma segunda chamada de modelo. Depois de P1, o roteamento é executado novamente para os objetivos finais.
 
 
 \input{figures/visual_07.tex}
@@ -345,7 +345,7 @@ O primeiro estágio privilegia cobertura e retorna até \(K_{\mathrm{retrieve}}\
 
 A seleção é baseada no comportamento ensinado pela skill. Uma skill não deve ser escolhida apenas porque declara uma tool útil. Se uma operação geral já estiver em Tbase, ela continua disponível mesmo quando nenhuma skill é selecionada.
 
-O gate de planejamento e o seletor de bundle usam o mesmo princípio de utilidade, mas possuem escopos diferentes. \(\Gamma\) opera uma vez sobre a união das candidatas de P0 para controlar o feedback entregue a P1. \(B(g)\) opera depois de P1, por objetivo pronto, usando seus critérios e estado causal para compor a execução. Uma decisão \texttt{drop} em \(\Gamma\) não proíbe recuperação posterior, e uma decisão \texttt{keep} não força presença no bundle. Essa independência permite que P1 altere a decomposição sem congelar prematuramente o roteamento de execução.
+O gate de planejamento e o seletor de bundle usam o mesmo princípio de utilidade, mas possuem escopos diferentes. \(\Gamma\) opera uma vez sobre a união das candidatas de P0 para controlar os bodies entregues à síntese de P1. \(B(g)\) opera depois de P1, por objetivo pronto, usando seus critérios e estado causal para compor a execução. Uma decisão \texttt{drop} em \(\Gamma\) não proíbe recuperação posterior, e uma decisão \texttt{keep} não força presença no bundle. Essa independência permite que P1 altere a decomposição sem congelar prematuramente o roteamento de execução.
 
 
 % Source PDF page 15
@@ -459,8 +459,8 @@ F0 <- candidatas_mantidas(C0, G0)
 se F0 estiver vazio:
   P <- copiar_como_P1(P0)                // revisão 1, sem chamada vazia
 senão:
-  P <- revisar_uma_vez(q, P0, bodies_canonicos(F0))
-                                             // full bodies, sem hints
+  P <- sintetizar_P1(q, bodies_canonicos(F0))
+                                             // full bodies; P0 omitido
 validar_dag(P)
 estado <- vazio
 revisoes <- 0
@@ -510,7 +510,7 @@ retornar compor_resposta_deterministicamente(q, P, estado)
 O algoritmo mantém onze invariantes de conformidade:
 
 
-\noindent 1. objetivos descrevem resultados, não chamadas de tools nem nomes de skills; 2. decisões que precisam ser revistas em conjunto permanecem no mesmo objetivo; 3. o planner inicial não depende dos nomes das skills; 4. o gate pré-P1 avalia cada candidata única exatamente uma vez e entrega à revisão somente bodies canônicos mantidos, nunca hints ou rationales; 5. o roteamento final é independente do gate de planejamento; 6. o bundle pode conter zero, uma ou várias skills e possui ordem observável; 7. tools gerais podem existir fora das skills por meio de \(T_{\mathrm{base}}\); 8. o body canônico é usado no feedback de P1, no reranking final e na execução; 9. toda operação cognitiva estruturada satisfaz o contrato completo do runtime antes de alterar plano ou estado; 10. toda observação executável é criada, correlacionada e ordenada pelo runtime, nunca pelo modelo, e cada critério cita apenas evidência causalmente disponível; 11. uma revisão localizada recebe o conjunto completo de observações, preserva nós concluídos e altera apenas o nó atual incompleto e a parte ainda não iniciada do plano.\par
+\noindent 1. objetivos descrevem resultados, não chamadas de tools nem nomes de skills; 2. decisões que precisam ser revistas em conjunto permanecem no mesmo objetivo; 3. o planner inicial não depende dos nomes das skills; 4. o gate pré-P1 avalia cada candidata única exatamente uma vez e entrega à síntese somente bodies canônicos mantidos, nunca P0, hints ou rationales; 5. o roteamento final é independente do gate de planejamento; 6. o bundle pode conter zero, uma ou várias skills e possui ordem observável; 7. tools gerais podem existir fora das skills por meio de \(T_{\mathrm{base}}\); 8. o body canônico é usado na síntese de P1, no reranking final e na execução; 9. toda operação cognitiva estruturada satisfaz o contrato completo do runtime antes de alterar plano ou estado; 10. toda observação executável é criada, correlacionada e ordenada pelo runtime, nunca pelo modelo, e cada critério cita apenas evidência causalmente disponível; 11. uma revisão localizada recebe o conjunto completo de observações, preserva nós concluídos e altera apenas o nó atual incompleto e a parte ainda não iniciada do plano.\par
 
 Uma implementação que preserve esses invariantes e os contratos do Apêndice A pode variar livremente em modelo, índice, linguagem, formato de serialização e protocolo de tool calling.
 
@@ -784,11 +784,13 @@ A fronteira da Figura 10 não impede extensões. Ela estabelece uma ordem: prime
 
 \subsection*{9.1 Escopo dos experimentos}
 
-A MOSAIC 0.3 é informada por três laboratórios privados de planejamento, sendo o terceiro estendido por uma auditoria exaustiva de seleção. Eles não executam tools nem tarefas completas; isolam a transição entre pedido, P0, retrieval, representação das skills, filtragem e P1. Os dois primeiros laboratórios e a fase comparativa do terceiro usam seis casos, três rodadas por caso, catálogo de 37 skills, o mesmo modelo de planejamento e dois juízes independentes. Cada comparação é apresentada cegamente nas duas orientações A/B; um resultado é inconsistente quando a preferência muda com a posição.
+A MOSAIC 0.3 é informada por quatro laboratórios privados de planejamento, sendo o terceiro estendido por uma auditoria exaustiva de seleção e o quarto dedicado à exposição textual de P0. Eles não executam tools nem tarefas completas; isolam fronteiras entre pedido, P0, retrieval, representação das skills, filtragem e P1. Os dois primeiros laboratórios e a fase comparativa do terceiro usam seis casos, três rodadas por caso, catálogo de 37 skills, o mesmo modelo de planejamento e dois juízes independentes. Cada comparação é apresentada cegamente nas duas orientações A/B; um resultado é inconsistente quando a preferência muda com a posição.
 
-A extensão mais recente usa 30 casos autorados nos domínios de software, documentos e artefatos, finanças, viagens e computação científica. Em cada caso, as 37 skills do catálogo formam uma partição exaustiva: \texttt{expected} identifica orientação necessária, \texttt{useful} identifica contribuição suplementar aceitável e \texttt{noise} classifica todo o restante como irrelevante, sem valor operacional ou conflitante. Esses rótulos são usados apenas no scoring offline e nunca entram em P0, retrieval, reranking, gate ou P1.
+A extensão de seleção usa 30 casos autorados nos domínios de software, documentos e artefatos, finanças, viagens e computação científica. Em cada caso, as 37 skills do catálogo formam uma partição exaustiva: \texttt{expected} identifica orientação necessária, \texttt{useful} identifica contribuição suplementar aceitável e \texttt{noise} classifica todo o restante como irrelevante, sem valor operacional ou conflitante. Nessa auditoria, os rótulos são usados apenas no scoring offline e nunca entram em P0, retrieval, reranking, gate ou P1.
 
-As rodadas repetidas dos experimentos comparativos não são tarefas independentes. Seus conjuntos de skills esperadas são incompletos e as preferências são produzidas por modelos, não por verificadores end-to-end. A auditoria de 30 casos elimina a ambiguidade entre skill suplementar e ruído no scoring, mas continua sendo um conjunto autorado, com um único run, um catálogo pequeno e um modelo de gate. Portanto, os números abaixo sustentam decisões locais de arquitetura e revelam modos de falha; não estabelecem superioridade universal nem significância confirmatória.
+O quarto laboratório reutiliza os 30 objetivos e o catálogo dessa auditoria, mas usa deliberadamente \texttt{expected + useful} para formar um bundle oráculo ordenado. Os nomes das categorias não entram nos prompts. A campanha inicial comparou síntese direta e revisão de P0 em dois batches avaliados por dois modelos-juízes. Uma etapa posterior igualou o system prompt e variou três fixtures de P0. A confirmação final manteve também o mesmo plano \texttt{withoutP0} congelado em todas as células; somente o plano \texttt{withP0} foi gerado novamente. Assim, objetivo, bodies, planner, contrato e controle permaneceram fixos, enquanto variou o draft exposto.
+
+As rodadas repetidas dos experimentos comparativos não são tarefas independentes. Seus conjuntos de skills esperadas são incompletos e as preferências são produzidas por modelos, não por verificadores end-to-end. A auditoria de seleção continua sendo um conjunto autorado, com um único run, um catálogo pequeno e um modelo de gate. Na ablação de P0, as orientações A/B e a adjudicação condicional são verificações de consistência, não observações independentes; batches e fixtures repetem os mesmos 30 casos e não devem ser agrupados como novas tarefas. Na confirmação há uma geração \texttt{withP0} por caso e fixture, diante do mesmo controle congelado. Portanto, os números abaixo sustentam decisões locais de arquitetura e revelam modos de falha; não estabelecem superioridade universal, agnosticismo entre planners nem sucesso downstream.
 
 \subsection*{9.2 Full bodies, P0 e revisão}
 
@@ -842,7 +844,7 @@ Direct \(\times\) Goal P1 & 20 & 44 & 0 & 8 \\
 \par\smallskip\raggedright\small Fonte: runs \texttt{88a74c54-fa6e-456b-b6ae-b963205667fd} e \texttt{aaaa645e-a9b2-4d2c-a3bd-119f13cc7879} (2026).
 \end{table}
 
-Quando a evidência de retrieval é mantida constante, as duas comparações favorecem P1: Request P1 supera Direct por 44--15 e Goal P1 supera Direct Goal por 43--18. A comparação entre as duas políticas diretas fica próxima, 30--27. A evidência indica que a ancoragem em um P0 independente do catálogo e sua revisão posterior são o fator dominante; retrieval por objetivo parece útil principalmente em interação com esse P0.
+Nas condições antigas, as duas comparações com evidência de retrieval constante favorecem o pipeline P1: Request P1 supera Direct por 44--15 e Goal P1 supera Direct Goal por 43--18. A comparação entre as duas políticas diretas fica próxima, 30--27. Entretanto, ``Direct'' e ``P1'' não mantinham fixos o bundle, o papel da chamada final e todo o contexto apresentado ao planner. Atribuir a diferença à ancoragem em P0 era, portanto, uma hipótese causal, não um efeito isolado. As campanhas da Seção 9.6 testam diretamente essa atribuição e não encontram benefício robusto da exposição textual ao draft.
 
 \subsection*{9.3 Retrieval de alta cobertura não é seleção final}
 
@@ -918,7 +920,7 @@ conservative-v3 & 17 & 8 & 6 & 5 \\
 
 Os três runs repetem o mesmo efeito direcional: menos contexto não reduz a qualidade agregada e frequentemente a melhora. Ao mesmo tempo, v1 reteve somente 66,2\% das skills esperadas que chegaram ao gate, e Spring Boot favoreceu o contexto integral nos runs conservadores. O gate é, portanto, útil e imperfeito. A política normativa favorece recall, exige alta confiança para \texttt{drop} e preserva orientação operacional, comportamento e verificação quando forem materialmente aplicáveis.
 
-V2 e v3 não congelaram P0 e retrieval entre si; diferenças numéricas entre versões não podem ser atribuídas causalmente ao schema binário. V3 mostra apenas que \texttt{keep}/\texttt{drop} é suficiente para reproduzir a direção do efeito sem categorias adicionais.
+V2 e v3 não congelaram P0 e retrieval entre si; diferenças numéricas entre versões não podem ser atribuídas causalmente ao schema binário. V3 mostra apenas que \texttt{keep}/\texttt{drop} é suficiente para reproduzir a direção do efeito sem categorias adicionais. Além disso, todos os braços desta subseção expuseram P0 na revisão final. A ablação com bundle oráculo da Seção 9.6 não testa a interação entre gate e exposição a P0; por isso, a qualidade causal do bundle filtrado sob a síntese normativa sem P0 continua em aberto.
 
 \subsection*{9.5 Auditoria exaustiva do retrieval híbrido e do gate}
 
@@ -955,30 +957,120 @@ Selection F1 & --- & 93,4\% \\
 
 Vinte dos 30 casos tiveram precisão e retenção relevantes perfeitas. Nove casos mantiveram algum ruído; entre os dez falsos positivos, oito foram classificados como sem valor operacional e dois como irrelevantes. Nenhuma das seis ocorrências conflitantes recuperadas chegou ao bundle. O único falso negativo foi uma skill suplementar útil no caso de associação de fases sísmicas; nenhuma skill obrigatória foi perdida. O perfil residual sugere que a fronteira mais difícil não é reconhecer conflito explícito, mas decidir quando uma orientação tematicamente aplicável acrescenta valor operacional suficiente.
 
-O run usou \nolinkurl{qwen/qwen3.8-27b} com effort alto para P0, gate e P1, \nolinkurl{voyageai/voyage-4-large} com 1.024 dimensões para embeddings e \nolinkurl{voyageai/rerank-2.5} para reranking. As 2.581 chamadas bem-sucedidas reportaram uso e custo, totalizando 14.123.842 tokens contabilizados pelo provedor e 4,77550605 créditos. O manifest persistido registra os hashes das fontes do experimento, dos 30 casos e do catálogo de 37 skills. P1 foi gerado para preservar o trace completo, mas não foi julgado; essas métricas validam seleção, não qualidade downstream.
+O run usou \nolinkurl{qwen/qwen3.8-27b} com effort alto para P0, gate e P1, \nolinkurl{voyageai/voyage-4-large} com 1.024 dimensões para embeddings e \nolinkurl{voyageai/rerank-2.5} para reranking. As 2.581 chamadas bem-sucedidas reportaram uso e custo, totalizando 14.123.842 tokens contabilizados pelo provedor e 4,77550605 créditos. O manifest persistido registra os hashes das fontes do experimento, dos 30 casos e do catálogo de 37 skills. P1 foi gerado para preservar o trace completo, mas não foi julgado nesse laboratório; as métricas desta subseção validam seleção, não qualidade downstream. A qualidade de P1 é examinada separadamente na Seção 9.6, sob bundles oráculo em vez dos bundles recuperados.
 
-Um erro revela a interação mais importante para a próxima fase. No caso de viagem com orçamento, P0 transformou a necessidade de controlar custos em um \textit{budget worksheet}, embora o pedido não exigisse uma planilha. Essa formulação tornou a skill \texttt{xlsx} aparentemente aplicável; o gate a manteve e P1 ampliou o requisito para fórmulas e subtotais. Retrieval lexical não criou sozinho esse erro, mas pode reforçar termos introduzidos pelo draft. O caso sustenta a regra da Seção 4.5: P0 deve chegar a P1 como rascunho falível, e uma skill não pode legitimar um entregável sem suporte no pedido.
+Um erro revela a interação mais importante para a próxima fase. No caso de viagem com orçamento, P0 transformou a necessidade de controlar custos em um \textit{budget worksheet}, embora o pedido não exigisse uma planilha. Essa formulação tornou a skill \texttt{xlsx} aparentemente aplicável; o gate a manteve e P1 ampliou o requisito para fórmulas e subtotais. Retrieval lexical não criou sozinho esse erro, mas pode reforçar termos introduzidos pelo draft. O caso motivou isolar e, depois, remover a exposição textual de P0 da síntese final. P0 ainda pode influenciar retrieval e gate upstream, mas uma skill selecionada não pode legitimar um entregável sem suporte no pedido.
 
 Por fim, a topologia experimental não é idêntica ao gate global normativo. A auditoria decide por par objetivo--skill e faz união por nome; \(\Gamma\), na especificação, recebe a união canônica e o P0 completo e avalia cada candidata uma vez. O run sustenta retrieval híbrido, reranking body-aware e filtragem semântica pós-retrieval, mas não compara causalmente essas duas topologias de gate.
 
-\subsection*{9.6 O que a evidência sustenta}
+\subsection*{9.6 Ablação da exposição textual de P0}
 
-Os experimentos sustentam quatro decisões encadeadas: P0 antes do catálogo; revisão em vez de geração final direta; preservação de full bodies; e filtragem semântica depois de retrieval de alta cobertura. A auditoria exaustiva acrescenta evidência direta de que a combinação lexical e vetorial recupera o conjunto obrigatório e de que o gate remove a maior parte do ruído sem sacrificar esse recall. Mais importante, os laboratórios fatoriais e de gate exercitam a interação entre essas partes, e não apenas cada componente isoladamente. Isso reduz a incerteza antes de uma campanha completa.
+\subsubsection*{Campanha inicial e rejudge histórico}
 
-Ainda assim, desempenho local não é uma prova transitiva de desempenho total. A validação imediatamente seguinte deve congelar pedido, P0, candidatas recuperadas, modelo, effort e contrato de saída e comparar P1 com todos os bodies recuperados contra P1 com o bundle filtrado. Um baseline adicional sem skills mede o ganho sobre P0; um braço \textit{pedido + mesmas skills}, sem mostrar o texto de P0 na síntese, isola o efeito de expor o draft. Como as candidatas desse último braço ainda foram recuperadas a partir dos objetivos de P0, ele não representa um pipeline integralmente independente de P0.
+O quarto laboratório começou com uma hipótese estreita: dado o mesmo objetivo, o mesmo bundle oráculo de skills, o mesmo planner e o mesmo contrato de saída, mostrar P0 na chamada final melhora P1? Os 30 P0s, com 207 objetivos, foram congelados a partir do run \texttt{89ba6c1e-470c-43ea-809b-a34a90f59540}. Para cada caso, a união ordenada \texttt{expected + useful} sobre o catálogo de 37 skills forneceu exatamente os mesmos bodies canônicos aos dois braços: 65 ocorrências obrigatórias e 14 suplementares úteis, totalizando 79. O braço \texttt{withoutP0} recebeu objetivo e bodies sob instrução de síntese direta; \texttt{withP0} recebeu esse conteúdo, o bloco \texttt{P0 Draft} e instrução de revisão. Modelo, effort, schema, flags e ordem das skills foram mantidos iguais, mas a framing do system prompt também variou com o tratamento. Retrieval, embeddings, reranking e gate não participaram do runtime da ablação.
 
-Essa próxima validação deve medir cobertura dos requisitos, contribuições realmente derivadas das skills, regressões, entregáveis não sustentados, verificabilidade e custo. Somente depois dela cabe atribuir ao gate melhora causal de P1. Routing final, menu de tools, execução, projeção de estado e revisão localizada permanecem para uma campanha end-to-end posterior com tarefas completas, tools reais e verificadores externos.
+O planner \nolinkurl{qwen/qwen3.8-27b}, com effort alto, produziu dois batches separados: uma amostra por braço e caso em cada batch. \nolinkurl{google/gemini-3.7-flash} e \nolinkurl{openai/gpt-5.6-sol}, ambos com effort médio, julgaram cada par sem receber P0, identidade dos braços, categorias gold ou metadados experimentais. Cada juiz viu duas orientações A/B exatamente invertidas. O rejudge reutilizou os planos congelados e as posições A/B exatas do source run, sem novas chamadas de planner. As orientações são verificações de consistência, não observações independentes; uma preferência só é decisiva quando ambas concordam semanticamente em exatamente um braço.
+
+Seja \(D\) o evento de uma preferência estável por exatamente um braço. Para cada célula juiz--batch, o teste binomial exato unilateral pré-declarado foi:
+
+\begin{equation}
+H_0: \Pr(\texttt{withP0}\mid D) \leq 0{,}5,
+\qquad
+H_1: \Pr(\texttt{withP0}\mid D) > 0{,}5,
+\qquad \alpha = 0{,}05.
+\end{equation}
+
+\begin{table}[H]
+\centering
+\caption*{\textbf{Quadro 14 - Preferência cega na ablação com bundle oráculo}}
+\scriptsize
+\renewcommand{\arraystretch}{1.12}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{|l|l|r|r|r|r|r|r|r|r|}
+\hline
+\textbf{Batch} & \textbf{Juiz} & \textbf{Sem P0} & \textbf{Com P0} & \textbf{Ambos} & \textbf{Nenhum} & \textbf{Incons.} & \textbf{Decisivas} & \textbf{Taxa com P0} & \textbf{$p$ unilateral} \\
+\hline
+\texttt{cfab07af} & Gemini (original) & 8 & 0 & 10 & 0 & 12 & 8 & 0,0\% & 1,0000 \\
+\hline
+\texttt{cfab07af} & GPT-5.6-Sol (rejudge) & 13 & 6 & 0 & 2 & 9 & 19 & 31,6\% & 0,9682 \\
+\hline
+\texttt{3541de47} & GPT-5.6-Sol (original) & 16 & 10 & 0 & 0 & 4 & 26 & 38,5\% & 0,9157 \\
+\hline
+\texttt{3541de47} & Gemini (rejudge) & 9 & 2 & 10 & 0 & 9 & 11 & 18,2\% & 0,9941 \\
+\hline
+\end{tabular}%
+}
+\par\smallskip\raggedright\small Fonte: runs de geração \texttt{cfab07af-5551-4e5c-85b4-d418ccc302c5} e \texttt{3541de47-9a14-4f54-911a-06a0d9eb3de7}; rejudges \texttt{f31056fb-3fa5-4708-88c8-3b37feef8475} e \texttt{38835dac-9413-4721-970f-ec4e145cf624} (2026).
+\end{table}
+
+Nenhuma das quatro células rejeita \(H_0\). Entre as preferências estáveis por exatamente um braço, \texttt{withP0} recebe de 0\% a 38,5\%; em todas as células, a direção descritiva favorece \texttt{withoutP0}. O resultado não prova equivalência, não permite aceitar \(H_0\) e não confirma que P0 prejudica P1: superioridade de \texttt{withoutP0} seria a hipótese direcional oposta, formulada depois de observar os dados. A conclusão dessa campanha é apenas que a hipótese pré-declarada de benefício da exposição textual a P0 não foi sustentada.
+
+Os juízes diferem substancialmente em calibração. O acordo categórico exato foi 6/30 (20,0\%) no batch \texttt{cfab07af} e 10/30 (33,3\%) no batch \texttt{3541de47}; restrito aos casos com outcome estável nos dois juízes, foi 4/11 (36,4\%) e 9/18 (50,0\%). Quando ambos produziram preferências decisivas, concordaram na direção em 4/5 e 9/9 casos, respectivamente, mas os denominadores são pequenos. Gemini classificou dez pares como \texttt{both} em cada batch; GPT-5.6-Sol não usou essa categoria. A inconsistência entre orientações variou de 13,3\% a 40,0\%. A preferência de LLM-as-judge é, portanto, um instrumento dependente do modelo, embora a ausência de vantagem para \texttt{withP0} apareça nas quatro células.
+
+Os quatro runs somaram 360 chamadas bem-sucedidas em 363 tentativas, 2.143.732 tokens reportados e 3,55075013 créditos. Os dois batches repetem os mesmos 30 casos e não formam uma amostra independente de 60 tarefas. Os casos e rótulos foram autorados, há um único planner e a ablação mede qualidade de plano, não execução downstream. Mostrar P0 também acrescenta conteúdo, scaffold estrutural e tokens; o desenho de dois braços estima o tratamento composto e não separa esses mecanismos.
+
+A validade externa para o contrato normativo de plano também é limitada. No laboratório, P0 e P1 são listas de strings não vazias, P0 é apresentado como lista numerada e os bodies são delimitados por \texttt{Guidance N}; o experimento não materializa IDs, dependências e \texttt{doneWhen} de um DAG nem expõe nomes canônicos das skills. Portanto, a omissão normativa de P0 em um \texttt{Plan} completo ainda requer confirmação direta. Além disso, os outputs de origem são ignorados pelo Git e os source runs partiram de um worktree com alterações locais. A campanha de rejudge registra uma atestação revisada de equivalência do contrato comparativo, mas essa equivalência histórica não é demonstrável criptograficamente apenas a partir de um checkout; os runs posteriores persistem o hash do contrato de comparação.
+
+\subsubsection*{Confirmação com framing neutro e controle congelado}
+
+Uma etapa intermediária removeu o confundimento de framing: os dois braços passaram a usar o mesmo system prompt de síntese direta, sem menção a P0 ou revisão, e somente \texttt{withP0} recebeu o bloco adicional. Com controles ainda regenerados em cada célula, o P0 catalog-independent produziu 16 preferências por \texttt{withoutP0} contra sete por \texttt{withP0} (\(p=0{,}0466\)); o draft Qwen produziu 14 contra oito (\(p=0{,}1431\)); e o draft Gemini produziu dez contra 12 (\(p=0{,}7383\)). Os três runs tiveram 20 outcomes inconsistentes em 90 casos. A mudança de direção no cenário Gemini sugeriu dependência do draft, mas nenhum plano de controle foi byte-idêntico entre os runs; comparar fixtures ainda misturava tratamento e variabilidade da geração direta.
+
+A confirmação final congelou um único controle por caso: os 242 objetivos diretos do fixture \nolinkurl{p0-skill-aware-qwen.json}, originado no run de prefixo \texttt{aaae19f2}. O mesmo controle \texttt{withoutP0} foi reutilizado byte a byte contra três conjuntos de drafts: o P0 catalog-independent com 207 objetivos, o próprio conjunto Qwen com 242 e o conjunto Gemini com 143, originado no run de prefixo \texttt{d95fc9dd}. Em todas as células, \nolinkurl{qwen/qwen3.8-27b} com effort alto gerou apenas \texttt{withP0}; portanto, Gemini identifica a origem do draft, não o modelo que sintetizou P1. \nolinkurl{openai/gpt-5.6-sol}, com effort médio, julgou uma dupla A/B balanceada. Um conflito inicial acionou outra dupla balanceada, e o outcome final exigiu maioria estrita de três entre quatro votos.
+
+Seja novamente \(D\) uma preferência final estável por exatamente um braço. A hipótese direcional, declarada depois da campanha inicial e antes destes runs confirmatórios, foi invertida para testar dano:
+
+\begin{equation}
+H_0: \Pr(\texttt{withoutP0}\mid D) \leq 0{,}5,
+\qquad
+H_1: \Pr(\texttt{withoutP0}\mid D) > 0{,}5,
+\qquad \alpha = 0{,}05.
+\end{equation}
+
+\begin{table}[H]
+\centering
+\caption*{\textbf{Quadro 15 - Confirmação com controle congelado e três origens de P0}}
+\scriptsize
+\renewcommand{\arraystretch}{1.12}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{|l|r|r|r|r|r|r|r|r|r|}
+\hline
+\textbf{P0 exposto} & \textbf{Objetivos P0} & \textbf{Sem P0} & \textbf{Com P0} & \textbf{Ambos} & \textbf{Nenhum} & \textbf{Incons.} & \textbf{Decisivas} & \textbf{Taxa sem P0} & \textbf{\(p\) unilateral} \\
+\hline
+Catalog-independent & 207 & 16 & 9 & 0 & 1 & 4 & 25 & 64,0\% & 0,1148 \\
+\hline
+Qwen & 242 & 3 & 3 & 17 & 4 & 3 & 6 & 50,0\% & 0,6563 \\
+\hline
+Gemini & 143 & 9 & 13 & 2 & 1 & 5 & 22 & 40,9\% & 0,8569 \\
+\hline
+\end{tabular}%
+}
+\par\smallskip\raggedright\small Fonte: runs \texttt{ed05666a-9150-4ab1-9e8a-1d3e5ec6b873}, \texttt{1a8939ed-b6f5-4d59-bb0e-fb6ad6ad1efe} e \texttt{e0884256-b551-4fd1-bc10-174a39823a5e}, 7 set. 2026.
+\end{table}
+
+Nenhuma célula rejeitou \(H_0\). Contra o P0 catalog-independent, o controle teve vantagem descritiva de 16--9, mas o resultado deixou de cruzar \(\alpha=0{,}05\) depois de congelar o controle. Quando P0 e controle continham o mesmo draft Qwen, 17 casos foram julgados equivalentes, quatro inadequados em ambos e somente seis decisivos, divididos em 3--3; duas duplas de planos foram byte-idênticas. Com o draft Gemini, \texttt{withP0} teve vantagem descritiva de 13--9, mas a hipótese oposta não foi pré-declarada e seu teste unilateral post hoc também não seria significativo (\(p=0{,}2617\)). Os dados não demonstram que P0 sempre prejudica nem que um draft Gemini sempre ajuda. Eles são compatíveis com um efeito de ancoragem condicionado pela qualidade, estrutura e origem do draft.
+
+A adjudicação foi acionada em 21 casos: seis, cinco e dez nas células catalog-independent, Qwen e Gemini. Ela resolveu, respectivamente, dois, dois e cinco casos, deixando 12 outcomes inconsistentes nos 90 casos finais. Os três runs somaram 312 chamadas bem-sucedidas em 381 tentativas, 1.808.416 tokens reportados e 4,640473568 créditos. A segunda dupla reduziu descarte por sensibilidade posicional, mas não transforma preferência de LLM-as-judge em verificação objetiva.
+
+Para a arquitetura, o critério não é provar que todo P0 causa dano. É exigir ganho robusto antes de introduzir dependência de um draft cuja qualidade varia com outro modelo e outra geração. Nenhuma campanha mostrou esse ganho de forma estável. A síntese direta \(\mathrm{P1}(pedido,\ bodies)\) mantém o pedido como autoridade, incorpora a orientação operacional já selecionada, reduz contexto e remove a via de propagação textual de erros de P0. Essa escolha diminui acoplamento ao gerador do draft; não prova agnosticismo entre modelos, pois todos os P1 confirmatórios foram produzidos pelo mesmo Qwen. P0 permanece provisoriamente upstream para retrieval e gate, onde sua contribuição ainda precisa ser comparada contra retrieval guiado apenas pelo pedido.
+
+\subsection*{9.7 O que a evidência sustenta}
+
+Em conjunto, os experimentos sustentam diretamente três decisões locais: preservar full bodies; filtrar semanticamente depois de retrieval de alta cobertura; e sintetizar P1 a partir do pedido e dos bodies mantidos sem mostrar o texto de P0. A auditoria exaustiva mostra que a topologia guiada por um P0 independente do catálogo pode recuperar o conjunto obrigatório e remover a maior parte do ruído. Ela não isola a contribuição incremental de P0 contra retrieval apenas pelo pedido sob a nova síntese sem P0. As ablações com bundle oráculo mostram que a exposição ao draft não oferece benefício robusto: o efeito muda com sua origem, vai de uma vantagem descritiva de 16--9 para o controle direto a uma vantagem descritiva de 13--9 para a síntese condicionada pelo P0 Gemini, e nenhuma célula de controle congelado rejeita sua hipótese nula direcional. A especificação retém P0 como scaffold upstream provisório, mas evita tornar a síntese final dependente dessa variabilidade.
+
+Desempenho local não é uma prova transitiva de desempenho total. A validação imediatamente seguinte deve congelar pedido, P0, candidatas recuperadas, modelo, effort e contrato de saída e comparar, sem P0 em nenhuma chamada final, P1 com todos os bodies recuperados contra P1 com o bundle filtrado. Um baseline adicional apenas com o pedido mede o ganho das skills. Como P0 ainda orienta as candidatas dos dois braços principais, esse teste isola filtragem. Uma ablação ortogonal deve comparar retrieval apenas pelo pedido com retrieval guiado pelos objetivos congelados de P0, mantendo P0 fora das duas sínteses finais.
+
+Essa validação deve medir cobertura dos requisitos, contribuições realmente derivadas das skills, regressões, entregáveis não sustentados, verificabilidade e custo. Somente depois dela cabe atribuir ao gate melhora causal de P1. Routing final, menu de tools, execução, projeção de estado e revisão localizada permanecem para uma campanha end-to-end posterior com tarefas completas, tools reais e verificadores externos.
 
 \section*{10 DISCUSSÃO E LIMITAÇÕES}
 
 \subsection*{10.1 Validação parcial, não end-to-end}
 
-O artigo demonstra preferências diagnósticas para mecanismos de planejamento e valida retrieval e seleção contra rótulos autorados exaustivos. Ele ainda não demonstra que o bundle filtrado produz P1 melhor do que o contexto integral, que bundles finais superam top-1, que a fórmula de tools aumenta sucesso, que a revisão localizada recupera execuções ou que o MOSAIC completo supera um agente direto. Essas claims exigem comparações pareadas com o mesmo modelo, as mesmas skills, tools, tarefas e verificadores. A Seção 9 deve ser lida como evidência de desenho e preparação para esses testes, não como seu substituto.
+O artigo demonstra preferências diagnósticas para mecanismos de planejamento, testa a exposição de P0 sob bundles oráculo com framing neutro e controle congelado, e valida retrieval e seleção contra rótulos autorados exaustivos. Ele ainda não demonstra que o bundle filtrado produz P1 melhor do que o contexto integral sob o novo contrato sem P0, que bundles finais superam top-1, que a fórmula de tools aumenta sucesso, que a revisão localizada recupera execuções ou que o MOSAIC completo supera um agente direto. Também não demonstra que o efeito de P0 se generaliza para outros planners: os três cenários confirmatórios alteraram a origem do draft, mas mantiveram o mesmo Qwen na síntese de P1. Essas claims exigem comparações pareadas com o mesmo modelo, as mesmas skills, tools, tarefas e verificadores. A Seção 9 deve ser lida como evidência de desenho e preparação para esses testes, não como seu substituto.
 
 
-\subsection*{10.2 Dependência do modelo}
+\subsection*{10.2 Dependência do planner e dos juízes}
 
-Planner, reranker, seletor e executor dependem da capacidade do modelo de seguir instruções e distinguir comportamentos próximos. Um modelo fraco pode produzir objetivos inadequados, incluir skills redundantes ou ignorar partes do bundle. O MOSAIC organiza o problema, mas não elimina a dependência da competência do modelo.
+Planner, reranker, seletor e executor dependem da capacidade do modelo de seguir instruções e distinguir comportamentos próximos. Um modelo fraco pode produzir objetivos inadequados, incluir skills redundantes ou ignorar partes do bundle. Os juízes também são instrumentos calibrados de modos diferentes: na campanha histórica, o acordo categórico cross-judge ficou entre 20,0\% e 33,3\%, embora a direção coincidisse na maioria dos poucos casos em que ambos foram decisivos. Na confirmação, 21 dos 90 pares foram inicialmente inconsistentes; a segunda dupla A/B resolveu nove e deixou 12 inconsistentes. O MOSAIC organiza o problema, mas não elimina a dependência da competência do planner nem transforma preferência de LLM-as-judge em verdade objetiva.
 
 
 \subsection*{10.3 Qualidade e tamanho dos bodies}
@@ -991,9 +1083,9 @@ Retrieval e execução dependem da qualidade do\texttt{ SKILL.md}. Um body vago 
 O gate e o seletor evitam conflitos de forma qualitativa, e o bundle preserva a ordem do reranking com desempate determinístico. Na auditoria exaustiva, nenhum item conflitante foi selecionado, mas dez itens sem utilidade suficiente permaneceram e uma contribuição suplementar útil foi removida. Falsos keeps e falsos drops, portanto, continuam possíveis, especialmente em tarefas técnicas com várias orientações complementares. A regra conservadora reduz, mas não elimina, esse risco. A ordem de aplicabilidade também não é necessariamente ótima quando instruções possuem tensão implícita. Uma linguagem formal de precedência pode ser necessária em catálogos maiores, porém pertence a um perfil posterior se evidência empírica justificar o custo.
 
 
-\subsection*{10.5 Ancoragem e propagação de erros de P0}
+\subsection*{10.5 P0 como scaffold de retrieval e propagação residual}
 
-Transportar P0 para P1 preserva cobertura e estrutura, e as comparações fatoriais desta versão favoreceram revisão sobre geração direta. Esse ganho não torna P0 correto por definição. Um objetivo inventado pode orientar retrieval, tornar um body aparentemente aplicável e voltar a P1 como requisito reforçado. Busca lexical aumenta a sensibilidade à formulação exata; retrieval vetorial pode reproduzir o mesmo efeito por proximidade semântica. O contrato da Seção 4.5 reduz esse risco ao tornar o pedido a autoridade de escopo e P0 um rascunho livremente revisável. Ele não elimina ancoragem cognitiva, que deve ser medida pelo braço sem exposição textual a P0 descrito na Seção 9.6.
+P0 não entra mais na chamada de síntese de P1 condicionada por skills. Essa decisão remove a via textual direta variada na ablação, mas não torna P0 correto nem elimina sua influência upstream. O controle congelado mostrou por que a omissão é uma escolha de robustez, e não uma alegação de dano universal: o P0 catalog-independent favoreceu descritivamente o controle direto, o draft Qwen produziu sobretudo equivalência e o draft Gemini favoreceu descritivamente o braço condicionado, sem resultado direcional significativo. Tornar P1 dependente de P0 acrescentaria variabilidade de outro modelo e outra geração sem ganho estável demonstrado. Um objetivo inventado ainda pode orientar retrieval, tornar um body aparentemente aplicável e fazer a formulação residual voltar a P1 por meio de uma skill mantida. Busca lexical aumenta a sensibilidade à expressão exata; retrieval vetorial pode reproduzir o mesmo efeito por proximidade semântica. O gate conservador e a autoridade de escopo do pedido reduzem esse risco, mas a ablação com bundle oráculo da Seção 9.6 não mede a utilidade nem o dano de P0 para retrieval. O caminho excepcional \(F_0 = \varnothing\), que materializa P0 validado sem segunda chamada, também não foi avaliado separadamente.
 
 
 \subsection*{10.6 Menu simples de tools}
@@ -1020,10 +1112,10 @@ Os contratos do perfil resolvem ambiguidade entre implementações, mas não esp
 
 \section*{11 CONSIDERAÇÕES FINAIS}
 
-A MOSAIC 0.3 parte de uma distinção simples: objetivos descrevem resultados; skills ensinam comportamentos; tools executam operações; o modelo toma decisões semânticas; e o runtime detém a evidência operacional. O planner produz P0 sem nomes de skills. Retrieval por objetivo, lexical, vetorial ou híbrido, e reranking body-aware formam uma união de alta cobertura; um gate semântico conservador remove apenas candidatas sem utilidade material e P1 recebe os bodies canônicos mantidos. P0 permanece no contexto como rascunho falível, subordinado ao pedido original. O roteamento final então seleciona, independentemente para cada objetivo pronto, um bundle ordenado de zero a várias instruções e monta um menu composto por \(T_{\mathrm{base}}\) e pelas tools declaradas nesse bundle.
+A MOSAIC 0.3 parte de uma distinção simples: objetivos descrevem resultados; skills ensinam comportamentos; tools executam operações; o modelo toma decisões semânticas; e o runtime detém a evidência operacional. O planner produz P0 sem nomes de skills. Retrieval por objetivo, lexical, vetorial ou híbrido, e reranking body-aware formam uma união de alta cobertura; um gate semântico conservador remove apenas candidatas sem utilidade material. Quando há bodies mantidos, P1 é sintetizado como plano completo a partir do pedido original e desses bodies canônicos, sem receber o texto de P0, rationales ou metadados de retrieval. O roteamento final então seleciona, independentemente para cada objetivo pronto, um bundle ordenado de zero a várias instruções e monta um menu composto por \(T_{\mathrm{base}}\) e pelas tools declaradas nesse bundle.
 
 
-A revisão 0.3 preserva os contratos de catálogo, plano, estado, bundle, contexto, decisão semântica, observação e resultado do nó definidos na 0.2. Sua mudança normativa é menor e baseada em evidência: remove \texttt{SkillHint} do caminho de planejamento, introduz um \texttt{PlanningGate} auditável e mantém independentes a seleção pré-P1 e o bundle de execução. Julgamentos pareados favoreceram full bodies, revisão P0--P1 e contexto filtrado; a auditoria exaustiva recuperou todas as 65 skills esperadas e removeu 96,8\% do ruído recuperado. A próxima hipótese é downstream: demonstrar, com P0 e retrieval congelados, que o bundle filtrado produz P1 melhor do que o contexto integral. Somente uma campanha posterior de execução medirá a arquitetura completa e seu custo.
+A revisão 0.3 preserva os contratos de catálogo, plano, estado, bundle, contexto, decisão semântica, observação e resultado do nó definidos na 0.2. Sua mudança normativa é pequena e baseada em evidência diagnóstica: remove \texttt{SkillHint} do caminho de planejamento, introduz um \texttt{PlanningGate} auditável, omite P0 da síntese final condicionada por skills e mantém independentes a seleção pré-P1 e o bundle de execução. Julgamentos pareados favoreceram full bodies e contexto filtrado; a auditoria exaustiva recuperou todas as 65 skills esperadas e removeu 96,8\% do ruído recuperado. Na ablação com controle congelado, o efeito de expor P0 mudou com a origem do draft e nenhuma das três células sustentou dano direcional; a campanha histórica tampouco sustentou benefício. Sem ganho robusto que compense o acoplamento ao gerador de P0, a forma normativa permanece \(\mathrm{P1}(pedido,\ bodies)\). A próxima hipótese é demonstrar, com P0 e retrieval congelados e sem P0 em nenhuma chamada final, que o bundle filtrado produz P1 melhor do que o contexto integral. Somente uma campanha posterior de execução medirá a arquitetura completa e seu custo.
 
 Não há compilador semântico obrigatório, tool router independente, camada de providers, resolvedor de recursos, solver formal de bundles, verificador separado, reabertura automática de nós concluídos ou protocolo operacional completo. A especificação assume execução YOLO e explicita seus limites. Com essa redução, a tese arquitetural pode ser enunciada de forma direta:
 
@@ -1074,7 +1166,7 @@ ZHENG, YanZhao et al. SkillRouter: retrieve-and-rerank skill selection for LLM a
 
 \section*{APÊNDICE A - CONTRATOS NORMATIVOS}
 
-Este apêndice define a informação mínima que deve atravessar as fronteiras do runtime. Os Quadros A.1 e A.2 distinguem objetos de catálogo, planejamento, decisão do modelo e evidência criada pelo runtime. Em \texttt{Plan}, \texttt{revision} é um inteiro seguro não negativo materializado exclusivamente pelo runtime: P0 usa 0, P1 usa 1 e cada revisão localizada incrementa o valor em uma unidade. O histórico de planos deve ser contíguo. O schema escrito pelo modelo contém apenas os campos semânticos dos nós e não permite que o modelo escolha a revisão.
+Este apêndice define a informação mínima que deve atravessar as fronteiras do runtime. Os Quadros A.1 e A.2 distinguem objetos de catálogo, planejamento, decisão do modelo e evidência criada pelo runtime. Em \texttt{Plan}, \texttt{revision} é um inteiro seguro não negativo materializado exclusivamente pelo runtime: P0 usa 0, P1 usa 1 e cada revisão localizada incrementa o valor em uma unidade. O número de revisão identifica a geração aceita do plano, não exige edição textual mínima: quando \(F_0 \neq \varnothing\), P1 é gerado como nova resolução sem receber P0. O histórico de planos deve ser contíguo. O schema escrito pelo modelo contém apenas os campos semânticos dos nós e não permite que o modelo escolha a revisão.
 
 O contrato normativo de artefato é a união discriminada abaixo. MIME type e referência são strings normalizadas não vazias; \texttt{data} pode ser vazio. Objetos sem \texttt{kind}, variantes híbridas e campos desconhecidos são inválidos.
 
@@ -1101,7 +1193,7 @@ Antes da execução, o runtime deve verificar:
 
 % Source PDF page 31
 
-\noindent 5. aciclicidade do plano; 6. $T_{\mathrm{base}} \subseteq T_{\mathrm{registry}}$; 7. $0 \leq |B(g)| \leq K_{\max}$; 8. existência de pelo menos um resultado terminal entregável; 9. cobertura explícita em \texttt{doneWhen} de toda afirmação semântica relevante do objetivo; 10. cobertura exata da união \(C_0\) pelas avaliações \texttt{keep}/\texttt{drop} do \texttt{PlanningGate}; 11. resolução canônica e ordem dos bodies mantidos em P1; 12. unicidade dos IDs por critério e disponibilidade causal de cada observação citada no grafo ativo.\par
+\noindent 5. aciclicidade do plano; 6. $T_{\mathrm{base}} \subseteq T_{\mathrm{registry}}$; 7. $0 \leq |B(g)| \leq K_{\max}$; 8. existência de pelo menos um resultado terminal entregável; 9. cobertura explícita em \texttt{doneWhen} de toda afirmação semântica relevante do objetivo; 10. cobertura exata da união \(C_0\) pelas avaliações \texttt{keep}/\texttt{drop} do \texttt{PlanningGate}; 11. resolução canônica e ordem dos bodies mantidos em P1, sem P0, rationales ou metadados de retrieval no contexto de síntese; 12. unicidade dos IDs por critério e disponibilidade causal de cada observação citada no grafo ativo.\par
 
 \textbf{A.2 Semântica de revisão do nó atual}
 

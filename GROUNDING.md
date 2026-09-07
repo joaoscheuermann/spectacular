@@ -649,63 +649,87 @@ comparison judges, rounds, replay, checkpoints, similarity grouping,
 redundancy adjudication, or historical evidence pipeline.
 
 The sibling private `scripts/p0-planning-ablation` diagnostic is an oracle
-final-synthesis comparison of direct planning and P0-aware revision over a
-frozen copy of the same 30 cases and complete local skill catalog. Its versioned
-P0 fixture contains only case name,
-objective, and nonempty goals projected from run
-`89ba6c1e-470c-43ea-809b-a34a90f59540`, whose source `results.json` SHA-256 is
+final-synthesis test of whether exposing a frozen P0 draft harms planning over
+a frozen copy of the same 30 cases and complete local skill catalog. Its
+generation entrypoint accepts only three versioned fixtures. The baseline
+catalog-independent fixture contains case name, objective, and nonempty goals
+projected from run `89ba6c1e-470c-43ea-809b-a34a90f59540`, whose source
+`results.json` SHA-256 is
 `f904b241cc05264c281e017ebfb16cbe52af934c4d4c7bc6b62f71088f5b68db`.
-Runtime validation pins the fixture content hash and requires a one-to-one name
-and objective match with all 30 local cases before provider construction.
-Normal generation runs use only this fixture and do not regenerate P0 or read
-historical output directories.
+Two strong skill-aware fixtures contain the frozen `withoutP0` plans from
+completed oracle-bundle runs `aaae19f2-6f98-4539-8eda-e72bdf8b4f57` and
+`d95fc9dd-42b8-4bfc-8358-7dcfae141198`; they are model-generated drafts, not
+human gold plans. Runtime validation pins the selected filename, fixture
+content hash, source run, and source-results hash, and requires a one-to-one
+name and objective match with all 30 local cases before provider construction.
+Normal generation does not regenerate P0 or read historical output
+directories. Each fixture run is a separate robustness cell over the same
+cases and cannot be pooled as independent observations.
+
+Every generation cell also uses `p0-skill-aware-qwen.json` as its fixed
+`withoutP0` control. Those arrays are frozen direct plans produced by
+`qwen/qwen3.8-27b` from the same objectives, ordered gold skills, high effort,
+direct system prompt, schema, and flags used by the treatment planner. Runtime
+validates and persists the control filename, content hash, source run, and
+source-results hash separately from the selected P0 fixture. The control is
+loaded byte-identically for all three cells and no `withoutP0` provider call is
+made. In the Qwen fixture cell, the exposed P0 and frozen control have identical
+plan arrays.
 
 Each case's fixed oracle bundle is the ordered, duplicate-free union of its
 `expected` and `useful` skill names resolved to complete bodies in the local
-catalog. Category labels are not sent to models. Two fresh planning calls use
-the same planning model, effort, schema, flags, objective, and exact skill
-objects, bodies, and order. The calls use purpose-specific system prompts:
-`withoutP0` requests direct synthesis without mentioning P0 or revision, while
-`withP0` requests review of a fallible P0 that the planner may completely
-reconstruct. Separate user-prompt builders make both treatments explicit:
-`withoutP0` receives only the shared objective-and-skills prefix, while `withP0`
-receives that byte-identical prefix plus the frozen `P0 Draft`. The objective is
-the sole scope and deliverable authority, and skills are advisory. There is no
-P0 generation, indexing, embedding, lexical or vector
+catalog. Category labels are not sent to models. One fresh `withP0` planning
+call per case uses the same planning model, effort, schema, flags, objective,
+exact skill objects, bodies, order, direct-synthesis system prompt, and
+objective-and-skills user prefix that produced the frozen control; it appends
+only the selected frozen `P0 Draft`. The system prompt does not mention P0 or
+revision. The objective is the sole scope and deliverable authority, and skills
+are advisory. There is no fresh control generation, P0 generation, indexing,
+embedding, lexical or vector
 retrieval, hybrid fusion, reranking, semantic gate, bundle scoring, retrieval
 configuration, or associated trace in this experiment.
 
-One planning-independent primary judge compares the plans twice with A/B
-positions exactly reversed. It receives only the objective, the same ordered
-gold skill bodies, and the two options; it never receives P0, arm identities,
-gold categories, historical results, traces, or experimental metadata. Stable
-outcomes are `withoutP0`, `withP0`, `both`, or `neither`; orientation conflicts
-are `inconsistent`. Byte-identical plan arrays are classified as `both` after
-both judge calls are still recorded. The aggregate reports all outcomes, the
-With-P0 preference rate over stable single-arm cases, and a predeclared
-one-sided exact binomial test at alpha 0.05. A normal 30-case run therefore has
-30 successful calls per planning arm and 60 successful judge calls; retryable
-failures may cause additional attempts before those operations resolve. Outputs
-retain UUID manifests, separate fixture/case/catalog/source/package hashes,
-JSONL logs, per-operation usage, and complete case results. This diagnostic does
-not establish downstream execution success, separate draft semantics from the
-revision-specific system framing or added scaffold/context, or generalize
-beyond the frozen P0 quality and authored corpus; end-to-end confirmation
-remains a later stage. One generated plan per
-arm and case means the reversed judge orientations measure evaluation
-consistency, not generation stability.
+One planning-independent primary judge initially compares the plans twice with
+A/B positions exactly reversed. It receives only the objective, the same
+ordered gold skill bodies, and the two options; it never receives P0, arm
+identities, gold categories, historical results, traces, or experimental
+metadata. Stable outcomes are `withoutP0`, `withP0`, `both`, or `neither`. An
+initial orientation conflict triggers exactly one additional fresh balanced
+A/B pair. The four semantic votes resolve only with a strict majority of at
+least three; otherwise the case remains `inconsistent`. Byte-identical plan
+arrays are classified as `both` after the required judge calls are still
+recorded. The aggregate reports all outcomes, adjudication counts, the
+Without-P0 preference rate over stable single-arm cases, and a predeclared
+one-sided exact binomial test of whether that rate exceeds 0.5 at alpha 0.05. A
+normal 30-case run has 30 fresh treatment calls and 60 initial judge calls;
+each initially inconsistent case adds two `judge_adjudication` calls, for a
+range of 90 to 150 successful calls. Retryable failures may cause additional
+attempts before those operations resolve. Outputs retain UUID manifests,
+separate selected-fixture, frozen-control, case, catalog, source, and package
+identities, JSONL logs, per-operation usage, and complete case results with two
+or four judgments. This diagnostic isolates the addition of the labeled draft
+block under a shared neutral system prompt while holding the control fixed
+across fixture cells. It does not establish downstream execution success,
+separate draft semantics from added scaffold or context length, measure
+treatment-generation stability, or generalize beyond the frozen P0 fixtures
+and authored corpus; end-to-end confirmation remains a later stage. Reversed
+judge orientations and conditional adjudication measure evaluation consistency
+over each fixed plan pair.
 
-The same diagnostic also exposes a separate fixed cross-judge rejudgment
-entrypoint. Its versioned campaign fixture pins two completed 30-case
-generation runs by complete manifest and results hashes, fixes the opposite
-judge for each run, and pins a comparison-contract hash covering the byte-level
-system/user prompt, structured choice contract, and provider flags. Before
-provider construction, rejudge validates the pinned artifacts, source judge and
-planning lineage, current P0 fixture/case/catalog identities, every objective,
-ordered gold bundle, plan, orientation, winner mapping, outcome, and aggregate
-source comparison. It then reuses the source run's exact inverted A/B positions
-and makes only 60 judge calls under the `rejudge` usage operation; it never
-calls either planner.
+The same diagnostic also retains a separate fixed historical cross-judge
+rejudgment entrypoint. Its two pinned 30-case generation runs use the earlier
+revision-framed treatment and its original one-sided With-P0 hypothesis; they
+are not exposure-treatment cells and are not combined with new generation
+runs. The versioned campaign fixture pins both runs by complete manifest and
+results hashes, fixes the opposite judge for each run, and pins a
+comparison-contract hash covering the byte-level judge system/user prompt,
+structured choice contract, and provider flags. Before provider construction,
+rejudge validates the pinned artifacts, source judge and planning lineage,
+baseline P0 fixture/case/catalog identities, every objective, ordered gold
+bundle, plan, orientation, winner mapping, outcome, and aggregate source
+comparison. It then reuses the source run's exact inverted A/B positions and
+makes only 60 judge calls under the `rejudge` usage operation; it never calls
+either planner.
 
 Rejudge outputs use a fresh UUID and retain the source artifact hashes, source
 experiment-source hash, planning configuration, source and target judge

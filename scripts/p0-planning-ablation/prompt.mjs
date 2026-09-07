@@ -23,22 +23,6 @@ Rules:
 
 Check the final plan against the objective so that no requirement is lost and no unsupported requirement is introduced.`;
 
-export const revisionPlanSystem = `Create a complete plan of observable, verifiable goals by reviewing the supplied P0 draft.
-
-Rules:
-
-1. The objective is the only authority for scope and deliverables.
-2. Preserve every requirement supported by the objective.
-3. Selected skills are advisory operational guidance.
-4. Skills may add applicable methods and verification criteria, but never scope or deliverables that the objective does not request.
-5. Treat the P0 draft as fallible rather than authoritative.
-6. Remove, correct, split, merge, reorder, or completely reconstruct P0 goals when necessary.
-7. Return a complete, standalone plan, never a delta or commentary about the revision.
-8. Every goal must describe an observable, verifiable result rather than an activity.
-9. Do not mention skill names and do not create goals whose outcome is merely invoking a tool.
-
-Check the final plan against the objective so that no requirement is lost and no unsupported requirement is introduced.`;
-
 const finalPlanPrefix = (objective, skills) => `# Objective
 
 ${objective}
@@ -47,10 +31,7 @@ ${objective}
 
 ${skillBlocks(skills)}`;
 
-export const p1WithoutP0User = (objective, skills) =>
-  finalPlanPrefix(objective, skills);
-
-export const p1WithP0User = (objective, skills, p0) => `${finalPlanPrefix(
+export const withP0User = (objective, skills, p0) => `${finalPlanPrefix(
   objective,
   skills,
 )}
