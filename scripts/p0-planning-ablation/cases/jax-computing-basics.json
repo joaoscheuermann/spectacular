@@ -1,0 +1,118 @@
+{
+  "name": "JAX computing tasks",
+  "objective": "Read every task in problem.json, load its referenced input, implement the described computation with JAX, and save each result to the task's specified output path.",
+  "skills": {
+    "expected": ["jax-skills"],
+    "useful": [],
+    "noise": {
+      "13f-analyzer": {
+        "type": "irrelevant"
+      },
+      "citation-management": {
+        "type": "irrelevant"
+      },
+      "citation-verification": {
+        "type": "irrelevant"
+      },
+      "coding-workflow": {
+        "type": "no_operational_value"
+      },
+      "d3-visualization": {
+        "type": "irrelevant"
+      },
+      "data-reconciliation": {
+        "type": "irrelevant"
+      },
+      "docx": {
+        "type": "irrelevant"
+      },
+      "feasible-trip-plan": {
+        "type": "irrelevant"
+      },
+      "file-organizer": {
+        "type": "irrelevant"
+      },
+      "fuzzy-name-search": {
+        "type": "irrelevant"
+      },
+      "gamma-phase-associator": {
+        "type": "irrelevant"
+      },
+      "hibernate-upgrade": {
+        "type": "irrelevant"
+      },
+      "jakarta-namespace": {
+        "type": "irrelevant"
+      },
+      "obspy-data-api": {
+        "type": "irrelevant"
+      },
+      "pdf-editing": {
+        "type": "irrelevant"
+      },
+      "pdf": {
+        "type": "irrelevant"
+      },
+      "planning-with-files": {
+        "type": "no_operational_value"
+      },
+      "pptx": {
+        "type": "irrelevant"
+      },
+      "real-world-travel-research": {
+        "type": "irrelevant"
+      },
+      "restclient-migration": {
+        "type": "irrelevant"
+      },
+      "road-trip-routing": {
+        "type": "irrelevant"
+      },
+      "safe-database-release": {
+        "type": "irrelevant"
+      },
+      "search-accommodations": {
+        "type": "irrelevant"
+      },
+      "search-attractions": {
+        "type": "irrelevant"
+      },
+      "search-cities": {
+        "type": "irrelevant"
+      },
+      "search-driving-distance": {
+        "type": "irrelevant"
+      },
+      "search-flights": {
+        "type": "irrelevant"
+      },
+      "search-restaurants": {
+        "type": "irrelevant"
+      },
+      "seisbench-model-api": {
+        "type": "irrelevant"
+      },
+      "seismic-picker-selection": {
+        "type": "irrelevant"
+      },
+      "spring-boot-migration": {
+        "type": "irrelevant"
+      },
+      "spring-security-6": {
+        "type": "irrelevant"
+      },
+      "strict-json-delivery": {
+        "type": "no_operational_value"
+      },
+      "text-parser": {
+        "type": "irrelevant"
+      },
+      "vector-database-integration": {
+        "type": "irrelevant"
+      },
+      "xlsx": {
+        "type": "irrelevant"
+      }
+    }
+  }
+}

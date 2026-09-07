@@ -8,6 +8,8 @@
     "llm:full-skill-vs-hints": "node --env-file=.env --conditions=@org/source --import @swc-node/register/esm-register scripts/full-skill-vs-hints/index.mjs",
     "llm:direct-skill-planning": "node --env-file=.env --conditions=@org/source --import @swc-node/register/esm-register scripts/direct-skill-planning/index.mjs",
     "llm:skill-retrieval-gating": "node --env-file=.env --conditions=@org/source --import @swc-node/register/esm-register scripts/skill-retrieval-gating/index.mjs",
+    "llm:p0-planning-ablation": "node --env-file=.env --conditions=@org/source --import @swc-node/register/esm-register scripts/p0-planning-ablation/index.mjs",
+    "llm:p0-planning-rejudge": "node --env-file=.env --conditions=@org/source --import @swc-node/register/esm-register scripts/p0-planning-ablation/rejudge.mjs",
     "okf": "node --conditions=@org/source --import @swc-node/register/esm-register scripts/okf.mjs"
   },
   "private": true,

@@ -1,0 +1,115 @@
+{
+  "name": "demographic pivot analysis",
+  "objective": "Combine population data from /root/population.pdf with /root/income.xlsx into /root/demographic_analysis.xlsx containing the four specified pivot tables plus enriched source data with income quartiles and EARNERS times MEDIAN_INCOME.",
+  "skills": {
+    "expected": ["pdf", "xlsx"],
+    "useful": [],
+    "noise": {
+      "13f-analyzer": {
+        "type": "irrelevant"
+      },
+      "citation-management": {
+        "type": "irrelevant"
+      },
+      "citation-verification": {
+        "type": "irrelevant"
+      },
+      "coding-workflow": {
+        "type": "irrelevant"
+      },
+      "d3-visualization": {
+        "type": "no_operational_value"
+      },
+      "data-reconciliation": {
+        "type": "no_operational_value"
+      },
+      "docx": {
+        "type": "irrelevant"
+      },
+      "feasible-trip-plan": {
+        "type": "irrelevant"
+      },
+      "file-organizer": {
+        "type": "irrelevant"
+      },
+      "fuzzy-name-search": {
+        "type": "irrelevant"
+      },
+      "gamma-phase-associator": {
+        "type": "irrelevant"
+      },
+      "hibernate-upgrade": {
+        "type": "irrelevant"
+      },
+      "jakarta-namespace": {
+        "type": "irrelevant"
+      },
+      "jax-skills": {
+        "type": "irrelevant"
+      },
+      "obspy-data-api": {
+        "type": "irrelevant"
+      },
+      "pdf-editing": {
+        "type": "no_operational_value"
+      },
+      "planning-with-files": {
+        "type": "no_operational_value"
+      },
+      "pptx": {
+        "type": "irrelevant"
+      },
+      "real-world-travel-research": {
+        "type": "irrelevant"
+      },
+      "restclient-migration": {
+        "type": "irrelevant"
+      },
+      "road-trip-routing": {
+        "type": "irrelevant"
+      },
+      "safe-database-release": {
+        "type": "irrelevant"
+      },
+      "search-accommodations": {
+        "type": "irrelevant"
+      },
+      "search-attractions": {
+        "type": "irrelevant"
+      },
+      "search-cities": {
+        "type": "irrelevant"
+      },
+      "search-driving-distance": {
+        "type": "irrelevant"
+      },
+      "search-flights": {
+        "type": "irrelevant"
+      },
+      "search-restaurants": {
+        "type": "irrelevant"
+      },
+      "seisbench-model-api": {
+        "type": "irrelevant"
+      },
+      "seismic-picker-selection": {
+        "type": "irrelevant"
+      },
+      "spring-boot-migration": {
+        "type": "irrelevant"
+      },
+      "spring-security-6": {
+        "type": "irrelevant"
+      },
+      "strict-json-delivery": {
+        "type": "irrelevant"
+      },
+      "text-parser": {
+        "type": "irrelevant"
+      },
+      "vector-database-integration": {
+        "type": "irrelevant"
+      }
+    }
+  }
+}

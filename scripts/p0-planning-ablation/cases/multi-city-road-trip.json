@@ -1,0 +1,106 @@
+{
+  "name": "multi-city road trip",
+  "objective": "Build a seven-day itinerary for two people leaving Minneapolis and visiting three Ohio cities within a $5,100 budget. Accommodations must be pet-friendly, meals must cover four requested cuisines, and the trip must not use flights. Use real-world data rather than remembered places.",
+  "skills": {
+    "expected": [
+      "feasible-trip-plan",
+      "real-world-travel-research",
+      "road-trip-routing",
+      "search-accommodations",
+      "search-attractions",
+      "search-cities",
+      "search-driving-distance",
+      "search-restaurants"
+    ],
+    "useful": [],
+    "noise": {
+      "13f-analyzer": {
+        "type": "irrelevant"
+      },
+      "citation-management": {
+        "type": "irrelevant"
+      },
+      "citation-verification": {
+        "type": "irrelevant"
+      },
+      "coding-workflow": {
+        "type": "irrelevant"
+      },
+      "d3-visualization": {
+        "type": "irrelevant"
+      },
+      "data-reconciliation": {
+        "type": "no_operational_value"
+      },
+      "docx": {
+        "type": "irrelevant"
+      },
+      "file-organizer": {
+        "type": "irrelevant"
+      },
+      "fuzzy-name-search": {
+        "type": "irrelevant"
+      },
+      "gamma-phase-associator": {
+        "type": "irrelevant"
+      },
+      "hibernate-upgrade": {
+        "type": "irrelevant"
+      },
+      "jakarta-namespace": {
+        "type": "irrelevant"
+      },
+      "jax-skills": {
+        "type": "irrelevant"
+      },
+      "obspy-data-api": {
+        "type": "irrelevant"
+      },
+      "pdf": {
+        "type": "irrelevant"
+      },
+      "pdf-editing": {
+        "type": "irrelevant"
+      },
+      "planning-with-files": {
+        "type": "no_operational_value"
+      },
+      "pptx": {
+        "type": "irrelevant"
+      },
+      "restclient-migration": {
+        "type": "irrelevant"
+      },
+      "safe-database-release": {
+        "type": "irrelevant"
+      },
+      "search-flights": {
+        "type": "conflicting"
+      },
+      "seisbench-model-api": {
+        "type": "irrelevant"
+      },
+      "seismic-picker-selection": {
+        "type": "irrelevant"
+      },
+      "spring-boot-migration": {
+        "type": "irrelevant"
+      },
+      "spring-security-6": {
+        "type": "irrelevant"
+      },
+      "strict-json-delivery": {
+        "type": "irrelevant"
+      },
+      "text-parser": {
+        "type": "irrelevant"
+      },
+      "vector-database-integration": {
+        "type": "irrelevant"
+      },
+      "xlsx": {
+        "type": "no_operational_value"
+      }
+    }
+  }
+}

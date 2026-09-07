@@ -1,0 +1,118 @@
+{
+  "name": "D3 stock visualization",
+  "objective": "Build a standalone D3.js v6 web app from the supplied stock CSV data with a sector-clustered, collision-free market-cap bubble chart, linked 50-stock table, labels, legend, tooltips, and bidirectional row highlighting under /root/output/.",
+  "skills": {
+    "expected": ["d3-visualization"],
+    "useful": [],
+    "noise": {
+      "13f-analyzer": {
+        "type": "no_operational_value"
+      },
+      "citation-management": {
+        "type": "irrelevant"
+      },
+      "citation-verification": {
+        "type": "irrelevant"
+      },
+      "coding-workflow": {
+        "type": "no_operational_value"
+      },
+      "data-reconciliation": {
+        "type": "irrelevant"
+      },
+      "docx": {
+        "type": "irrelevant"
+      },
+      "feasible-trip-plan": {
+        "type": "irrelevant"
+      },
+      "file-organizer": {
+        "type": "irrelevant"
+      },
+      "fuzzy-name-search": {
+        "type": "irrelevant"
+      },
+      "gamma-phase-associator": {
+        "type": "irrelevant"
+      },
+      "hibernate-upgrade": {
+        "type": "irrelevant"
+      },
+      "jakarta-namespace": {
+        "type": "irrelevant"
+      },
+      "jax-skills": {
+        "type": "irrelevant"
+      },
+      "obspy-data-api": {
+        "type": "irrelevant"
+      },
+      "pdf-editing": {
+        "type": "irrelevant"
+      },
+      "pdf": {
+        "type": "irrelevant"
+      },
+      "planning-with-files": {
+        "type": "no_operational_value"
+      },
+      "pptx": {
+        "type": "irrelevant"
+      },
+      "real-world-travel-research": {
+        "type": "irrelevant"
+      },
+      "restclient-migration": {
+        "type": "irrelevant"
+      },
+      "road-trip-routing": {
+        "type": "irrelevant"
+      },
+      "safe-database-release": {
+        "type": "irrelevant"
+      },
+      "search-accommodations": {
+        "type": "irrelevant"
+      },
+      "search-attractions": {
+        "type": "irrelevant"
+      },
+      "search-cities": {
+        "type": "irrelevant"
+      },
+      "search-driving-distance": {
+        "type": "irrelevant"
+      },
+      "search-flights": {
+        "type": "irrelevant"
+      },
+      "search-restaurants": {
+        "type": "irrelevant"
+      },
+      "seisbench-model-api": {
+        "type": "irrelevant"
+      },
+      "seismic-picker-selection": {
+        "type": "irrelevant"
+      },
+      "spring-boot-migration": {
+        "type": "irrelevant"
+      },
+      "spring-security-6": {
+        "type": "irrelevant"
+      },
+      "strict-json-delivery": {
+        "type": "irrelevant"
+      },
+      "text-parser": {
+        "type": "irrelevant"
+      },
+      "vector-database-integration": {
+        "type": "irrelevant"
+      },
+      "xlsx": {
+        "type": "no_operational_value"
+      }
+    }
+  }
+}

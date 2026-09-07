@@ -648,6 +648,83 @@ failed. It has no
 comparison judges, rounds, replay, checkpoints, similarity grouping,
 redundancy adjudication, or historical evidence pipeline.
 
+The sibling private `scripts/p0-planning-ablation` diagnostic is an oracle
+final-synthesis comparison of direct planning and P0-aware revision over a
+frozen copy of the same 30 cases and complete local skill catalog. Its versioned
+P0 fixture contains only case name,
+objective, and nonempty goals projected from run
+`89ba6c1e-470c-43ea-809b-a34a90f59540`, whose source `results.json` SHA-256 is
+`f904b241cc05264c281e017ebfb16cbe52af934c4d4c7bc6b62f71088f5b68db`.
+Runtime validation pins the fixture content hash and requires a one-to-one name
+and objective match with all 30 local cases before provider construction.
+Normal generation runs use only this fixture and do not regenerate P0 or read
+historical output directories.
+
+Each case's fixed oracle bundle is the ordered, duplicate-free union of its
+`expected` and `useful` skill names resolved to complete bodies in the local
+catalog. Category labels are not sent to models. Two fresh planning calls use
+the same planning model, effort, schema, flags, objective, and exact skill
+objects, bodies, and order. The calls use purpose-specific system prompts:
+`withoutP0` requests direct synthesis without mentioning P0 or revision, while
+`withP0` requests review of a fallible P0 that the planner may completely
+reconstruct. Separate user-prompt builders make both treatments explicit:
+`withoutP0` receives only the shared objective-and-skills prefix, while `withP0`
+receives that byte-identical prefix plus the frozen `P0 Draft`. The objective is
+the sole scope and deliverable authority, and skills are advisory. There is no
+P0 generation, indexing, embedding, lexical or vector
+retrieval, hybrid fusion, reranking, semantic gate, bundle scoring, retrieval
+configuration, or associated trace in this experiment.
+
+One planning-independent primary judge compares the plans twice with A/B
+positions exactly reversed. It receives only the objective, the same ordered
+gold skill bodies, and the two options; it never receives P0, arm identities,
+gold categories, historical results, traces, or experimental metadata. Stable
+outcomes are `withoutP0`, `withP0`, `both`, or `neither`; orientation conflicts
+are `inconsistent`. Byte-identical plan arrays are classified as `both` after
+both judge calls are still recorded. The aggregate reports all outcomes, the
+With-P0 preference rate over stable single-arm cases, and a predeclared
+one-sided exact binomial test at alpha 0.05. A normal 30-case run therefore has
+30 successful calls per planning arm and 60 successful judge calls; retryable
+failures may cause additional attempts before those operations resolve. Outputs
+retain UUID manifests, separate fixture/case/catalog/source/package hashes,
+JSONL logs, per-operation usage, and complete case results. This diagnostic does
+not establish downstream execution success, separate draft semantics from the
+revision-specific system framing or added scaffold/context, or generalize
+beyond the frozen P0 quality and authored corpus; end-to-end confirmation
+remains a later stage. One generated plan per
+arm and case means the reversed judge orientations measure evaluation
+consistency, not generation stability.
+
+The same diagnostic also exposes a separate fixed cross-judge rejudgment
+entrypoint. Its versioned campaign fixture pins two completed 30-case
+generation runs by complete manifest and results hashes, fixes the opposite
+judge for each run, and pins a comparison-contract hash covering the byte-level
+system/user prompt, structured choice contract, and provider flags. Before
+provider construction, rejudge validates the pinned artifacts, source judge and
+planning lineage, current P0 fixture/case/catalog identities, every objective,
+ordered gold bundle, plan, orientation, winner mapping, outcome, and aggregate
+source comparison. It then reuses the source run's exact inverted A/B positions
+and makes only 60 judge calls under the `rejudge` usage operation; it never
+calls either planner.
+
+Rejudge outputs use a fresh UUID and retain the source artifact hashes, source
+experiment-source hash, planning configuration, source and target judge
+identities, campaign and protocol hashes, per-case frozen-plan hash, both
+outcomes, and an outcome-transition matrix with agreement rates. Source
+outputs remain unchanged. The two frozen plan batches are repeated generations
+over the same 30 cases and are reported as separate robustness cells, not
+pooled as 60 independent observations. Cross-judge agreement tests evaluator
+robustness only and does not establish downstream execution quality.
+
+Those two source runs predate the rejudge fixture, came from a dirty worktree,
+and do not independently persist their comparison-contract hash. The campaign
+therefore version-controls a reviewed historical attestation from each pinned
+aggregate experiment-source hash to the contract. Runtime validates the pinned
+source hash, attestation, and current contract fail-closed, but cannot derive
+that historical association from the ignored run artifacts alone. Fresh
+generation outputs include their mode, full current experiment-source hash,
+and comparison-contract hash directly.
+
 The SkillsBench composition condition scans a caller-verified clean checkout of
 the existing v1.1 pin into a deterministic global catalog, hashes every package,
 namespaces same-name/different-body collisions, and preserves task-to-skill gold

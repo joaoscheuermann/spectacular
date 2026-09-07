@@ -1,0 +1,118 @@
+{
+  "name": "LaTeX formula extraction",
+  "objective": "Extract every display formula from latex_paper.pdf as render-equivalent one-line $$...$$ Markdown, remove trailing tags and punctuation, append only syntax-corrected variants for genuinely malformed formulas, and save /root/latex_formula_extraction.md.",
+  "skills": {
+    "expected": ["pdf"],
+    "useful": [],
+    "noise": {
+      "13f-analyzer": {
+        "type": "irrelevant"
+      },
+      "citation-management": {
+        "type": "no_operational_value"
+      },
+      "citation-verification": {
+        "type": "no_operational_value"
+      },
+      "coding-workflow": {
+        "type": "irrelevant"
+      },
+      "d3-visualization": {
+        "type": "irrelevant"
+      },
+      "data-reconciliation": {
+        "type": "irrelevant"
+      },
+      "docx": {
+        "type": "irrelevant"
+      },
+      "feasible-trip-plan": {
+        "type": "irrelevant"
+      },
+      "file-organizer": {
+        "type": "irrelevant"
+      },
+      "fuzzy-name-search": {
+        "type": "irrelevant"
+      },
+      "gamma-phase-associator": {
+        "type": "irrelevant"
+      },
+      "hibernate-upgrade": {
+        "type": "irrelevant"
+      },
+      "jakarta-namespace": {
+        "type": "irrelevant"
+      },
+      "jax-skills": {
+        "type": "irrelevant"
+      },
+      "obspy-data-api": {
+        "type": "irrelevant"
+      },
+      "pdf-editing": {
+        "type": "no_operational_value"
+      },
+      "planning-with-files": {
+        "type": "no_operational_value"
+      },
+      "pptx": {
+        "type": "irrelevant"
+      },
+      "real-world-travel-research": {
+        "type": "irrelevant"
+      },
+      "restclient-migration": {
+        "type": "irrelevant"
+      },
+      "road-trip-routing": {
+        "type": "irrelevant"
+      },
+      "safe-database-release": {
+        "type": "irrelevant"
+      },
+      "search-accommodations": {
+        "type": "irrelevant"
+      },
+      "search-attractions": {
+        "type": "irrelevant"
+      },
+      "search-cities": {
+        "type": "irrelevant"
+      },
+      "search-driving-distance": {
+        "type": "irrelevant"
+      },
+      "search-flights": {
+        "type": "irrelevant"
+      },
+      "search-restaurants": {
+        "type": "irrelevant"
+      },
+      "seisbench-model-api": {
+        "type": "irrelevant"
+      },
+      "seismic-picker-selection": {
+        "type": "irrelevant"
+      },
+      "spring-boot-migration": {
+        "type": "irrelevant"
+      },
+      "spring-security-6": {
+        "type": "irrelevant"
+      },
+      "strict-json-delivery": {
+        "type": "irrelevant"
+      },
+      "text-parser": {
+        "type": "no_operational_value"
+      },
+      "vector-database-integration": {
+        "type": "irrelevant"
+      },
+      "xlsx": {
+        "type": "irrelevant"
+      }
+    }
+  }
+}

@@ -1,0 +1,113 @@
+{
+  "name": "earthquake phase association",
+  "objective": "Load the supplied MiniSEED waveforms and station CSV, pick P and S phases with SeisBench, associate picks into unique earthquake events using station data, and write ISO event times to /root/results.csv with F1 of at least 0.6.",
+  "skills": {
+    "expected": [
+      "gamma-phase-associator",
+      "obspy-data-api",
+      "seisbench-model-api"
+    ],
+    "useful": ["seismic-picker-selection"],
+    "noise": {
+      "13f-analyzer": {
+        "type": "irrelevant"
+      },
+      "citation-management": {
+        "type": "irrelevant"
+      },
+      "citation-verification": {
+        "type": "irrelevant"
+      },
+      "coding-workflow": {
+        "type": "irrelevant"
+      },
+      "d3-visualization": {
+        "type": "irrelevant"
+      },
+      "data-reconciliation": {
+        "type": "no_operational_value"
+      },
+      "docx": {
+        "type": "irrelevant"
+      },
+      "feasible-trip-plan": {
+        "type": "irrelevant"
+      },
+      "file-organizer": {
+        "type": "irrelevant"
+      },
+      "fuzzy-name-search": {
+        "type": "irrelevant"
+      },
+      "hibernate-upgrade": {
+        "type": "irrelevant"
+      },
+      "jakarta-namespace": {
+        "type": "irrelevant"
+      },
+      "jax-skills": {
+        "type": "no_operational_value"
+      },
+      "pdf-editing": {
+        "type": "irrelevant"
+      },
+      "pdf": {
+        "type": "irrelevant"
+      },
+      "planning-with-files": {
+        "type": "no_operational_value"
+      },
+      "pptx": {
+        "type": "irrelevant"
+      },
+      "real-world-travel-research": {
+        "type": "irrelevant"
+      },
+      "restclient-migration": {
+        "type": "irrelevant"
+      },
+      "road-trip-routing": {
+        "type": "irrelevant"
+      },
+      "safe-database-release": {
+        "type": "irrelevant"
+      },
+      "search-accommodations": {
+        "type": "irrelevant"
+      },
+      "search-attractions": {
+        "type": "irrelevant"
+      },
+      "search-cities": {
+        "type": "irrelevant"
+      },
+      "search-driving-distance": {
+        "type": "irrelevant"
+      },
+      "search-flights": {
+        "type": "irrelevant"
+      },
+      "search-restaurants": {
+        "type": "irrelevant"
+      },
+      "spring-boot-migration": {
+        "type": "irrelevant"
+      },
+      "spring-security-6": {
+        "type": "irrelevant"
+      },
+      "strict-json-delivery": {
+        "type": "irrelevant"
+      },
+      "text-parser": {
+        "type": "irrelevant"
+      },
+      "vector-database-integration": {
+        "type": "irrelevant"
+      },
+      "xlsx": {
+        "type": "irrelevant"
+      }
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "comparisonProtocolSha256": "c35a340cb46e0ec29934593501c5d9dfc07951b273fac5aaba6d9d703293bd2c",
+  "sources": [
+    {
+      "runId": "cfab07af-5551-4e5c-85b4-d418ccc302c5",
+      "manifestSha256": "41dd0a2cabd15511f408127ed21eefb48f99f7617d155f961e7eba7d95bf45cd",
+      "resultsSha256": "f295639c91b17d9035dc031bd6ccfa84ab44d2e0dfeb9db382031ea763c1637c",
+      "sourceExperimentSourcesSha256": "9f8bb57e8d1f358be15955a1eddcec922b40dc1a76aee2b6b0540f5a40ed3b4f",
+      "attestedComparisonProtocolSha256": "c35a340cb46e0ec29934593501c5d9dfc07951b273fac5aaba6d9d703293bd2c",
+      "sourceJudgeModel": "google/gemini-3.7-flash",
+      "targetJudgeModel": "openai/gpt-5.6-sol",
+      "targetJudgeEffort": "medium"
+    },
+    {
+      "runId": "3541de47-9a14-4f54-911a-06a0d9eb3de7",
+      "manifestSha256": "6ed8cbde21e2f5bf876a740ea0e38179fe47ddefc6c778ed25ffcc160e9c2cef",
+      "resultsSha256": "c8dc2ce1f27631888867f33ff4c3ba4eaeedebeb4bc59a5fbb32a78cc6b0d5e2",
+      "sourceExperimentSourcesSha256": "fbab55b7d95e0e21179978e2b2ace17212b33ab570ddcda3789fd393f9334add",
+      "attestedComparisonProtocolSha256": "c35a340cb46e0ec29934593501c5d9dfc07951b273fac5aaba6d9d703293bd2c",
+      "sourceJudgeModel": "openai/gpt-5.6-sol",
+      "targetJudgeModel": "google/gemini-3.7-flash",
+      "targetJudgeEffort": "medium"
+    }
+  ]
+}

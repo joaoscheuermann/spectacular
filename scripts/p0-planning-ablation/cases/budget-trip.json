@@ -1,0 +1,46 @@
+{
+  "name": "budget trip",
+  "objective": "Plan a five-day trip to Santiago for two people with a total budget of R$7,000, central lodging, and one winery day trip.",
+  "skills": {
+    "expected": ["feasible-trip-plan", "real-world-travel-research"],
+    "useful": [
+      "road-trip-routing",
+      "search-accommodations",
+      "search-attractions",
+      "search-driving-distance",
+      "search-flights",
+      "search-restaurants"
+    ],
+    "noise": {
+      "13f-analyzer": { "type": "irrelevant" },
+      "citation-management": { "type": "irrelevant" },
+      "citation-verification": { "type": "irrelevant" },
+      "coding-workflow": { "type": "irrelevant" },
+      "d3-visualization": { "type": "irrelevant" },
+      "data-reconciliation": { "type": "no_operational_value" },
+      "docx": { "type": "irrelevant" },
+      "file-organizer": { "type": "irrelevant" },
+      "fuzzy-name-search": { "type": "irrelevant" },
+      "gamma-phase-associator": { "type": "irrelevant" },
+      "hibernate-upgrade": { "type": "irrelevant" },
+      "jakarta-namespace": { "type": "irrelevant" },
+      "jax-skills": { "type": "irrelevant" },
+      "obspy-data-api": { "type": "irrelevant" },
+      "pdf-editing": { "type": "irrelevant" },
+      "pdf": { "type": "irrelevant" },
+      "planning-with-files": { "type": "no_operational_value" },
+      "pptx": { "type": "irrelevant" },
+      "restclient-migration": { "type": "irrelevant" },
+      "safe-database-release": { "type": "irrelevant" },
+      "search-cities": { "type": "no_operational_value" },
+      "seisbench-model-api": { "type": "irrelevant" },
+      "seismic-picker-selection": { "type": "irrelevant" },
+      "spring-boot-migration": { "type": "irrelevant" },
+      "spring-security-6": { "type": "irrelevant" },
+      "strict-json-delivery": { "type": "irrelevant" },
+      "text-parser": { "type": "irrelevant" },
+      "vector-database-integration": { "type": "irrelevant" },
+      "xlsx": { "type": "no_operational_value" }
+    }
+  }
+}

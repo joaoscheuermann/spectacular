@@ -1,0 +1,396 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "runId": "89ba6c1e-470c-43ea-809b-a34a90f59540",
+    "resultsSha256": "f904b241cc05264c281e017ebfb16cbe52af934c4d4c7bc6b62f71088f5b68db"
+  },
+  "cases": [
+    {
+      "name": "budget trip",
+      "objective": "Plan a five-day trip to Santiago for two people with a total budget of R$7,000, central lodging, and one winery day trip.",
+      "p0": [
+        "A complete day-by-day itinerary for five consecutive days exists for two travelers in Santiago.",
+        "The itinerary includes at least one designated day trip to a winery.",
+        "Lodging is selected for the full stay and is located in Santiago’s central area.",
+        "A budget worksheet for the two travelers is produced with itemized estimated costs by category and day.",
+        "The total estimated cost for the trip is no more than R$7,000 for two people.",
+        "All major itinerary items—lodging, the winery day trip, and daily activities—have identifiable locations, duration, or time windows that fit within five days."
+      ]
+    },
+    {
+      "name": "citation check",
+      "objective": "Inspect /root/test.bib, identify fake or hallucinated academic citations, and write /root/answer.json containing only their cleaned titles in a sorted fake_citations array.",
+      "p0": [
+        "Read and parse /root/test.bib so every citation entry (title, authors, venue, year) is available for inspection.",
+        "Determine which entries are fake or hallucinated by checking whether each cited work plausibly exists as a real publication (author, title, venue, year consistency).",
+        "Produce a sorted array of the cleaned titles belonging only to the fake/hallucinated citations.",
+        "Write /root/answer.json containing exactly that sorted fake_citations array and nothing else."
+      ]
+    },
+    {
+      "name": "California small-claims form filling",
+      "objective": "Fill the supplied California small-claims PDF from the provided case description, leave court-only, optional, and unspecified fields blank, use YYYY-MM-DD dates, and save the completed form to /root/sc100-filled.pdf.",
+      "p0": [
+        "A valid PDF file exists at the exact path /root/sc100-filled.pdf",
+        "The PDF is a completed California SC-100 (Claim) form with fields populated from the case description",
+        "All court-only fields (e.g., case number, judge assignment, court clerk annotations) are left blank",
+        "All optional fields not required by the case description are left blank",
+        "All fields for which no information is provided in the case description are left blank",
+        "Every date written on the form uses the YYYY-MM-DD format (e.g., 2025-01-15, not 01/15/2025)",
+        "The file is saved and persisted at /root/sc100-filled.pdf and is readable as a valid PDF"
+      ]
+    },
+    {
+      "name": "D3 stock visualization",
+      "objective": "Build a standalone D3.js v6 web app from the supplied stock CSV data with a sector-clustered, collision-free market-cap bubble chart, linked 50-stock table, labels, legend, tooltips, and bidirectional row highlighting under /root/output/.",
+      "p0": [
+        "A standalone HTML file (or HTML with inlined/embedded JS and CSS) exists under /root/output/ that renders in a browser without a build step, web server, or external dependencies beyond a D3.js v6.x CDN reference.",
+        "The application reads and parses the supplied stock CSV file, making its data available for rendering.",
+        "A bubble chart is rendered in which each stock is represented by a circle whose area is proportional to that stock's market capitalization.",
+        "Bubbles belonging to the same sector are spatially clustered together, so that stocks of different sectors occupy visually distinct regions of the chart.",
+        "No two bubbles overlap: the layout is collision-free such that every pair of circles is either disjoint or only touching at a single point.",
+        "A table is rendered that lists exactly 50 stocks with at least ticker symbol, company name, sector, and market cap columns.",
+        "Each bubble in the chart displays a text label (ticker or company name) identifying the stock.",
+        "A legend is rendered that maps the color (or other visual encoding) used in the chart to the sector names present in the data.",
+        "Hovering the pointer over a bubble displays a tooltip showing additional stock details (e.g., ticker, name, sector, market cap).",
+        "Hovering the pointer over a row in the 50-stock table produces a visible highlight on the corresponding bubble in the chart (e.g., stroke change, scale change, or opacity change).",
+        "Hovering the pointer over a bubble in the chart produces a visible highlight on the corresponding row in the 50-stock table (e.g., background color change or bold text).",
+        "All generated or required files (HTML, CSS, JS, and any data file) reside exclusively under the /root/output/ directory."
+      ]
+    },
+    {
+      "name": "earthquake phase association",
+      "objective": "Load the supplied MiniSEED waveforms and station CSV, pick P and S phases with SeisBench, associate picks into unique earthquake events using station data, and write ISO event times to /root/results.csv with F1 of at least 0.6.",
+      "p0": [
+        "MiniSEED waveform records are loaded into a usable form such that each waveform has an identifiable source channel, time series, and sample rate, and the full set of supplied MiniSEED files is represented.",
+        "The supplied station CSV is loaded into a structured form containing station identifiers and their associated metadata (e.g., coordinates or network/ID columns) that can be referenced during event association.",
+        "A set of phase picks is produced by SeisBench, where each pick carries a phase label (P or S), a station identifier, and an arrival time, and picks exist for both P and S phases across the loaded waveforms.",
+        "Phase picks are grouped into a finite set of unique earthquake events, where the grouping leverages station data so that picks from different stations that correspond to the same physical event are assigned to the same event, and each event is assigned a single origin time.",
+        "The file /root/results.csv exists and contains, for each identified event, a timestamp written in ISO 8601 format representing the event origin time.",
+        "When the written event times in /root/results.csv are scored against the ground-truth catalog using the standard F1 evaluation for event detection, the resulting F1 score is at least 0.6."
+      ]
+    },
+    {
+      "name": "instruction-driven PDF update",
+      "objective": "Update /root/input/input.pdf from the natural-language instructions and latest facts in /root/input/input.txt, avoid duplicating correct information or obscuring original text, perform any requested redactions, and save /root/output/output.pdf.",
+      "p0": [
+        "A valid PDF file exists at /root/output/output.pdf.",
+        "Every content change specified in /root/input/input.txt—whether a factual correction, a textual edit, or an instruction to insert new information—is reflected in /root/output/output.pdf.",
+        "No piece of information that was already correct in /root/input/input.pdf is stated more than once in /root/output/output.pdf.",
+        "All original text in /root/input/input.pdf that is neither targeted for modification nor targeted for redaction by /root/input/input.txt remains present, unaltered, and legible in /root/output/output.pdf.",
+        "Every redaction requested in /root/input/input.txt is applied in /root/output/output.pdf such that the targeted content is no longer readable.",
+        "No text appears in /root/output/output.pdf that was neither present in /root/input/input.pdf nor explicitly specified for inclusion in /root/input/input.txt."
+      ]
+    },
+    {
+      "name": "embedded Excel table in PowerPoint",
+      "objective": "Extract the embedded currency-rate workbook and nearby update text from /root/input.pptx, change the specified rate while preserving formula cells and all other presentation content, and save /root/results.pptx.",
+      "p0": [
+        "/root/results.pptx exists and is a valid PPTX (ZIP/OOXML) archive that opens without corruption.",
+        "The embedded currency-rate workbook inside /root/results.pptx contains the rate value modified to the specified new value, as identified in the source file's update instructions.",
+        "Every formula cell in the embedded currency-rate workbook retains its original formula expression (e.g., =B2*B3) and is not replaced with a static cached or computed value.",
+        "The update text located near the embedded workbook within the presentation reflects the changed rate value, consistent with the modification applied to the workbook.",
+        "All other presentation content in /root/results.pptx—slides, shapes, text boxes, images, charts, layouts, slide masters, themes, notes, and any other OOXML parts unrelated to the embedded workbook and the adjacent update text—is byte-identical to the corresponding content in /root/input.pptx."
+      ]
+    },
+    {
+      "name": "financial model game matching",
+      "objective": "Use /root/background.pdf and the large /root/data.xlsx dataset to pair odd-numbered and even-numbered games, compute Player 1 wins minus Player 2 wins, and write only the resulting number to /root/answer.txt.",
+      "p0": [
+        "The file /root/background.pdf has been consulted and the pairing rule it specifies for odd-numbered and even-numbered games is applied to the game records in /root/data.xlsx, so that every odd-numbered game is matched with the corresponding even-numbered game per that rule.",
+        "A single numeric value has been obtained that equals (total number of Player 1 wins across all paired games) minus (total number of Player 2 wins across all paired games).",
+        "The file /root/answer.txt exists and its complete content is only that computed number, with no additional labels, units, or text."
+      ]
+    },
+    {
+      "name": "Flink longest job stage",
+      "objective": "Read the supplied format.pdf and schema notes, then implement the Java Flink job to identify per-job stages separated by ten minutes without SUBMIT events, count resubmissions separately, output each job ID and its longest-stage task count, and preserve the supplied class and pom.xml contracts.",
+      "p0": [
+        "A Java Flink job source file exists, compiles successfully against the supplied pom.xml (no dependencies added, removed, or version-changed), and runs without compilation errors.",
+        "Every class name, package declaration, public/protected method signature, and constructor in the supplied class contracts is present and unmodified in the delivered source; no new public API surface is introduced.",
+        "The input event parsing and field mapping conform exactly to the field names, types, and semantics defined in the supplied format.pdf and schema notes.",
+        "For each distinct job ID, the event sequence is partitioned into contiguous stages such that a new stage begins immediately after any interval of ten minutes or more in which no SUBMIT event was observed for that job.",
+        "Events identified as resubmissions (per the schema/format definition) are tracked and counted as a separate category and are excluded from the per-stage task count used to determine the longest stage.",
+        "For every job ID present in the input, the job's output record contains that job ID and the task count (non-resubmission task events) of its longest stage, where 'longest' is defined by the highest task count among all stages for that job.",
+        "The supplied pom.xml file is byte-for-byte identical to the original in the delivered artifact; no dependencies, plugin configurations, or properties are altered.",
+        "The Flink job is structured as a runnable pipeline (source → transformation → sink) using Flink's DataStream or Table API as implied by the supplied class contracts, and produces the specified output format without introducing additional output fields or records."
+      ]
+    },
+    {
+      "name": "invoice fraud detection",
+      "objective": "Cross-check invoice pages in /root/invoices.pdf against approved vendors in /root/vendors.xlsx and purchase orders in CSV, apply the stated fuzzy-name and ordered fraud rules, and write only flagged invoices to /root/fraud_report.json in the required schema.",
+      "p0": [
+        "All invoice records (vendor name, invoice number, amount, date, PO reference, and any other fields present) are extracted from every page of /root/invoices.pdf into a structured, in-memory representation for subsequent matching.",
+        "The full set of approved vendor records from /root/vendors.xlsx is loaded into a reference structure that supports name-lookup and comparison.",
+        "The full set of purchase-order records from the CSV file is loaded into a reference structure that supports lookup by PO identifier and field-level comparison.",
+        "For every invoice, the vendor name is compared against the approved-vendor list using the fuzzy-name matching rule as stated in the source materials, and the result (match, near-match, or no-match) is determined for that invoice.",
+        "For every invoice, the ordered fraud rules are evaluated strictly in their stated sequence, and each rule's pass/fail (or applicable) outcome is recorded before the next rule is considered, so that later rules can depend on earlier results.",
+        "The final flagged set consists of exactly those invoices that fail at least one fraud rule after full ordered evaluation; no invoice that passes all rules appears in the flagged set, and no invoice that fails any rule is omitted from it.",
+        "A file exists at the path /root/fraud_report.json and contains a valid JSON document (parseable without error).",
+        "The JSON document in /root/fraud_report.json conforms to the required schema: the top-level structure, field names, field types, and any nested object/array shapes match the schema specification exactly.",
+        "The invoice entries present in /root/fraud_report.json are limited to the flagged set identified in goal 6—no non-flagged invoices are included and no flagged invoices are missing.",
+        "Each flagged-invoice entry in /root/fraud_report.json includes the specific rule(s) that triggered the flag and the matching context (e.g., the vendor name as it appeared on the invoice, the nearest approved-vendor match or absence thereof, and the PO reference or its absence) so that the flag is auditable."
+      ]
+    },
+    {
+      "name": "JAX computing tasks",
+      "objective": "Read every task in problem.json, load its referenced input, implement the described computation with JAX, and save each result to the task's specified output path.",
+      "p0": [
+        "Every task entry in problem.json is parsed such that its fields (input reference, computation description, output path) are accessible as structured data.",
+        "For each task, the data at the referenced input location is loaded and in memory, matching the format expected by the task's computation description.",
+        "For each task, the computation specified in the task is implemented using JAX (jax.numpy or equivalent JAX primitives) and produces a result that is numerically correct per the task's description.",
+        "For each task, a file exists at the task's specified output path containing the computed result in the expected format."
+      ]
+    },
+    {
+      "name": "LaTeX formula extraction",
+      "objective": "Extract every display formula from latex_paper.pdf as render-equivalent one-line $$...$$ Markdown, remove trailing tags and punctuation, append only syntax-corrected variants for genuinely malformed formulas, and save /root/latex_formula_extraction.md.",
+      "p0": [
+        "Every display formula present in latex_paper.pdf appears in the output file — the set of formulas in the .md file is a superset of (and only adds corrected variants for) the formulas found in the PDF.",
+        "Each extracted formula is written on a single line enclosed in exactly one pair of $$ delimiters, with no line breaks inside the delimiter pair.",
+        "Each formula, when rendered, produces output visually identical to the corresponding formula in the PDF source (same mathematical content, same structure).",
+        "No formula in the output file ends with any trailing punctuation character (period, comma, colon, semicolon) or trailing tag (e.g., a stray label, closing brace fragment) that was not part of the mathematical content.",
+        "A corrected variant (also one-line $$...$$) appears immediately after a formula if and only if that formula contains a genuine LaTeX syntax error preventing rendering; every corrected variant itself parses without error.",
+        "A file exists at the exact path /root/latex_formula_extraction.md containing all the above formulas."
+      ]
+    },
+    {
+      "name": "multi-city road trip",
+      "objective": "Build a seven-day itinerary for two people leaving Minneapolis and visiting three Ohio cities within a $5,100 budget. Accommodations must be pet-friendly, meals must cover four requested cuisines, and the trip must not use flights. Use real-world data rather than remembered places.",
+      "p0": [
+        "The final itinerary presents a day-by-day schedule spanning exactly 7 consecutive days, from departure out of Minneapolis through return.",
+        "All costs, lodging configurations, and meal portions in the itinerary are calculated for exactly 2 travelers.",
+        "The itinerary's origin is Minneapolis, MN, and the trip begins and ends there.",
+        "Exactly 3 distinct cities within the state of Ohio appear as destinations in the itinerary.",
+        "The itemized total of all listed trip expenses (transportation, lodging, meals, activities) does not exceed $5,100.",
+        "Every overnight lodging property named in the itinerary explicitly advertises a pet-friendly policy, as stated by that specific property.",
+        "The meal plan across the 7 days includes dining that represents 4 distinct cuisines as specified by the travelers.",
+        "No segment of the transportation plan involves air travel; all inter-city and intra-city movement is accomplished by ground transport (e.g., car, train, bus).",
+        "Every named establishment (hotel, restaurant, attraction) in the itinerary is a real, currently operating business verified against real-world data sources, not fabricated or recalled from model memory."
+      ]
+    },
+    {
+      "name": "Word offer letter generation",
+      "objective": "Fill the placeholders in offer_letter_template.docx from employee_data.json, conditionally retain relocation content only when applicable while removing its markers, and save /root/offer_letter_filled.docx.",
+      "p0": [
+        "Every placeholder token in offer_letter_template.docx that maps to a key in employee_data.json is replaced in the output with the corresponding value from that JSON file.",
+        "All non-placeholder text and formatting from the original template are preserved unchanged in the output document.",
+        "If employee_data.json indicates relocation is applicable, the relocation content section appears in the output document.",
+        "If employee_data.json indicates relocation is not applicable, the relocation content section is absent from the output document.",
+        "No conditional or block markers (e.g., {{#relocation}}, {{/relocation}}) remain anywhere in the output document, regardless of whether the relocation section is included or excluded.",
+        "The file /root/offer_letter_filled.docx exists, is a valid .docx document, and can be opened without corruption errors."
+      ]
+    },
+    {
+      "name": "organize mixed research files",
+      "objective": "Classify more than 100 PDF, PPTX, and DOCX files by content into exactly five named subject folders, place every file in exactly one folder, and do not rename or modify any file.",
+      "p0": [
+        "Exactly five folders exist, each bearing a name that designates a distinct subject category.",
+        "More than 100 files of types PDF, PPTX, and DOCX are present in the working set to be classified.",
+        "Every one of those files resides in exactly one of the five folders: no file is left outside the folders, and no file appears in more than one folder.",
+        "The folder assigned to each file corresponds to the subject matter contained in that file's content, not to its filename, extension, or origin.",
+        "Every file retains its original filename; no file has been renamed.",
+        "Every file's content is byte-for-byte identical to its original state; no file has been modified."
+      ]
+    },
+    {
+      "name": "academic paper anonymization",
+      "objective": "Redact names, affiliations, arXiv identifiers, accepted venues, and any other authorship leaks from /root/paper1.pdf through /root/paper3.pdf, while allowing self-citations after other identity clues are removed, and save the redacted PDFs under /root/redacted/.",
+      "p0": [
+        "A directory /root/redacted/ exists and contains one redacted PDF corresponding to each of /root/paper1.pdf, /root/paper2.pdf, and /root/paper3.pdf (e.g., /root/redacted/paper1.pdf, /root/redacted/paper2.pdf, /root/redacted/paper3.pdf).",
+        "Each redacted PDF is a valid, renderable PDF file whose non-authorship text, figures, tables, and mathematical content are preserved from the source.",
+        "No author name (full name, initials, or common abbreviation of an author) appears in the text layer, annotations, or PDF metadata (Title, Author, Creator, Producer, Subject, Keywords fields) of any redacted PDF.",
+        "No institutional affiliation, department name, university name, company name, or other organizational entity tied to the paper's authors appears anywhere in the text layer or PDF metadata of any redacted PDF.",
+        "No arXiv identifier (in any form such as arXiv:NNNN.NNNNN, arXiv preprint arXiv:…, or a DOI derived from arXiv) appears in any redacted PDF.",
+        "No accepted-venue information—conference or journal names, phrases such as 'accepted at', 'to appear in', 'published in', 'camera-ready', 'proceedings of', or equivalent—appears in any redacted PDF.",
+        "No other authorship-identifying information remains in any redacted PDF, including but not limited to: author e-mail addresses, ORCID iDs, 'corresponding author' or 'senior author' labels, acknowledgments or footnotes that name specific individuals or funding tied to a named person, 'our previous work' phrasing that directly identifies the authors, and any watermark, signature, or cover-page element revealing authorship.",
+        "Self-citations (references in the bibliography or in-text citations to the authors' own prior publications) are present in the redacted PDFs, and each such entry contains no author name, affiliation, arXiv identifier, or accepted-venue string—only the non-identifying bibliographic details (title, year, and any remaining venue-neutral information) are retained.",
+        "All identity-removal is applied consistently: after redaction, no combination of remaining text strings (e.g., a unique paper title paired with a year, a distinctive acronym, or a project name) can be used to re-identify the authors by cross-referencing public sources."
+      ]
+    },
+    {
+      "name": "PDF and Excel employee diff",
+      "objective": "Compare the old employee table in /root/employees_backup.pdf with /root/employees_current.xlsx, report deleted and field-modified records with correctly typed values, sort results by employee ID, and write the exact required JSON schema to /root/diff_report.json.",
+      "p0": [
+        "The old employee data is extracted from /root/employees_backup.pdf as structured records with employee ID and all field values correctly parsed and typed (numeric fields as numbers, text fields as strings, dates in their native format).",
+        "The current employee data is extracted from /root/employees_current.xlsx as structured records with employee ID and all field values correctly parsed and typed (numeric fields as numbers, text fields as strings, dates in their native format).",
+        "Every record present in the old table but absent from the current table (by employee ID) is identified and listed as a deleted record, including the full field values from the old table.",
+        "Every record present in both the old and current tables (by employee ID) is compared field-by-field, and any record with at least one differing field value is identified as modified, listing the specific fields that changed along with their old and new values.",
+        "All values in the diff report carry the correct data type matching the source columns (e.g., integer/float for numeric columns, string for name/text columns) rather than uniformly stringified representations.",
+        "Both the deleted-records list and the modified-records list are sorted in ascending order by employee ID.",
+        "The file /root/diff_report.json exists and contains valid JSON that conforms to the required schema (with keys for deleted records and modified records, each containing employee ID, and for modified records the old/new values per changed field), with no extraneous top-level keys and no missing required keys."
+      ]
+    },
+    {
+      "name": "pgvector support",
+      "objective": "Clone \"https://github.com/joaoscheuermann/doric\" and add pgvector support to package/victor.",
+      "p0": [
+        "A local directory exists whose Git repository has its origin remote set to 'https://github.com/joaoscheuermann/doric' and whose HEAD matches the upstream default branch at the time of cloning.",
+        "The file tree under package/victor contains source code that imports or references the pgvector extension (e.g., a dependency declaration, a SQL statement using the 'vector' or 'l2_distance'/'cosine_distance' operator, or a type/struct that maps to a pgvector column), demonstrating that the package can store or query vector embeddings via Postgres.",
+        "The package/victor directory builds (compiles, passes syntax checks, or installs) without errors after the pgvector-related changes are applied.",
+        "At least one test or executable code path within package/victor exercises the pgvector-backed functionality (e.g., inserting a vector, performing a similarity search, or declaring the 'vector(n)' column type in a migration), and that path executes successfully against a Postgres instance with the pgvector extension available."
+      ]
+    },
+    {
+      "name": "powerlifting DOTS coefficients",
+      "objective": "In /root/data/openipf.xlsx, copy the required lifter fields into the existing Dots sheet and use Excel formulas with three-digit precision to calculate TotalKg and DOTS coefficients without changing the source ordering or column names.",
+      "p0": [
+        "The existing 'Dots' sheet in /root/data/openipf.xlsx contains the required lifter fields as copied cell values (not external references or hyperlinks) drawn from the source data.",
+        "The TotalKg column in the Dots sheet holds an in-cell Excel formula (visible on formula-bar inspection) that sums the applicable bodyweight components rather than a hardcoded numeric constant.",
+        "The DOTS coefficient column(s) in the Dots sheet hold in-cell Excel formulas (visible on formula-bar inspection) that derive each coefficient from the lifter fields rather than hardcoded numeric constants.",
+        "Every formula that produces a TotalKg or DOTS-coefficient value wraps its computation in a three-digit precision function (e.g., ROUND(expr, 3)) so the displayed and stored result carries exactly three decimal places.",
+        "The sequence of data rows in the Dots sheet is identical, top to bottom, to the sequence of the corresponding rows in the source, with no reordering, insertion, or omission.",
+        "The header row (column names) in the Dots sheet matches the source column names character-for-character, with no renaming, abbreviation, reordering, or addition of headers that were not present in the source."
+      ]
+    },
+    {
+      "name": "PowerPoint reference formatting",
+      "objective": "Find all dangling paper titles in /root/Awesome-Agent-Papers.pptx, apply the specified Arial 16 gray non-bold bottom-centered one-line formatting, and append a deduplicated auto-numbered Reference slide before saving the processed presentation.",
+      "p0": [
+        "Every text element in the presentation identified as a dangling paper title has been located and its position (slide index, shape name/ID, original text) recorded, such that no dangling title remains unprocessed and no non-dangling element is mistakenly treated as one.",
+        "Each identified dangling paper title text frame uses the Arial typeface at exactly 16 pt with regular (non-bold) weight and a gray fill color (RGB 80,80,80 or an equivalent recognized gray), confirmed by inspecting the resulting XML run properties (a:rPr) for font attributes.",
+        "Each identified dangling paper title text frame is vertically positioned at the bottom of its parent slide, horizontally centered within the slide width, and constrained to render on a single line (no word-wrap, single line-height), verified by the shape's off/ext and bodyPr (anchor=ctr or b, wrap=none, spcBef=0, single line) in the saved XML.",
+        "A new Reference slide is appended as the final slide of the presentation, containing a deduplicated list of all referenced paper titles (no two list entries share the same normalized title string) in the order of first appearance, each prefixed with a sequential number starting at 1, and the slide is saved to disk.",
+        "The processed file is written back to /root/Awesome-Agent-Papers.pptx (or a clearly specified output path) and can be opened without repair warnings, with all previously intact slides and content preserved unchanged except for the formatted dangling titles and the appended Reference slide."
+      ]
+    },
+    {
+      "name": "production migration",
+      "objective": "Deploy the new billing service version to production without interrupting active checkouts. The release includes a database migration.",
+      "p0": [
+        "The production database schema reflects the migrated state required by the new billing service version, and the migration completed without errors (verifiable via migration state table / schema version check and data-integrity validation).",
+        "The database schema after migration remains fully readable and writable by the currently running (pre-deployment) billing service version, so no existing request path breaks during the transition (verifiable by confirming the old version's queries and writes succeed against the new schema before any new code is deployed).",
+        "The new billing service version is deployed and registered as healthy in the production environment, receiving routing traffic for billing requests (verifiable via service-mesh / load-balancer health checks and version-tag inspection).",
+        "Throughout the entire deployment and migration window, the checkout success rate and latency remain within the established production baseline with zero 5xx responses, connection resets, or dropped in-flight transactions attributable to the release (verifiable via APM / transaction-tracing dashboards covering the deployment time window).",
+        "No in-flight checkout session is orphaned, duplicated, or left in an inconsistent state as a result of the service version change or schema migration (verifiable by confirming all checkout transactions initiated before the deployment window completed normally with matching payment, order, and billing records).",
+        "The new billing service version is handling 100% of production billing traffic and the pre-deployment version has been fully decommissioned (verifiable via traffic-routing configuration and absence of the old version in the active pod/container set).",
+        "Post-deployment functional verification confirms that end-to-end billing flows (charge, refund, subscription update) succeed under production load conditions (verifiable via synthetic transactions or monitored request-success metrics for a defined stabilization period after cutover)."
+      ]
+    },
+    {
+      "name": "gold reserves at risk",
+      "objective": "Populate the supplied workbook with IMF gold prices and reserve data, calculate log returns, three- and twelve-month volatility, gold exposure, and reserves at risk using Excel formulas only, and save /root/output/rar_result.xlsx.",
+      "p0": [
+        "The file /root/output/rar_result.xlsx exists, is a valid .xlsx workbook, and can be opened by a spreadsheet application without repair or error.",
+        "The workbook contains a column of IMF gold prices (in USD per ounce) and a column of gold reserve data (e.g., tonnes or value) where every data cell holds a numeric value consistent with published IMF sources for the covered period.",
+        "A column of log returns is present where each cell equals LN(P_t / P_{t-1}) (or equivalently LN(P_t) − LN(P_{t-1})) computed via an Excel formula referencing the two adjacent gold-price cells, with the first period left blank or marked N/A.",
+        "A column of three-month rolling volatility is present where each cell equals the standard deviation (STDEV or STDEV.S) of the three most recent log-return values, expressed as an Excel formula referencing that three-cell window, with insufficient-data rows left blank.",
+        "A column of twelve-month rolling volatility is present where each cell equals the standard deviation of the twelve most recent log-return values, expressed as an Excel formula referencing that twelve-cell window, with insufficient-data rows left blank.",
+        "A column of gold exposure is present where each cell is computed by an Excel formula that multiplies (or otherwise combines) the gold price level (or change) with the reserve quantity for that period, yielding a monetary value representing the notional gold position.",
+        "A column of reserves at risk is present where each cell is computed by an Excel formula that applies the applicable volatility measure (three-month or twelve-month) to the gold exposure, yielding a risk-adjusted monetary figure for that period.",
+        "Every calculated cell (log returns, volatilities, gold exposure, reserves at risk) contains a live Excel formula (e.g., =LN(...), =STDEV(...), =A2*B2) rather than a pasted or typed constant, as verified by inspecting the formula bar or the saved XML.",
+        "The workbook is saved at the exact path /root/output/rar_result.xlsx with the correct file extension and non-zero file size."
+      ]
+    },
+    {
+      "name": "demographic pivot analysis",
+      "objective": "Combine population data from /root/population.pdf with /root/income.xlsx into /root/demographic_analysis.xlsx containing the four specified pivot tables plus enriched source data with income quartiles and EARNERS times MEDIAN_INCOME.",
+      "p0": [
+        "The file /root/demographic_analysis.xlsx exists and is a valid .xlsx workbook that opens without corruption.",
+        "Population data originally contained in /root/population.pdf is present in the output workbook as structured, tabular data (rows and columns with identifiable fields such as region/area and population count).",
+        "Income data originally contained in /root/income.xlsx is present in the output workbook as structured, tabular data.",
+        "The output workbook contains exactly four distinct pivot-table sheets (or named pivot-table objects), each representing a different analytical cross-tabulation of the combined dataset.",
+        "The enriched source data in the output workbook includes computed income-quartile boundaries (Q1, Q2, Q3, Q4) for the income distribution, and each record is assigned to a quartile label.",
+        "The enriched source data in the output workbook includes a derived column equal to EARNERS × MEDIAN_INCOME for every record, with values that are arithmetically consistent with the corresponding EARNERS and MEDIAN_INCOME columns.",
+        "The population data and income data are joined on a shared key (e.g., geographic unit) so that each combined record carries both population and income attributes, and no records from either source are silently dropped due to the join."
+      ]
+    },
+    {
+      "name": "SEC 13F hedge-fund report",
+      "objective": "Analyze the supplied Q2 and Q3 2025 SEC 13F datasets to answer the Renaissance AUM and holdings questions, Berkshire's top five increased positions, and Palantir's top three fund managers, then write the exact answers.json schema.",
+      "p0": [
+        "A numerical AUM value for Renaissance Technologies (or Renaissance Medallion Fund) is stated, derived from the Q2 2025 and Q3 2025 13F data, with the specific quarter(s) it refers to explicitly identified.",
+        "A holdings count or total market value figure for Renaissance Technologies (or Renaissance Medallion Fund) is stated, derived from the supplied 13F datasets, with the reporting period explicitly identified.",
+        "The top five positions at Berkshire Hathaway that increased from Q2 2025 to Q3 2025 are enumerated by ticker, with the magnitude of increase (shares or dollar value) stated for each, ordered from largest increase to smallest.",
+        "The top three fund managers (by shares held or market value) holding Palantir (PLTR) as of Q3 2025 are enumerated, each identified by fund name and/or CIK, with the position size stated.",
+        "A file named answers.json exists whose structure matches the exact schema specified in the task (field names, types, nesting), containing the values determined by the preceding goals.",
+        "All figures in answers.json are traceable to the supplied Q2 2025 and Q3 2025 13F datasets without introducing external or assumed data."
+      ]
+    },
+    {
+      "name": "seismic phase picking",
+      "objective": "Process 100 supplied NPZ earthquake traces, choose and apply methods that maximize P- and S-arrival F1, and write file_name, phase, and pick_idx rows to /root/results.csv with P F1 at least 0.7 and S F1 at least 0.6.",
+      "p0": [
+        "/root/results.csv exists, is parseable as CSV, and its header row contains exactly the columns file_name, phase, and pick_idx.",
+        "For every one of the 100 supplied NPZ earthquake traces, at least one data row in /root/results.csv has file_name equal to that trace's filename.",
+        "Every data row in /root/results.csv has phase equal to 'P' or 'S', and pick_idx is a non-negative integer.",
+        "The set of rows with phase='P' scored as (file_name, pick_idx) predictions against ground-truth P-arrivals yields an F1 of at least 0.7.",
+        "The set of rows with phase='S' scored as (file_name, pick_idx) predictions against ground-truth S-arrivals yields an F1 of at least 0.6."
+      ]
+    },
+    {
+      "name": "Georgia demand-side investment shock",
+      "objective": "Use Excel only to collect IMF and Georgian supply-use data, populate and formula-link the supplied workbook, model an eight-year USD 6.5 billion investment under the stated baseline and two alternative demand scenarios, and save test_demand.xlsx with formulas intact.",
+      "p0": [
+        "Data sourced from IMF for the relevant Georgia indicators is present in the workbook cells, identifiable as an input block.",
+        "Georgian supply-use table data is present in the workbook cells, identifiable as an input block.",
+        "Every designated input and calculation cell in the supplied workbook template is populated (no required cell left blank or containing placeholder text).",
+        "Calculation and link cells in the workbook contain Excel formulas (e.g., =, cell references, SUM, IF, VLOOKUP) rather than hardcoded numeric or text values, so that altering an upstream input cell changes all dependent downstream cells.",
+        "The investment model spans exactly eight consecutive years, with year-over-year columns or rows for each of the 8 periods.",
+        "The total investment amount in the model equals USD 6.5 billion (6,500,000,000) in the base-case figures.",
+        "A baseline demand scenario is modeled, with its own set of demand-side assumptions and resulting outputs distinct from the alternatives.",
+        "Two alternative demand scenarios are modeled, each with demand assumptions that differ from the baseline, producing separate output rows or sheets.",
+        "The final file is saved under the filename test_demand.xlsx.",
+        "The saved test_demand.xlsx file retains all formulas in live (not pasted-as-values) form, verifiable by opening the file in Excel and observing that formula-referencing cells display their formulas in the formula bar and recompute when inputs change."
+      ]
+    },
+    {
+      "name": "Georgia supply-side investment shock",
+      "objective": "Use Excel only to populate the supplied workbook from PWT, IMF, and ECB data, estimate depreciation, solve an HP-filtered Cobb-Douglas potential-output model, project the investment effect through 2041 with formulas intact, and save test-supply.xlsx.",
+      "p0": [
+        "The workbook contains data cells populated from PWT (Penn World Table) for the required variables (e.g., output, capital, labor) with values traceable to the PWT dataset.",
+        "The workbook contains data cells populated from IMF sources (e.g., WEO or BOP data) for the required variables, distinct from the PWT cells.",
+        "The workbook contains data cells populated from ECB sources (e.g., Main Economic Indicators or Statistical Data Warehouse) for the required variables, distinct from the PWT and IMF cells.",
+        "A depreciation series (or depreciation rate) is computed in the workbook using a stated method (e.g., perpetual inventory from investment and capital stock), with the result visible in designated cells.",
+        "An HP filter is applied to the relevant series (e.g., log of output) within Excel, producing both a trend component and a cyclical component as separate, visible series.",
+        "A Cobb-Douglas production function (Y = A · K^α · L^β) is estimated on the HP-filtered (demeaned) data, with the coefficients for capital elasticity (α), labor elasticity (β), and the log of TFP (A) computed and displayed in the workbook.",
+        "The potential-output model includes a projection of the investment effect that extends the time series through the year 2041, with 2041 as the final column or row of the projection.",
+        "All computed cells (depreciation, HP-filter components, regression coefficients, projections) contain live Excel formulas rather than hardcoded numeric values, so that changing an input cell propagates through the model.",
+        "The final workbook is saved with the exact filename test-supply.xlsx."
+      ]
+    },
+    {
+      "name": "Spring Boot migration",
+      "objective": "Migrate a user-management microservice from Java 8 and Spring Boot 2.7 to Java 21 and Spring Boot 3.2. Preserve CRUD, JWT authentication, role-based access, JPA persistence, validation, and external API behavior. Handle Jakarta namespaces, Hibernate 6, Spring Security 6, replace RestTemplate with RestClient, and pass mvn clean compile and mvn test.",
+      "p0": [
+        "The Maven build targets Java 21: the `maven.compiler.release` (or equivalent) property in the POM is set to 21, and `mvn clean compile` exits with status code 0 with no compilation errors or warnings related to deprecated or removed Java 8-era APIs.",
+        "The project's parent/BOM dependency declares Spring Boot 3.2.x, and all Spring Framework, Spring Security, Spring Data JPA, and related transitive dependencies resolve to versions compatible with that Boot release.",
+        "No source file contains an import of `javax.persistence`, `javax.servlet`, `javax.validation`, or `javax.annotation`; all formerly-Jakarta-EE namespace references use the `jakarta.*` equivalent, and the application context loads without `ClassNotFound` or `NoClassDefFoundError` on startup.",
+        "JPA entity mappings and Spring Data JPA repository interfaces compile and run against Hibernate 6 (the version managed by Spring Boot 3.2), with all entity relationships, constraints, and lifecycle callbacks behaving identically to the Java 8 / Hibernate 5 baseline.",
+        "Spring Security configuration uses the Spring Security 6 programming model (`SecurityFilterChain` bean with `HttpSecurity` lambda DSL, `AuthenticationManager`/`AuthenticationProvider` wiring as applicable), the JWT filter intercepts and validates tokens, and a request with a valid JWT returns 200 while a request with a missing or expired JWT returns 401.",
+        "Role-based access control is enforced: an authenticated user holding a role that is not permitted for a given endpoint receives 403, and an authenticated user holding the required role receives the expected success status, matching the pre-migration authorization matrix.",
+        "All REST endpoints that performed create, read, update, and delete on user resources return the same HTTP status codes, response body structure, and side-effects (e.g., 201 with body on create, 200 with body on read, 200 or 204 on update, 204 on delete) as the pre-migration service.",
+        "Bean validation (e.g., `@NotNull`, `@Size`, `@Email`, custom validators) on request DTOs produces identical validation error responses (status 400 with the same field-level messages and structure) for invalid input as the pre-migration service.",
+        "No source file references `RestTemplate` or `org.springframework.web.client.RestTemplate`; all outbound HTTP calls to external services use `org.springframework.web.client.RestClient`, and the external API integration tests (or contract tests) that verify those outbound interactions pass.",
+        "The external API contract is preserved: every endpoint path, HTTP method, accepted request headers, accepted and returned content types, and response JSON/XML schema are unchanged relative to the pre-migration service, as verified by the existing integration or contract test suite.",
+        "`mvn clean test` exits with status code 0: all unit tests, integration tests (including those exercising CRUD flows, JWT authentication, role-based authorization, validation error paths, and JPA persistence round-trips), and any external-API interaction tests pass without failures or errors.",
+        "`mvn clean compile` exits with status code 0: the full source set compiles under the Java 21 toolchain with Spring Boot 3.2 dependencies, producing class files that the Spring Boot 3.2 application loader can execute."
+      ]
+    },
+    {
+      "name": "GCC weighted net exports",
+      "objective": "Work only in the existing sheets of gdp.xlsx, use the required lookup combinations and Excel formulas to calculate six GCC countries' net exports statistics and GDP-weighted mean, preserve formatting, and add no macros or VBA.",
+      "p0": [
+        "The workbook gdp.xlsx is modified only within sheets that already exist in that workbook, and no additional sheets are added.",
+        "For each of the six GCC countries, an existing sheet cell contains an Excel formula that applies the required lookup combinations to calculate that country's net exports statistic.",
+        "An existing sheet cell contains an Excel formula that calculates the GDP-weighted mean using the six GCC countries' GDP values and net exports statistics.",
+        "All required calculations are expressed as Excel formulas rather than hardcoded values, except for cells that already contain input data.",
+        "The workbook's original formatting, sheet names, cell positions not intentionally changed, and overall workbook appearance remain unchanged except for the required formula inputs and calculated results.",
+        "The final workbook contains no macros, VBA code, macro-enabled features, or script-based automation, and it can be saved and evaluated as a standard Excel workbook."
+      ]
+    },
+    {
+      "name": "NASA budget spreadsheet recovery",
+      "objective": "Recover every value marked ??? in nasa_budget_incomplete.xlsx by analyzing cross-sheet relationships, replace each marker with the computed numeric value, and save nasa_budget_recovered.xlsx.",
+      "p0": [
+        "All cells across every sheet in nasa_budget_incomplete.xlsx that contain the literal string '???' have been identified, and their total count is established.",
+        "The numeric and/or formulaic relationships (references, arithmetic, aggregations, ratios) that link the affected cells to other cells within and across sheets have been determined from the workbook's existing data and structure.",
+        "A file named nasa_budget_recovered.xlsx exists and is a valid, openable .xlsx workbook.",
+        "nasa_budget_recovered.xlsx contains zero cells whose value is the literal string '???'.",
+        "Every cell in nasa_budget_recovered.xlsx that corresponded to a '???' cell in the source file now holds a numeric value (an integer or floating-point number, not text, not a formula string).",
+        "Each recovered numeric value is arithmetically consistent with the cross-sheet relationships: re-evaluating the inferred formula using the surrounding known values yields the placed number.",
+        "All cells in nasa_budget_recovered.xlsx that were not marked '???' in the source retain their original values, types, and formatting unchanged."
+      ]
+    }
+  ]
+}
