@@ -77,8 +77,10 @@ export const loadSkills = async ({ skills = [], skillUrls = [] }) => [
   ...(await Promise.all(
     skillUrls.map(async (url) => {
       const response = await fetch(url);
+
       if (!response.ok)
-        throw new Error(`Could not load external skill: ${url}`);
+        {throw new Error(`Could not load external skill: ${url}`);}
+
       return response.text();
     }),
   )),

@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  StateMachineError,
   createStateMachine,
+  StateMachineError,
   type StateMachineErrorCode,
   type StateMachineHandler,
 } from '../src/index.js';
@@ -30,7 +30,9 @@ test('infers available handlers from the initialized object', () => {
     start: (state, context, { transition }) => {
       const count: number = state.count;
       const runId: string = context.runId;
+
       void count;
+
       void runId;
 
       // @ts-expect-error transitions require the configured state object type.
@@ -62,10 +64,12 @@ test('infers available handlers from the initialized object', () => {
     });
 
     const supported: StateMachineErrorCode = 'handler_failed';
+
     void supported;
 
     // @ts-expect-error lifecycle errors are not reusable-definition errors.
     const removed: StateMachineErrorCode = 'concurrent_dispatch';
+
     void removed;
   };
 
@@ -75,6 +79,7 @@ test('infers available handlers from the initialized object', () => {
 test('copies the explicitly supplied state before calling the next handler', async () => {
   const received: State[] = [];
   const supplied: State[] = [];
+
   const definition = createStateMachine<
     Context,
     State,
@@ -83,21 +88,27 @@ test('copies the explicitly supplied state before calling the next handler', asy
   >()({
     start: async (state, _context, { transition }) => {
       received.push(state);
+
       await Promise.resolve();
 
       const next = { count: state.count + 1 };
+
       supplied.push(next);
+
       return transition('middle', next);
     },
     middle: (state, _context, { transition }) => {
       received.push(state);
 
       const next = { count: state.count + 1 };
+
       supplied.push(next);
+
       return transition('done', next);
     },
     done: (state, context, { finish }) => {
       received.push(state);
+
       return finish(`${context.runId}:${state.count}`);
     },
   });
@@ -111,9 +122,13 @@ test('copies the explicitly supplied state before calling the next handler', asy
   });
 
   assert.equal(received.length, 3);
+
   assert.strictEqual(received[0], initial);
+
   assert.notStrictEqual(received[1], supplied[0]);
+
   assert.notStrictEqual(received[2], supplied[1]);
+
   assert.deepEqual(result, {
     status: 'finished',
     value: 'chain:2',
@@ -125,6 +140,7 @@ test('copies the explicitly supplied state before calling the next handler', asy
 
 test('returns the exact domain failure and current state', async () => {
   const failure: DomainFailure = { code: 'cancelled' };
+
   const definition = createStateMachine<
     Context,
     State,
@@ -133,6 +149,7 @@ test('returns the exact domain failure and current state', async () => {
   >()({
     start: (state, _context, { fail }) => {
       state.count += 1;
+
       return fail(failure);
     },
   });
@@ -148,14 +165,18 @@ test('returns the exact domain failure and current state', async () => {
 
   if (result.status === 'failed') {
     assert.equal(result.error, failure);
+
     assert.equal(result.handler, 'start');
+
     assert.deepEqual(result.state, { count: 1 });
+
     assert.equal(result.context, context);
   }
 });
 
 test('preserves a thrown handler value as the engine error cause', async () => {
   const thrown = { reason: 'boom' };
+
   const definition = createStateMachine<Context, State>()({
     start: () => {
       throw thrown;
@@ -172,8 +193,11 @@ test('preserves a thrown handler value as the engine error cause', async () => {
 
   if (result.status === 'error') {
     assert.ok(result.error instanceof StateMachineError);
+
     assert.equal(result.error.data.code, 'handler_failed');
+
     assert.equal(result.error.cause, thrown);
+
     assert.equal(result.handler, 'start');
   }
 });
@@ -187,14 +211,18 @@ test('reuses one definition for independent concurrent runs', async () => {
   const definition = createStateMachine<Context, ConcurrentState, string>()({
     start: async (state, context, { finish }) => {
       await state.gate;
+
       return finish(`${context.runId}:${state.value}`);
     },
   });
   let releaseFirst: () => void = () => undefined;
+
   let releaseSecond: () => void = () => undefined;
+
   const firstGate = new Promise<void>((resolve) => {
     releaseFirst = resolve;
   });
+
   const secondGate = new Promise<void>((resolve) => {
     releaseSecond = resolve;
   });
@@ -204,6 +232,7 @@ test('reuses one definition for independent concurrent runs', async () => {
     state: { value: 'one', gate: firstGate },
     context: { runId: 'first' },
   });
+
   const second = definition.run({
     initial: 'start',
     state: { value: 'two', gate: secondGate },
@@ -211,14 +240,18 @@ test('reuses one definition for independent concurrent runs', async () => {
   });
 
   releaseSecond();
+
   const secondResult = await second;
+
   releaseFirst();
+
   const firstResult = await first;
 
   assert.equal(
     firstResult.status === 'finished' ? firstResult.value : undefined,
     'first:one',
   );
+
   assert.equal(
     secondResult.status === 'finished' ? secondResult.value : undefined,
     'second:two',
@@ -244,6 +277,7 @@ test('returns an engine error when a handler returns an invalid action', async (
 
   if (result.status === 'error') {
     assert.equal(result.error.data.code, 'invalid_handler_return');
+
     assert.equal(result.handler, 'start');
   }
 });
@@ -265,6 +299,7 @@ test('defensively returns an engine error when a handler is missing', async () =
 
   if (result.status === 'error') {
     assert.equal(result.error.data.code, 'missing_handler');
+
     assert.equal(result.handler, 'start');
   }
 });

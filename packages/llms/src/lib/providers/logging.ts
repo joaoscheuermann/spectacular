@@ -6,14 +6,15 @@ import type {
   ProviderFinished,
   ProviderRequest,
   ProviderRerankRequest,
-  ProviderStructuredFinished,
   ProviderStreamEvent,
+  ProviderStructuredFinished,
   StructuredOutputSchema,
   StructuredOutputValue,
   UsageMetadata,
 } from '../types/provider.js';
 
 type Fields = Readonly<Record<string, unknown>>;
+
 type Terminal = 'completed' | 'failed' | 'cancelled';
 
 const operationNames = {
@@ -33,11 +34,14 @@ export const withProviderLogging = (
   logger: Logger,
 ): LlmProvider => {
   assertLogger(logger);
+
   const log = logger.child({
     component: 'llms',
     provider: provider.metadata.id,
   });
+
   assertLogger(log);
+
   log.debug('llm provider initialized');
 
   async function complete<Schema extends StructuredOutputSchema>(
@@ -45,9 +49,11 @@ export const withProviderLogging = (
       readonly schema: Schema;
     },
   ): Promise<ProviderStructuredFinished<StructuredOutputValue<Schema>>>;
+
   async function complete<Output = JsonValue>(
     request: ProviderRequest<Output>,
   ): Promise<ProviderFinished<Output>>;
+
   async function complete<Output = JsonValue>(
     request: ProviderRequest<Output>,
   ): Promise<ProviderFinished<Output>> {
@@ -67,9 +73,11 @@ export const withProviderLogging = (
       readonly schema: Schema;
     },
   ): AsyncIterable<ProviderStreamEvent<StructuredOutputValue<Schema>>>;
+
   function stream<Output = JsonValue>(
     request: ProviderRequest<Output>,
   ): AsyncIterable<ProviderStreamEvent<Output>>;
+
   function stream<Output = JsonValue>(
     request: ProviderRequest<Output>,
   ): AsyncIterable<ProviderStreamEvent<Output>> {
@@ -151,7 +159,9 @@ const loggedPromise = async <Result>(
 
   try {
     const result = await execute();
+
     debug(logger, operation, 'completed', completedFields(result), sensitive);
+
     return result;
   } catch (error) {
     debug(
@@ -161,6 +171,7 @@ const loggedPromise = async <Result>(
       {},
       sensitive,
     );
+
     throw error;
   }
 };
@@ -172,16 +183,20 @@ async function* loggedStream<Output>(
 ): AsyncIterable<ProviderStreamEvent<Output>> {
   const sensitive = request.flags?.sensitiveOutput === true;
   let terminal = false;
+
   debug(logger, 'stream', 'started', requestFields(request), sensitive);
 
   try {
     for await (const event of source) {
       if (!terminal && event.type === 'error') {
         terminal = true;
+
         debug(logger, 'stream', 'failed', {}, sensitive);
       } else if (!terminal && event.type === 'response.finished') {
         terminal = true;
+
         const status = terminalFromFinish(event.finish);
+
         debug(logger, 'stream', status, finishFields(event.finish), sensitive);
       }
 
@@ -190,11 +205,13 @@ async function* loggedStream<Output>(
 
     if (!terminal) {
       terminal = true;
+
       debug(logger, 'stream', 'completed', {}, sensitive);
     }
   } catch (error) {
     if (!terminal) {
       terminal = true;
+
       debug(
         logger,
         'stream',
@@ -203,6 +220,7 @@ async function* loggedStream<Output>(
         sensitive,
       );
     }
+
     throw error;
   } finally {
     if (!terminal) {

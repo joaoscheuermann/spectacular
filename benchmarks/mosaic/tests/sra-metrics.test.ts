@@ -59,6 +59,7 @@ test('computes recall, set metrics, MRR, nDCG, and cardinality at K', () => {
       cardinalityAbsoluteError: 0,
     },
   );
+
   closeTo(metrics.ndcgAtK, 1 / (1 + 1 / Math.log2(3)));
 });
 
@@ -113,6 +114,7 @@ test('macro-averages pure per-query retrieval metrics', () => {
       meanAbsoluteCardinalityError: 0,
     },
   );
+
   closeTo(summary.ndcgAtK, (1 + 1 / Math.log2(3) / (1 + 1 / Math.log2(3))) / 2);
 });
 
@@ -121,14 +123,17 @@ test('rejects invalid cutoffs, empty batches, and duplicate identifiers', () => 
     () => scoreSraRetrieval(record('query-1', ['a'], ['a']), 0),
     /positive integer/,
   );
+
   assert.throws(
     () => aggregateSraRetrievalMetrics([], 2),
     /at least one retrieval record/,
   );
+
   assert.throws(
     () => scoreSraRetrieval(record('query-1', ['a', 'a'], ['a']), 2),
     /duplicate gold skill_id: a/,
   );
+
   assert.throws(
     () => scoreSraRetrieval(record('query-1', ['a'], ['a', 'a']), 2),
     /duplicate retrieved skill_id: a/,

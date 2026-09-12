@@ -6,7 +6,6 @@ export const PlanningDomainSchema = z.enum([
   'artifacts',
   'communications',
 ]);
-
 export const CompositionClassSchema = z.enum(['A', 'B', 'C', 'D', 'E', 'F']);
 
 const IdSchema = z
@@ -24,12 +23,14 @@ const unique = (
 
 const IdsSchema = z.array(IdSchema).superRefine((values, context) => {
   const message = unique(values, 'Identifiers must be unique.');
-  if (message !== undefined) context.addIssue({ code: 'custom', message });
+
+  if (message !== undefined) {context.addIssue({ code: 'custom', message });}
 });
 
 const NodeIdsSchema = z.array(TextSchema).superRefine((values, context) => {
   const message = unique(values, 'Node identifiers must be unique.');
-  if (message !== undefined) context.addIssue({ code: 'custom', message });
+
+  if (message !== undefined) {context.addIssue({ code: 'custom', message });}
 });
 
 export const PlanningOutputSchema = z
@@ -92,8 +93,9 @@ export const PlanningPhaseCriteriaSchema = z
           roles.map(({ roleId }) => roleId),
           'Criterion role identifiers must be unique.',
         );
+
         if (message !== undefined)
-          context.addIssue({ code: 'custom', message });
+          {context.addIssue({ code: 'custom', message });}
       }),
     dependencyIds: IdsSchema,
     forbiddenBehaviorIds: IdsSchema,
@@ -154,16 +156,20 @@ export const PlanningObservationSchema = z
   .strict()
   .superRefine((value, context) => {
     const ids = value.nodes.map(({ id }) => id);
+
     addUniqueIssue(
       ids,
       context,
       ['nodes'],
       'Observation node IDs must be unique.',
     );
+
     const known = new Set(ids);
+
     value.nodes.forEach((node, index) => {
       node.dependsOn.forEach((dependency, dependencyIndex) => {
-        if (known.has(dependency) && dependency !== node.id) return;
+        if (known.has(dependency) && dependency !== node.id) {return;}
+
         context.addIssue({
           code: 'custom',
           path: ['nodes', index, 'dependsOn', dependencyIndex],
@@ -171,6 +177,7 @@ export const PlanningObservationSchema = z
         });
       });
     });
+
     if (hasCycle(value.nodes)) {
       context.addIssue({
         code: 'custom',
@@ -195,13 +202,17 @@ export const PlanningGraphSchema = z
   .strict()
   .superRefine((value, context) => {
     const ids = value.nodes.map(({ id }) => id);
+
     addUniqueIssue(ids, context, ['nodes'], 'Plan node IDs must be unique.');
+
     const known = new Set(ids);
+
     value.nodes.forEach((node, index) => {
       const duplicate = unique(
         node.dependsOn,
         'Plan dependencies must be unique.',
       );
+
       if (duplicate !== undefined) {
         context.addIssue({
           code: 'custom',
@@ -209,8 +220,10 @@ export const PlanningGraphSchema = z
           message: duplicate,
         });
       }
+
       node.dependsOn.forEach((dependency, dependencyIndex) => {
-        if (known.has(dependency) && dependency !== node.id) return;
+        if (known.has(dependency) && dependency !== node.id) {return;}
+
         context.addIssue({
           code: 'custom',
           path: ['nodes', index, 'dependsOn', dependencyIndex],
@@ -218,6 +231,7 @@ export const PlanningGraphSchema = z
         });
       });
     });
+
     if (hasCycle(value.nodes)) {
       context.addIssue({
         code: 'custom',
@@ -225,6 +239,7 @@ export const PlanningGraphSchema = z
         message: 'Plan dependencies must be acyclic.',
       });
     }
+
     if (!value.nodes.some(({ deliver }) => deliver)) {
       context.addIssue({
         code: 'custom',
@@ -232,11 +247,14 @@ export const PlanningGraphSchema = z
         message: 'At least one terminal node must be deliverable.',
       });
     }
+
     const dependedOn = new Set(
       value.nodes.flatMap(({ dependsOn }) => dependsOn),
     );
+
     value.nodes.forEach((node, index) => {
-      if (!node.deliver || !dependedOn.has(node.id)) return;
+      if (!node.deliver || !dependedOn.has(node.id)) {return;}
+
       context.addIssue({
         code: 'custom',
         path: ['nodes', index, 'deliver'],
@@ -246,15 +264,21 @@ export const PlanningGraphSchema = z
   });
 
 export type PlanningCase = z.output<typeof PlanningCaseSchema>;
+
 export type PlanningDomain = z.output<typeof PlanningDomainSchema>;
+
 export type CompositionClass = z.output<typeof CompositionClassSchema>;
+
 export type PlanningPhaseCriteria = z.output<
   typeof PlanningPhaseCriteriaSchema
 >;
+
 export type PlanningObservation = z.output<typeof PlanningObservationSchema>;
+
 export type PlanningGraph = z.output<typeof PlanningGraphSchema>;
 
 type CaseInput = z.input<typeof PlanningCaseSchema>;
+
 type Refinement = z.RefinementCtx;
 
 const validateCase = (value: CaseInput, context: Refinement): void => {
@@ -264,30 +288,35 @@ const validateCase = (value: CaseInput, context: Refinement): void => {
     ['catalog'],
     'Catalog skill IDs must be unique.',
   );
+
   addUniqueIssue(
     value.catalog.map(({ name }) => name),
     context,
     ['catalog'],
     'Catalog skill names must be unique.',
   );
+
   addUniqueIssue(
     value.gold.outputs.map(({ id }) => id),
     context,
     ['gold', 'outputs'],
     'Output IDs must be unique.',
   );
+
   addUniqueIssue(
     value.gold.behaviors.map(({ id }) => id),
     context,
     ['gold', 'behaviors'],
     'Behavior IDs must be unique.',
   );
+
   addUniqueIssue(
     value.gold.roles.map(({ id }) => id),
     context,
     ['gold', 'roles'],
     'Role IDs must be unique.',
   );
+
   addUniqueIssue(
     value.gold.dependencies.map(({ id }) => id),
     context,
@@ -298,6 +327,7 @@ const validateCase = (value: CaseInput, context: Refinement): void => {
   const outputs = new Set(value.gold.outputs.map(({ id }) => id));
   const behaviors = new Set(value.gold.behaviors.map(({ id }) => id));
   const roles = new Map(value.gold.roles.map((role) => [role.id, role]));
+
   const dependencies = new Map(
     value.gold.dependencies.map((dependency) => [dependency.id, dependency]),
   );
@@ -312,6 +342,7 @@ const validateCase = (value: CaseInput, context: Refinement): void => {
       'Catalog skills must reference known behaviors.',
     ),
   );
+
   value.gold.roles.forEach((role, index) => {
     validateReferences(
       role.outputIds,
@@ -320,6 +351,7 @@ const validateCase = (value: CaseInput, context: Refinement): void => {
       ['gold', 'roles', index, 'outputIds'],
       'Roles must reference known outputs.',
     );
+
     validateReferences(
       role.behaviorIds,
       behaviors,
@@ -328,13 +360,15 @@ const validateCase = (value: CaseInput, context: Refinement): void => {
       'Roles must reference known behaviors.',
     );
   });
+
   value.gold.dependencies.forEach((dependency, index) => {
     if (
       roles.has(dependency.beforeRoleId) &&
       roles.has(dependency.afterRoleId) &&
       dependency.beforeRoleId !== dependency.afterRoleId
     )
-      return;
+      {return;}
+
     context.addIssue({
       code: 'custom',
       path: ['gold', 'dependencies', index],
@@ -349,6 +383,7 @@ const validateCase = (value: CaseInput, context: Refinement): void => {
     ['gold', 'relevantSkillIds'],
     'Relevant skill IDs must exist in the catalog.',
   );
+
   validateReferences(
     value.gold.distractorSkillIds,
     skills,
@@ -356,10 +391,12 @@ const validateCase = (value: CaseInput, context: Refinement): void => {
     ['gold', 'distractorSkillIds'],
     'Distractor skill IDs must exist in the catalog.',
   );
+
   const classified = new Set([
     ...value.gold.relevantSkillIds,
     ...value.gold.distractorSkillIds,
   ]);
+
   if (
     classified.size !== value.catalog.length ||
     value.catalog.some(
@@ -384,6 +421,7 @@ const validateCase = (value: CaseInput, context: Refinement): void => {
     behaviors,
     context,
   );
+
   validatePhase(
     value.criteria.p1,
     'p1',
@@ -396,6 +434,7 @@ const validateCase = (value: CaseInput, context: Refinement): void => {
   const p0Atoms = phaseAtoms(value.criteria.p0);
   const p1Atoms = phaseAtoms(value.criteria.p1);
   const missing = [...p0Atoms].filter((atom) => !p1Atoms.has(atom));
+
   if (missing.length > 0) {
     context.addIssue({
       code: 'custom',
@@ -440,14 +479,17 @@ const validatePhase = (
 ): void => {
   phase.roles.forEach((criterion, index) => {
     const role = roles.get(criterion.roleId);
+
     if (role === undefined) {
       context.addIssue({
         code: 'custom',
         path: ['criteria', name, 'roles', index, 'roleId'],
         message: 'Phase criteria must reference a known role.',
       });
+
       return;
     }
+
     validateReferences(
       criterion.outputIds,
       new Set(role.outputIds),
@@ -455,6 +497,7 @@ const validatePhase = (
       ['criteria', name, 'roles', index, 'outputIds'],
       'Phase outputs must belong to their referenced role.',
     );
+
     validateReferences(
       criterion.behaviorIds,
       new Set(role.behaviorIds),
@@ -463,6 +506,7 @@ const validatePhase = (
       'Phase behaviors must belong to their referenced role.',
     );
   });
+
   validateReferences(
     phase.dependencyIds,
     new Set(dependencies.keys()),
@@ -470,6 +514,7 @@ const validatePhase = (
     ['criteria', name, 'dependencyIds'],
     'Phase criteria must reference known dependencies.',
   );
+
   validateReferences(
     phase.forbiddenBehaviorIds,
     behaviors,
@@ -477,9 +522,11 @@ const validatePhase = (
     ['criteria', name, 'forbiddenBehaviorIds'],
     'Forbidden behavior IDs must be known.',
   );
+
   const required = new Set(
     phase.roles.flatMap(({ behaviorIds }) => behaviorIds),
   );
+
   if (phase.forbiddenBehaviorIds.some((id) => required.has(id))) {
     context.addIssue({
       code: 'custom',
@@ -493,6 +540,7 @@ const validateComposition = (value: CaseInput, context: Refinement): void => {
   const relevant = value.gold.relevantSkillIds.length;
   const toolCount = new Set([...value.tools.base, ...value.tools.declared])
     .size;
+
   const valid =
     (value.compositionClass === 'A' && relevant === 0 && toolCount === 0) ||
     (value.compositionClass === 'B' &&
@@ -505,7 +553,9 @@ const validateComposition = (value: CaseInput, context: Refinement): void => {
       value.tools.declared.length > 0) ||
     (value.compositionClass === 'E' && relevant >= 2 && toolCount <= 1) ||
     (value.compositionClass === 'F' && relevant >= 2 && toolCount >= 2);
-  if (valid) return;
+
+  if (valid) {return;}
+
   context.addIssue({
     code: 'custom',
     path: ['compositionClass'],
@@ -523,8 +573,10 @@ const hasCatalogGain = (
       .filter(({ source }) => source === 'catalog')
       .map(({ id }) => id),
   );
+
   return [...p1Atoms].some((atom) => {
-    if (p0Atoms.has(atom) || !atom.startsWith('behavior:')) return false;
+    if (p0Atoms.has(atom) || !atom.startsWith('behavior:')) {return false;}
+
     return catalog.has(atom.slice(atom.lastIndexOf(':') + 1));
   });
 };
@@ -553,7 +605,8 @@ const addUniqueIssue = (
   path: readonly PropertyKey[],
   message: string,
 ): void => {
-  if (new Set(values).size === values.length) return;
+  if (new Set(values).size === values.length) {return;}
+
   context.addIssue({ code: 'custom', path: [...path], message });
 };
 
@@ -565,7 +618,8 @@ const validateReferences = (
   message: string,
 ): void => {
   values.forEach((value, index) => {
-    if (known.has(value)) return;
+    if (known.has(value)) {return;}
+
     context.addIssue({ code: 'custom', path: [...path, index], message });
   });
 };
@@ -579,14 +633,22 @@ const hasCycle = (
   const dependencies = new Map(nodes.map((node) => [node.id, node.dependsOn]));
   const visiting = new Set<string>();
   const visited = new Set<string>();
+
   const visit = (id: string): boolean => {
-    if (visiting.has(id)) return true;
-    if (visited.has(id)) return false;
+    if (visiting.has(id)) {return true;}
+
+    if (visited.has(id)) {return false;}
+
     visiting.add(id);
+
     const cycle = (dependencies.get(id) ?? []).some(visit);
+
     visiting.delete(id);
+
     visited.add(id);
+
     return cycle;
   };
+
   return nodes.some(({ id }) => visit(id));
 };

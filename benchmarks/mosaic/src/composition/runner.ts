@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 
+import pino from 'pino';
+
 import { SkillSchema } from 'bundle';
 import type { LlmProvider } from 'llms';
 import type { MosaicAgent, MosaicOptions, MosaicResult } from 'mosaic';
@@ -7,7 +9,6 @@ import {
   mosaic as evaluationMosaic,
   type MosaicEvaluationOptions,
 } from 'mosaic/evaluation';
-import pino from 'pino';
 import type { Tool } from 'tool';
 
 export const compositionArms = [
@@ -16,7 +17,6 @@ export const compositionArms = [
   'mosaic',
   'oracle',
 ] as const;
-
 /** Pinned cross-encoder used for body-aware candidate reranking. */
 export const defaultCompositionRerankerModel = 'cohere/rerank-v3.5';
 
@@ -102,20 +102,25 @@ export const runCompositionCase = async (
     input,
     dependencies.createWorkflow ?? evaluationMosaic,
   );
+
   const result = await prepared.workflow.prompt(input.benchmarkCase.request, {
     capture: 'structure',
   });
+
   const selected = unique(
     result.nodes.flatMap(({ bundle }) => bundle?.skills ?? []),
   );
+
   const candidates = unique(
     result.nodes.flatMap(({ candidates: values }) =>
       values.map(({ skillName }) => skillName),
     ),
   );
+
   const toIds = (names: readonly string[]): readonly string[] =>
     names.flatMap((name) => {
       const id = prepared.canonicalToId.get(name);
+
       return id === undefined ? [] : [id];
     });
 
@@ -136,12 +141,15 @@ const prepare = (
   createWorkflow: CreateWorkflow,
 ): Prepared => {
   validateInput(input);
+
   const canonical = canonicalSkills(input.skills);
   const byId = new Map(canonical.map((entry) => [entry.id, entry]));
+
   const ranked = input.ranking.map(({ skillId, score }) => ({
     ...required(byId, skillId),
     score,
   }));
+
   const gold =
     input.arm === 'oracle'
       ? input.benchmarkCase.goldSkillIds.map((id) => required(byId, id))
@@ -149,6 +157,7 @@ const prepare = (
   const topK = input.topK ?? 3;
   const retrieved = input.maxRetrievedCandidates ?? 50;
   const shortlist = ranked.slice(0, retrieved);
+
   const requiredEntries =
     input.arm === 'fixed-top-k'
       ? ranked.slice(0, topK)
@@ -160,6 +169,7 @@ const prepare = (
   const requiredSkills = requiredEntries.map(({ skill }) => skill);
   const tools = input.tools ?? [];
   const maxSkills = input.arm === 'mosaic' ? (input.maxSkills ?? 6) : 0;
+
   const options: MosaicOptions = {
     logger: pino({ enabled: false }),
     providers: {
@@ -185,6 +195,7 @@ const prepare = (
     skills: { required: requiredSkills, menu, retriever: noSearch },
     tools: { required: tools, menu: tools, retriever: noSearch },
   };
+
   const evaluation: MosaicEvaluationOptions = {
     hooks: {
       ...(input.arm === 'no-skills'
@@ -212,12 +223,18 @@ const prepare = (
 const canonicalSkills = (values: readonly CompositionSkill[]) => {
   const seen = new Set<string>();
   const names = new Set<string>();
+
   return values.map((value) => {
-    if (seen.has(value.id)) throw new Error(`Duplicate skill id: ${value.id}`);
+    if (seen.has(value.id)) {throw new Error(`Duplicate skill id: ${value.id}`);}
+
     seen.add(value.id);
+
     const name = `skill-${createHash('sha256').update(value.id).digest('hex').slice(0, 16)}`;
-    if (names.has(name)) throw new Error('Canonical skill name collision.');
+
+    if (names.has(name)) {throw new Error('Canonical skill name collision.');}
+
     names.add(name);
+
     return {
       id: value.id,
       skill: SkillSchema.parse({
@@ -235,29 +252,41 @@ const required = <Value>(
   id: string,
 ): Value => {
   const value = values.get(id);
-  if (value === undefined) throw new Error(`Unknown skill id: ${id}`);
+
+  if (value === undefined) {throw new Error(`Unknown skill id: ${id}`);}
+
   return value;
 };
 
 const validateInput = (input: CompositionRunInput): void => {
   const positive = (value: number, name: string): void => {
     if (!Number.isSafeInteger(value) || value <= 0)
-      throw new Error(`${name} must be a positive safe integer.`);
+      {throw new Error(`${name} must be a positive safe integer.`);}
   };
+
   positive(input.topK ?? 3, 'topK');
+
   positive(input.maxHintCandidates ?? 6, 'maxHintCandidates');
+
   positive(input.maxRetrievedCandidates ?? 50, 'maxRetrievedCandidates');
+
   positive(input.maxSkills ?? 6, 'maxSkills');
+
   positive(input.maxTurns ?? 16, 'maxTurns');
+
   if ((input.maxSkills ?? 6) > (input.maxRetrievedCandidates ?? 50)) {
     throw new Error('maxSkills must not exceed maxRetrievedCandidates.');
   }
+
   const ranked = new Set<string>();
+
   input.ranking.forEach(({ skillId, score }) => {
     if (!Number.isFinite(score))
-      throw new Error('Ranking score must be finite.');
+      {throw new Error('Ranking score must be finite.');}
+
     if (ranked.has(skillId))
-      throw new Error(`Duplicate ranked skill: ${skillId}`);
+      {throw new Error(`Duplicate ranked skill: ${skillId}`);}
+
     ranked.add(skillId);
   });
 };

@@ -12,7 +12,9 @@ export const resolveSkills = (
   return selected.map((name) => {
     // Missing definitions invalidate the bundle instead of silently dropping it.
     const skill = catalog.get(name);
-    if (skill !== undefined) return skill;
+
+    if (skill !== undefined) {return skill;}
+
     throw new Error(`Selected skill is unavailable: ${name}`);
   });
 };
@@ -35,7 +37,9 @@ export const composeTools = (
   return names.map((name) => {
     // allowed-tools is declarative here, but every declaration must still resolve.
     const tool = catalog.get(name);
-    if (tool !== undefined) return tool;
+
+    if (tool !== undefined) {return tool;}
+
     throw new Error(`Selected tool is unavailable: ${name}`);
   });
 };
@@ -50,5 +54,6 @@ export const metadata = (tools: readonly Tool[]): ToolMetadata[] =>
 /** Preserves first-use order while enforcing one visible entry per tool name. */
 const unique = (values: readonly string[]): string[] => {
   const seen = new Set<string>();
+
   return values.filter((value) => !seen.has(value) && Boolean(seen.add(value)));
 };

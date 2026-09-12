@@ -6,9 +6,9 @@ import {
   parseSraInstances,
 } from '../src/composition/sra-fixtures.js';
 import {
-  SRA_BENCH_MANIFEST,
   buildSraSkillGolds,
   selectSraPilot,
+  SRA_BENCH_MANIFEST,
 } from '../src/composition/sra-pilot.js';
 
 const makeInstance = (dataset: string, index: number, skillCount = 2) => ({
@@ -42,14 +42,17 @@ test('pins the external benchmark and its balanced multi-skill pilot', () => {
     paper: 'https://arxiv.org/abs/2604.24594',
     license: 'MIT',
   });
+
   assert.equal(
     SRA_BENCH_MANIFEST.dataset.revision,
     '6143f2634eb284955ce312213bac24b582d039f3',
   );
+
   assert.deepEqual(SRA_BENCH_MANIFEST.pilot.datasets, [
     'champ',
     'bigcodebench',
   ]);
+
   assert.deepEqual(
     [
       SRA_BENCH_MANIFEST.pilot.minimumGoldSkills,
@@ -58,6 +61,7 @@ test('pins the external benchmark and its balanced multi-skill pilot', () => {
     ],
     [2, 50, 100],
   );
+
   assert.equal(
     SRA_BENCH_MANIFEST.pilot.strata.reduce(
       (total, stratum) => total + stratum.count,
@@ -75,16 +79,20 @@ test('selects the same balanced pilot regardless of fixture order', () => {
     forward.map((instance) => instance.instance_id),
     reverse.map((instance) => instance.instance_id),
   );
+
   assert.deepEqual(
     forward.reduce<Record<string, number>>((counts, instance) => {
       counts[instance.dataset] = (counts[instance.dataset] ?? 0) + 1;
+
       return counts;
     }, {}),
     { champ: 50, bigcodebench: 50 },
   );
+
   assert.ok(
     forward.every((instance) => instance.skill_annotations.length >= 2),
   );
+
   assert.ok(forward.every((instance) => instance.dataset !== 'logicbench'));
 });
 
@@ -106,9 +114,11 @@ test('rejects a missing cardinality stratum instead of shrinking the pilot', () 
 
 test('builds canonical gold skill sets and verifies them against the corpus', () => {
   const pilot = selectSraPilot(instances);
+
   const skillIds = new Set(
     pilot.flatMap((instance) => instance.skill_annotations),
   );
+
   const corpus = parseSraCorpus(
     [...skillIds].map((skillId) => ({
       skill_id: skillId,
@@ -117,14 +127,15 @@ test('builds canonical gold skill sets and verifies them against the corpus', ()
       content: 'Synthetic instructions.',
     })),
   );
-
   const golds = buildSraSkillGolds(pilot, corpus);
 
   assert.equal(golds.length, 100);
+
   assert.deepEqual(
     golds[0]?.gold_skill_ids,
     [...(pilot[0]?.skill_annotations ?? [])].sort(),
   );
+
   assert.throws(
     () => buildSraSkillGolds(pilot, corpus.slice(1)),
     /references missing corpus skill/,

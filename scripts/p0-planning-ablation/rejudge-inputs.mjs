@@ -19,16 +19,19 @@ import {
 const campaignPath = (directory) => join(directory, 'fixtures', 'rejudge.json');
 
 const sha256 = (data) => createHash('sha256').update(data).digest('hex');
+
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 
 const readPinnedJson = async (path, expectedSha256, schema, label) => {
   const data = await readFile(path);
   const actualSha256 = sha256(data);
+
   if (actualSha256 !== expectedSha256) {
     throw new Error(
       `${label} SHA-256 mismatch: expected ${expectedSha256}, found ${actualSha256}.`,
     );
   }
+
   return schema.parse(JSON.parse(data.toString('utf8')));
 };
 
@@ -44,53 +47,65 @@ const parseCli = (argv) => {
   });
   const sourceRunId = values['source-run']?.trim();
   const judgeModel = values['judge-model']?.trim();
+
   if (!sourceRunId || !judgeModel) {
     throw new Error(
       'Both --source-run and --judge-model are required for rejudge.',
     );
   }
+
   return { sourceRunId, judgeModel };
 };
 
 const loadCampaign = async (directory) => {
   const data = await readFile(campaignPath(directory));
+
   const campaign = rejudgeCampaignSchema.parse(
     JSON.parse(data.toString('utf8')),
   );
   const runIds = campaign.sources.map(({ runId }) => runId);
+
   if (new Set(runIds).size !== runIds.length) {
     throw new Error('Rejudge campaign contains duplicate source runs.');
   }
+
   const protocolSha256 = comparisonProtocolSha256();
+
   if (campaign.comparisonProtocolSha256 !== protocolSha256) {
     throw new Error(
       `Comparison protocol SHA-256 mismatch: expected ${campaign.comparisonProtocolSha256}, found ${protocolSha256}.`,
     );
   }
+
   return { campaign, campaignSha256: sha256(data), protocolSha256 };
 };
 
 const findCampaignCell = (campaign, sourceRunId, judgeModel) => {
   const source = campaign.sources.find(({ runId }) => runId === sourceRunId);
+
   if (source === undefined) {
     throw new Error(
       `Source run is not pinned by the campaign: ${sourceRunId}.`,
     );
   }
+
   if (source.targetJudgeModel !== judgeModel) {
     throw new Error(
       `Campaign requires judge ${source.targetJudgeModel} for source ${sourceRunId}; received ${judgeModel}.`,
     );
   }
+
   if (source.sourceJudgeModel === source.targetJudgeModel) {
     throw new Error(`Rejudge target must differ from the source judge.`);
   }
+
   if (
     source.attestedComparisonProtocolSha256 !==
     campaign.comparisonProtocolSha256
   ) {
     throw new Error(`Source protocol attestation differs from the campaign.`);
   }
+
   return source;
 };
 
@@ -98,18 +113,22 @@ const assertSourceIdentity = (manifest, results, source, inputs, identity) => {
   if (manifest.runId !== source.runId || results.runId !== source.runId) {
     throw new Error(`Source run ID mismatch for ${source.runId}.`);
   }
+
   if (manifest.config.judgeModel !== source.sourceJudgeModel) {
     throw new Error(`Source judge mismatch for ${source.runId}.`);
   }
+
   if (manifest.config.judgeEffort !== source.targetJudgeEffort) {
     throw new Error(`Rejudge effort differs from source for ${source.runId}.`);
   }
+
   if (
     manifest.identity.experimentSources.sha256 !==
     source.sourceExperimentSourcesSha256
   ) {
     throw new Error(`Source-code identity mismatch for ${source.runId}.`);
   }
+
   if (
     manifest.identity.fixture.runId !== inputs.fixture.source.runId ||
     manifest.identity.fixture.sourceResultsSha256 !==
@@ -120,6 +139,7 @@ const assertSourceIdentity = (manifest, results, source, inputs, identity) => {
   ) {
     throw new Error(`Source inputs do not match current frozen inputs.`);
   }
+
   if (manifest.cases !== results.cases) {
     throw new Error(`Source manifest/results case count mismatch.`);
   }
@@ -127,6 +147,7 @@ const assertSourceIdentity = (manifest, results, source, inputs, identity) => {
 
 const assertSourceJudgments = (current) => {
   const [first, second] = current.judgments;
+
   if (
     first.orientation !== 1 ||
     second.orientation !== 2 ||
@@ -134,16 +155,20 @@ const assertSourceJudgments = (current) => {
   ) {
     throw new Error(`Invalid source orientations for ${current.name}.`);
   }
+
   for (const judgment of current.judgments) {
     const expectedWinner = outcomeForChoice(
       judgment.withoutP0Option,
       judgment.choice,
     );
+
     if (judgment.winner !== expectedWinner) {
       throw new Error(`Invalid source winner mapping for ${current.name}.`);
     }
   }
+
   const recomputed = comparisonOutcome(current.plans, current.judgments);
+
   if (
     recomputed.rawOutcome !== current.rawOutcome ||
     recomputed.outcome !== current.outcome ||
@@ -155,26 +180,34 @@ const assertSourceJudgments = (current) => {
 
 const resolveCases = (inputs, sourceResults) => {
   const sourceByName = new Map();
+
   for (const current of sourceResults.results) {
     if (sourceByName.has(current.name)) {
       throw new Error(`Duplicate source case: ${current.name}.`);
     }
+
     sourceByName.set(current.name, current);
   }
+
   const localNames = new Set(inputs.cases.map(({ name }) => name));
+
   const unknown = [...sourceByName.keys()].filter(
     (name) => !localNames.has(name),
   );
+
   if (unknown.length > 0) {
     throw new Error(`Unknown source cases: ${unknown.join(', ')}.`);
   }
 
   return inputs.cases.map((local) => {
     const source = sourceByName.get(local.name);
+
     if (source === undefined) {
       throw new Error(`Missing source case: ${local.name}.`);
     }
+
     const goldSkills = local.goldSkills.map(({ name }) => name);
+
     if (
       source.objective !== local.objective ||
       !same(source.p0, local.p0) ||
@@ -182,6 +215,7 @@ const resolveCases = (inputs, sourceResults) => {
     ) {
       throw new Error(`Source treatment mismatch for ${local.name}.`);
     }
+
     assertSourceJudgments(source);
 
     return Object.freeze({
@@ -205,6 +239,7 @@ const resolveCases = (inputs, sourceResults) => {
 
 const assertSourceSummary = (sourceResults, judgeModel) => {
   const actual = aggregateComparisons(sourceResults.results, judgeModel);
+
   if (!same(actual, sourceResults.metrics?.comparison)) {
     throw new Error('Source comparison metrics do not match case outcomes.');
   }
@@ -222,6 +257,7 @@ export const loadRejudgeInputs = async ({
     await loadCampaign(directory);
   const source = findCampaignCell(campaign, sourceRunId, judgeModel);
   const sourceDirectory = join(directory, 'output', source.runId);
+
   const [manifest, sourceResults] = await Promise.all([
     readPinnedJson(
       join(sourceDirectory, 'manifest.json'),
@@ -236,8 +272,11 @@ export const loadRejudgeInputs = async ({
       'Source results',
     ),
   ]);
+
   assertSourceIdentity(manifest, sourceResults, source, inputs, identity);
+
   const cases = resolveCases(inputs, sourceResults);
+
   assertSourceSummary(sourceResults, source.sourceJudgeModel);
 
   return Object.freeze({

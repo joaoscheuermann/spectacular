@@ -30,7 +30,9 @@ const tokens = (value: string): string[] =>
 
 const frequencies = (terms: readonly string[]): ReadonlyMap<string, number> => {
   const counts = new Map<string, number>();
-  for (const term of terms) counts.set(term, (counts.get(term) ?? 0) + 1);
+
+  for (const term of terms) {counts.set(term, (counts.get(term) ?? 0) + 1);}
+
   return counts;
 };
 
@@ -47,14 +49,18 @@ const termScore = (
 
 const score = <Data>(entry: Entry<Data>, context: ScoreContext): number => {
   let total = 0;
+
   for (const term of context.query) {
     const count = entry.frequencies.get(term);
     const documentFrequency = context.documentFrequencies.get(term);
-    if (count === undefined || documentFrequency === undefined) continue;
+
+    if (count === undefined || documentFrequency === undefined) {continue;}
+
     total +=
       idf(context.documents, documentFrequency) *
       termScore(count, entry.length, context.averageLength);
   }
+
   return total;
 };
 
@@ -63,6 +69,7 @@ export const createLexicalIndex = <Data = unknown>(
   options: LexicalIndexOptions,
 ): SearchIndex<Data> => {
   const parentLogger = options?.logger;
+
   validateLogger(parentLogger, 'lexical index');
 
   const logger = parentLogger.child({ component: 'victor' });
@@ -75,17 +82,20 @@ export const createLexicalIndex = <Data = unknown>(
   return {
     async add(data, transform): Promise<void> {
       logger.debug({ entryCount: entries.length }, 'lexical index add started');
+
       try {
         if (typeof transform !== 'function') {
           throw invalid('lexical index', 'transform: expected a function');
         }
 
         const text = transform(data);
+
         if (typeof text !== 'string') {
           throw invalid('lexical index', 'transform result: expected a string');
         }
 
         const terms = tokens(text);
+
         if (terms.length === 0) {
           throw invalid(
             'lexical index',
@@ -94,19 +104,23 @@ export const createLexicalIndex = <Data = unknown>(
         }
 
         const counts = frequencies(terms);
+
         for (const term of counts.keys()) {
           documentFrequencies.set(
             term,
             (documentFrequencies.get(term) ?? 0) + 1,
           );
         }
+
         entries.push({
           data,
           frequencies: counts,
           length: terms.length,
           index: entries.length,
         });
+
         totalLength += terms.length;
+
         logger.debug(
           { entryCount: entries.length },
           'lexical index add completed',
@@ -116,6 +130,7 @@ export const createLexicalIndex = <Data = unknown>(
           { entryCount: entries.length },
           'lexical index add failed',
         );
+
         throw error;
       }
     },
@@ -123,34 +138,41 @@ export const createLexicalIndex = <Data = unknown>(
     async search(query, topK): Promise<ReadonlyArray<SearchResult<Data>>> {
       const safeTopK = Number.isFinite(topK) ? topK : undefined;
       const fields = { entryCount: entries.length, topK: safeTopK };
+
       logger.debug(fields, 'lexical index search started');
 
       try {
         validateTopK(topK, 'lexical index');
+
         if (topK === 0 || entries.length === 0) {
           logger.debug(
             { ...fields, resultCount: 0 },
             'lexical index search completed',
           );
+
           return [];
         }
 
         const queryTerms = new Set(tokens(query));
+
         if (queryTerms.size === 0) {
           logger.debug(
             { ...fields, resultCount: 0 },
             'lexical index search completed',
           );
+
           return [];
         }
 
         const averageLength = totalLength / entries.length;
+
         const context = {
           query: queryTerms,
           documentFrequencies,
           documents: entries.length,
           averageLength,
         };
+
         const results = entries
           .map((entry) => ({
             data: entry.data,
@@ -169,9 +191,11 @@ export const createLexicalIndex = <Data = unknown>(
           { ...fields, resultCount: results.length },
           'lexical index search completed',
         );
+
         return results;
       } catch (error) {
         logger.debug(fields, 'lexical index search failed');
+
         throw error;
       }
     },

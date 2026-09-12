@@ -42,6 +42,7 @@ test('returns detached observation objects', () => {
   const observations = materializeObservations('current', [recordValue]);
 
   assert.notStrictEqual(observations[0], recordValue);
+
   assert.equal(observations[0]?.id, recordValue.id);
 });
 

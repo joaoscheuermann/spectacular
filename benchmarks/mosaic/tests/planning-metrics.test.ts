@@ -59,18 +59,25 @@ test('reports P0-to-P1 gains and regressions overall and by stratum', () => {
   const gold = metrics.conditions.find(({ condition }) => condition === 'gold');
 
   assert.equal(metrics.caseCount, 2);
+
   assert.equal(gold?.meanGain, 0.5);
+
   assert.equal(gold?.meanP1Score, 0.875);
+
   assert.equal(gold?.regressionRate, 0.5);
+
   assert.equal(gold?.meanEvidenceSkills, 1);
+
   assert.equal(metrics.byDomain.software?.[1]?.caseCount, 1);
+
   assert.equal(metrics.byCompositionClass.C?.[1]?.caseCount, 2);
 });
 
 test('rejects empty and duplicate planning evidence', () => {
   assert.throws(() => aggregatePlanningRuns([]), /at least one case/);
+
   assert.throws(
-    () => aggregatePlanningRuns([runs[0]!, runs[0]!]),
+    () => aggregatePlanningRuns([runs[0], runs[0]]),
     /Duplicate planning case/,
   );
 });

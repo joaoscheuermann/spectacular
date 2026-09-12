@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { mosaic, type MosaicEvent, type MosaicOptions } from '../src/index.js';
-import type { LlmProvider, ProviderRequest } from 'llms';
-import type { Tool } from 'tool';
 import { z } from 'zod';
 
-import { mosaicProviders, terminalFinish } from './structured.js';
+import type { LlmProvider, ProviderRequest } from 'llms';
+import type { Tool } from 'tool';
+
+import { mosaic, type MosaicEvent, type MosaicOptions } from '../src/index.js';
 import { createRuntime } from '../src/lib/observability.js';
+import { mosaicProviders, terminalFinish } from './structured.js';
 
 test('observer delivery is awaited, serial, immutable, and ordered', async () => {
   const harness = createHarness();
@@ -22,31 +23,42 @@ test('observer delivery is awaited, serial, immutable, and ordered', async () =>
     capture: 'io',
     observer: async (event) => {
       assert.equal(active, false);
+
       active = true;
+
       await Promise.resolve();
+
       assert.throws(() => {
         (event as { sequence: number }).sequence = 0;
       }, TypeError);
+
       events.push(event);
+
       active = false;
     },
   });
 
   assert.equal(result.status, 'completed');
+
   assert.deepEqual(
     events.map(({ sequence }) => sequence),
     events.map((_, index) => index + 1),
   );
+
   assert.equal(events[0]?.type, 'run.started');
+
   assert.equal(events.at(-1)?.type, 'run.finished');
+
   assert.equal(
     events.every((event) => event.schemaVersion === 3),
     true,
   );
+
   assert.equal(
     events.every((event) => event.runId === runId),
     true,
   );
+
   assert.equal(
     events
       .filter(
@@ -59,14 +71,17 @@ test('observer delivery is awaited, serial, immutable, and ordered', async () =>
       .every((event) => event.providerId === 'fake'),
     true,
   );
+
   assert.equal(
     harness.requests.every((request) => request.signal === controller.signal),
     true,
   );
+
   assert.equal(
     events.filter(({ type }) => type === 'structured.attempt').length,
     3,
   );
+
   assert.equal(
     events.some(
       (event) =>
@@ -88,7 +103,9 @@ test('structure capture excludes prompts, parsed payloads, and model responses',
   });
 
   const trace = JSON.stringify(events);
+
   assert.doesNotMatch(trace, /secret prompt/);
+
   for (const field of [
     'content',
     'input',
@@ -117,12 +134,15 @@ test('observer failure aborts the run and prevents provider activity', async () 
     mosaic(harness.options).prompt('request', {
       observer: () => {
         calls += 1;
+
         throw failure;
       },
     }),
     (error: unknown) => error === failure,
   );
+
   assert.equal(calls, 1);
+
   assert.equal(harness.requests.length, 0);
 });
 
@@ -135,16 +155,20 @@ test('undefined observer rejection still latches and aborts the run', async () =
     await mosaic(harness.options).prompt('request', {
       observer: () => {
         calls += 1;
+
         return Promise.reject(undefined);
       },
     });
+
     resolved = true;
   } catch (error) {
     assert.equal(error, undefined);
   }
 
   assert.equal(resolved, false);
+
   assert.equal(calls, 1);
+
   assert.equal(harness.requests.length, 0);
 });
 
@@ -161,24 +185,28 @@ test('io capture deep-clones and freezes tool inputs and outputs', async () => {
           (event.input as { query: string }).query = 'changed';
         }, TypeError);
       }
+
       if (event.type === 'tool.finished') {
         assert.throws(() => {
           (event.output as { found: boolean }).found = false;
         }, TypeError);
       }
+
       events.push(event);
     },
   });
-
   const started = events.find(({ type }) => type === 'tool.started');
   const finished = events.find(({ type }) => type === 'tool.finished');
+
   assert.deepEqual(started?.type === 'tool.started' ? started.input : null, {
     query: 'evidence',
   });
+
   assert.deepEqual(
     finished?.type === 'tool.finished' ? finished.output : null,
     { found: true },
   );
+
   assert.equal(
     finished?.type === 'tool.finished' ? finished.observationId : undefined,
     result.nodes[0]?.observations[0]?.id,
@@ -202,6 +230,7 @@ test('io capture omits reasoning, usage, flags, auth, and request controls', asy
   });
 
   assert.ok(contents.length > 0);
+
   for (const key of [
     'reasoning',
     'usage',
@@ -222,12 +251,14 @@ test('io capture omits reasoning, usage, flags, auth, and request controls', asy
 
 test('io capture never exposes rejected structured candidates', async () => {
   const events: MosaicEvent[] = [];
+
   const runtime = createRuntime({
     capture: 'io',
     observer: (event) => {
       events.push(event);
     },
   });
+
   const provider = {
     metadata: { id: 'fake', name: 'Fake', baseUrl: 'https://fake.invalid' },
     complete: async () => ({
@@ -276,10 +307,12 @@ test('io capture never exposes rejected structured candidates', async () => {
   });
 
   const trace = JSON.stringify(events);
+
   assert.doesNotMatch(
     trace,
     /private rejected|rejected response|previous response/u,
   );
+
   assert.match(trace, /submit_structured_output/u);
 });
 
@@ -298,8 +331,10 @@ test('duration measurements exclude observer latency', async () => {
 
 test('tool effects remain executed when observer fails on tool.finished', async () => {
   let effects = 0;
+
   const lookup = tool('lookup', async () => {
     effects += 1;
+
     return { found: true };
   });
   const harness = createHarness(lookup);
@@ -311,13 +346,15 @@ test('tool effects remain executed when observer fails on tool.finished', async 
       capture: 'io',
       observer: (event) => {
         observed.push(event.type);
-        if (event.type === 'tool.finished') throw failure;
+
+        if (event.type === 'tool.finished') {throw failure;}
       },
     }),
     (error: unknown) => error === failure,
   );
 
   assert.equal(effects, 1);
+
   assert.equal(observed.at(-1), 'tool.finished');
 });
 
@@ -337,11 +374,14 @@ test('node-bound bundle and execution events identify the active revision', asyn
       event.nodeId === 'n01:finish' &&
       (event.stage === 'bundle' || event.stage === 'execution'),
   );
+
   assert.ok(nodeEvents.length > 0);
+
   assert.equal(
     nodeEvents.every((event) => 'revision' in event && event.revision === 1),
     true,
   );
+
   for (const type of [
     'retrieval.result',
     'bundle.selected',
@@ -393,16 +433,22 @@ const decision = {
 const createHarness = (lookup?: Tool) => {
   const requests: ProviderRequest<unknown>[] = [];
   let executionTurns = 0;
+
   const provider = {
     metadata: { id: 'fake', name: 'Fake', baseUrl: 'https://fake.invalid' },
     complete: async (request: ProviderRequest<unknown>) => {
       requests.push(request);
+
       const system = request.messages[0]?.content;
+
       const executing =
         typeof system === 'string' &&
         system.startsWith('You execute one outcome-oriented node');
-      if (!executing) return privateFinish(request, plan);
+
+      if (!executing) {return privateFinish(request, plan);}
+
       executionTurns += 1;
+
       if (lookup !== undefined && executionTurns === 1) {
         return {
           text: '',
@@ -416,9 +462,11 @@ const createHarness = (lookup?: Tool) => {
           ],
         };
       }
+
       return privateFinish(request, decision);
     },
   } as unknown as LlmProvider;
+
   const options: MosaicOptions = {
     logger: { info: () => undefined, debug: () => undefined } as never,
     providers: mosaicProviders(provider),
@@ -457,6 +505,7 @@ const tool = (
 ): Tool => {
   const input = z.object({ query: z.string() });
   const output = z.object({ found: z.boolean() });
+
   return {
     name,
     description: `${name} tool`,
@@ -490,8 +539,10 @@ const privateFinish = (request: ProviderRequest<unknown>, value: unknown) => ({
 });
 
 const hasKey = (value: unknown, key: string): boolean => {
-  if (typeof value !== 'object' || value === null) return false;
-  if (Object.prototype.hasOwnProperty.call(value, key)) return true;
+  if (typeof value !== 'object' || value === null) {return false;}
+
+  if (Object.prototype.hasOwnProperty.call(value, key)) {return true;}
+
   return Object.values(value).some((nested) => hasKey(nested, key));
 };
 

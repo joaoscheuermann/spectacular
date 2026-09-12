@@ -77,10 +77,12 @@ const outcomeLabel = (winner) => armLabels[winner] ?? winner;
 
 const formatJudgment = (pair, judgment) => {
   const { orientation, leftOption, choice, rationale, winner } = judgment;
+
   const selection =
     choice === 'a' || choice === 'b'
       ? `option ${choice.toUpperCase()}`
       : choice;
+
   return `  Orientation ${orientation} (${armLabels[pair.left]}=${leftOption.toUpperCase()}): ${selection} → ${outcomeLabel(winner)}
     ${rationale}`;
 };
@@ -99,12 +101,14 @@ const failureDetails = (failure) =>
 
 const formatFailure = (pair, failure) => {
   const unit = failure.attempts === 1 ? 'attempt' : 'attempts';
+
   return `  Orientation ${failure.orientation} (${armLabels[pair.left]}=${failure.leftOption.toUpperCase()}): failed after ${failure.attempts} ${unit} [${failureDetails(failure)}]`;
 };
 
 const formatComparison = (comparison) => {
   const { judgeModel, status, judgments, failures = [], winner } = comparison;
   const result = status === 'completed' ? outcomeLabel(winner) : status;
+
   const details = [
     ...judgments.map((judgment) => formatJudgment(comparison, judgment)),
     ...failures.map((failure) => formatFailure(comparison, failure)),

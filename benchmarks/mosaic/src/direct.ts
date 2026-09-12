@@ -1,12 +1,13 @@
+import { homedir } from 'node:os';
+
 import {
-  createAgent,
-  createToolCallStorage,
   type Agent,
   type AgentOptions,
+  createAgent,
+  createToolCallStorage,
 } from 'agent';
 import type { Skill } from 'bundle';
 import { createMessageStorage } from 'messages';
-import { homedir } from 'node:os';
 import { createToolStorage, type Tool } from 'tool';
 
 import { directEvent } from './events.js';
@@ -34,10 +35,12 @@ export const direct = (dependencies: DirectDependencies = {}): Runner => {
       const skills = await (dependencies.loadSkills ?? loadSkills)(
         dependencies.home ?? homedir(),
       );
+
       const terminal = (dependencies.createTerminal ?? createTerminal)({
         cwd: request.cwd,
         signal: request.signal,
       });
+
       const agent = (dependencies.createAgent ?? createAgent)({
         provider: profile.provider,
         model: profile.model,
@@ -53,7 +56,8 @@ export const direct = (dependencies: DirectDependencies = {}): Runner => {
         signal: request.signal,
       })) {
         const normalized = directEvent(event);
-        if (normalized !== undefined) await emit(normalized);
+
+        if (normalized !== undefined) {await emit(normalized);}
       }
     },
   };

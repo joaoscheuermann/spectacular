@@ -7,6 +7,7 @@ import type {
 } from 'llms';
 import { createMessageStorage } from 'messages';
 import { createToolStorage } from 'tool';
+
 import type { MosaicRuntime } from './observability.js';
 import type { MosaicStage } from './types/events.js';
 import type { MosaicModelProfile } from './types/mosaic-options.js';
@@ -49,6 +50,7 @@ export const completeStructured = async <
     tools: createToolStorage([]),
     effort: profile.effort,
   });
+
   const response = await agent.complete(input, {
     schema,
     ...(runtime === undefined

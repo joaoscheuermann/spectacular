@@ -1,22 +1,23 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { mosaic as publicMosaic, type MosaicOptions } from '../src/index.js';
-import { mosaic as evaluationMosaic } from '../src/evaluation.js';
 import type { LlmProvider, ProviderRequest } from 'llms';
 
+import { mosaic as evaluationMosaic } from '../src/evaluation.js';
+import { mosaic as publicMosaic, type MosaicOptions } from '../src/index.js';
 import { mosaicProviders, terminalFinish } from './structured.js';
 
 test('evaluation adapter without hooks is behaviorally neutral', async () => {
   const first = createHarness();
   const second = createHarness();
-
   const publicResult = await publicMosaic(first.options).prompt('request');
+
   const evaluationResult = await evaluationMosaic(second.options).prompt(
     'request',
   );
 
   assert.deepEqual(evaluationResult, publicResult);
+
   assert.deepEqual(
     second.requests.map(projectRequest),
     first.requests.map(projectRequest),
@@ -25,6 +26,7 @@ test('evaluation adapter without hooks is behaviorally neutral', async () => {
 
 test('routes planning and execution through their configured profiles', async () => {
   const harness = createHarness();
+
   const options: MosaicOptions = {
     ...harness.options,
     models: {
@@ -56,14 +58,18 @@ test('feedback unchanged skips hints and P1 while materializing revision one', a
     hooks: {
       feedbackPlan: async (input) => {
         frozen = Object.isFrozen(input) && Object.isFrozen(input.graph);
+
         return 'unchanged';
       },
     },
   }).prompt('request');
 
   assert.equal(result.status, 'completed');
+
   assert.equal(frozen, true);
+
   assert.equal(harness.requests.length, 2);
+
   assert.equal(harness.searches.length, 1);
 });
 
@@ -77,6 +83,7 @@ test('invalid hook output is rejected before graph state is committed', async ()
       },
     }).prompt('request'),
   );
+
   assert.equal(harness.requests.length, 0);
 });
 
@@ -117,19 +124,24 @@ const decision = {
 const createHarness = (withSearch = false) => {
   const requests: ProviderRequest<unknown>[] = [];
   const searches: string[] = [];
+
   const provider = {
     metadata: { id: 'fake', name: 'Fake', baseUrl: 'https://fake.invalid' },
     complete: async (request: ProviderRequest<unknown>) => {
       requests.push(request);
+
       const system = request.messages[0]?.content;
+
       const value =
         typeof system === 'string' &&
         system.startsWith('You execute one outcome-oriented node')
           ? decision
           : plan;
+
       return terminalFinish(request, value);
     },
   } as unknown as LlmProvider;
+
   const options: MosaicOptions = {
     logger: { info: () => undefined, debug: () => undefined } as never,
     providers: mosaicProviders(provider),
@@ -163,6 +175,7 @@ const createHarness = (withSearch = false) => {
       retriever: {
         search: async (query) => {
           searches.push(query);
+
           return [];
         },
       },

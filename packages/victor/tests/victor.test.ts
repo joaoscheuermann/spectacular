@@ -27,9 +27,11 @@ const captureLogger = (): {
   readonly records: LogRecord[];
 } => {
   const records: LogRecord[] = [];
+
   const destination = new Writable({
     write(chunk, _encoding, callback) {
       records.push(JSON.parse(chunk.toString('utf8')) as LogRecord);
+
       callback();
     },
   });
@@ -68,10 +70,13 @@ test('returns the closest stored structured data and cosine scores', async () =>
   const east: Skill = { direction: 'east', id: 'east', tags: ['closest'] };
 
   await vectors.add({ direction: 'north', id: 'north' }, transform);
+
   await vectors.add({ direction: 'diagonal', id: 'diagonal' }, transform);
+
   await vectors.add(east, transform);
 
   const result = await vectors.search('query', 2);
+
   const acceptsSkillResults = (
     value: ReadonlyArray<VectorSearchResult<Skill>>,
   ): void => undefined;
@@ -79,14 +84,19 @@ test('returns the closest stored structured data and cosine scores', async () =>
   acceptsSkillResults(result);
 
   assert.equal(result.length, 2);
+
   assert.deepEqual(result[0], { data: east, score: 1 });
+
   assert.deepEqual(result[1]?.data, { direction: 'diagonal', id: 'diagonal' });
+
   assert.ok(Math.abs((result[1]?.score ?? 0) - Math.SQRT1_2) < 1e-12);
+
   assert.equal('metadata' in (result[0] ?? {}), false);
 });
 
 test('embeds only text returned by the transformer and runs it once per add', async () => {
   const texts: string[] = [];
+
   const vectors = createVectorDatabase<{
     readonly title: string;
     readonly body: string;
@@ -95,6 +105,7 @@ test('embeds only text returned by the transformer and runs it once per add', as
     logger: silentLogger,
     embedding: async (text) => {
       texts.push(text);
+
       return [1, 0];
     },
   });
@@ -103,27 +114,34 @@ test('embeds only text returned by the transformer and runs it once per add', as
 
   await vectors.add(data, (value) => {
     transformations += 1;
+
     assert.equal(value, data);
+
     return value.body;
   });
 
   assert.equal(transformations, 1);
+
   assert.deepEqual(texts, ['Indexed body']);
 });
 
 test('rejects invalid transformers before embedding or retaining data', async () => {
   let embeddings = 0;
+
   const vectors = createVectorDatabase<TextData>({
     dimensions: 2,
     logger: silentLogger,
     embedding: async () => {
       embeddings += 1;
+
       return [1, 0];
     },
   });
+
   const invalidFunction = undefined as unknown as (data: {
     text: string;
   }) => string;
+
   const invalidResult = (() => 123) as unknown as (data: {
     text: string;
   }) => string;
@@ -131,10 +149,13 @@ test('rejects invalid transformers before embedding or retaining data', async ()
   await assert.rejects(() =>
     vectors.add({ text: 'not a function' }, invalidFunction),
   );
+
   await assert.rejects(() => vectors.add({ text: 'not text' }, invalidResult));
 
   assert.equal(embeddings, 0);
+
   assert.deepEqual(await vectors.search('query', 1), []);
+
   assert.equal(embeddings, 0);
 });
 
@@ -158,7 +179,9 @@ test('limits results to topK and retains insertion order for equal scores', asyn
   const transform = ({ text }: { readonly text: string }): string => text;
 
   await vectors.add({ text: 'first', order: 1 }, transform);
+
   await vectors.add({ text: 'second', order: 2 }, transform);
+
   await vectors.add({ text: 'later', order: 3 }, transform);
 
   assert.deepEqual(await vectors.search('query', 2), [
@@ -170,19 +193,25 @@ test('limits results to topK and retains insertion order for equal scores', asyn
 test('returns no results without embedding zero-topK or empty-database queries', async () => {
   let calls = 0;
   const { logger, records } = captureLogger();
+
   const vectors = createVectorDatabase({
     dimensions: 2,
     logger,
     embedding: async () => {
       calls += 1;
+
       return [1, 0];
     },
   });
 
   assert.deepEqual(await vectors.search('zero', 0), []);
+
   assert.equal(calls, 0);
+
   assert.deepEqual(await vectors.search('empty', 1), []);
+
   assert.equal(calls, 0);
+
   assert.deepEqual(
     records.map(({ msg, entryCount, resultCount, topK }) => ({
       msg,
@@ -285,9 +314,11 @@ test('does not retain data when its transformer or embedding fails', async () =>
       throw new Error('transform failed');
     }),
   );
+
   await assert.rejects(() =>
     vectors.add({ text: 'invalid' }, (data) => data.text),
   );
+
   await vectors.add({ text: 'valid', retained: true }, (data) => data.text);
 
   assert.deepEqual(await vectors.search('query', 10), [
@@ -309,6 +340,7 @@ test('requires a logger with debug and child functions synchronously', () => {
 
 test('emits structured debug logs for successful add and search operations', async () => {
   const { logger, records } = captureLogger();
+
   const vectors = createVectorDatabase({
     dimensions: 2,
     logger,
@@ -316,6 +348,7 @@ test('emits structured debug logs for successful add and search operations', asy
   });
 
   await vectors.add({ id: 'stored' }, () => 'stored');
+
   await vectors.search('query', 1);
 
   assert.deepEqual(
@@ -398,6 +431,7 @@ test('logs failures without exposing private data or changing error identity', a
   const addFailure = new Error(privateAddFailure);
   const searchFailure = new Error(privateSearchFailure);
   const { logger, records } = captureLogger();
+
   const vectors = createVectorDatabase({
     dimensions: 2,
     logger,
@@ -416,7 +450,9 @@ test('logs failures without exposing private data or changing error identity', a
     }),
     (error) => error === addFailure,
   );
+
   await vectors.add(privateData, () => privateText);
+
   await assert.rejects(
     vectors.search(privateQuery, 1),
     (error) => error === searchFailure,
@@ -434,6 +470,7 @@ test('logs failures without exposing private data or changing error identity', a
       'vector database search failed',
     ],
   );
+
   assert.equal(
     records.every(
       ({ component, level }) => component === 'victor' && level === 20,
@@ -442,6 +479,7 @@ test('logs failures without exposing private data or changing error identity', a
   );
 
   const rendered = JSON.stringify(records);
+
   for (const value of [
     privateData,
     privateText,

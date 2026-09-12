@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import type { LlmProvider, ProviderFinished, ProviderRequest } from 'llms';
 import { z } from 'zod';
+
+import type { LlmProvider, ProviderFinished, ProviderRequest } from 'llms';
 import type { Tool } from 'tool';
 
 import { execution } from '../src/lib/states/execution/index.js';
@@ -19,21 +20,27 @@ test('derives concurrent revision work in wave order rather than completion orde
   const second = node('second', 1, 'tool-second');
   const graph: Graph = { revision: 1, nodes: [first, second] };
   const turns = new Map<string, number>();
+
   const provider = {
     metadata: { id: 'fake', name: 'Fake', baseUrl: 'https://fake.invalid' },
     complete: async (request: ProviderRequest<unknown>) => {
       const name = request.tools?.find(({ name }) =>
         name.startsWith('tool-'),
       )?.name;
+
       assert.ok(name);
+
       const goalId = name.replace('tool-', '');
       const turn = turns.get(goalId) ?? 0;
+
       turns.set(goalId, turn + 1);
 
-      if (turn === 0) return toolCall(`call-${goalId}`, name);
+      if (turn === 0) {return toolCall(`call-${goalId}`, name);}
+
       if (goalId === 'second') {
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
+
       return terminal(request, revisionOutcome(goalId));
     },
   } as unknown as LlmProvider;
@@ -45,22 +52,29 @@ test('derives concurrent revision work in wave order rather than completion orde
   );
 
   assert.equal(action.type, 'transition');
-  if (action.type !== 'transition') return;
+
+  if (action.type !== 'transition') {return;}
+
   const revisions = revisionNodes(graph);
+
   assert.deepEqual(
     revisions.map(({ outcome }) => outcome?.revisionRequest?.goalId),
     ['second', 'first'],
   );
+
   assert.deepEqual(
     revisions.flatMap(({ observations }) =>
       observations.map(({ goalId }) => goalId),
     ),
     ['second', 'first'],
   );
+
   const observationIds = graph.nodes.flatMap(({ observations }) =>
     observations.map(({ id }) => id),
   );
+
   assert.equal(new Set(observationIds).size, 2);
+
   assert.equal(
     observationIds.every((id) => /^[0-9a-f]{6}$/u.test(id)),
     true,
@@ -119,6 +133,7 @@ const node = (id: string, index: number, toolName: string): Node => ({
 const tool = (name: string): Tool => {
   const input = z.object({ query: z.string() });
   const output = z.unknown();
+
   return {
     name,
     description: `${name} tool`,
@@ -174,7 +189,9 @@ const terminal = (
       description ===
       'Submit the final structured output and end the agent run.',
   );
+
   assert.ok(definition);
+
   return {
     text: '',
     finishReason: 'tool_calls',

@@ -1,4 +1,7 @@
 import type { Skill } from 'bundle';
+
+import { evaluate } from '../../evaluation.js';
+import type { MosaicRuntime } from '../../observability.js';
 import * as bundlePrompt from '../../prompts/bundle.js';
 import { createBundleSelectionSchema } from '../../schemas/bundle.js';
 import {
@@ -6,11 +9,9 @@ import {
   SkillCandidateSchema,
 } from '../../schemas/routing.js';
 import { completeStructured } from '../../structured.js';
-import { evaluate } from '../../evaluation.js';
+import type { MosaicEvaluationHooks } from '../../types/evaluation.js';
 import type { Graph, Node } from '../../types/graph.js';
 import type { RoutingTrace } from '../../types/routing.js';
-import type { MosaicEvaluationHooks } from '../../types/evaluation.js';
-import type { MosaicRuntime } from '../../observability.js';
 import type { WorkflowContext, WorkflowHandler } from '../../types/workflow.js';
 import { composeTools, metadata, resolveSkills } from './menus.js';
 import { validateMatches, validateTools, validateTrace } from './validation.js';
@@ -61,6 +62,7 @@ export const bundle: WorkflowHandler = async (
     const { graphs } = state;
     // Mosaic keeps graph revisions as a stack; only the newest graph is active.
     const graph = graphs.at(-1);
+
     if (graph === undefined) {
       return fail(new Error('Impossible to continue, missing active graph!'));
     }
@@ -103,6 +105,7 @@ const prepare = async ({
           { request: input, node, graph },
           async () => route({ input, node, graph, options, runtime, hooks }),
         );
+
   const validated = validateTrace(
     trace,
     node,
@@ -144,9 +147,11 @@ const prepare = async ({
 /** Retrieves candidates and materializes either a deterministic or selected trace. */
 const route = async (input: Preparation): Promise<RoutingTrace> => {
   const candidates = await retrieve(input);
+
   if (candidates.length === 0) {
     return emptyTrace(input.node.id, NO_CANDIDATES_RATIONALE);
   }
+
   return select({ ...input, candidates });
 };
 
@@ -160,10 +165,8 @@ const retrieve = async ({
   hooks,
 }: Preparation): Promise<Skill[]> => {
   const { skills, routing } = options;
-
   // The same request, node, criteria, and ancestor artifacts feed every route stage.
   const context = bundlePrompt.routingContext(input, node, graph);
-
   // Universal skills apply outside B(g), so they cannot become routed candidates.
   const required = new Set(skills.required.map(({ name }) => name));
 
@@ -190,6 +193,7 @@ const retrieve = async ({
         ({ data: skill, score }) => ({ skill, score }),
       ),
   );
+
   const candidates = currentCandidates(
     validateMatches(matches, catalog, routing.maxRetrievedCandidates).map(
       ({ skill }) => ({ data: skill }),
@@ -197,6 +201,7 @@ const retrieve = async ({
     catalog,
     routing.maxRetrievedCandidates,
   );
+
   await runtime?.emit({
     type: 'retrieval.result',
     stage: 'bundle',
@@ -205,6 +210,7 @@ const retrieve = async ({
     skillNames: candidates.map(({ name }) => name),
     ...(runtime?.capture === 'io' ? { query: context } : {}),
   });
+
   return candidates;
 };
 
@@ -217,13 +223,16 @@ const select = async (input: CandidateSelection): Promise<RoutingTrace> => {
         { skill, purpose: 'routing' as const, nodeId: input.node.id },
         async ({ skill: current }) => current.body,
       );
+
       if (body.trim().length === 0) {
         throw new Error('Evaluation skill view must be non-empty.');
       }
+
       return { ...skill, body };
     }),
   );
   const reranked = await rerank({ ...input, candidates });
+
   return choose({ ...input, reranked });
 };
 
@@ -249,9 +258,9 @@ const rerank = async ({
     topN: candidates.length,
     flags: { sensitiveOutput: true },
   });
-
   // Provider order is not trusted; validation and sorting happen in this process.
   const ordered = orderCandidates(candidates, ranking);
+
   await runtime?.emit({
     type: 'rerank.result',
     stage: 'bundle',
@@ -263,6 +272,7 @@ const rerank = async ({
       rank,
     })),
   });
+
   return ordered;
 };
 
@@ -309,6 +319,7 @@ const choose = async ({
       evaluation,
     ]),
   );
+
   const candidates = SkillCandidateSchema.array().parse(
     reranked.map(({ skill, score, rank }) => ({
       skillName: skill.name,
@@ -317,11 +328,13 @@ const choose = async ({
       rationale: evaluations.get(skill.name)!.rationale,
     })),
   );
+
   const selected = new Set(
     structured.evaluations
       .filter(({ selected }) => selected)
       .map(({ skillName }) => skillName),
   );
+
   const bundle = OrderedBundleSchema.parse({
     goalId: node.id,
     skills: candidates.flatMap(({ skillName }) =>
@@ -344,8 +357,11 @@ const currentCandidates = (
   return matches
     .flatMap(({ data }) => {
       const skill = catalog.get(data.name);
-      if (skill === undefined || seen.has(skill.name)) return [];
+
+      if (skill === undefined || seen.has(skill.name)) {return [];}
+
       seen.add(skill.name);
+
       return [skill];
     })
     .slice(0, limit);
@@ -361,14 +377,16 @@ const orderCandidates = (
   return [...ranking]
     .sort((left, right) => {
       const score = right.relevanceScore - left.relevanceScore;
-      if (score !== 0) return score;
+
+      if (score !== 0) {return score;}
+
       return compare(
-        candidates[left.index]!.name,
-        candidates[right.index]!.name,
+        candidates[left.index].name,
+        candidates[right.index].name,
       );
     })
     .map(({ index, relevanceScore }, position) => ({
-      skill: candidates[index]!,
+      skill: candidates[index],
       score: relevanceScore,
       rank: position + 1,
     }));
@@ -384,6 +402,7 @@ const validateRanking = (
   }
 
   const indices = new Set<number>();
+
   for (const result of ranking) {
     const validIndex =
       Number.isSafeInteger(result.index) &&
@@ -445,11 +464,14 @@ const assign = async ({
 
   // Metadata is sufficient for the graph snapshot; executable tools remain in the catalog.
   node.candidates = trace.candidates.map((candidate) => ({ ...candidate }));
+
   node.bundle = {
     ...trace.bundle,
     skills: [...trace.bundle.skills],
   };
+
   node.tools = metadata(validatedTools);
+
   await runtime?.emit({
     type: 'menu.composed',
     stage: 'bundle',

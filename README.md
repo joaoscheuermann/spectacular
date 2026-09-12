@@ -32,6 +32,33 @@ it on a trusted network.
 See [`agents/doric/README.md`](agents/doric/README.md) for the API, event, and
 persistence contracts.
 
+## Formatting and linting
+
+Use Node.js 20.19+, 22.13+, or 24+ for the development tools.
+
+```console
+npm run format:check  # Check formatting across the workspace
+npm run format       # Apply Prettier formatting
+npm run lint         # Check JavaScript and TypeScript, including scripts/*.mjs
+npm run lint:fix     # Apply available ESLint fixes; review the diff afterward
+npx nx lint agent   # Lint one Nx project
+```
+
+Prettier uses its defaults with single quotes. ESLint uses the recommended
+JavaScript and TypeScript rules, with type-aware checks for package source,
+tools, and tests. Formatting rules are delegated to Prettier. Braces are
+required, nested ternaries are rejected, and complexity above 8, nesting above
+3, or more than 3 parameters produces a warning, following the repository's
+coding conventions. These checks help readability but do not replace review
+of naming, decomposition, or architecture.
+
+Generated files, dependencies, vendored code, frozen experiment fixtures, and
+experiment outputs are excluded. Python remains under its existing tooling.
+This setup does not automatically reformat existing source. The repository
+has existing lint and formatting violations, so the CI checks initially
+report findings without blocking builds. After cleanup, remove
+`continue-on-error` from both quality-check steps to make them blocking.
+
 ## Workspace guide
 
 Each Nx project owns a README with its public contract, usage, and development

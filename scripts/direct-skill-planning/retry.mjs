@@ -8,7 +8,9 @@ export const providerAttempts = providerRetryDelaysMs.length + 1;
 class ProviderCallError extends Error {
   constructor(failure) {
     super('Provider operation failed.');
+
     this.name = 'ProviderCallError';
+
     this.failure = failure;
   }
 }
@@ -60,32 +62,38 @@ export const retryProvider = async (
     try {
       return await operation();
     } catch (error) {
-      if (!(error instanceof ProviderErrorObject)) throw error;
+      if (!(error instanceof ProviderErrorObject)) {throw error;}
 
       const failure = failureDetails(error, context);
       const exhausted =
         error.data.retryable === false || attempt === providerAttempts;
+
       const nextDelayMs = exhausted
         ? undefined
         : providerRetryDelaysMs[attempt - 1];
+
       await onFailure?.({
         ...failure,
         attempt,
         outcome: exhausted ? 'exhausted' : 'retrying',
         ...(nextDelayMs === undefined ? {} : { nextDelayMs }),
       });
+
       if (exhausted) {
         throw new ProviderCallError({ ...failure, attempts: attempt });
       }
 
       await retryDelay(nextDelayMs);
+
       attempt += 1;
     }
   }
 };
 
 export const providerFailure = (error) => {
-  if (error instanceof ProviderCallError) return error.failure;
-  if (!(error instanceof ProviderErrorObject)) return null;
+  if (error instanceof ProviderCallError) {return error.failure;}
+
+  if (!(error instanceof ProviderErrorObject)) {return null;}
+
   return { ...failureDetails(error), attempts: 1 };
 };

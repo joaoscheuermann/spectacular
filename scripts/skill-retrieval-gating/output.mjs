@@ -1,6 +1,6 @@
-import { createHash, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
@@ -17,11 +17,15 @@ const files = async (directory, extension, prefix) =>
 
 const digest = async (entries) => {
   const hash = createHash('sha256');
+
   for (const { name, path } of entries) {
     const data = await readFile(path);
+
     hash.update(name).update('\0').update(String(data.byteLength)).update('\0');
+
     hash.update(data);
   }
+
   return hash.digest('hex');
 };
 
@@ -45,6 +49,7 @@ const rates = ({
 }) => {
   const recall = ratio(selectedExpected, expected);
   const precision = ratio(selectedExpected + selectedUseful, selected);
+
   const relevantRetentionRate = ratio(
     selectedExpected + selectedUseful,
     recoveredRelevant,
@@ -64,25 +69,32 @@ const rates = ({
 export const scoreBundle = (current, recovered, selected) => {
   const recoveredNames = new Set(recovered.map(({ name }) => name));
   const selectedNames = new Set(selected.map(({ name }) => name));
+
   const selectedExpected = current.skills.expected.filter((name) =>
     selectedNames.has(name),
   );
+
   const selectedUseful = current.skills.useful.filter((name) =>
     selectedNames.has(name),
   );
+
   const selectedNoise = Object.entries(current.skills.noise)
     .filter(([name]) => selectedNames.has(name))
     .map(([name, { type }]) => ({ name, type }));
+
   const recoveredRelevant = [
     ...current.skills.expected,
     ...current.skills.useful,
   ].filter((name) => recoveredNames.has(name));
+
   const recoveredNoise = Object.entries(current.skills.noise)
     .filter(([name]) => recoveredNames.has(name))
     .map(([name, { type }]) => ({ name, type }));
+
   const removedNoise = recoveredNoise.filter(
     ({ name }) => !selectedNames.has(name),
   );
+
   const counts = {
     selectedExpected: selectedExpected.length,
     selectedUseful: selectedUseful.length,
@@ -142,6 +154,7 @@ const createUsage = () => {
   let callsWithCost = 0;
   const operations = new Map();
   const costs = new Map();
+
   const totals = {
     inputTokens: 0,
     outputTokens: 0,
@@ -154,20 +167,26 @@ const createUsage = () => {
 
   const record = ({ operation, model, usage }) => {
     sequence += 1;
+
     operations.set(operation, (operations.get(operation) ?? 0) + 1);
 
     if (usage !== undefined) {
       callsWithUsage += 1;
+
       for (const name of Object.keys(totals)) {
         totals[name] += usage[name] ?? 0;
       }
+
       if (usage.cost !== undefined) {
         callsWithCost += 1;
+
         const unit = usage.cost.unit ?? 'unspecified';
+
         const current = costs.get(unit) ?? {
           amount: 0,
           upstreamAmount: undefined,
         };
+
         costs.set(unit, {
           amount: current.amount + usage.cost.amount,
           upstreamAmount:
@@ -222,6 +241,7 @@ export const createOutput = async ({ directory, config }) => {
   const resultsPath = join(runDirectory, 'results.json');
   const logPath = join(runDirectory, 'output.log');
   const usage = createUsage();
+
   await mkdir(runDirectory, { recursive: true });
 
   const [cases, skills, commit, status] = await Promise.all([
@@ -233,6 +253,7 @@ export const createOutput = async ({ directory, config }) => {
       encoding: 'utf8',
     }),
   ]);
+
   const sources = [
     ...[
       'index.mjs',
@@ -249,11 +270,13 @@ export const createOutput = async ({ directory, config }) => {
     ...cases,
     ...skills,
   ].sort((left, right) => left.name.localeCompare(right.name));
+
   const [sourceSha256, casesSha256, catalogSha256] = await Promise.all([
     digest(sources),
     digest(cases),
     digest(skills),
   ]);
+
   const identity = {
     source: {
       commit: commit.stdout.trim(),
@@ -270,6 +293,7 @@ export const createOutput = async ({ directory, config }) => {
       arch: process.arch,
     },
   };
+
   const manifest = {
     schemaVersion: 1,
     runId: id,
@@ -279,6 +303,7 @@ export const createOutput = async ({ directory, config }) => {
     identity,
     files: { log: 'output.log', results: 'results.json' },
   };
+
   await json(manifestPath, manifest);
 
   return {
@@ -290,6 +315,7 @@ export const createOutput = async ({ directory, config }) => {
     async complete(results, metrics) {
       const completedAt = new Date().toISOString();
       const providerUsage = usage.snapshot();
+
       await json(resultsPath, {
         runId: id,
         cases: results.length,
@@ -297,6 +323,7 @@ export const createOutput = async ({ directory, config }) => {
         providerUsage,
         results,
       });
+
       await json(manifestPath, {
         ...manifest,
         status: 'completed',

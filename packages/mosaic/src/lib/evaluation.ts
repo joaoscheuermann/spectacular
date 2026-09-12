@@ -7,7 +7,9 @@ export const evaluate = async <Input, Output>(
   next: (input: Readonly<Input>) => Promise<Output>,
 ): Promise<Output> => {
   const snapshot = readonlySnapshot(input);
-  if (hook === undefined) return next(snapshot);
+
+  if (hook === undefined) {return next(snapshot);}
+
   return hook(snapshot, (candidate) =>
     next(readonlySnapshot(candidate as Input)),
   );
@@ -20,7 +22,8 @@ const freezeCopy = (
   value: unknown,
   seen: WeakMap<object, unknown>,
 ): unknown => {
-  if (typeof value !== 'object' || value === null) return value;
+  if (typeof value !== 'object' || value === null) {return value;}
+
   if (
     !Array.isArray(value) &&
     Object.getPrototypeOf(value) !== Object.prototype
@@ -29,19 +32,26 @@ const freezeCopy = (
   }
 
   const existing = seen.get(value);
-  if (existing !== undefined) return existing;
+
+  if (existing !== undefined) {return existing;}
 
   if (Array.isArray(value)) {
     const copy: unknown[] = [];
+
     seen.set(value, copy);
+
     value.forEach((item) => copy.push(freezeCopy(item, seen)));
+
     return Object.freeze(copy);
   }
 
   const copy: Record<string, unknown> = {};
+
   seen.set(value, copy);
+
   Object.entries(value).forEach(([key, item]) => {
     copy[key] = freezeCopy(item, seen);
   });
+
   return Object.freeze(copy);
 };

@@ -48,6 +48,7 @@ export const validateMatches = (
   limit: number,
 ): readonly SkillMatch[] => {
   const seen = new Set<string>();
+
   return matches
     .flatMap(({ skill, score }) => {
       if (!Number.isFinite(score)) {
@@ -55,9 +56,13 @@ export const validateMatches = (
           'Evaluation retrieval returned an invalid skill score.',
         );
       }
+
       const current = catalog.get(skill.name);
-      if (current === undefined || seen.has(current.name)) return [];
+
+      if (current === undefined || seen.has(current.name)) {return [];}
+
       seen.add(current.name);
+
       return [{ skill: current, score }];
     })
     .slice(0, limit);
@@ -76,10 +81,13 @@ export const validateTools = (
 
   return tools.map(({ name }) => {
     const current = catalog.get(name);
+
     if (current === undefined || seen.has(name)) {
       throw new Error('Evaluation menu returned an invalid tool.');
     }
+
     seen.add(name);
+
     return current;
   });
 };

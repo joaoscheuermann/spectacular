@@ -1,17 +1,19 @@
+import { z } from 'zod';
+
 import { ProviderErrorObject } from '../classes/provider-error.js';
 import type {
   FinishReason,
   JsonObject,
   JsonValue,
-  ProviderError,
   ProviderEmbeddingFinished,
   ProviderEmbeddingRequest,
+  ProviderError,
   ProviderFinished,
   ProviderId,
   ProviderMessage,
   ProviderRequest,
-  ProviderRerankRequest,
   ProviderRerankFinished,
+  ProviderRerankRequest,
   ProviderRerankResult,
   ProviderStructuredFinished,
   ReasoningEffort,
@@ -25,7 +27,6 @@ import {
   numberField,
   recordField,
 } from '../utils/json.js';
-import { z } from 'zod';
 
 export const requireRequestInput = (
   provider: ProviderId,
@@ -187,19 +188,23 @@ export const parseUsage = (
   const promptDetails = recordField(usage, 'prompt_tokens_details');
   const inputTokens =
     numberField(usage, 'input_tokens') ?? numberField(usage, 'prompt_tokens');
+
   const outputTokens =
     numberField(usage, 'output_tokens') ??
     numberField(usage, 'completion_tokens');
   const totalTokens = numberField(usage, 'total_tokens');
+
   const reasoningTokens =
     numberField(usage, 'reasoning_tokens') ??
     (details === undefined
       ? undefined
       : numberField(details, 'reasoning_tokens'));
+
   const cachedInputTokens =
     promptDetails === undefined
       ? undefined
       : numberField(promptDetails, 'cached_tokens');
+
   const cacheWriteTokens =
     promptDetails === undefined
       ? undefined
@@ -207,6 +212,7 @@ export const parseUsage = (
   const searchUnits = numberField(usage, 'search_units');
   const amount = numberField(usage, 'cost');
   const costDetails = recordField(usage, 'cost_details');
+
   const upstreamAmount =
     costDetails === undefined
       ? undefined
@@ -271,6 +277,7 @@ export const parseJsonBody = (
       message: `${provider} returned invalid JSON.`,
       ...(sensitiveOutput ? {} : { diagnostic: diagnosticExcerpt(body) }),
     };
+
     throw sensitiveOutput
       ? new ProviderErrorObject(data)
       : new ProviderErrorObject(data, { cause });
@@ -294,8 +301,9 @@ export const parseEmbedding = (
 
   if (embedding.length > 0 && embedding.every(isFiniteNumber)) {
     const usage = parseUsage(recordField(body, 'usage'), costUnit);
+
     return {
-      embedding: embedding as readonly number[],
+      embedding: embedding,
       ...(usage === undefined ? {} : { usage }),
     };
   }
@@ -313,6 +321,7 @@ export const parseRerank = (
   costUnit?: string,
 ): ProviderRerankFinished => {
   const results = arrayField(body, 'results');
+
   const parsed = results.map((value) => {
     const result = asRecord(value);
     const index =
@@ -331,6 +340,7 @@ export const parseRerank = (
 
   if (parsed.length > 0 && parsed.every(isRerankResult)) {
     const usage = parseUsage(recordField(body, 'usage'), costUnit);
+
     return {
       results: parsed,
       ...(usage === undefined ? {} : { usage }),
@@ -419,9 +429,11 @@ export const messagesWithStructuredSchema = (
   }
 
   const content = structuredSchemaPrompt(schema);
+
   const system = request.messages.filter(
     (message) => message.role === 'system',
   );
+
   const nonSystem = request.messages.filter(
     (message) => message.role !== 'system',
   );
@@ -511,6 +523,7 @@ export const parseStructuredOutput = <Output = JsonValue>(
     parsed = JSON.parse(finish.text) as unknown;
   } catch (cause) {
     const sensitiveOutput = request.flags?.sensitiveOutput === true;
+
     const data = {
       provider,
       code: 'invalid_structured_output',
@@ -519,6 +532,7 @@ export const parseStructuredOutput = <Output = JsonValue>(
         ? {}
         : { diagnostic: structuredOutputDiagnostic(finish) }),
     };
+
     throw sensitiveOutput
       ? new ProviderErrorObject(data)
       : new ProviderErrorObject(data, { cause });

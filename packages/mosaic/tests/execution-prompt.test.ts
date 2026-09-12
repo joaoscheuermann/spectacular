@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import type { Skill } from 'bundle';
 import { z } from 'zod';
+
+import type { Skill } from 'bundle';
 import type { Tool } from 'tool';
 
 import * as executionPrompt from '../src/lib/prompts/execution.js';
@@ -14,38 +15,62 @@ test('defines precedence tools criteria and all terminal statuses', () => {
   ]);
 
   assert.match(prompt, /# Instruction precedence/u);
+
   assert.match(prompt, /# Tool use/u);
+
   assert.match(prompt, /limit applies per response, not per node/u);
+
   assert.match(prompt, /failed command is an observation/u);
+
   assert.match(prompt, /another reasonable command or tool action/u);
+
   assert.match(prompt, /One missing executable/u);
+
   assert.match(prompt, /zero-based criterionIndex/u);
+
   assert.match(prompt, /smallest set of observationIds/u);
+
   assert.match(prompt, /exact opaque IDs shown in tool-result messages/u);
+
   assert.match(prompt, /another branch, a descendant, an older plan snapshot/u);
+
   assert.match(prompt, /completed post-revision decision[\s\S]*fresh local/u);
+
   assert.match(prompt, /does not apply to blocked or failed/u);
+
   assert.match(prompt, /exit_code.*stderr.*timed_out.*truncated/u);
+
   assert.match(
     prompt,
     /later successful command does not automatically resolve/u,
   );
+
   assert.match(prompt, /set -e.*&&/u);
+
   assert.match(prompt, /concrete evidence shows completion is impossible/u);
+
   assert.match(prompt, /reasonable[\s\S]*alternatives/u);
+
   assert.match(prompt, /explicit confirmation does not prove impossibility/u);
+
   assert.match(prompt, /blocked, mark at least one criterion unsatisfied/u);
+
   assert.match(prompt, /logical impossibility[\s\S]*no local observation/u);
+
   for (const status of ['completed', 'needs_revision', 'blocked', 'failed']) {
     assert.match(prompt, new RegExp(`- ${status}:`, 'u'));
   }
+
   assert.match(prompt, /structured-output mechanism supplied by/u);
+
   assert.match(prompt, /universal behavior/u);
+
   assert.doesNotMatch(prompt, /observationRefs|triggerObservationRef|callId/u);
 });
 
 test('projects only cited transitive ancestor evidence and preserves skill order', () => {
   const root = completedNode('root', 0, [], 'root artifact', ['obs-root-call']);
+
   const direct = createNode(
     'direct',
     1,
@@ -53,15 +78,18 @@ test('projects only cited transitive ancestor evidence and preserves skill order
     'completed',
     'direct artifact',
   );
+
   direct.observations = [
     observation('direct', 'direct-call-1', 'cited direct output'),
     observation('direct', 'direct-call-2', 'also cited direct output'),
     observation('direct', 'direct-call-3', 'uncited direct output'),
   ];
+
   direct.outcome = completedOutcome('direct', [
     'obs-direct-call-1',
     'obs-direct-call-2',
   ]);
+
   const unrelated = createNode(
     'unrelated',
     2,
@@ -70,16 +98,20 @@ test('projects only cited transitive ancestor evidence and preserves skill order
     'unrelated artifact',
   );
   const current = createNode('current', 3, ['direct'], 'ready');
+
   current.candidates = [
     candidate('first', 1, 'First is needed.'),
     candidate('second', 2, 'Second is needed.'),
   ];
+
   current.bundle = {
     goalId: 'current',
     skills: ['first', 'second'],
     selectionRationale: 'Both skills are needed.',
   };
+
   current.tools = [{ name: 'lookup', description: 'Lookup evidence.' }];
+
   const graph: Graph = {
     revision: 1,
     nodes: [root, unrelated, direct, current],
@@ -94,25 +126,41 @@ test('projects only cited transitive ancestor evidence and preserves skill order
   });
 
   assert.match(prompt, /root artifact/u);
+
   assert.match(prompt, /direct artifact/u);
+
   assert.match(prompt, /cited root output/u);
+
   assert.match(prompt, /cited direct output/u);
+
   assert.match(prompt, /also cited direct output/u);
+
   assert.match(prompt, /Total Observation Count[\s\S]*3/u);
+
   assert.match(prompt, /Cited Observation Count[\s\S]*2/u);
+
   assert.match(prompt, /Observation IDs/u);
+
   assert.match(prompt, /may be cited as ancestor evidence/u);
+
   assert.doesNotMatch(prompt, /unrelated artifact/u);
+
   assert.doesNotMatch(prompt, /uncited direct output|## Call ID/u);
+
   assert.ok(prompt.indexOf('first body') < prompt.indexOf('second body'));
+
   assert.match(prompt, /Input schemas are supplied directly by the runtime/u);
+
   assert.doesNotMatch(prompt, /inputSchema/u);
+
   assert.doesNotMatch(prompt, /# Previous Revision Handoff/u);
 });
 
 test('deduplicates cross-criterion references in original observation order', () => {
   const ancestor = completedNode('ancestor', 0, []);
+
   ancestor.doneWhen = ['First.', 'Second.'];
+
   ancestor.outcome = {
     ...ancestor.outcome!,
     criteria: [
@@ -130,10 +178,12 @@ test('deduplicates cross-criterion references in original observation order', ()
       },
     ],
   };
+
   ancestor.observations = [
     observation('ancestor', 'call-0', 'first ledger output'),
     observation('ancestor', 'call-1', 'second ledger output'),
   ];
+
   const current = createNode('current', 1, ['ancestor'], 'ready');
 
   const prompt = executionPrompt.user({
@@ -145,25 +195,33 @@ test('deduplicates cross-criterion references in original observation order', ()
   });
 
   assert.equal(prompt.split('first ledger output').length - 1, 1);
+
   assert.equal(prompt.split('second ledger output').length - 1, 1);
+
   assert.ok(
     prompt.indexOf('first ledger output') <
       prompt.indexOf('second ledger output'),
   );
+
   assert.doesNotMatch(prompt, /## Call ID/u);
 });
 
 test('uses collision-safe fences for arbitrary dynamic content', () => {
   const hostile = 'before\n``````\n~~~~~~\nafter';
   const current = createNode('current', 0, [], 'ready');
+
   current.goal = hostile;
+
   current.doneWhen = [hostile];
+
   current.candidates = [candidate(hostile, 1, 'Needed.')];
+
   current.bundle = {
     goalId: 'current',
     skills: [hostile],
     selectionRationale: 'The skill is needed.',
   };
+
   const graph: Graph = { revision: 1, nodes: [current] };
 
   const prompt = executionPrompt.user({
@@ -176,12 +234,15 @@ test('uses collision-safe fences for arbitrary dynamic content', () => {
   const occurrences = prompt.split(hostile).length - 1;
 
   assert.equal(occurrences, 8);
+
   assert.match(prompt, /`{7}text\nbefore/u);
+
   assert.doesNotMatch(prompt, /^\{\s*"/u);
 });
 
 test('renders artifact references as references rather than inline content', () => {
   const ancestor = completedNode('ancestor', 0, []);
+
   ancestor.artifacts = [
     {
       kind: 'reference',
@@ -189,7 +250,9 @@ test('renders artifact references as references rather than inline content', () 
       reference: 'urn:artifact:opaque',
     },
   ];
+
   const current = createNode('current', 1, ['ancestor'], 'ready');
+
   const prompt = executionPrompt.user({
     request: 'Use the artifact.',
     node: current,
@@ -199,13 +262,16 @@ test('renders artifact references as references rather than inline content', () 
   });
 
   assert.match(prompt, /## Kind[\s\S]*reference/u);
+
   assert.match(prompt, /## Reference[\s\S]*urn:artifact:opaque/u);
+
   assert.doesNotMatch(prompt, /## Data[\s\S]*urn:artifact:opaque/u);
 });
 
 test('renders a delimiter-safe non-citable revision handoff without historical IDs', () => {
   const hostile = 'before\n``````\n~~~~~~\nafter';
   const current = createNode('current', 0, [], 'ready');
+
   const prompt = executionPrompt.user({
     request: 'Continue after revision.',
     node: current,
@@ -228,13 +294,21 @@ test('renders a delimiter-safe non-citable revision handoff without historical I
   });
 
   assert.match(prompt, /# Previous Revision Handoff/u);
+
   assert.match(prompt, /historical context only, not citable evidence/u);
+
   assert.match(prompt, /cite only fresh observation IDs/u);
+
   assert.match(prompt, /## Criterion Index[\s\S]*1/u);
+
   assert.match(prompt, /## Criterion Text/u);
+
   assert.match(prompt, /## Relevant Historical Tool Results/u);
+
   assert.equal(prompt.split(hostile).length - 1, 3);
+
   assert.match(prompt, /`{7}text\nbefore/u);
+
   assert.doesNotMatch(prompt, /Observation ID|Call ID/u);
 });
 
@@ -274,8 +348,11 @@ function completedNode(
   observationIds: readonly string[] = [],
 ): Node {
   const node = createNode(id, index, dependsOn, 'completed', artifact);
+
   node.observations = [observation(id, `${id}-call`, `cited ${id} output`)];
+
   node.outcome = completedOutcome(id, observationIds);
+
   return node;
 }
 

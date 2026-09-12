@@ -1,7 +1,6 @@
 const planningSystem = `Decompose the objective into observable goals.
 
 Each goal must describe a verifiable outcome, preserve the objective, avoid any unsupported assumptions, and state what must become true rather than an activity to perform.`;
-
 const goalsList = (goals) =>
   goals.map((goal, index) => `${index + 1}. ${goal}`).join('\n');
 
@@ -10,9 +9,7 @@ const skillBlock = ({ name, body }) => `## ${name}
 \`\`\`\`markdown
 ${body}
 \`\`\`\``;
-
 export const p0System = planningSystem;
-
 export const p0User = (objective) => `# Objective
 ${objective}`;
 

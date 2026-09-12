@@ -13,31 +13,32 @@ import type {
   ProviderMessage,
   ProviderMetadata,
   ProviderRequest,
-  ProviderRerankRequest,
   ProviderRerankFinished,
-  ProviderStructuredFinished,
+  ProviderRerankRequest,
   ProviderStreamEvent,
+  ProviderStructuredFinished,
   ProviderToolCall,
   StructuredOutputSchema,
   StructuredOutputValue,
 } from '../types/provider.js';
-import { asRecord, arrayField, stringField } from '../utils/json.js';
+import { arrayField, asRecord, stringField } from '../utils/json.js';
 import { parseSseEvents } from '../utils/sse.js';
 import {
   httpError,
-  parseEmbedding,
-  parseRerank,
   messagesWithStructuredSchema,
   messageText,
+  parseEmbedding,
   parseJsonBody,
+  parseRerank,
   parseStructuredOutput,
-  requireEmbeddingInput,
-  requireRerankInput,
   requestReasoningEffort,
+  requireEmbeddingInput,
   requireRequestInput,
+  requireRerankInput,
   streamErrorEvent,
   structuredJsonSchema,
 } from './common.js';
+import { withProviderLogging } from './logging.js';
 import {
   createStreamState,
   hasProviderError,
@@ -46,7 +47,6 @@ import {
   streamFinish,
   streamToolCalls,
 } from './openrouter/parse.js';
-import { withProviderLogging } from './logging.js';
 
 type SecretSource = string | (() => string | Promise<string>);
 
@@ -86,6 +86,7 @@ export const createLmStudioOpenAiProvider = (
     body: Record<string, unknown>,
   ): Promise<Record<string, unknown>> => {
     const sensitiveOutput = request.flags?.sensitiveOutput === true;
+
     const response = await deps.transport.request({
       method: 'POST',
       url: `${baseUrl}/chat/completions`,
@@ -115,14 +116,18 @@ export const createLmStudioOpenAiProvider = (
       readonly schema: Schema;
     },
   ): Promise<ProviderStructuredFinished<StructuredOutputValue<Schema>>>;
+
   async function complete<Output = JsonValue>(
     request: ProviderRequest<Output>,
   ): Promise<ProviderFinished<Output>>;
+
   async function complete<Output = JsonValue>(
     request: ProviderRequest<Output>,
   ): Promise<ProviderFinished<Output>> {
     requireRequestInput('lmstudio-openai', request);
+
     const body = chatBody(request, false);
+
     return parseStructuredOutput(
       'lmstudio-openai',
       request,
@@ -141,6 +146,7 @@ export const createLmStudioOpenAiProvider = (
         request: ProviderRequest<Output>,
       ): AsyncIterable<ProviderStreamEvent<Output>> {
         requireRequestInput('lmstudio-openai', request);
+
         const sensitiveOutput = request.flags?.sensitiveOutput === true;
         const body = chatBody(request, true);
         const state = createStreamState();
@@ -185,6 +191,7 @@ export const createLmStudioOpenAiProvider = (
               undefined,
               sensitiveOutput,
             );
+
             return;
           }
 
@@ -196,6 +203,7 @@ export const createLmStudioOpenAiProvider = (
               event.data,
               sensitiveOutput,
             );
+
             return;
           }
 
@@ -223,7 +231,9 @@ export const createLmStudioOpenAiProvider = (
         request: ProviderEmbeddingRequest,
       ): Promise<ProviderEmbeddingFinished> {
         requireEmbeddingInput('lmstudio-openai', request);
+
         const sensitiveOutput = request.flags?.sensitiveOutput === true;
+
         const body = {
           model: request.model,
           input: request.input,
@@ -231,6 +241,7 @@ export const createLmStudioOpenAiProvider = (
             ? {}
             : { dimensions: request.dimensions }),
         };
+
         const response = await deps.transport.request({
           method: 'POST',
           url: `${baseUrl}/embeddings`,
@@ -242,6 +253,7 @@ export const createLmStudioOpenAiProvider = (
           body: JSON.stringify(body),
           signal: request.signal,
         });
+
         if (response.status >= 400) {
           throw httpError(
             'lmstudio-openai',
@@ -261,13 +273,16 @@ export const createLmStudioOpenAiProvider = (
         request: ProviderRerankRequest,
       ): Promise<ProviderRerankFinished> {
         requireRerankInput('lmstudio-openai', request);
+
         const sensitiveOutput = request.flags?.sensitiveOutput === true;
+
         const body = {
           model: request.model,
           query: request.query,
           documents: request.documents,
           ...(request.topN === undefined ? {} : { top_n: request.topN }),
         };
+
         const response = await deps.transport.request({
           method: 'POST',
           url: `${baseUrl}/rerank`,
@@ -279,6 +294,7 @@ export const createLmStudioOpenAiProvider = (
           body: JSON.stringify(body),
           signal: request.signal,
         });
+
         if (response.status >= 400) {
           throw httpError(
             'lmstudio-openai',
@@ -339,6 +355,7 @@ const chatBody = (
   assertStructuredToolsSupported(request);
 
   const schema = structuredJsonSchema('lmstudio-openai', request.schema);
+
   const messages = messagesWithStructuredSchema(
     'lmstudio-openai',
     request,

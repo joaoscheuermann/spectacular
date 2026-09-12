@@ -3,23 +3,23 @@ import { readFile, stat, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { type AcpOptions,serveAcp } from './acp.js';
 import {
-  campaign,
   type Benchmark,
+  campaign,
   type CampaignAction,
   type CampaignCheck,
   type CampaignOptions,
   type CampaignRun,
 } from './campaign.js';
 import { compare, type CompareOptions, type CompareReport } from './compare.js';
-import { serveAcp, type AcpOptions } from './acp.js';
-import type { RunMode } from './run.js';
 import {
+  type CompositionCommandDependencies,
   compositionUsage,
   formatPlanningProgress,
   runCompositionCommand,
-  type CompositionCommandDependencies,
 } from './composition-cli.js';
+import type { RunMode } from './run.js';
 
 type Output = Pick<NodeJS.WriteStream, 'write'>;
 
@@ -47,10 +47,13 @@ export const runCli = async (
     switch (args[0]) {
       case 'serve':
         return await serve(args.slice(1), dependencies);
+
       case 'campaign':
         return await runCampaign(args.slice(1), dependencies, stdout);
+
       case 'compare':
         return await runComparison(args.slice(1), dependencies, stdout);
+
       case 'composition':
         writeJson(
           stdout,
@@ -63,20 +66,29 @@ export const runCli = async (
               }),
           }),
         );
+
         return 0;
+
       case 'release':
         return await createRelease(args.slice(1), dependencies, stdout);
+
       case 'help':
+
       case '--help':
+
       case '-h':
+
       case undefined:
         stdout.write(`${usage}\n`);
+
         return args[0] === undefined ? 2 : 0;
+
       default:
         throw new Error(`Unknown command: ${args[0]}`);
     }
   } catch (error) {
     stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+
     return 2;
   }
 };
@@ -86,8 +98,11 @@ const serve = async (
   dependencies: CliDependencies,
 ): Promise<number> => {
   const mode = parseMode(args[0]);
+
   rejectExtra(args, 1);
+
   await (dependencies.serveAcp ?? serveAcp)({ mode });
+
   return 0;
 };
 
@@ -101,9 +116,11 @@ const runCampaign = async (
   const flags = args.slice(2);
   const yesPaidRun = takeBooleanFlag(flags, '--yes-paid-run');
   const skillsbenchReport = takeValueFlag(flags, '--skillsbench-report');
+
   const rootDir =
     takeValueFlag(flags, '--root') ??
     (await benchmarkRoot(dependencies.cwd ?? process.cwd()));
+
   rejectFlags(flags);
 
   const result = await (dependencies.campaign ?? campaign)({
@@ -113,9 +130,11 @@ const runCampaign = async (
     yesPaidRun,
     ...(skillsbenchReport === undefined ? {} : { skillsbenchReport }),
   });
+
   writeJson(stdout, result);
 
-  if ('ok' in result) return result.ok ? 0 : 1;
+  if ('ok' in result) {return result.ok ? 0 : 1;}
+
   return result.arms.every((arm) => arm.result.code === 0) ? 0 : 1;
 };
 
@@ -128,13 +147,17 @@ const runComparison = async (
   const directDir = takeRequiredValueFlag(flags, '--direct');
   const mosaicDir = takeRequiredValueFlag(flags, '--mosaic');
   const reportPath = takeValueFlag(flags, '--report');
+
   rejectFlags(flags);
+
   const result = await (dependencies.compare ?? compare)({
     directDir,
     mosaicDir,
     ...(reportPath === undefined ? {} : { reportPath }),
   });
+
   writeJson(stdout, result);
+
   return result.exitCode;
 };
 
@@ -144,29 +167,36 @@ const createRelease = async (
   stdout: Output,
 ): Promise<number> => {
   rejectExtra(args, 0);
+
   const root = await benchmarkRoot(dependencies.cwd ?? process.cwd());
   const asset = resolve(root, 'dist', 'mosaic-bench-acp.mjs');
+
   const digest = createHash('sha256')
     .update(await readFile(asset))
     .digest('hex');
   const checksum = `${asset}.sha256`;
+
   await writeFile(checksum, `${digest}  mosaic-bench-acp.mjs\n`, 'utf8');
+
   writeJson(stdout, {
     version: '0.2.0',
     asset,
     checksum,
     sha256: digest,
   });
+
   return 0;
 };
 
 const parseMode = (value: string | undefined): RunMode => {
-  if (value === 'direct' || value === 'mosaic') return value;
+  if (value === 'direct' || value === 'mosaic') {return value;}
+
   throw new Error('serve requires one mode: direct or mosaic');
 };
 
 const parseBenchmark = (value: string | undefined): Benchmark => {
-  if (value === 'skillsbench' || value === 'terminalbench') return value;
+  if (value === 'skillsbench' || value === 'terminalbench') {return value;}
+
   throw new Error(
     'campaign requires one benchmark: skillsbench or terminalbench',
   );
@@ -179,54 +209,67 @@ const parseAction = (value: string | undefined): CampaignAction => {
     value === 'pilot' ||
     value === 'run'
   )
-    return value;
+    {return value;}
+
   throw new Error('campaign requires one action: check, smoke, pilot, or run');
 };
 
 const benchmarkRoot = async (cwd: string): Promise<string> => {
   const candidates = [resolve(cwd, 'benchmarks', 'mosaic'), resolve(cwd)];
+
   for (const candidate of candidates) {
     try {
       if ((await stat(resolve(candidate, 'project.json'))).isFile())
-        return candidate;
+        {return candidate;}
     } catch {
       // Try the next supported invocation directory.
     }
   }
+
   throw new Error('Cannot find the mosaic-benchmark project root.');
 };
 
 const takeBooleanFlag = (args: string[], flag: string): boolean => {
   const index = args.indexOf(flag);
-  if (index === -1) return false;
+
+  if (index === -1) {return false;}
+
   args.splice(index, 1);
+
   return true;
 };
 
 const takeRequiredValueFlag = (args: string[], flag: string): string => {
   const value = takeValueFlag(args, flag);
-  if (value === undefined) throw new Error(`${flag} requires a value`);
+
+  if (value === undefined) {throw new Error(`${flag} requires a value`);}
+
   return value;
 };
 
 const takeValueFlag = (args: string[], flag: string): string | undefined => {
   const index = args.indexOf(flag);
-  if (index === -1) return undefined;
+
+  if (index === -1) {return undefined;}
+
   const value = args[index + 1];
+
   if (value === undefined || value.startsWith('--')) {
     throw new Error(`${flag} requires a value`);
   }
+
   args.splice(index, 2);
+
   return value;
 };
 
 const rejectFlags = (args: readonly string[]): void => {
-  if (args.length > 0) throw new Error(`Unknown argument: ${args[0]}`);
+  if (args.length > 0) {throw new Error(`Unknown argument: ${args[0]}`);}
 };
 
 const rejectExtra = (args: readonly string[], expected: number): void => {
   if (args.length > expected)
-    throw new Error(`Unknown argument: ${args[expected]}`);
+    {throw new Error(`Unknown argument: ${args[expected]}`);}
 };
 
 const writeJson = (output: Output, value: unknown): void => {
@@ -244,8 +287,8 @@ const usage = [
   compositionUsage,
   '  npx nx run mosaic-benchmark:release',
 ].join('\n');
-
 const invokedPath = process.argv[1];
+
 if (
   invokedPath !== undefined &&
   import.meta.url === pathToFileURL(invokedPath).href

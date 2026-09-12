@@ -1,7 +1,7 @@
 import {
   GraphSchema,
-  PlannedGraphSchema,
   type PlannedGraph,
+  PlannedGraphSchema,
 } from '../../schemas/graph.js';
 import type { Graph, Node } from '../../types/graph.js';
 
@@ -14,7 +14,8 @@ export const localizedRevisionCount = (graphs: readonly Graph[]): number =>
 export const retiredNodeIds = (graphs: readonly Graph[]): string[] => {
   // Without an active snapshot there is no meaningful retirement comparison.
   const active = graphs.at(-1);
-  if (active === undefined) return [];
+
+  if (active === undefined) {return [];}
 
   // Any historical ID absent from the active graph is retired exactly once.
   const activeIds = new Set(active.nodes.map(({ id }) => id));
@@ -22,8 +23,10 @@ export const retiredNodeIds = (graphs: readonly Graph[]): string[] => {
 
   return graphs.slice(0, -1).flatMap((graph) =>
     graph.nodes.flatMap(({ id }) => {
-      if (activeIds.has(id) || seen.has(id)) return [];
+      if (activeIds.has(id) || seen.has(id)) {return [];}
+
       seen.add(id);
+
       return [id];
     }),
   );
@@ -44,7 +47,8 @@ export const revisionNodes = (graph: Graph): Node[] =>
 /** Rejects an exact planner-owned no-op while it can still be repaired. */
 export const localizedRevisionSchema = (active: Graph, target: Node) =>
   PlannedGraphSchema.superRefine((plan, context) => {
-    if (!sameRevisablePlan(active, plan, target.id)) return;
+    if (!sameRevisablePlan(active, plan, target.id)) {return;}
+
     context.addIssue({
       code: 'custom',
       path: ['nodes'],
@@ -71,6 +75,7 @@ export const applyLocalizedRevision = (
 
   // Reusing a removed ID would make graph history semantically ambiguous.
   const reused = plan.nodes.find(({ id }) => retiredIds.has(id));
+
   if (reused !== undefined) {
     throw new Error(`Localized revision reused retired node ID ${reused.id}.`);
   }
@@ -84,6 +89,7 @@ export const applyLocalizedRevision = (
   for (const node of protectedNodes) {
     const index = active.nodes.indexOf(node);
     const planned = plan.nodes[index];
+
     if (planned === undefined || !samePlan(node, planned)) {
       throw new Error(`Localized revision changed protected node ${node.id}.`);
     }
@@ -96,7 +102,8 @@ export const applyLocalizedRevision = (
    */
   const nodes = plan.nodes.map((planned, index) => {
     const protectedNode = protectedNodes.find(({ id }) => id === planned.id);
-    if (protectedNode !== undefined) return cloneNode(protectedNode);
+
+    if (protectedNode !== undefined) {return cloneNode(protectedNode);}
 
     return {
       ...planned,
@@ -134,8 +141,10 @@ const sameRevisablePlan = (
 ): boolean =>
   graph.nodes.length === plan.nodes.length &&
   graph.nodes.every((node, index) => {
-    if (node.id !== targetId && node.status !== 'pending') return true;
+    if (node.id !== targetId && node.status !== 'pending') {return true;}
+
     const planned = plan.nodes[index];
+
     return planned !== undefined && samePlan(node, planned);
   });
 

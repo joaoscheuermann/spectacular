@@ -3,9 +3,9 @@ import test from 'node:test';
 
 import type { Skill } from 'bundle';
 import {
-  structuredJsonSchema,
   type LlmProvider,
   type ProviderRequest,
+  structuredJsonSchema,
 } from 'llms';
 import type { Tool } from 'tool';
 
@@ -34,8 +34,11 @@ test('routes with transitive ancestor artifacts and omits unrelated branches', a
   );
 
   assert.equal(action.type, 'transition');
+
   assert.match(harness.searches[0] ?? '', /root artifact/u);
+
   assert.match(harness.searches[0] ?? '', /direct artifact/u);
+
   assert.doesNotMatch(harness.searches[0] ?? '', /unrelated artifact/u);
 });
 
@@ -43,18 +46,22 @@ test('uses an empty skill bundle and base-only tools without model calls', async
   const current = node('current');
   const base = tool('base');
   const harness = createHarness({ matches: [], requiredTools: [base] });
-
   const action = await run({ revision: 1, nodes: [current] }, harness.options);
 
   assert.equal(action.type, 'transition');
+
   assert.deepEqual(current.candidates, []);
+
   assert.deepEqual(current.bundle, {
     goalId: 'current',
     skills: [],
     selectionRationale: 'No routable skill candidates were available.',
   });
+
   assert.deepEqual(current.tools, [{ name: 'base', description: 'base tool' }]);
+
   assert.equal(harness.reranks.length, 0);
+
   assert.equal(harness.completions.length, 0);
 });
 
@@ -62,18 +69,22 @@ test('skips reranking and selection when maxSkills is zero', async () => {
   const current = node('current');
   const candidate = skill('candidate');
   const harness = createHarness({ matches: [candidate], maxSkills: 0 });
-
   const action = await run({ revision: 1, nodes: [current] }, harness.options);
 
   assert.equal(action.type, 'transition');
+
   assert.deepEqual(current.candidates, []);
+
   assert.deepEqual(current.bundle, {
     goalId: 'current',
     skills: [],
     selectionRationale: 'Skill routing is disabled because maxSkills is zero.',
   });
+
   assert.equal(harness.searches.length, 0);
+
   assert.equal(harness.reranks.length, 0);
+
   assert.equal(harness.completions.length, 0);
 });
 
@@ -82,6 +93,7 @@ test('normalizes selected references to score and canonical-name order', async (
   const beta = skill('beta', ['shared', 'beta-tool']);
   const alpha = skill('alpha', ['alpha-tool']);
   const gamma = skill('gamma', ['shared', 'gamma-tool']);
+
   const tools = [
     tool('base'),
     tool('shared'),
@@ -89,6 +101,7 @@ test('normalizes selected references to score and canonical-name order', async (
     tool('beta-tool'),
     tool('gamma-tool'),
   ];
+
   const harness = createHarness({
     matches: [beta, alpha, gamma],
     ranking: [
@@ -114,13 +127,13 @@ test('normalizes selected references to score and canonical-name order', async (
       },
     ],
     selectionRationale: 'Gamma and beta form the smallest sufficient bundle.',
-    requiredTools: [tools[0]!],
+    requiredTools: [tools[0]],
     toolMenu: tools,
   });
-
   const action = await run({ revision: 1, nodes: [current] }, harness.options);
 
   assert.equal(action.type, 'transition');
+
   assert.deepEqual(current.candidates, [
     {
       skillName: 'gamma',
@@ -141,32 +154,44 @@ test('normalizes selected references to score and canonical-name order', async (
       rationale: 'Beta behavior is needed.',
     },
   ]);
+
   assert.deepEqual(current.bundle, {
     goalId: 'current',
     skills: ['gamma', 'beta'],
     selectionRationale: 'Gamma and beta form the smallest sufficient bundle.',
   });
+
   assert.deepEqual(
     current.tools.map(({ name }) => name),
     ['base', 'shared', 'gamma-tool', 'beta-tool'],
   );
+
   const completion = harness.completions[0];
+
   assert.ok(completion);
+
   assert.match(completion.system, /at most 5 skills/u);
+
   assert.equal(completion.request.schema, undefined);
+
   assert.equal(completion.request.model, 'default-model');
+
   assert.deepEqual(completion.request.flags, { sensitiveOutput: true });
+
   assert.deepEqual(
     completion.request.messages.map(({ role }) => role),
     ['system', 'system', 'user'],
   );
+
   assert.equal(completion.request.tools?.length, 1);
+
   terminalTool(completion.request);
 });
 
 test('materializes rejected candidates and an empty selected bundle', async () => {
   const current = node('current');
   const candidate = skill('candidate');
+
   const harness = createHarness({
     matches: [candidate],
     ranking: [{ index: 0, relevanceScore: 0.123456789 }],
@@ -179,10 +204,10 @@ test('materializes rejected candidates and an empty selected bundle', async () =
     ],
     selectionRationale: 'General capability is sufficient for this goal.',
   });
-
   const action = await run({ revision: 1, nodes: [current] }, harness.options);
 
   assert.equal(action.type, 'transition');
+
   assert.deepEqual(current.candidates, [
     {
       skillName: 'candidate',
@@ -191,6 +216,7 @@ test('materializes rejected candidates and an empty selected bundle', async () =
       rationale: 'The candidate does not add required behavior.',
     },
   ]);
+
   assert.deepEqual(current.bundle, {
     goalId: 'current',
     skills: [],
@@ -201,6 +227,7 @@ test('materializes rejected candidates and an empty selected bundle', async () =
 test('fails on incomplete duplicate and out-of-range reranker results', async () => {
   const candidateA = skill('a');
   const candidateB = skill('b');
+
   const rankings = [
     [{ index: 0, relevanceScore: 1 }],
     [
@@ -222,16 +249,19 @@ test('fails on incomplete duplicate and out-of-range reranker results', async ()
       matches: [candidateA, candidateB],
       ranking,
     });
+
     const action = await run(
       { revision: 1, nodes: [node('current')] },
       harness.options,
     );
+
     assert.equal(action.type, 'fail');
   }
 });
 
 test('binds the selection schema to the node candidates uniqueness and limit', () => {
   const schema = createBundleSelectionSchema('node-1', ['alpha', 'beta'], 1);
+
   const valid = {
     goalId: 'node-1',
     evaluations: [
@@ -242,7 +272,9 @@ test('binds the selection schema to the node candidates uniqueness and limit', (
   };
 
   assert.equal(schema.safeParse(valid).success, true);
+
   assert.equal(schema.safeParse({ ...valid, goalId: 'other' }).success, false);
+
   assert.equal(
     schema.safeParse({
       goalId: 'node-1',
@@ -254,6 +286,7 @@ test('binds the selection schema to the node candidates uniqueness and limit', (
     }).success,
     false,
   );
+
   assert.equal(
     schema.safeParse({
       goalId: 'node-1',
@@ -262,6 +295,7 @@ test('binds the selection schema to the node candidates uniqueness and limit', (
     }).success,
     false,
   );
+
   assert.equal(
     schema.safeParse({
       goalId: 'node-1',
@@ -270,6 +304,7 @@ test('binds the selection schema to the node candidates uniqueness and limit', (
     }).success,
     false,
   );
+
   assert.equal(
     schema.safeParse({
       ...valid,
@@ -280,10 +315,12 @@ test('binds the selection schema to the node candidates uniqueness and limit', (
     }).success,
     false,
   );
+
   assert.equal(
     schema.safeParse({ ...valid, selectionRationale: ' ' }).success,
     false,
   );
+
   assert.equal(
     schema.safeParse({
       ...valid,
@@ -308,9 +345,13 @@ test('describes exact node and candidate constants in the provider-facing select
   const serialized = JSON.stringify(schema);
 
   assert.match(serialized, /field's `const` value exactly/u);
+
   assert.match(serialized, /"const":"n01:explore_mosaic_catalog"/u);
+
   assert.match(serialized, /field's `enum` values exactly/u);
+
   assert.match(serialized, /Include every allowed `skillName` exactly once/u);
+
   assert.match(serialized, /At most 1 evaluation may set `selected` to true/u);
 });
 
@@ -319,6 +360,7 @@ test('excludes required and stale indexed skills and never reads the tool retrie
   const required = skill('required');
   const selected = skill('selected');
   const stale = skill('stale');
+
   const harness = createHarness({
     matches: [required, stale, selected],
     requiredSkills: [required],
@@ -327,18 +369,21 @@ test('excludes required and stale indexed skills and never reads the tool retrie
       { skillName: 'selected', selected: true, rationale: 'Needed.' },
     ],
   });
-
   const action = await run({ revision: 1, nodes: [current] }, harness.options);
 
   assert.equal(action.type, 'transition');
+
   assert.deepEqual(current.bundle?.skills, ['selected']);
+
   assert.equal(harness.reranks[0]?.documents.length, 1);
+
   assert.match(harness.reranks[0]?.documents[0] ?? '', /selected body/u);
 });
 
 test('uses and defensively enforces the independent execution retrieval limit', async () => {
   const current = node('current');
   const matches = [skill('first'), skill('second'), skill('third')];
+
   const harness = createHarness({
     matches,
     maxRetrievedCandidates: 2,
@@ -349,12 +394,14 @@ test('uses and defensively enforces the independent execution retrieval limit', 
       rationale: `${name} is unnecessary.`,
     })),
   });
-
   const action = await run({ revision: 1, nodes: [current] }, harness.options);
 
   assert.equal(action.type, 'transition');
+
   assert.deepEqual(harness.topKs, [2]);
+
   assert.equal(harness.reranks[0]?.documents.length, 2);
+
   assert.deepEqual(
     current.candidates.map(({ skillName }) => skillName),
     ['first', 'second'],
@@ -366,6 +413,7 @@ test('keeps hostile context delimited and excludes private content from logs', a
   const ancestor = node('ancestor', 'completed', hostile);
   const current = node('current', 'ready', undefined, ['ancestor']);
   const selected = skill('selected');
+
   const harness = createHarness({
     matches: [selected],
     evaluations: [
@@ -383,8 +431,11 @@ test('keeps hostile context delimited and excludes private content from logs', a
   );
 
   assert.equal(action.type, 'transition');
+
   assert.match(harness.completions[0]?.user ?? '', /`{7}text\nartifact/u);
+
   const logs = JSON.stringify(harness.logs);
+
   assert.doesNotMatch(logs, /private-value|private-rationale|selected body/u);
 });
 
@@ -415,16 +466,19 @@ const createHarness = (input: HarnessInput) => {
   const toolMenu = input.toolMenu ?? requiredTools;
   const searches: string[] = [];
   const topKs: number[] = [];
+
   const reranks: Array<{
     readonly query: string;
     readonly documents: readonly string[];
   }> = [];
+
   const completions: Array<{
     readonly request: ProviderRequest<unknown>;
     readonly system: string;
     readonly user: string;
   }> = [];
   const logs: unknown[] = [];
+
   const toolRetriever = new Proxy(
     {},
     {
@@ -433,6 +487,7 @@ const createHarness = (input: HarnessInput) => {
       },
     },
   );
+
   const options: MosaicOptions = {
     logger: {
       info: (bindings: unknown, message: string) =>
@@ -451,6 +506,7 @@ const createHarness = (input: HarnessInput) => {
         readonly documents: readonly string[];
       }) => {
         reranks.push(request);
+
         return {
           results:
             input.ranking ??
@@ -462,6 +518,7 @@ const createHarness = (input: HarnessInput) => {
       },
       complete: async (request: ProviderRequest<unknown>) => {
         terminalTool(request);
+
         completions.push({
           request,
           system:
@@ -470,6 +527,7 @@ const createHarness = (input: HarnessInput) => {
               : '',
           user: userContent(request),
         });
+
         return terminalFinish(request, {
           goalId: 'current',
           evaluations: input.evaluations ?? [],
@@ -498,7 +556,9 @@ const createHarness = (input: HarnessInput) => {
       retriever: {
         search: async (query: string, topK: number) => {
           searches.push(query);
+
           topKs.push(topK);
+
           return matches.map((data) => ({ data, score: 1 }));
         },
       },

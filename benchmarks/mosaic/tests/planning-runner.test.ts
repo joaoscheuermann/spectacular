@@ -1,17 +1,18 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import type { MosaicOptions } from 'mosaic';
 import pino from 'pino';
+
+import type { MosaicOptions } from 'mosaic';
 
 import {
   createPlanningConditionHooks,
   planningCase,
+  type PlanningCondition,
   planningGoldObservation,
   planningGraphFromObservation,
-  runPlanningConditions,
-  type PlanningCondition,
   type PlanningRunAdapter,
+  runPlanningConditions,
 } from '../src/composition/planning.js';
 import { fakeProvider } from './support/provider.js';
 
@@ -30,27 +31,34 @@ test('runs all four conditions over one shared P0 without provider calls', async
   const adapter: PlanningRunAdapter = {
     initialPlan: () => {
       initialPlans += 1;
+
       return p0;
     },
     retrieve: () => {
       retrievals += 1;
+
       return benchmarkCase.gold.relevantSkillIds;
     },
     revise: ({ condition }) => {
       revisions.push(condition);
+
       return condition === 'distractor' ? p0 : p1;
     },
     observe: ({ phase, condition }) => {
       if (phase === 'p0') {
         p0Observations += 1;
+
         assert.equal(condition, null);
+
         return p0Observation;
       }
+
       return condition === 'gold' || condition === 'retrieved'
         ? p1Observation
         : p0Observation;
     },
   };
+
   const results = await runPlanningConditions({
     case: benchmarkCase,
     mosaic: options(profile.provider),
@@ -61,26 +69,37 @@ test('runs all four conditions over one shared P0 without provider calls', async
     results.map(({ condition }) => condition),
     ['no-hints', 'gold', 'retrieved', 'distractor'],
   );
+
   assert.equal(initialPlans, 1);
+
   assert.equal(retrievals, 1);
+
   assert.equal(p0Observations, 1);
+
   assert.deepEqual(revisions, ['gold', 'retrieved', 'distractor']);
-  assert.ok(results.every(({ p0: graph }) => graph === results[0]!.p0));
+
+  assert.ok(results.every(({ p0: graph }) => graph === results[0].p0));
+
   assert.equal(profile.requests.length, 0);
-  assert.deepEqual(results[0]!.evidenceSkillIds, []);
+
+  assert.deepEqual(results[0].evidenceSkillIds, []);
+
   assert.deepEqual(
-    results[1]!.evidenceSkillIds,
+    results[1].evidenceSkillIds,
     benchmarkCase.gold.relevantSkillIds,
   );
+
   assert.deepEqual(
-    results[2]!.evidenceSkillIds,
+    results[2].evidenceSkillIds,
     benchmarkCase.gold.relevantSkillIds,
   );
+
   assert.ok(
-    results[3]!.evidenceSkillIds.every((id) =>
+    results[3].evidenceSkillIds.every((id) =>
       benchmarkCase.gold.distractorSkillIds.includes(id),
     ),
   );
+
   assert.deepEqual(
     results.map(({ score }) => score.passed),
     [false, true, true, false],
@@ -89,10 +108,12 @@ test('runs all four conditions over one shared P0 without provider calls', async
 
 test('condition hooks reject a request that does not belong to their case', async () => {
   const benchmarkCase = planningCase('planning.artifacts.a');
+
   const p0 = planningGraphFromObservation(
     benchmarkCase,
     planningGoldObservation(benchmarkCase, 'p0'),
   );
+
   const hooks = createPlanningConditionHooks({
     case: benchmarkCase,
     condition: 'no-hints',
@@ -127,6 +148,7 @@ test('rejects unknown retrieved skill evidence before a workflow starts', async 
     }),
     /unknown skill ID/u,
   );
+
   assert.equal(profile.requests.length, 0);
 });
 
@@ -146,7 +168,7 @@ test('rejects semantic observations that omit or rename plan nodes', async () =>
         retrieve: async () => [],
         revise: async (): Promise<'unchanged'> => 'unchanged',
         observe: async () => ({
-          nodes: [{ ...p0Observation.nodes[0]!, id: 'renamed-node' }],
+          nodes: [{ ...p0Observation.nodes[0], id: 'renamed-node' }],
         }),
       },
     }),

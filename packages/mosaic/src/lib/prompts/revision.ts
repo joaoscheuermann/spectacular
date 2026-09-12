@@ -1,6 +1,6 @@
+import type { Observation } from '../schemas/observation.js';
 import type { Graph, Node } from '../types/graph.js';
 import type { SkillExtraction } from '../types/hint.js';
-import type { Observation } from '../schemas/observation.js';
 import { artifactSections, fenced, graphContext, section } from './context.js';
 
 const planningRules = [
@@ -82,6 +82,7 @@ export const localizedUser = (
   retiredIds: readonly string[],
 ): string => {
   const revision = target.outcome?.revisionRequest;
+
   if (revision === null || revision === undefined) {
     throw new Error('Localized revision target is missing its request.');
   }
@@ -102,7 +103,7 @@ export const localizedUser = (
 
 const hintContext = (hints: readonly SkillExtraction[]): string => {
   if (hints.length === 0)
-    return '# Planning Hints\n\nNo material hints were extracted.';
+    {return '# Planning Hints\n\nNo material hints were extracted.';}
 
   return [
     '# Planning Hints',

@@ -1,14 +1,14 @@
-import type { PlanningTransitionScore } from './planning-scoring.js';
+import {
+  type PlanningCondition,
+  type PlanningConditionResult,
+  planningConditions,
+} from './planning-runner.js';
 import type {
   CompositionClass,
   PlanningCase,
   PlanningDomain,
 } from './planning-schema.js';
-import {
-  planningConditions,
-  type PlanningCondition,
-  type PlanningConditionResult,
-} from './planning-runner.js';
+import type { PlanningTransitionScore } from './planning-scoring.js';
 
 export interface PlanningCaseRun {
   readonly case: Pick<PlanningCase, 'id' | 'domain' | 'compositionClass'>;
@@ -51,18 +51,22 @@ export const aggregatePlanningRuns = (
   runs: readonly PlanningCaseRun[],
 ): PlanningAggregateMetrics => {
   if (runs.length === 0)
-    throw new Error('Controlled planning metrics require at least one case.');
+    {throw new Error('Controlled planning metrics require at least one case.');}
+
   assertUnique(runs.map(({ case: benchmarkCase }) => benchmarkCase.id));
+
   runs.forEach(({ case: benchmarkCase, results }) => {
     if (results.length === 0)
-      throw new Error(
+      {throw new Error(
         `Planning case has no condition results: ${benchmarkCase.id}`,
-      );
+      );}
+
     assertUnique(
       results.map(({ condition }) => condition),
       `condition in ${benchmarkCase.id}`,
     );
   });
+
   return {
     caseCount: runs.length,
     conditions: summarize(runs),
@@ -94,7 +98,9 @@ const summarize = (
     const results = runs.flatMap(({ results }) =>
       results.filter((result) => result.condition === condition),
     );
-    if (results.length === 0) return [];
+
+    if (results.length === 0) {return [];}
+
     return [
       {
         condition,
@@ -132,5 +138,5 @@ const mean = (values: readonly number[]): number =>
 
 const assertUnique = (values: readonly string[], label = 'case'): void => {
   if (new Set(values).size !== values.length)
-    throw new Error(`Duplicate planning ${label} identifier.`);
+    {throw new Error(`Duplicate planning ${label} identifier.`);}
 };

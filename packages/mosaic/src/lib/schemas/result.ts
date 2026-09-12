@@ -3,12 +3,12 @@ import * as z from 'zod';
 import { FinalDeliverySchema } from './delivery.js';
 import { ObservationSchema } from './observation.js';
 import { NodeOutcomeSchema } from './outcome.js';
-import { RuntimeTerminationSchema } from './termination.js';
 import {
   OrderedBundleSchema,
   SkillCandidateSchema,
   validateRoutingTrace,
 } from './routing.js';
+import { RuntimeTerminationSchema } from './termination.js';
 
 export const WorkflowNodeResultSchema = z
   .object({
@@ -25,6 +25,7 @@ export const WorkflowNodeResultSchema = z
   .strict()
   .superRefine((node, context) => {
     validateRoutingTrace(node, context);
+
     validateNodeResult(node, context);
   });
 
@@ -37,7 +38,8 @@ export const MosaicResultSchema = z.discriminatedUnion('status', [
     })
     .strict()
     .superRefine((result, context) => {
-      if (result.nodes.every(({ status }) => status === 'completed')) return;
+      if (result.nodes.every(({ status }) => status === 'completed')) {return;}
+
       context.addIssue({
         code: 'custom',
         path: ['nodes'],
@@ -52,12 +54,15 @@ export const MosaicResultSchema = z.discriminatedUnion('status', [
     .strict()
     .superRefine((result, context) => {
       const hasFailed = result.nodes.some(({ status }) => status === 'failed');
+
       const hasBlocked = result.nodes.some(
         ({ status }) => status === 'blocked',
       );
       const valid =
         result.status === 'failed' ? hasFailed : hasBlocked && !hasFailed;
-      if (valid) return;
+
+      if (valid) {return;}
+
       context.addIssue({
         code: 'custom',
         path: ['nodes'],
@@ -86,11 +91,13 @@ const validateNodeResult = (
 
   if (node.status === 'completed') {
     requireOutcome(node, 'completed', context);
+
     return;
   }
 
   if (node.status === 'failed') {
     requireOutcome(node, 'failed', context);
+
     return;
   }
 
@@ -100,12 +107,14 @@ const validateNodeResult = (
     node.outcome === null && node.termination?.type === 'turn_limit';
   const dependencyBlocked =
     node.outcome === null && node.termination?.type === 'dependency';
+
   const revisionBlocked =
     node.outcome?.status === 'needs_revision' &&
     node.termination?.type === 'revision_limit';
 
   if (modelBlocked || turnBlocked || dependencyBlocked || revisionBlocked)
-    return;
+    {return;}
+
   context.addIssue({
     code: 'custom',
     message: 'Blocked node outcome and termination are inconsistent.',
@@ -117,7 +126,8 @@ const requireOutcome = (
   status: 'completed' | 'failed',
   context: z.RefinementCtx,
 ): void => {
-  if (node.outcome?.status === status && node.termination === null) return;
+  if (node.outcome?.status === status && node.termination === null) {return;}
+
   context.addIssue({
     code: 'custom',
     message: `${status} node requires a matching outcome and no termination.`,

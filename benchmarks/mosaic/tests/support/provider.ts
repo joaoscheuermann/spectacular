@@ -42,22 +42,28 @@ export const fakeProvider = (
     },
     complete: async <Output = JsonValue>(request: ProviderRequest<Output>) => {
       requests.push(request);
+
       return respond(request) as ProviderFinished<Output>;
     },
     stream: async function* <Output = JsonValue>(
       request: ProviderRequest<Output>,
     ): AsyncIterable<ProviderStreamEvent<Output>> {
       requests.push(request);
+
       const response = respond(request) as ProviderFinished<Output>;
+
       yield {
         type: 'response.started',
         provider: 'fake',
         model: request.model,
       };
+
       if (response.text.length > 0) {
         yield { type: 'text.delta', delta: response.text };
       }
+
       yield { type: 'reasoning.delta', delta: 'private reasoning' };
+
       yield { type: 'response.finished', finish: response };
     },
     embedding: async () => ({ embedding: [] }),

@@ -4,20 +4,22 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { runCli } from '../src/cli.js';
 import type { CampaignOptions } from '../src/campaign.js';
+import { runCli } from '../src/cli.js';
 
 const output = (): {
   readonly lines: string[];
   write(value: string): boolean;
 } => {
   const lines: string[] = [];
+
   return { lines, write: (value) => (lines.push(value), true) };
 };
 
 test('dispatches the ACP mode without writing protocol output itself', async () => {
   const stdout = output();
   let mode = '';
+
   const code = await runCli(['serve', 'mosaic'], {
     stdout,
     serveAcp: async (options) => {
@@ -26,53 +28,63 @@ test('dispatches the ACP mode without writing protocol output itself', async () 
   });
 
   assert.equal(code, 0);
+
   assert.equal(mode, 'mosaic');
+
   assert.deepEqual(stdout.lines, []);
 });
 
 test('keeps paid campaign execution behind the explicit flag', async () => {
   const stdout = output();
   let received: CampaignOptions | undefined;
+
   const code = await runCli(
     ['campaign', 'skillsbench', 'smoke', '--yes-paid-run', '--root', '/bench'],
     {
       stdout,
       campaign: async (options) => {
         received = options;
+
         return { directory: '/result', arms: [] };
       },
     },
   );
 
   assert.equal(code, 0);
+
   assert.deepEqual(received, {
     benchmark: 'skillsbench',
     action: 'smoke',
     rootDir: '/bench',
     yesPaidRun: true,
   });
+
   assert.equal(JSON.parse(stdout.lines[0] ?? '{}').directory, '/result');
 });
 
 test('dispatches the fixed SkillsBench pilot action', async () => {
   let received: CampaignOptions | undefined;
+
   const code = await runCli(
     ['campaign', 'skillsbench', 'pilot', '--yes-paid-run', '--root', '/bench'],
     {
       stdout: output(),
       campaign: async (options) => {
         received = options;
+
         return { directory: '/result', arms: [] };
       },
     },
   );
 
   assert.equal(code, 0);
+
   assert.equal(received?.action, 'pilot');
 });
 
 test('returns the comparison decision exit code', async () => {
   const stdout = output();
+
   const code = await runCli(
     ['compare', '--direct', '/direct', '--mosaic', '/mosaic'],
     {
@@ -111,11 +123,13 @@ test('returns the comparison decision exit code', async () => {
   );
 
   assert.equal(code, 0);
+
   assert.equal(JSON.parse(stdout.lines[0] ?? '{}').paretoWin, true);
 });
 
 test('forwards the SkillsBench evidence gate for Terminal-Bench', async () => {
   let received: CampaignOptions | undefined;
+
   const code = await runCli(
     [
       'campaign',
@@ -131,30 +145,39 @@ test('forwards the SkillsBench evidence gate for Terminal-Bench', async () => {
       stdout: output(),
       campaign: async (options) => {
         received = options;
+
         return { directory: '/result', arms: [] };
       },
     },
   );
 
   assert.equal(code, 0);
+
   assert.equal(received?.skillsbenchReport, '/results/skillsbench.json');
 });
 
 test('creates the release checksum beside the generated bundle', async () => {
   const root = await mkdtemp(join(tmpdir(), 'mosaic-cli-'));
+
   try {
     await mkdir(join(root, 'dist'));
+
     await writeFile(join(root, 'project.json'), '{}');
+
     await writeFile(join(root, 'dist', 'mosaic-bench-acp.mjs'), 'asset');
+
     const stdout = output();
 
     assert.equal(await runCli(['release'], { cwd: root, stdout }), 0);
+
     assert.equal(JSON.parse(stdout.lines[0] ?? '{}').version, '0.2.0');
+
     const checksum = await readFile(
       join(root, 'dist', 'mosaic-bench-acp.mjs.sha256'),
       'utf8',
     );
-    assert.match(checksum, /^[a-f0-9]{64}  mosaic-bench-acp\.mjs\n$/);
+
+    assert.match(checksum, /^[a-f0-9]{64} {2}mosaic-bench-acp\.mjs\n$/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -163,19 +186,23 @@ test('creates the release checksum beside the generated bundle', async () => {
 test('rejects unknown arguments without writing to stdout', async () => {
   const stdout = output();
   const stderr = output();
+
   const code = await runCli(['serve', 'direct', '--unknown'], {
     stdout,
     stderr,
   });
 
   assert.equal(code, 2);
+
   assert.deepEqual(stdout.lines, []);
+
   assert.match(stderr.lines[0] ?? '', /Unknown argument/);
 });
 
 test('streams controlled planning progress to stderr and keeps stdout as JSON', async () => {
   const stdout = output();
   const stderr = output();
+
   const code = await runCli(
     [
       'composition',
@@ -200,7 +227,9 @@ test('streams controlled planning progress to stderr and keeps stdout as JSON', 
               ) => void | Promise<void>;
             }
           ).progress;
+
           await progress?.({ type: 'run.started', caseCount: 1 });
+
           await progress?.({
             type: 'model.call',
             caseId: 'planning.software.c',
@@ -208,6 +237,7 @@ test('streams controlled planning progress to stderr and keeps stdout as JSON', 
             condition: 'gold',
             call: 1,
           });
+
           await progress?.({
             type: 'structured.attempt',
             caseId: 'planning.software.c',
@@ -217,11 +247,13 @@ test('streams controlled planning progress to stderr and keeps stdout as JSON', 
             runtimeAccepted: false,
             feedbackSent: true,
           });
+
           await progress?.({
             type: 'run.completed',
             caseCount: 1,
             modelCallCount: 1,
           });
+
           return { benchmark: 'mosaic-p0-p1-controlled' } as never;
         },
       },
@@ -229,12 +261,17 @@ test('streams controlled planning progress to stderr and keeps stdout as JSON', 
   );
 
   assert.equal(code, 0);
+
   assert.equal(
     JSON.parse(stdout.lines[0] ?? '{}').benchmark,
     'mosaic-p0-p1-controlled',
   );
+
   assert.ok(stderr.lines.some((line) => line.includes('run started')));
+
   assert.ok(stderr.lines.some((line) => line.includes('model call')));
+
   assert.ok(stderr.lines.some((line) => line.includes('repair=yes')));
+
   assert.ok(stderr.lines.some((line) => line.includes('run completed')));
 });

@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createMachine } from '../src/lib/workflow/machine.js';
 import type { Node } from '../src/lib/types/graph.js';
+import { createMachine } from '../src/lib/workflow/machine.js';
 
 test('finishes completed graphs through delivery without provider calls', async () => {
   let providerCalls = 0;
+
   const result = await createMachine().run({
     initial: 'schedule',
     state: { graphs: [{ revision: 1, nodes: [node('final')] }] },
@@ -16,6 +17,7 @@ test('finishes completed graphs through delivery without provider calls', async 
         provider: {
           complete: async () => {
             providerCalls += 1;
+
             throw new Error('Delivery must not call the provider.');
           },
         } as never,
@@ -24,7 +26,9 @@ test('finishes completed graphs through delivery without provider calls', async 
   });
 
   assert.equal(result.status, 'finished');
-  if (result.status !== 'finished') return;
+
+  if (result.status !== 'finished') {return;}
+
   assert.deepEqual(result.value, {
     status: 'completed',
     delivery: {
@@ -53,6 +57,7 @@ test('finishes completed graphs through delivery without provider calls', async 
       },
     ],
   });
+
   assert.equal(providerCalls, 0);
 });
 

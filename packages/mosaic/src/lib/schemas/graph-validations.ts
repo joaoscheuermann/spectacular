@@ -20,6 +20,7 @@ export function validateGraphSchema(plan: {
     if (nodeIds.has(node.id)) {
       errors.push(`Duplicate node ID found: "${node.id}".`);
     }
+
     nodeIds.add(node.id);
   }
 
@@ -34,9 +35,11 @@ export function validateGraphSchema(plan: {
   }
 
   const dependents = new Set(plan.nodes.flatMap(({ dependsOn }) => dependsOn));
+
   const invalidDelivery = plan.nodes.find(
     ({ id, deliver }) => deliver && dependents.has(id),
   );
+
   if (invalidDelivery !== undefined) {
     errors.push(`Deliverable node "${invalidDelivery.id}" must be terminal.`);
   }
@@ -44,6 +47,7 @@ export function validateGraphSchema(plan: {
   const terminalDeliverable = plan.nodes.some(
     ({ id, deliver }) => deliver && !dependents.has(id),
   );
+
   if (!terminalDeliverable) {
     errors.push('At least one terminal node must be marked for delivery.');
   }
@@ -55,15 +59,20 @@ export function validateGraphSchema(plan: {
   const visited = new Set<string>();
 
   const visit = (id: string): boolean => {
-    if (visiting.has(id)) return true;
-    if (visited.has(id)) return false;
+    if (visiting.has(id)) {return true;}
+
+    if (visited.has(id)) {return false;}
 
     visiting.add(id);
+
     const cyclic = (dependencies.get(id) ?? []).some(
       (dependency) => dependencies.has(dependency) && visit(dependency),
     );
+
     visiting.delete(id);
+
     visited.add(id);
+
     return cyclic;
   };
 

@@ -1,34 +1,34 @@
 import {
   AgentErrorObject,
+  type AgentToolEvent,
   createAgent,
   createToolCallStorage,
-  type AgentToolEvent,
 } from 'agent';
 import { createMessageStorage } from 'messages';
 import { createToolStorage, type Tool } from 'tool';
 
+import { evaluate } from '../../evaluation.js';
+import type { MosaicRuntime } from '../../observability.js';
+import {
+  createObservationIdAllocator,
+  type ObservationIdAllocator,
+} from '../../observation-ids.js';
+import { projectedObservations } from '../../observations.js';
 import * as executionPrompt from '../../prompts/execution.js';
+import { GraphSchema } from '../../schemas/graph.js';
+import { ObservationSchema } from '../../schemas/observation.js';
 import {
   createExecutionDecisionSchema,
   createNodeDecisionSchema,
   createNodeOutcomeSchema,
 } from '../../schemas/outcome.js';
-import { projectedObservations } from '../../observations.js';
-import { resolveSkills } from '../bundle/menus.js';
+import type { MosaicEvaluationHooks } from '../../types/evaluation.js';
 import type { Graph, Node } from '../../types/graph.js';
 import type { RevisionExecutionHandoff } from '../../types/revision.js';
 import type { WorkflowContext, WorkflowHandler } from '../../types/workflow.js';
-import { materializeObservations } from './observations.js';
-import { evaluate } from '../../evaluation.js';
-import type { MosaicRuntime } from '../../observability.js';
-import type { MosaicEvaluationHooks } from '../../types/evaluation.js';
-import { ObservationSchema } from '../../schemas/observation.js';
-import { GraphSchema } from '../../schemas/graph.js';
-import {
-  createObservationIdAllocator,
-  type ObservationIdAllocator,
-} from '../../observation-ids.js';
+import { resolveSkills } from '../bundle/menus.js';
 import { revisionExecutionHandoff } from './handoff.js';
+import { materializeObservations } from './observations.js';
 
 /** Executes concurrent node waves under MOSAIC sections 4.9-4.10. */
 export const execution: WorkflowHandler = async (
@@ -51,9 +51,10 @@ export const execution: WorkflowHandler = async (
       .sort((left, right) => right.index - left.index);
 
     if (nodes.length === 0)
-      return fail(new Error('Impossible to continue, missing ready nodes!'));
+      {return fail(new Error('Impossible to continue, missing ready nodes!'));}
 
     const ids = observationIds ?? createObservationIdAllocator();
+
     ids.reserve(
       state.graphs.flatMap((snapshot) =>
         snapshot.nodes.flatMap((node) => node.observations.map(({ id }) => id)),
@@ -67,6 +68,7 @@ export const execution: WorkflowHandler = async (
       revision: graph.revision,
       nodeIds: nodes.map(({ id }) => id),
     });
+
     const results = await Promise.allSettled(
       nodes.map((node) =>
         execute({
@@ -86,7 +88,7 @@ export const execution: WorkflowHandler = async (
       (result): result is PromiseRejectedResult => result.status === 'rejected',
     );
 
-    if (failure !== undefined) return fail(failure.reason);
+    if (failure !== undefined) {return fail(failure.reason);}
 
     await runtime?.emit({
       type: 'wave.finished',
@@ -125,6 +127,7 @@ const execute = async ({
 }: ExecutionInput): Promise<void> => {
   /** The runtime owns node status after scheduling hands the node to execution. */
   node.status = 'running';
+
   await runtime?.emit({
     type: 'node.status',
     stage: 'execution',
@@ -132,8 +135,10 @@ const execute = async ({
     nodeId: node.id,
     status: node.status,
   });
+
   /** Keep history available when a bounded run exhausts after executing tools. */
   const messages = createMessageStorage();
+
   const toolCalls = createToolCallStorage({
     createId: () => observationIds.next(),
   });
@@ -141,9 +146,11 @@ const execute = async ({
   try {
     /** Resolve graph-approved tool metadata to executable catalog entries. */
     const tools = executors(node, options.tools.required, options.tools.menu);
+
     if (node.bundle === null) {
       throw new Error(`Node ${node.id} has not been routed.`);
     }
+
     const skills = resolveSkills(node.bundle.skills, options.skills.menu);
 
     options.logger.info(
@@ -169,8 +176,10 @@ const execute = async ({
         if (current.id !== node.id || active.revision !== graph.revision) {
           throw new Error('Evaluation execution changed its node identity.');
         }
+
         const currentObservationIds = () =>
           toolCalls.list().map(({ id }) => id);
+
         const agent = createAgent({
           provider:
             runtime?.provider(
@@ -186,6 +195,7 @@ const execute = async ({
           model: options.models.execution.model,
           effort: options.models.execution.effort,
         });
+
         const { structured: decision } = await agent.complete(
           executionPrompt.user({
             request,
@@ -238,9 +248,11 @@ const execute = async ({
                 }),
           },
         );
+
         if (decision === undefined) {
           throw new Error(`Node ${node.id} returned no structured decision.`);
         }
+
         return {
           decision,
           observations: materializeObservations(node.id, toolCalls.list()),
@@ -248,21 +260,27 @@ const execute = async ({
       },
     );
     const decision = createNodeDecisionSchema(node).parse(execution.decision);
+
     const observations = ObservationSchema.array().parse(
       execution.observations,
     );
+
     if (observations.some(({ goalId }) => goalId !== node.id)) {
       throw new Error(
         `Node ${node.id} received an observation from another node.`,
       );
     }
+
     const agentObservationIds = new Set(toolCalls.list().map(({ id }) => id));
+
     observationIds.claim(
       observations.flatMap(({ id }) =>
         agentObservationIds.has(id) ? [] : [id],
       ),
     );
+
     node.observations = observations.map((observation) => ({ ...observation }));
+
     GraphSchema.parse(graph);
 
     /**
@@ -286,6 +304,7 @@ const execute = async ({
       status: decision.status,
       ...(runtime.capture === 'io' ? { decision } : {}),
     });
+
     await runtime?.emit({
       type: 'observations.created',
       stage: 'execution',
@@ -295,6 +314,7 @@ const execute = async ({
       toolNames: node.observations.map(({ toolName }) => toolName),
       ...(runtime.capture === 'io' ? { observations: node.observations } : {}),
     });
+
     await runtime?.emit({
       type: 'outcome.created',
       stage: 'execution',
@@ -306,13 +326,16 @@ const execute = async ({
 
     // Persist the complete semantic outcome before applying lifecycle policy.
     node.outcome = outcome;
+
     node.termination = null;
 
     if (outcome.status === 'needs_revision') {
       const request = outcome.revisionRequest;
+
       if (request === null) {
         throw new Error(`Node ${node.id} returned no revision request.`);
       }
+
       if (node.observations.length === 0) {
         throw new Error(
           `Node ${node.id} requested revision without an observation.`,
@@ -320,7 +343,9 @@ const execute = async ({
       }
 
       node.status = outcome.status;
+
       await statusEvent(runtime, graph, node);
+
       options.logger.info(
         { nodeId: node.id, status: outcome.status },
         'node execution did not complete',
@@ -332,7 +357,9 @@ const execute = async ({
     /** Semantic blocked and failed decisions resolve the wave normally. */
     if (outcome.status !== 'completed') {
       node.status = outcome.status;
+
       await statusEvent(runtime, graph, node);
+
       options.logger.info(
         { nodeId: node.id, status: outcome.status },
         'node execution did not complete',
@@ -342,6 +369,7 @@ const execute = async ({
     }
 
     const result = outcome.result;
+
     if (result === null) {
       throw new Error(`Node ${node.id} returned no completed result.`);
     }
@@ -360,6 +388,7 @@ const execute = async ({
 
     /** Completion makes the node eligible to satisfy downstream dependencies. */
     node.status = outcome.status;
+
     await statusEvent(runtime, graph, node);
 
     options.logger.info({ nodeId: node.id }, 'node execution completed');
@@ -371,15 +400,21 @@ const execute = async ({
       error.data.code === 'turn_limit_exceeded'
     ) {
       const observations = materializeObservations(node.id, toolCalls.list());
+
       node.observations = observations;
+
       node.outcome = null;
+
       node.termination = {
         type: 'turn_limit',
         status: 'blocked',
         limit: options.execution.maxTurns,
       };
+
       node.status = 'blocked';
+
       GraphSchema.parse(graph);
+
       await runtime?.emit({
         type: 'observations.created',
         stage: 'execution',
@@ -389,11 +424,14 @@ const execute = async ({
         toolNames: observations.map(({ toolName }) => toolName),
         ...(runtime.capture === 'io' ? { observations } : {}),
       });
+
       await statusEvent(runtime, graph, node);
+
       options.logger.info(
         { nodeId: node.id, status: node.status },
         'node execution did not complete',
       );
+
       return;
     }
 
@@ -424,11 +462,14 @@ const observeTools = (
         ...identity,
         ...(runtime.capture === 'io' ? { input: event.call.payload } : {}),
       });
+
       timers.set(event.call.id, runtime.timer());
+
       return;
     }
 
     const timer = timers.get(event.call.id) ?? runtime.timer();
+
     timers.delete(event.call.id);
 
     if (event.type === 'tool.finished') {
@@ -442,6 +483,7 @@ const observeTools = (
         durationMs: runtime.duration(timer),
         ...(runtime.capture === 'io' ? { output: event.result } : {}),
       });
+
       return;
     }
 
@@ -483,9 +525,10 @@ const executors = (
 
   /** Resolve in graph order while removing duplicate metadata references. */
   return node.tools.flatMap(({ name }) => {
-    if (names.has(name)) return [];
+    if (names.has(name)) {return [];}
 
     names.add(name);
+
     const tool = catalog.get(name);
 
     if (tool === undefined) {

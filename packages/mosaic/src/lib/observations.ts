@@ -13,14 +13,18 @@ export const completedAncestors = (
 
   const collect = (candidate: Node): void => {
     candidate.dependsOn.forEach((id) => {
-      if (ids.has(id)) return;
+      if (ids.has(id)) {return;}
+
       ids.add(id);
+
       const dependency = byId.get(id);
-      if (dependency !== undefined) collect(dependency);
+
+      if (dependency !== undefined) {collect(dependency);}
     });
   };
 
   collect(node);
+
   return graph.nodes.filter(
     (candidate) => ids.has(candidate.id) && candidate.status === 'completed',
   );
@@ -32,6 +36,7 @@ export const projectedObservations = (
   graph: Graph,
 ): readonly Observation[] => {
   const ancestors = completedAncestors(node, graph);
+
   const cited = new Set(
     ancestors.flatMap(
       (ancestor) =>

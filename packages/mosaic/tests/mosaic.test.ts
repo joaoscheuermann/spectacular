@@ -10,6 +10,7 @@ import { mosaicProviders } from './structured.js';
 
 test('exports the same factory as named and default with an async prompt', () => {
   assert.strictEqual(mosaicDefault, mosaic);
+
   const agent: MosaicAgent = {
     prompt: async () => ({
       status: 'completed',
@@ -17,11 +18,13 @@ test('exports the same factory as named and default with an async prompt', () =>
       nodes: [],
     }),
   };
+
   assert.ok(agent.prompt('request') instanceof Promise);
 });
 
 test('propagates the exact provider failure from graph generation', async () => {
   const failure = new Error('provider unavailable');
+
   const options: MosaicOptions = {
     logger: { info: () => undefined, debug: () => undefined } as never,
     providers: mosaicProviders({
@@ -62,6 +65,7 @@ test('propagates the exact provider failure from graph generation', async () => 
 
   await assert.rejects(mosaic(options).prompt('Do it.'), (error) => {
     assert.strictEqual(error, failure);
+
     return true;
   });
 });

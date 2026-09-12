@@ -12,15 +12,15 @@ import type {
 import { createMessageStorage } from 'messages';
 import { createToolStorage } from 'tool';
 
-import { PlanningGraphSchema, type PlanningGraph } from './planning-schema.js';
 import { planningObservationSchema } from './planning-observation-schema.js';
 import type {
-  PlanningObservationInput,
   PlanningCondition,
+  PlanningObservationInput,
   PlanningRevisionInput,
   PlanningRunAdapter,
   PlanningSkill,
 } from './planning-runner.js';
+import { type PlanningGraph,PlanningGraphSchema } from './planning-schema.js';
 
 export type PlanningModelOperation =
   | 'initial-plan'
@@ -145,9 +145,11 @@ export const createPlanningModelAdapter = (
 ): PlanningRunAdapter => {
   const model = options.model.trim();
   const maxTurns = options.maxTurns ?? defaultMaxTurns;
+
   if (model.length === 0) {
     throw new TypeError('Planning model must be non-empty.');
   }
+
   if (!Number.isSafeInteger(maxTurns) || maxTurns <= 0) {
     throw new TypeError(
       'Planning model maxTurns must be a positive safe integer.',
@@ -155,6 +157,7 @@ export const createPlanningModelAdapter = (
   }
 
   const cache = new Map<string, unknown>();
+
   const emit = async (event: PlanningModelEvent): Promise<void> => {
     await options.onEvent?.(event);
   };
@@ -168,14 +171,18 @@ export const createPlanningModelAdapter = (
     schema,
   }: ModelCompletion<Schema>): Promise<StructuredOutputValue<Schema>> => {
     const key = cacheKey(operation, system, input);
+
     if (cache.has(key)) {
       await emit({ type: 'cache.hit', operation, caseId, condition });
+
       return schema.parse(cache.get(key));
     }
 
     let calls = 0;
+
     const provider = trackedProvider(options.provider, async () => {
       calls += 1;
+
       await emit({
         type: 'model.call',
         operation,
@@ -184,6 +191,7 @@ export const createPlanningModelAdapter = (
         call: calls,
       });
     });
+
     const agent = createAgent({
       provider,
       model,
@@ -193,6 +201,7 @@ export const createPlanningModelAdapter = (
       tools: createToolStorage([]),
       ...(options.effort === undefined ? {} : { effort: options.effort }),
     });
+
     const response = await agent.complete(input, {
       schema,
       maxTurns,
@@ -212,7 +221,9 @@ export const createPlanningModelAdapter = (
         }),
     });
     const output = schema.parse(response.structured);
+
     cache.set(key, output);
+
     await emit({
       type: 'model.completed',
       operation,
@@ -220,6 +231,7 @@ export const createPlanningModelAdapter = (
       condition,
       calls,
     });
+
     return output;
   };
 
@@ -259,12 +271,14 @@ export const createPlanningModelAdapter = (
         },
         p0,
       );
+
       await emit({
         type: 'retrieval.completed',
         caseId: benchmarkCase.id,
         condition: 'retrieved',
         matches,
       });
+
       return matches.map(({ skillId }) => skillId);
     },
   };
@@ -279,6 +293,7 @@ export const retrievePlanningSkills = (
   graph: PlanningGraph,
 ): readonly PlanningLexicalMatch[] => {
   const plan = PlanningGraphSchema.parse(graph);
+
   const queryTerms = new Set(
     terms(
       [
@@ -287,6 +302,7 @@ export const retrievePlanningSkills = (
       ].join('\n'),
     ),
   );
+
   const documents = source.catalog.map((skill) => ({
     skillId: skill.id,
     weights: skillTermWeights(skill),
@@ -299,11 +315,14 @@ export const retrievePlanningSkills = (
       const matchedTerms = [...weights.keys()]
         .filter((term) => queryTerms.has(term))
         .sort(compareText);
+
       const score = matchedTerms.reduce((total, term) => {
         const frequency = frequencies.get(term) ?? count;
         const inverseFrequency = Math.log((count + 1) / (frequency + 1)) + 1;
+
         return total + (weights.get(term) ?? 0) * inverseFrequency;
       }, 0);
+
       return {
         skillId,
         score: rounded(score),
@@ -436,6 +455,7 @@ const fenced = (value: string): string => {
     0,
   );
   const delimiter = '`'.repeat(Math.max(3, longest + 1));
+
   return `${delimiter}text\n${value}\n${delimiter}`;
 };
 
@@ -443,6 +463,7 @@ const skillTermWeights = (
   skill: PlanningRetrievalSource['catalog'][number],
 ): ReadonlyMap<string, number> => {
   const weights = new Map<string, number>();
+
   for (const [value, weight] of [
     [skill.name, 4],
     [skill.description, 2],
@@ -453,6 +474,7 @@ const skillTermWeights = (
       weights.set(term, Math.max(weight, weights.get(term) ?? 0)),
     );
   }
+
   return weights;
 };
 
@@ -460,11 +482,13 @@ const documentFrequencies = (
   documents: readonly { readonly weights: ReadonlyMap<string, number> }[],
 ): ReadonlyMap<string, number> => {
   const frequencies = new Map<string, number>();
+
   documents.forEach(({ weights }) =>
     weights.forEach((_, term) =>
       frequencies.set(term, (frequencies.get(term) ?? 0) + 1),
     ),
   );
+
   return frequencies;
 };
 
@@ -492,6 +516,7 @@ const trackedProvider = (
     request: ProviderRequest<Output>,
   ) => {
     await onCall();
+
     return provider.complete(request);
   }) as LlmProvider['complete'];
 
@@ -499,7 +524,7 @@ const trackedProvider = (
     metadata: provider.metadata,
     capabilities: provider.capabilities,
     complete,
-    stream: provider.stream.bind(provider) as LlmProvider['stream'],
+    stream: provider.stream.bind(provider),
     embedding: provider.embedding.bind(provider),
     rerank: provider.rerank.bind(provider),
     models: provider.models.bind(provider),

@@ -1,8 +1,8 @@
+import { completedAncestors, projectedObservations } from '../observations.js';
+import type { Observation } from '../schemas/observation.js';
+import type { CriterionEvaluation, NodeOutcome } from '../schemas/outcome.js';
 import type { Artifact } from '../types/artifact.js';
 import type { Graph, Node } from '../types/graph.js';
-import type { CriterionEvaluation, NodeOutcome } from '../schemas/outcome.js';
-import type { Observation } from '../schemas/observation.js';
-import { completedAncestors, projectedObservations } from '../observations.js';
 
 export type ProjectedArtifact = Artifact & {
   readonly producerId: string;
@@ -25,9 +25,11 @@ export const projectedAncestors = (
 ): readonly ProjectedAncestor[] =>
   completedAncestors(node, graph).map((ancestor) => {
     const outcome = completedOutcome(ancestor);
+
     const cited = new Set(
       outcome.criteria.flatMap(({ observationIds }) => observationIds),
     );
+
     const observations = ancestor.observations.filter(({ id }) =>
       cited.has(id),
     );
@@ -69,7 +71,8 @@ export const projectedArtifacts = (
   );
 
 const completedOutcome = (node: Node): NodeOutcome => {
-  if (node.outcome?.status === 'completed') return node.outcome;
+  if (node.outcome?.status === 'completed') {return node.outcome;}
+
   throw new Error(`Completed ancestor ${node.id} is missing its outcome.`);
 };
 
@@ -114,6 +117,7 @@ export const graphContext = (graph: Graph): string =>
 export const fenced = (value: string): string => {
   const fence = selectFence(value);
   const body = value.endsWith('\n') ? value : `${value}\n`;
+
   return `${fence}text\n${body}${fence}`;
 };
 

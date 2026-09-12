@@ -7,8 +7,10 @@ import {
   stat,
 } from 'node:fs/promises';
 import { join } from 'node:path';
-import { SkillSchema, type Skill } from 'bundle';
+
 import { parse } from 'yaml';
+
+import { type Skill,SkillSchema } from 'bundle';
 
 const skillDirectory = (home: string): string =>
   join(home, '.agents', 'skills');
@@ -21,7 +23,7 @@ const splitFrontmatter = (
 } => {
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/.exec(source);
 
-  if (match === null) throw new Error('Skill must contain YAML frontmatter.');
+  if (match === null) {throw new Error('Skill must contain YAML frontmatter.');}
 
   return { metadata: match[1], body: match[2] };
 };
@@ -54,8 +56,10 @@ const hasSkill = async (directory: string): Promise<boolean> => {
   const path = join(directory, 'SKILL.md');
 
   try {
-    if (!(await stat(path)).isFile()) return false;
+    if (!(await stat(path)).isFile()) {return false;}
+
     await access(path, constants.R_OK);
+
     return true;
   } catch {
     return false;
@@ -67,15 +71,17 @@ const directories = async (home: string): Promise<readonly string[]> => {
     const entries = await readdir(skillDirectory(home), {
       withFileTypes: true,
     });
+
     const candidates = entries
       .filter((entry) => entry.isDirectory())
       .map((entry) => join(skillDirectory(home), entry.name));
 
     return (await Promise.all(candidates.map(hasSkill))).flatMap(
-      (valid, index) => (valid ? [candidates[index]!] : []),
+      (valid, index) => (valid ? [candidates[index]] : []),
     );
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {return [];}
+
     throw error;
   }
 };

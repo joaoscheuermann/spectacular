@@ -161,7 +161,7 @@ const criteria = (items: readonly string[]): string =>
 const revisionHandoff = (
   handoff: RevisionExecutionHandoff | undefined,
 ): string => {
-  if (handoff === undefined) return '';
+  if (handoff === undefined) {return '';}
 
   return [
     '# Previous Revision Handoff',

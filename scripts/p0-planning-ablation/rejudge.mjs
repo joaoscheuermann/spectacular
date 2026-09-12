@@ -12,15 +12,16 @@ import { allFulfilled } from './utils.mjs';
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const outcomes = ['withoutP0', 'withP0', 'both', 'neither', 'inconsistent'];
-
 // All artifact and treatment validation intentionally precedes run creation.
 const inputs = await loadInputs();
 const inputIdentity = await readInputIdentity(directory);
+
 const rejudge = await loadRejudgeInputs({
   directory,
   inputs,
   identity: inputIdentity,
 });
+
 const output = await createOutput({
   directory,
   config: rejudge.config,
@@ -70,24 +71,30 @@ const agreementMetrics = (results) => {
       Object.fromEntries(outcomes.map((target) => [target, 0])),
     ]),
   );
+
   for (const current of results) {
     matrix[current.sourceOutcome][current.outcome] += 1;
   }
+
   const exact = results.filter(
     ({ sourceOutcome, outcome }) => sourceOutcome === outcome,
   ).length;
+
   const stable = results.filter(
     ({ sourceOutcome, outcome }) =>
       sourceOutcome !== 'inconsistent' && outcome !== 'inconsistent',
   );
+
   const stableExact = stable.filter(
     ({ sourceOutcome, outcome }) => sourceOutcome === outcome,
   ).length;
+
   const decisive = results.filter(
     ({ sourceOutcome, outcome }) =>
       ['withoutP0', 'withP0'].includes(sourceOutcome) &&
       ['withoutP0', 'withP0'].includes(outcome),
   );
+
   const decisiveExact = decisive.filter(
     ({ sourceOutcome, outcome }) => sourceOutcome === outcome,
   ).length;
@@ -128,6 +135,7 @@ const corpusMetrics = (results) => ({
 
 const main = async () => {
   const provider = createProvider();
+
   logger.info(
     {
       runId: output.id,
@@ -138,17 +146,21 @@ const main = async () => {
     },
     'Rejudge run started',
   );
+
   const results = await allFulfilled(
     rejudge.cases.map((current) => runCase(provider, current)),
     'One or more rejudge cases failed.',
   );
+
   const metrics = {
     corpus: corpusMetrics(results),
     sourceComparison: rejudge.sourceComparison,
     comparison: aggregateComparisons(results, rejudge.config.judgeModel),
     crossJudgeAgreement: agreementMetrics(results),
   };
+
   await output.complete(results, metrics);
+
   logger.info(
     { runId: output.id, cases: results.length, metrics },
     'Rejudge run completed',
@@ -159,6 +171,8 @@ try {
   await main();
 } catch (error) {
   logger.fatal({ error, runId: output.id }, 'Rejudge run failed');
+
   await output.fail();
+
   process.exitCode = 1;
 }

@@ -6,7 +6,9 @@ export class StateMachineError<States extends string = string> extends Error {
 
   constructor(data: StateMachineErrorData<States>, options?: ErrorOptions) {
     super(data.message, options);
+
     this.name = 'StateMachineError';
+
     this.data = data;
   }
 }

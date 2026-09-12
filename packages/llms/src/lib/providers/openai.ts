@@ -12,31 +12,33 @@ import type {
   ProviderFinished,
   ProviderMetadata,
   ProviderRequest,
-  ProviderRerankRequest,
   ProviderRerankFinished,
-  ProviderStructuredFinished,
+  ProviderRerankRequest,
   ProviderStreamEvent,
+  ProviderStructuredFinished,
   ProviderToolCall,
   StructuredOutputSchema,
   StructuredOutputValue,
 } from '../types/provider.js';
 import {
-  asRecord,
   arrayField,
+  asRecord,
   recordField,
   stringField,
 } from '../utils/json.js';
+import { parseSseEvents } from '../utils/sse.js';
 import {
   httpError,
   parseEmbedding,
-  parseRerank,
   parseJsonBody,
+  parseRerank,
   parseStructuredOutput,
   requireEmbeddingInput,
-  requireRerankInput,
   requireRequestInput,
+  requireRerankInput,
   streamErrorEvent,
 } from './common.js';
+import { withProviderLogging } from './logging.js';
 import { authorization, type SecretSource } from './openai/auth.js';
 import { openAiBody } from './openai/body.js';
 import {
@@ -46,10 +48,9 @@ import {
   streamEvent,
   streamText,
 } from './openai/parse.js';
-import { parseSseEvents } from '../utils/sse.js';
-import { withProviderLogging } from './logging.js';
 
 export type { SecretSource } from './openai/auth.js';
+
 export { openAiBody } from './openai/body.js';
 
 export type OpenAiProviderDeps = {
@@ -84,7 +85,6 @@ export const openAiCapabilities: ProviderCapabilities = {
   serviceTier: true,
   structuredOutputs: true,
 };
-
 export const createOpenAiProvider = (deps: OpenAiProviderDeps): LlmProvider =>
   withProviderLogging(createOpenAiProviderCore(deps), deps.logger);
 
@@ -94,6 +94,7 @@ export const createOpenAiCompatibleProvider = (
 ): LlmProvider => {
   const baseUrl = deps.baseUrl ?? openAiMetadata.baseUrl;
   const metadata = { ...deps.identity, baseUrl };
+
   return withProviderLogging(
     createOpenAiProviderCore(deps, metadata),
     deps.logger,
@@ -144,14 +145,18 @@ export const createOpenAiProviderCore = (
       readonly schema: Schema;
     },
   ): Promise<ProviderStructuredFinished<StructuredOutputValue<Schema>>>;
+
   async function complete<Output = JsonValue>(
     request: ProviderRequest<Output>,
   ): Promise<ProviderFinished<Output>>;
+
   async function complete<Output = JsonValue>(
     request: ProviderRequest<Output>,
   ): Promise<ProviderFinished<Output>> {
     requireRequestInput(providerId, request);
+
     const body = openAiBody(request, false, providerId);
+
     return parseStructuredOutput(
       providerId,
       request,
@@ -169,6 +174,7 @@ export const createOpenAiProviderCore = (
       request: ProviderRequest<Output>,
     ): AsyncIterable<ProviderStreamEvent<Output>> {
       requireRequestInput(providerId, request);
+
       const sensitiveOutput = request.flags?.sensitiveOutput === true;
       const body = openAiBody(request, true, providerId);
       const text: string[] = [];
@@ -213,10 +219,12 @@ export const createOpenAiProviderCore = (
             undefined,
             sensitiveOutput,
           );
+
           return;
         }
 
         const parsed = streamEvent(payload, calls);
+
         recordTextSnapshot(textSnapshots, payload);
 
         if (parsed?.type === 'text.delta') {
@@ -237,6 +245,7 @@ export const createOpenAiProviderCore = (
 
         if (payload.type === 'response.completed') {
           const response = recordField(payload, 'response') ?? payload;
+
           const finish = parseStructuredOutput(
             providerId,
             request,
@@ -256,6 +265,7 @@ export const createOpenAiProviderCore = (
           }
 
           yield { type: 'response.finished', finish };
+
           return;
         }
 
@@ -267,6 +277,7 @@ export const createOpenAiProviderCore = (
             undefined,
             sensitiveOutput,
           );
+
           return;
         }
       }
@@ -292,8 +303,10 @@ export const createOpenAiProviderCore = (
       request: ProviderEmbeddingRequest,
     ): Promise<ProviderEmbeddingFinished> {
       requireEmbeddingInput(providerId, request);
+
       const auth = await authorization(deps, providerId, providerName);
       const sensitiveOutput = request.flags?.sensitiveOutput === true;
+
       const body = {
         model: request.model,
         input: request.input,
@@ -301,6 +314,7 @@ export const createOpenAiProviderCore = (
           ? {}
           : { dimensions: request.dimensions }),
       };
+
       const response = await deps.transport.request({
         method: 'POST',
         url: `${baseUrl}/embeddings`,
@@ -312,6 +326,7 @@ export const createOpenAiProviderCore = (
         body: JSON.stringify(body),
         signal: request.signal,
       });
+
       if (response.status >= 400) {
         throw httpError(
           providerId,
@@ -331,14 +346,17 @@ export const createOpenAiProviderCore = (
       request: ProviderRerankRequest,
     ): Promise<ProviderRerankFinished> {
       requireRerankInput(providerId, request);
+
       const auth = await authorization(deps, providerId, providerName);
       const sensitiveOutput = request.flags?.sensitiveOutput === true;
+
       const body = {
         model: request.model,
         query: request.query,
         documents: request.documents,
         ...(request.topN === undefined ? {} : { top_n: request.topN }),
       };
+
       const response = await deps.transport.request({
         method: 'POST',
         url: `${baseUrl}/rerank`,
@@ -350,6 +368,7 @@ export const createOpenAiProviderCore = (
         body: JSON.stringify(body),
         signal: request.signal,
       });
+
       if (response.status >= 400) {
         throw httpError(
           providerId,
@@ -367,6 +386,7 @@ export const createOpenAiProviderCore = (
 
     async models(signal?: AbortSignal): Promise<readonly Model[]> {
       const auth = await authorization(deps, providerId, providerName);
+
       const response = await deps.transport.request({
         method: 'GET',
         url: `${baseUrl}/models`,

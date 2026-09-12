@@ -18,9 +18,9 @@ import {
 } from './skillsbench-arms.js';
 import {
   scanSkillsbenchCatalog,
-  skillsbenchV1_1,
   type SkillsbenchCatalog,
   type SkillsbenchCompositionManifest,
+  skillsbenchV1_1,
 } from './skillsbench-catalog.js';
 
 export const skillsbenchLexicalRanker = {
@@ -66,11 +66,15 @@ export const verifySkillsbenchCheckout = async (
 ): Promise<string> => {
   const root = await realpath(resolve(sourceRoot));
   const top = await git(runner, root, ['rev-parse', '--show-toplevel']);
+
   if ((await realpath(resolve(top.trim()))) !== root)
-    throw new Error('SkillsBench source must be the checkout root.');
+    {throw new Error('SkillsBench source must be the checkout root.');}
+
   const head = await git(runner, root, ['rev-parse', 'HEAD']);
+
   if (head.trim() !== skillsbenchV1_1.revision)
-    throw new Error('SkillsBench checkout HEAD does not match the v1.1 pin.');
+    {throw new Error('SkillsBench checkout HEAD does not match the v1.1 pin.');}
+
   const dirty = await git(runner, root, [
     'status',
     '--porcelain=v1',
@@ -79,21 +83,25 @@ export const verifySkillsbenchCheckout = async (
     '--',
     skillsbenchV1_1.tasksPath,
   ]);
+
   if (dirty.trim() !== '')
-    throw new Error(
+    {throw new Error(
       'SkillsBench tasks tree must be clean, including ignored files.',
-    );
+    );}
+
   const staged = await git(runner, root, [
     'ls-files',
     '--stage',
     '--',
     ':(glob)tasks/*/environment/skills/**',
   ]);
+
   if (staged.split('\n').some((line) => /^(?:120000|160000)\s/u.test(line))) {
     throw new Error(
       'SkillsBench skill packages must not contain Git symlinks or submodules.',
     );
   }
+
   return root;
 };
 
@@ -108,28 +116,35 @@ export const buildSkillsbenchFixedRanking = async (
       '\n',
     ),
   }));
+
   if (skills.length === 0)
-    throw new Error('SkillsBench ranking requires a non-empty catalog.');
+    {throw new Error('SkillsBench ranking requires a non-empty catalog.');}
+
   const documents = skills.map(({ id, text }) => ({
     id,
     terms: termCounts(text),
   }));
   const idf = inverseDocumentFrequencies(documents.map(({ terms }) => terms));
+
   const documentVectors = documents.map(({ id, terms }) => ({
     id,
     vector: tfidf(terms, idf),
   }));
   const tasks = [];
+
   for (const task of catalog.manifest.tasks) {
     const query = tfidf(termCounts(await readTask(task.id)), idf);
+
     const skillIds = documentVectors
       .map(({ id, vector }) => ({ id, score: cosine(query, vector) }))
       .sort(
         (left, right) => right.score - left.score || compare(left.id, right.id),
       )
       .map(({ id }) => id);
+
     tasks.push({ id: task.id, skillIds });
   }
+
   return {
     catalogSha256: catalog.manifest.catalogSha256,
     ranker: skillsbenchLexicalRanker,
@@ -145,10 +160,12 @@ export const prepareSkillsbenchComposition = async (
     options.sourceRoot,
     options.runner,
   );
+
   const catalog = await scanSkillsbenchCatalog({
     root,
     revision: skillsbenchV1_1.revision,
   });
+
   if (
     catalog.manifest.counts.skillOccurrences !==
       skillsbenchCompositionPin.skillOccurrences ||
@@ -160,14 +177,17 @@ export const prepareSkillsbenchComposition = async (
       'SkillsBench catalog bytes do not match the pinned composition identity.',
     );
   }
+
   const ranking = await buildSkillsbenchFixedRanking(catalog, (taskId) =>
     readFile(join(root, skillsbenchV1_1.tasksPath, taskId, 'task.md'), 'utf8'),
   );
   const contract = defineSkillsbenchComposition(catalog.manifest, ranking);
+
   if (contract.fixedRanking.sha256 !== skillsbenchCompositionPin.rankingSha256)
-    throw new Error(
+    {throw new Error(
       'SkillsBench task text or lexical ranking does not match its pin.',
-    );
+    );}
+
   return {
     schemaVersion: 1,
     benchmark: 'SkillsBench Composition',
@@ -182,33 +202,39 @@ export const writeSkillsbenchPreparation = async (
   preparation: SkillsbenchPreparation,
 ): Promise<void> => {
   const path = resolve(outputPath);
+
   await mkdir(dirname(path), { recursive: true });
+
   const temporary = join(
     dirname(path),
     `.${basename(path)}.${randomUUID()}.tmp`,
   );
+
   try {
     const handle = await open(temporary, 'wx');
+
     try {
       await handle.writeFile(
         `${JSON.stringify(preparation, null, 2)}\n`,
         'utf8',
       );
+
       await handle.sync();
     } finally {
       await handle.close();
     }
+
     await link(temporary, path);
   } finally {
     try {
       await unlink(temporary);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {throw error;}
     }
   }
 };
-
 const exec = promisify(execFile);
+
 const defaultRunner: SkillsbenchCommandRunner = {
   run: async (command, args) => {
     const result = await exec(command, [...args], {
@@ -216,6 +242,7 @@ const defaultRunner: SkillsbenchCommandRunner = {
       windowsHide: true,
       maxBuffer: 16 * 1024 * 1024,
     });
+
     return { stdout: result.stdout };
   },
 };
@@ -233,6 +260,7 @@ const git = async (
 };
 
 type Counts = ReadonlyMap<string, number>;
+
 type Vector = ReadonlyMap<string, number>;
 
 const tokens = (value: string): readonly string[] =>
@@ -245,6 +273,7 @@ const tokens = (value: string): readonly string[] =>
 
 const features = (value: string): readonly string[] => {
   const values = tokens(value);
+
   return [
     ...values.map((token) => `u:${token}`),
     ...values
@@ -255,19 +284,23 @@ const features = (value: string): readonly string[] => {
 
 const termCounts = (value: string): Counts => {
   const counts = new Map<string, number>();
+
   features(value).forEach((term) =>
     counts.set(term, (counts.get(term) ?? 0) + 1),
   );
+
   return counts;
 };
 
 const inverseDocumentFrequencies = (documents: readonly Counts[]): Vector => {
   const frequencies = new Map<string, number>();
+
   documents.forEach((document) =>
     document.forEach((_, term) =>
       frequencies.set(term, (frequencies.get(term) ?? 0) + 1),
     ),
   );
+
   return new Map(
     [...frequencies].map(([term, frequency]) => [
       term,
@@ -278,10 +311,13 @@ const inverseDocumentFrequencies = (documents: readonly Counts[]): Vector => {
 
 const tfidf = (counts: Counts, idf: Vector): Vector => {
   const total = [...counts.values()].reduce((sum, count) => sum + count, 0);
-  if (total === 0) return new Map();
+
+  if (total === 0) {return new Map();}
+
   return new Map(
     [...counts].flatMap(([term, count]) => {
       const inverse = idf.get(term);
+
       return inverse === undefined
         ? []
         : [[term, (count / total) * inverse] as const];
@@ -292,11 +328,15 @@ const tfidf = (counts: Counts, idf: Vector): Vector => {
 const cosine = (left: Vector, right: Vector): number => {
   const leftNorm = norm(left);
   const rightNorm = norm(right);
-  if (leftNorm === 0 || rightNorm === 0) return 0;
+
+  if (leftNorm === 0 || rightNorm === 0) {return 0;}
+
   let dot = 0;
+
   left.forEach((value, term) => {
     dot += value * (right.get(term) ?? 0);
   });
+
   return dot / (leftNorm * rightNorm);
 };
 

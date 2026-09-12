@@ -1,12 +1,12 @@
+import { evaluate } from '../../evaluation.js';
 import * as revisionPrompt from '../../prompts/revision.js';
 import { GraphHistorySchema, GraphSchema } from '../../schemas/graph.js';
 import { completeStructured } from '../../structured.js';
-import { evaluate } from '../../evaluation.js';
 import type { WorkflowHandler } from '../../types/workflow.js';
 import {
   applyLocalizedRevision,
-  localizedRevisionSchema,
   localizedRevisionCount,
+  localizedRevisionSchema,
   retiredNodeIds,
   revisionNodes,
 } from './localized.js';
@@ -25,6 +25,7 @@ export const revision: WorkflowHandler = async (
 
     // Revisions operate on the latest graph snapshot without mutating its history.
     const active = state.graphs.at(-1);
+
     if (active === undefined) {
       return fail(new Error('Localized revision is missing an active graph.'));
     }
@@ -45,6 +46,7 @@ export const revision: WorkflowHandler = async (
     ) {
       return fail(new Error('Revision node is missing its runtime request.'));
     }
+
     if (targets.length === 0) {
       return fail(new Error('Localized revision has no pending request.'));
     }
@@ -52,9 +54,11 @@ export const revision: WorkflowHandler = async (
     // Validate all queued requests before selecting one, preventing latent bad state.
     for (const candidate of targets) {
       const request = candidate.outcome?.revisionRequest;
+
       if (request === null || request === undefined) {
         return fail(new Error('Revision node is missing its runtime request.'));
       }
+
       if (request.goalId !== candidate.id) {
         return fail(
           new Error(
@@ -66,20 +70,24 @@ export const revision: WorkflowHandler = async (
 
     // Only the first deterministic target is revised during this state transition.
     const target = targets[0];
+
     if (target === undefined) {
       return fail(new Error('Localized revision has no pending request.'));
     }
 
     // Count only snapshots appended after P0 and P1 as successful local revisions.
     const revisionCount = localizedRevisionCount(state.graphs);
+
     if (revisionCount >= options.revision.max) {
       // Limit exhaustion blocks the target without spending another provider call.
       target.status = 'blocked';
+
       target.termination = {
         type: 'revision_limit',
         status: 'blocked',
         limit: options.revision.max,
       };
+
       await runtime?.emit({
         type: 'node.status',
         stage: 'revision',
@@ -87,6 +95,7 @@ export const revision: WorkflowHandler = async (
         nodeId: target.id,
         status: target.status,
       });
+
       return transition('schedule', state);
     }
 
@@ -109,6 +118,7 @@ export const revision: WorkflowHandler = async (
      * hints are intentionally absent from runtime revision.
      */
     const schema = localizedRevisionSchema(active, target);
+
     const plan = schema.parse(
       await evaluate(
         hooks?.localizedRevision,

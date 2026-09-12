@@ -10,6 +10,7 @@ test('direct mapping emits visible text and excludes reasoning deltas', () => {
     type: 'message_delta',
     delta: 'visible',
   });
+
   assert.equal(
     directEvent({ type: 'reasoning.delta', delta: 'private' }),
     undefined,
@@ -25,6 +26,7 @@ test('direct mapping normalizes tool lifecycle without failure details', () => {
     name: 'terminal',
     input: { command: 'pwd' },
   });
+
   assert.deepEqual(
     directEvent({ type: 'tool.failed', call, error: new Error('private') }),
     { type: 'tool_failed', callId: 'call-1', name: 'terminal' },
@@ -41,6 +43,7 @@ test('mosaic mapping uses only public visible response and tool hooks', () => {
     durationMs: 1,
     content: { text: 'visible', reasoning: 'not inspected' },
   });
+
   const tool = event({
     type: 'tool.finished',
     stage: 'execution',
@@ -57,6 +60,7 @@ test('mosaic mapping uses only public visible response and tool hooks', () => {
     type: 'message_delta',
     delta: 'visible',
   });
+
   assert.deepEqual(mosaicEvent(tool), {
     type: 'tool_completed',
     callId: 'call-1',
@@ -77,6 +81,7 @@ test('mosaic result maps only a completed final delivery', () => {
     type: 'message_delta',
     delta: 'Final answer.',
   });
+
   assert.equal(mosaicResult(blocked), undefined);
 });
 

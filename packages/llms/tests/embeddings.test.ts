@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { ProviderErrorObject, type LlmProvider } from '../src/index.js';
+import { type LlmProvider,ProviderErrorObject } from '../src/index.js';
 import {
   createCodexProvider,
   createLmStudioOpenAiProvider,
@@ -24,9 +24,11 @@ const compatibleProviders = (): readonly CompatibleProvider[] => {
   const openAiTransport = fakeTransport({
     responses: [response({ data: [{ embedding: [0.25, -0.5] }] })],
   });
+
   const lmStudioTransport = fakeTransport({
     responses: [response({ data: [{ embedding: [0.25, -0.5] }] })],
   });
+
   const openRouterTransport = fakeTransport({
     responses: [response({ data: [{ embedding: [0.25, -0.5] }] })],
   });
@@ -79,17 +81,25 @@ for (const fixture of compatibleProviders()) {
     const request = fixture.transport.requests[0];
 
     assert.equal(fixture.provider.capabilities.embeddings, true);
+
     assert.deepEqual(result, { embedding: [0.25, -0.5] });
+
     assert.equal(request?.method, 'POST');
+
     assert.equal(request?.url, fixture.endpoint);
+
     assert.equal(request?.headers?.authorization, fixture.authorization);
+
     assert.equal(request?.headers?.['content-type'], 'application/json');
+
     assert.equal(request?.headers?.accept, 'application/json');
+
     assert.deepEqual(JSON.parse(request?.body ?? '{}'), {
       model: 'text-embedding-3-small',
       input: 'A short document.',
       dimensions: 1024,
     });
+
     assert.equal(request?.signal, controller.signal);
   });
 }
@@ -108,6 +118,7 @@ test('preserves OpenRouter embedding usage and cost', async () => {
       }),
     ],
   });
+
   const provider = createOpenRouterProvider({
     transport,
     apiKey: 'router-key',
@@ -119,12 +130,15 @@ test('preserves OpenRouter embedding usage and cost', async () => {
   });
 
   assert.deepEqual(result.embedding, [0.25, -0.5]);
+
   assert.deepEqual(result.usage?.cost, {
     amount: 0.000_004,
     unit: 'credits',
     upstreamAmount: 0.000_003,
   });
+
   assert.equal(result.usage?.inputTokens, 7);
+
   assert.equal(result.usage?.totalTokens, 7);
 });
 
@@ -162,12 +176,14 @@ test('rejects OpenAI embedding requests without a model or input before networki
       error instanceof ProviderErrorObject &&
       error.data.code === 'missing_model',
   );
+
   await assert.rejects(
     provider.embedding({ model: 'text-embedding-3-small', input: '' }),
     (error: unknown) =>
       error instanceof ProviderErrorObject &&
       error.data.code === 'missing_input',
   );
+
   assert.equal(transport.requests.length, 0);
 });
 
@@ -221,6 +237,7 @@ for (const fixture of [
     );
 
     assert.equal(provider.capabilities.embeddings, false);
+
     assert.equal(fixture.transport.requests.length, 0);
   });
 }

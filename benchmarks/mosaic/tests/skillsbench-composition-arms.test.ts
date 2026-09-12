@@ -2,13 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  skillsbenchV1_1,
-  type SkillsbenchCompositionManifest,
-} from '../src/composition/skillsbench-catalog.js';
-import {
   defineSkillsbenchComposition,
   resolveSkillsbenchCompositionArm,
 } from '../src/composition/skillsbench-arms.js';
+import {
+  type SkillsbenchCompositionManifest,
+  skillsbenchV1_1,
+} from '../src/composition/skillsbench-catalog.js';
 
 const sha = (character: string): string => character.repeat(64);
 
@@ -61,21 +61,27 @@ test('defines five arms and marks oracle and all-skills diagnostic', () => {
     contract.arms.map((arm) => arm.id),
     ['no-skills', 'fixed-top-k', 'mosaic-selective', 'oracle', 'all-skills'],
   );
+
   assert.deepEqual(
     contract.arms.filter((arm) => arm.diagnosticOnly).map((arm) => arm.id),
     ['oracle', 'all-skills'],
   );
+
   assert.deepEqual(contract.arms[1]?.selection, {
     kind: 'fixed-top-k',
     k: 3,
     rankingSha256: contract.fixedRanking.sha256,
   });
+
   assert.deepEqual(contract.arms[2]?.selection, {
     kind: 'mosaic-selective',
     maxSkills: 8,
   });
+
   assert.equal(contract.catalogSha256, manifest.catalogSha256);
+
   assert.equal(contract.manifestSha256, manifest.manifestSha256);
+
   assert.match(contract.fixedRanking.sha256, /^[a-f0-9]{64}$/);
 });
 
@@ -91,6 +97,7 @@ test('resolves static, ranked, gold, all, and selective skill assignments', () =
     }),
     { kind: 'preloaded', skillIds: [] },
   );
+
   assert.deepEqual(
     resolveSkillsbenchCompositionArm({
       contract,
@@ -100,6 +107,7 @@ test('resolves static, ranked, gold, all, and selective skill assignments', () =
     }),
     { kind: 'preloaded', skillIds: ['delta', 'charlie', 'bravo'] },
   );
+
   assert.deepEqual(
     resolveSkillsbenchCompositionArm({
       contract,
@@ -109,6 +117,7 @@ test('resolves static, ranked, gold, all, and selective skill assignments', () =
     }),
     { kind: 'preloaded', skillIds: ['alpha', 'bravo'] },
   );
+
   assert.deepEqual(
     resolveSkillsbenchCompositionArm({
       contract,
@@ -121,6 +130,7 @@ test('resolves static, ranked, gold, all, and selective skill assignments', () =
       skillIds: ['alpha', 'bravo', 'charlie', 'delta'],
     },
   );
+
   assert.deepEqual(
     resolveSkillsbenchCompositionArm({
       contract,
@@ -145,6 +155,7 @@ test('rejects incomplete, duplicate, unknown, or mismatched fixed rankings', () 
       }),
     /catalog digest/,
   );
+
   assert.throws(
     () =>
       defineSkillsbenchComposition(manifest, {
@@ -153,6 +164,7 @@ test('rejects incomplete, duplicate, unknown, or mismatched fixed rankings', () 
       }),
     /one complete ranking per task/,
   );
+
   assert.throws(
     () =>
       defineSkillsbenchComposition(manifest, {
@@ -164,6 +176,7 @@ test('rejects incomplete, duplicate, unknown, or mismatched fixed rankings', () 
       }),
     /complete catalog permutation/,
   );
+
   assert.throws(
     () =>
       resolveSkillsbenchCompositionArm({

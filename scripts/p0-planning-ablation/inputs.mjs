@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFile, readdir } from 'node:fs/promises';
+import { readdir,readFile } from 'node:fs/promises';
 import { basename, dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -28,24 +28,29 @@ const frozenFixtures = Object.freeze({
       'c920e22d338f0d6d2b74f262a883585fb9a9c0e1577e61bd3c7d75c0fe24847e',
   }),
 });
-
 const directory = dirname(fileURLToPath(import.meta.url));
 const casesDirectory = join(directory, 'cases');
 const skillsDirectory = join(casesDirectory, 'skills');
 
 const loadFixture = async (fixtureName) => {
   const expected = frozenFixtures[fixtureName];
+
   if (expected === undefined) {
     throw new Error(`Unknown frozen fixture: ${fixtureName}`);
   }
+
   const fixturePath = join(directory, 'fixtures', fixtureName);
   const data = await readFile(fixturePath);
   const sha256 = createHash('sha256').update(data).digest('hex');
+
   if (sha256 !== expected.sha256) {
     throw new Error(`Unexpected frozen fixture hash: ${sha256}`);
   }
+
   const fixture = fixtureSchema.parse(JSON.parse(data.toString('utf8')));
+
   validateFixtureSource(fixture, expected);
+
   return fixture;
 };
 
@@ -71,7 +76,9 @@ const loadCatalog = async () => {
   return Promise.all(
     entries.map(async ({ name }) => {
       const body = (await readFile(join(skillsDirectory, name), 'utf8')).trim();
-      if (body.length === 0) throw new Error(`Skill is empty: ${name}`);
+
+      if (body.length === 0) {throw new Error(`Skill is empty: ${name}`);}
+
       return Object.freeze({ name: basename(name, '.md'), body });
     }),
   );
@@ -79,10 +86,13 @@ const loadCatalog = async () => {
 
 const uniqueByName = (values, label) => {
   const names = new Set();
+
   for (const { name } of values) {
-    if (names.has(name)) throw new Error(`Duplicate ${label}: ${name}`);
+    if (names.has(name)) {throw new Error(`Duplicate ${label}: ${name}`);}
+
     names.add(name);
   }
+
   return names;
 };
 
@@ -90,6 +100,7 @@ const validateFixtureSource = (fixture, expected) => {
   if (fixture.source.runId !== expected.sourceRunId) {
     throw new Error(`Unexpected fixture run ID: ${fixture.source.runId}`);
   }
+
   if (fixture.source.resultsSha256 !== expected.sourceResultsSha256) {
     throw new Error(
       `Unexpected source results hash: ${fixture.source.resultsSha256}`,
@@ -106,6 +117,7 @@ const validateCaseSets = (cases, fixtureCases) => {
   if (missing.length > 0) {
     throw new Error(`Fixture is missing cases: ${missing.join(', ')}`);
   }
+
   if (unknown.length > 0) {
     throw new Error(`Fixture has unknown cases: ${unknown.join(', ')}`);
   }
@@ -113,6 +125,7 @@ const validateCaseSets = (cases, fixtureCases) => {
 
 const validateCatalogPartitions = (cases, catalog) => {
   const catalogNames = new Set(catalog.map(({ name }) => name));
+
   for (const current of cases) {
     const classified = new Set([
       ...current.skills.expected,
@@ -121,11 +134,13 @@ const validateCatalogPartitions = (cases, catalog) => {
     ]);
     const unknown = [...classified].filter((name) => !catalogNames.has(name));
     const missing = [...catalogNames].filter((name) => !classified.has(name));
+
     if (unknown.length > 0) {
       throw new Error(
         `Unknown classified skills for ${current.name}: ${unknown.join(', ')}`,
       );
     }
+
     if (missing.length > 0) {
       throw new Error(
         `Unclassified skills for ${current.name}: ${missing.join(', ')}`,
@@ -138,6 +153,7 @@ const resolveCases = (cases, fixture, catalog, controlFixture) => {
   const frozenByName = new Map(
     fixture.cases.map((current) => [current.name, current]),
   );
+
   const controlByName =
     controlFixture === undefined
       ? undefined
@@ -146,30 +162,38 @@ const resolveCases = (cases, fixture, catalog, controlFixture) => {
 
   return cases.map((current) => {
     const frozen = frozenByName.get(current.name);
+
     if (frozen === undefined) {
       throw new Error(`Fixture is missing case: ${current.name}`);
     }
+
     if (frozen.objective !== current.objective) {
       throw new Error(`Objective mismatch for case: ${current.name}`);
     }
+
     const control = controlByName?.get(current.name);
+
     if (controlByName !== undefined && control === undefined) {
       throw new Error(`Control fixture is missing case: ${current.name}`);
     }
+
     if (control !== undefined && control.objective !== current.objective) {
       throw new Error(`Control objective mismatch for case: ${current.name}`);
     }
 
     const goldNames = [...current.skills.expected, ...current.skills.useful];
+
     if (new Set(goldNames).size !== goldNames.length) {
       throw new Error(`Duplicate gold skill for case: ${current.name}`);
     }
 
     const goldSkills = goldNames.map((name) => {
       const skill = catalogByName.get(name);
+
       if (skill === undefined) {
         throw new Error(`Unknown gold skill for ${current.name}: ${name}`);
       }
+
       return skill;
     });
 
@@ -199,14 +223,19 @@ export const loadInputs = async ({
   if (cases.length !== 30) {
     throw new Error(`Expected 30 local cases; found ${cases.length}.`);
   }
+
   if (catalog.length !== 37) {
     throw new Error(`Expected 37 catalog skills; found ${catalog.length}.`);
   }
+
   uniqueByName(catalog, 'catalog skill');
+
   validateCaseSets(cases, fixture.cases);
+
   if (controlFixture !== undefined) {
     validateCaseSets(cases, controlFixture.cases);
   }
+
   validateCatalogPartitions(cases, catalog);
 
   return Object.freeze({

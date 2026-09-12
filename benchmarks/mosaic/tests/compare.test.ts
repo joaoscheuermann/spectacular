@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -13,6 +13,7 @@ type Json = Record<string, unknown>;
 const hash = (value: string): string =>
   createHash('sha256').update(value).digest('hex');
 const taskDigest = `sha256:${'a'.repeat(64)}`;
+
 const source = (path: string, withFiles = true) => ({
   type: 'github',
   repo: 'benchflow-ai/skillsbench',
@@ -30,12 +31,14 @@ type Fixture = {
   readonly tasks: readonly string[];
   readonly includeTasks: readonly string[];
 };
+
 const smokeFixture: Fixture = {
   action: 'smoke',
   sourcePath: 'tasks/jax-computing-basics',
   tasks: ['jax-computing-basics'],
   includeTasks: [],
 };
+
 const pilotFixture: Fixture = {
   action: 'pilot',
   sourcePath: 'tasks',
@@ -51,6 +54,7 @@ const writeArm = async (
   fixture: Fixture = smokeFixture,
 ): Promise<string> => {
   const directory = join(root, agent);
+
   await Promise.all(
     fixture.tasks.map((_, index) =>
       mkdir(join(directory, 'jobs', index === 0 ? 'one' : String(index + 1)), {
@@ -58,7 +62,9 @@ const writeArm = async (
       }),
     ),
   );
+
   const manifestSource = source(fixture.sourcePath, fixture.action === 'smoke');
+
   const taskManifest = JSON.stringify({
     schema_version: 1,
     total: fixture.tasks.length,
@@ -69,6 +75,7 @@ const writeArm = async (
       registry_digest_match: true,
     })),
   });
+
   const runConfig = JSON.stringify({
     schema_version: 1,
     eval: {
@@ -90,6 +97,7 @@ const writeArm = async (
     },
     retry_attempts: 0,
   });
+
   const health = JSON.stringify({
     schema_version: 1,
     total_rows: fixture.tasks.length,
@@ -113,6 +121,7 @@ const writeArm = async (
   });
   const agentManifest = `name = "${agent}"\n`;
   const bundle = 'common generated bundle\n';
+
   const metadata = {
     action: fixture.action,
     benchmark: 'skillsbench',
@@ -142,6 +151,7 @@ const writeArm = async (
       agentManifest: hash(agentManifest),
     },
   };
+
   const result = (task: string) => ({
     task_name: task,
     agent,
@@ -173,6 +183,7 @@ const writeArm = async (
       cost_usd: cost,
     },
   });
+
   await Promise.all([
     writeFile(join(directory, 'metadata.json'), JSON.stringify(metadata)),
     writeFile(join(directory, 'task-manifest.json'), taskManifest),
@@ -192,6 +203,7 @@ const writeArm = async (
       ),
     ),
   ]);
+
   return directory;
 };
 
@@ -201,7 +213,9 @@ const updateMetadata = async (
 ): Promise<void> => {
   const path = join(directory, 'metadata.json');
   const metadata: Json = JSON.parse(await readFile(path, 'utf8'));
+
   mutate(metadata);
+
   await writeFile(path, JSON.stringify(metadata));
 };
 
@@ -213,9 +227,13 @@ const updateArtifact = async (
 ): Promise<void> => {
   const path = join(directory, file);
   const artifact: Json = JSON.parse(await readFile(path, 'utf8'));
+
   mutate(artifact);
+
   const text = JSON.stringify(artifact);
+
   await writeFile(path, text);
+
   await updateMetadata(directory, (metadata) => {
     (metadata.digests as Json)[digestKey] = hash(text);
   });
@@ -223,13 +241,17 @@ const updateArtifact = async (
 
 test('reports a valid SkillsBench Pareto win with benchmark proof', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'mosaic-compare-'));
+
   t.after(() => rm(root, { recursive: true, force: true }));
+
   const [direct, mosaic] = await Promise.all([
     writeArm(root, 'mosaic-direct', 0.5, 2),
     writeArm(root, 'mosaic', 0.8, 1),
   ]);
   const report = await compare({ directDir: direct, mosaicDir: mosaic });
+
   assert.deepEqual(report.reasons, []);
+
   assert.deepEqual(report.direct, {
     score: 0.5,
     reward: 0.5,
@@ -238,6 +260,7 @@ test('reports a valid SkillsBench Pareto win with benchmark proof', async (t) =>
     totalTokens: 100,
     tasks: 1,
   });
+
   assert.deepEqual(report.paired, {
     scoreDelta: 0.3,
     qualityWin: true,
@@ -245,6 +268,7 @@ test('reports a valid SkillsBench Pareto win with benchmark proof', async (t) =>
     regressions: [],
     ties: [],
   });
+
   assert.deepEqual(
     {
       benchmark: report.benchmark,
@@ -258,13 +282,15 @@ test('reports a valid SkillsBench Pareto win with benchmark proof', async (t) =>
 
 test('validates only the fixed ten-task SkillsBench pilot selection', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'mosaic-compare-'));
+
   t.after(() => rm(root, { recursive: true, force: true }));
+
   const [direct, mosaic] = await Promise.all([
     writeArm(root, 'mosaic-direct', 0.5, 2, pilotFixture),
     writeArm(root, 'mosaic', 0.8, 1, pilotFixture),
   ]);
-
   let report = await compare({ directDir: direct, mosaicDir: mosaic });
+
   assert.deepEqual(
     [report.valid, report.direct.tasks, report.mosaic.tasks],
     [true, 10, 10],
@@ -273,19 +299,25 @@ test('validates only the fixed ten-task SkillsBench pilot selection', async (t) 
   await updateArtifact(mosaic, 'run-config.json', 'runConfig', (artifact) => {
     (artifact.eval as Json).include_tasks = skillsbenchPilotTasks.slice(1);
   });
+
   report = await compare({ directDir: direct, mosaicDir: mosaic });
+
   assert.equal(report.exitCode, 2);
+
   assert.match(report.reasons.join('\n'), /mosaic: invalid run config/);
 });
 
 test('treats a quality gain as a win without requiring strict Pareto', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'mosaic-compare-'));
+
   t.after(() => rm(root, { recursive: true, force: true }));
+
   const [direct, mosaic] = await Promise.all([
     writeArm(root, 'mosaic-direct', 0.5, 1),
     writeArm(root, 'mosaic', 0.8, 2),
   ]);
   const report = await compare({ directDir: direct, mosaicDir: mosaic });
+
   assert.deepEqual(
     {
       valid: report.valid,
@@ -299,12 +331,15 @@ test('treats a quality gain as a win without requiring strict Pareto', async (t)
 
 test('returns a valid non-win when paired quality regresses', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'mosaic-compare-'));
+
   t.after(() => rm(root, { recursive: true, force: true }));
+
   const [direct, mosaic] = await Promise.all([
     writeArm(root, 'mosaic-direct', 0.8, 1),
     writeArm(root, 'mosaic', 0.5, 2),
   ]);
   const report = await compare({ directDir: direct, mosaicDir: mosaic });
+
   assert.deepEqual(report.paired, {
     scoreDelta: -0.3,
     qualityWin: false,
@@ -312,84 +347,118 @@ test('returns a valid non-win when paired quality regresses', async (t) => {
     regressions: ['jax-computing-basics'],
     ties: [],
   });
+
   assert.equal(report.exitCode, 1);
 });
 
 test('rejects arms from different campaign IDs or actions', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'mosaic-compare-'));
+
   t.after(() => rm(root, { recursive: true, force: true }));
+
   const [direct, mosaic] = await Promise.all([
     writeArm(root, 'mosaic-direct', 0.5, 2),
     writeArm(root, 'mosaic', 0.8, 1),
   ]);
+
   await updateMetadata(mosaic, (metadata) => {
     metadata.campaignId = 'a-different-campaign';
   });
+
   let report = await compare({ directDir: direct, mosaicDir: mosaic });
+
   assert.equal(report.exitCode, 2);
+
   assert.match(report.reasons.join('\n'), /metadata differs: campaignId/);
+
   await updateMetadata(mosaic, (metadata) => {
     metadata.campaignId = 'skillsbench-smoke-fixture';
+
     metadata.action = 'run';
   });
+
   report = await compare({ directDir: direct, mosaicDir: mosaic });
+
   assert.equal(report.exitCode, 2);
+
   assert.match(report.reasons.join('\n'), /metadata differs: action/);
+
   assert.match(report.reasons.join('\n'), /pinned benchmark contract/);
 });
 
 test('rejects invalid task-manifest and run-config source provenance', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'mosaic-compare-'));
+
   t.after(() => rm(root, { recursive: true, force: true }));
+
   const [direct, mosaic] = await Promise.all([
     writeArm(root, 'mosaic-direct', 0.5, 2),
     writeArm(root, 'mosaic', 0.8, 1),
   ]);
+
   await updateArtifact(
     mosaic,
     'task-manifest.json',
     'taskManifest',
     (artifact) => {
       delete (artifact.source as Json).file_hashes;
-      (artifact.tasks as Json[])[0]!.registry_digest_match = false;
+
+      (artifact.tasks as Json[])[0].registry_digest_match = false;
     },
   );
+
   await updateArtifact(mosaic, 'run-config.json', 'runConfig', (artifact) => {
     ((artifact.eval as Json).source_provenance as Json).resolved_sha = 'wrong';
   });
+
   const report = await compare({ directDir: direct, mosaicDir: mosaic });
+
   assert.equal(report.exitCode, 2);
+
   assert.match(report.reasons.join('\n'), /mosaic: invalid task manifest/);
+
   assert.match(report.reasons.join('\n'), /mosaic: invalid run config/);
 });
 
 test('rejects non-agent run-config differences between arms', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'mosaic-compare-'));
+
   t.after(() => rm(root, { recursive: true, force: true }));
+
   const [direct, mosaic] = await Promise.all([
     writeArm(root, 'mosaic-direct', 0.5, 2),
     writeArm(root, 'mosaic', 0.8, 1),
   ]);
+
   await updateArtifact(mosaic, 'run-config.json', 'runConfig', (artifact) => {
     artifact.retry_policy = 'different';
   });
+
   const report = await compare({ directDir: direct, mosaicDir: mosaic });
+
   assert.equal(report.exitCode, 2);
+
   assert.match(report.reasons.join('\n'), /run configs differ/);
 });
 
 test('rejects BenchFlow-owned ACP reasoning effort', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'mosaic-compare-'));
+
   t.after(() => rm(root, { recursive: true, force: true }));
+
   const [direct, mosaic] = await Promise.all([
     writeArm(root, 'mosaic-direct', 0.5, 2),
     writeArm(root, 'mosaic', 0.8, 1),
   ]);
+
   await updateArtifact(mosaic, 'run-config.json', 'runConfig', (artifact) => {
     (artifact.eval as Json).reasoning_effort = 'low';
   });
+
   const report = await compare({ directDir: direct, mosaicDir: mosaic });
+
   assert.equal(report.exitCode, 2);
+
   assert.match(report.reasons.join('\n'), /mosaic: invalid run config/);
 });
 
@@ -398,43 +467,43 @@ test('rejects health evidence that diverges from public results', async (t) => {
     [
       'reward equality',
       (health) => {
-        (health.rows as Json[])[0]!.reward = 0.7;
+        (health.rows as Json[])[0].reward = 0.7;
       },
     ],
     [
       'reward range',
       (health) => {
-        (health.rows as Json[])[0]!.reward = 1.1;
+        (health.rows as Json[])[0].reward = 1.1;
       },
     ],
     [
       'tool call equality',
       (health) => {
-        (health.rows as Json[])[0]!.tool_calls = 1;
+        (health.rows as Json[])[0].tool_calls = 1;
       },
     ],
     [
       'tool call range',
       (health) => {
-        (health.rows as Json[])[0]!.tool_calls = -1;
+        (health.rows as Json[])[0].tool_calls = -1;
       },
     ],
     [
       'has trajectory',
       (health) => {
-        (health.rows as Json[])[0]!.has_llm_trajectory = false;
+        (health.rows as Json[])[0].has_llm_trajectory = false;
       },
     ],
     [
       'valid trajectory',
       (health) => {
-        (health.rows as Json[])[0]!.valid_llm_trajectory = false;
+        (health.rows as Json[])[0].valid_llm_trajectory = false;
       },
     ],
     [
       'trajectory rows',
       (health) => {
-        (health.rows as Json[])[0]!.llm_trajectory_rows = 0;
+        (health.rows as Json[])[0].llm_trajectory_rows = 0;
       },
     ],
     [
@@ -450,16 +519,23 @@ test('rejects health evidence that diverges from public results', async (t) => {
       },
     ],
   ];
+
   for (const [name, mutate] of mutations) {
     const root = await mkdtemp(join(tmpdir(), 'mosaic-compare-'));
+
     t.after(() => rm(root, { recursive: true, force: true }));
+
     const [direct, mosaic] = await Promise.all([
       writeArm(root, 'mosaic-direct', 0.5, 2),
       writeArm(root, 'mosaic', 0.8, 1),
     ]);
+
     await updateArtifact(mosaic, 'health.json', 'health', mutate);
+
     const report = await compare({ directDir: direct, mosaicDir: mosaic });
+
     assert.equal(report.exitCode, 2, name);
+
     assert.match(
       report.reasons.join('\n'),
       /mosaic: invalid health summary/,
@@ -470,53 +546,74 @@ test('rejects health evidence that diverges from public results', async (t) => {
 
 test('rejects unverifiable telemetry even when tool activity is zero', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'mosaic-compare-'));
+
   t.after(() => rm(root, { recursive: true, force: true }));
+
   const [direct, mosaic] = await Promise.all([
     writeArm(root, 'mosaic-direct', 0.5, 1),
     writeArm(root, 'mosaic', 0.8, 0),
   ]);
   const report = await compare({ directDir: direct, mosaicDir: mosaic });
+
   assert.equal(report.exitCode, 2);
+
   assert.match(report.reasons.join('\n'), /cost_usd/);
 });
 
 test('rejects an artifact changed after its metadata digest', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'mosaic-compare-'));
+
   t.after(() => rm(root, { recursive: true, force: true }));
+
   const [direct, mosaic] = await Promise.all([
     writeArm(root, 'mosaic-direct', 0.5, 1),
     writeArm(root, 'mosaic', 0.8, 0.5),
   ]);
+
   await writeFile(join(mosaic, 'run-config.json'), '{}');
+
   const report = await compare({ directDir: direct, mosaicDir: mosaic });
+
   assert.equal(report.exitCode, 2);
+
   assert.match(report.reasons.join('\n'), /runConfig digest mismatch/);
+
   assert.match(report.reasons.join('\n'), /invalid run config/);
+
   void direct;
 });
 
 test('rejects a source outside the fixed benchmark contract', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'mosaic-compare-'));
+
   t.after(() => rm(root, { recursive: true, force: true }));
+
   const [direct, mosaic] = await Promise.all([
     writeArm(root, 'mosaic-direct', 0.5, 1),
     writeArm(root, 'mosaic', 0.8, 0.5),
   ]);
+
   await updateMetadata(mosaic, (metadata) => {
     (metadata.source as Json).ref = 'unpinned';
   });
+
   const report = await compare({ directDir: direct, mosaicDir: mosaic });
+
   assert.equal(report.exitCode, 2);
+
   assert.match(report.reasons.join('\n'), /pinned benchmark contract/);
 });
 
 test('rejects task names that diverge from the manifest despite coherent health', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'mosaic-compare-'));
+
   t.after(() => rm(root, { recursive: true, force: true }));
+
   const [direct, mosaic] = await Promise.all([
     writeArm(root, 'mosaic-direct', 0.5, 1),
     writeArm(root, 'mosaic', 0.8, 0.5),
   ]);
+
   const health = JSON.stringify({
     schema_version: 1,
     total_rows: 1,
@@ -540,6 +637,7 @@ test('rejects task names that diverge from the manifest despite coherent health'
       },
     ],
   });
+
   await Promise.all([
     writeFile(join(mosaic, 'health.json'), health),
     writeFile(
@@ -575,11 +673,15 @@ test('rejects task names that diverge from the manifest despite coherent health'
       }),
     ),
   ]);
+
   await updateMetadata(mosaic, (metadata) => {
     (metadata.digests as Json).health = hash(health);
   });
+
   const report = await compare({ directDir: direct, mosaicDir: mosaic });
+
   assert.equal(report.exitCode, 2);
+
   assert.match(report.reasons.join('\n'), /mosaic: invalid task manifest/);
 });
 
@@ -688,19 +790,27 @@ test('rejects every mutated BenchFlow result identity field', async (t) => {
       },
     ],
   ];
+
   for (const [field, mutate] of mutations) {
     const root = await mkdtemp(join(tmpdir(), 'mosaic-compare-'));
+
     t.after(() => rm(root, { recursive: true, force: true }));
+
     const [direct, mosaic] = await Promise.all([
       writeArm(root, 'mosaic-direct', 0.5, 2),
       writeArm(root, 'mosaic', 0.8, 1),
     ]);
     const path = join(mosaic, 'jobs', 'one', 'result.json');
     const result: Json = JSON.parse(await readFile(path, 'utf8'));
+
     mutate(result);
+
     await writeFile(path, JSON.stringify(result));
+
     const report = await compare({ directDir: direct, mosaicDir: mosaic });
+
     assert.equal(report.exitCode, 2, field);
+
     assert.match(
       report.reasons.join('\n'),
       new RegExp(`mosaic:0: invalid ${field.replace('.', '\\.')}`),

@@ -31,20 +31,26 @@ const sources = [
   ['xlsx-recover-data', 'xlsx'],
   ['citation-check', 'citation-management'],
 ];
-
 const urlOf = (task, directory) =>
   `https://raw.githubusercontent.com/benchflow-ai/skillsbench/${skillsbenchRevision}/tasks/${task}/environment/skills/${directory}/SKILL.md`;
 
 const field = (metadata, name) => {
   const prefix = `${name}:`;
+
   const line = metadata
     .split(/\r?\n/u)
     .find((entry) => entry.startsWith(prefix));
-  if (line === undefined) throw new Error(`SkillsBench skill has no ${name}.`);
+
+  if (line === undefined) {throw new Error(`SkillsBench skill has no ${name}.`);}
+
   const value = line.slice(prefix.length).trim();
-  if (value.startsWith('"')) return JSON.parse(value);
-  if (value.startsWith("'") && value.endsWith("'")) return value.slice(1, -1);
-  if (value === '') throw new Error(`SkillsBench skill has an empty ${name}.`);
+
+  if (value.startsWith('"')) {return JSON.parse(value);}
+
+  if (value.startsWith("'") && value.endsWith("'")) {return value.slice(1, -1);}
+
+  if (value === '') {throw new Error(`SkillsBench skill has an empty ${name}.`);}
+
   return value;
 };
 
@@ -52,7 +58,9 @@ const parseSkill = (source, url) => {
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/u.exec(
     source,
   );
-  if (match === null) throw new Error(`Invalid SkillsBench skill: ${url}`);
+
+  if (match === null) {throw new Error(`Invalid SkillsBench skill: ${url}`);}
+
   return {
     name: field(match[1], 'name'),
     description: field(match[1], 'description'),
@@ -66,8 +74,10 @@ export const loadSkillsbenchCatalog = () =>
     sources.map(async ([task, directory]) => {
       const url = urlOf(task, directory);
       const response = await fetch(url);
+
       if (!response.ok)
-        throw new Error(`Could not load SkillsBench skill: ${url}`);
+        {throw new Error(`Could not load SkillsBench skill: ${url}`);}
+
       return parseSkill(await response.text(), url);
     }),
   );

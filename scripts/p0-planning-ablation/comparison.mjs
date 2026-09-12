@@ -38,6 +38,7 @@ export const orientation = (plans, withoutP0Option) => ({
 
 export const orientations = (plans) => {
   const firstWithoutP0Option = randomInt(2) === 0 ? 'a' : 'b';
+
   return [
     orientation(plans, firstWithoutP0Option),
     orientation(plans, firstWithoutP0Option === 'a' ? 'b' : 'a'),
@@ -45,7 +46,8 @@ export const orientations = (plans) => {
 };
 
 export const outcomeForChoice = (withoutP0Option, choice) => {
-  if (choice === 'both' || choice === 'neither') return choice;
+  if (choice === 'both' || choice === 'neither') {return choice;}
+
   return choice === withoutP0Option ? 'withoutP0' : 'withP0';
 };
 
@@ -57,11 +59,14 @@ export const comparisonOutcome = (plans, judgments) => {
   if (judgments.length !== 2 && judgments.length !== 4) {
     throw new Error('A comparison requires two or four judgments.');
   }
+
   const required = Math.floor(judgments.length / 2) + 1;
   const counts = new Map();
+
   for (const { winner } of judgments) {
     counts.set(winner, (counts.get(winner) ?? 0) + 1);
   }
+
   const consensus = [...counts].find(([, count]) => count >= required);
   const rawOutcome = consensus?.[0] ?? 'inconsistent';
   const plansIdentical = samePlan(plans.withoutP0, plans.withP0);
@@ -101,6 +106,7 @@ export const comparePlans = async ({
         `Judging orientation ${orientationOffset + index + 1}`,
         async () => {
           recordAttempt(operation, config.judgeModel);
+
           const result = await provider.complete({
             model: config.judgeModel,
             effort: config.judgeEffort,
@@ -116,7 +122,9 @@ export const comparePlans = async ({
             schema: judgmentSchema,
             flags: comparisonFlags,
           });
+
           recordUsage(operation, config.judgeModel, result.usage);
+
           return result.structured;
         },
         config.retry,
@@ -128,36 +136,42 @@ export const comparePlans = async ({
 
   return { judgments, ...comparisonOutcome(plans, judgments) };
 };
-
 const outcomes = ['withoutP0', 'withP0', 'both', 'neither', 'inconsistent'];
 
 const combinations = (n, k) => {
   const smaller = Math.min(k, n - k);
   let result = 1;
+
   for (let index = 1; index <= smaller; index += 1) {
     result = (result * (n - smaller + index)) / index;
   }
+
   return result;
 };
 
 export const exactBinomialRightTail = (successes, trials) => {
-  if (trials === 0) return null;
+  if (trials === 0) {return null;}
+
   let probability = 0;
+
   for (let count = successes; count <= trials; count += 1) {
     probability += combinations(trials, count) * 0.5 ** trials;
   }
+
   return Math.min(1, probability);
 };
 
 const aggregateFor = (results, judgeModel, preferredArm) => {
   const counts = Object.fromEntries(outcomes.map((outcome) => [outcome, 0]));
-  for (const result of results) counts[result.outcome] += 1;
+
+  for (const result of results) {counts[result.outcome] += 1;}
 
   const decisive = counts.withoutP0 + counts.withP0;
   const preferenceRate =
     decisive === 0 ? null : counts[preferredArm] / decisive;
   const pValue = exactBinomialRightTail(counts[preferredArm], decisive);
   const alpha = 0.05;
+
   const decision =
     decisive === 0
       ? 'insufficient_stable_preferences'
@@ -188,6 +202,7 @@ export const aggregateComparisons = (results, judgeModel) =>
 export const aggregateExposureComparisons = (results, judgeModel) => {
   const aggregate = aggregateFor(results, judgeModel, 'withoutP0');
   const adjudicated = results.filter(({ judgments }) => judgments.length === 4);
+
   const resolved = adjudicated.filter(
     ({ outcome }) => outcome !== 'inconsistent',
   );

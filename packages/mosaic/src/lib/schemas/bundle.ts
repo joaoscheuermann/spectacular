@@ -47,6 +47,7 @@ export const createBundleSelectionSchema = (
           evaluations.forEach(({ skillName }, index) => {
             if (!seen.has(skillName)) {
               seen.add(skillName);
+
               return;
             }
 

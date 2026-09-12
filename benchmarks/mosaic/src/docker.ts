@@ -32,9 +32,10 @@ export const runDocker = async (
   dependencies: DockerDependencies = {},
 ): Promise<number> => {
   const stderr = dependencies.stderr ?? process.stderr;
+
   try {
     if (args[0] !== 'campaign')
-      throw new Error('docker-run only supports campaign commands.');
+      {throw new Error('docker-run only supports campaign commands.');}
 
     const cwd = dependencies.cwd ?? process.cwd();
     const root = await benchmarkRoot(cwd);
@@ -42,6 +43,7 @@ export const runDocker = async (
     const environment = dependencies.environment ?? process.env;
     const execute = dependencies.execute ?? executeCommand;
     const translated = translateArgs(args, { cwd, root, results });
+
     await mkdir(results, { recursive: true });
 
     const build = await execute({
@@ -50,7 +52,8 @@ export const runDocker = async (
       cwd: root,
       environment,
     });
-    if (build !== 0) return build;
+
+    if (build !== 0) {return build;}
 
     return execute({
       file: 'docker',
@@ -60,6 +63,7 @@ export const runDocker = async (
     });
   } catch (error) {
     stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+
     return 2;
   }
 };
@@ -75,42 +79,52 @@ const translateArgs = (
   paths: Paths,
 ): readonly string[] => {
   const translated: string[] = [];
+
   for (let index = 0; index < values.length; index += 1) {
     const argument = values[index] ?? '';
+
     if (!resultPathFlags.has(argument) && argument !== '--root') {
       translated.push(argument);
+
       continue;
     }
 
     const value = values[index + 1];
+
     if (value === undefined || value.startsWith('--'))
-      throw new Error(`${argument} requires a value`);
+      {throw new Error(`${argument} requires a value`);}
+
     translated.push(
       argument,
       argument === '--root'
         ? translateRoot(value, paths)
         : translateResult(value, paths),
     );
+
     index += 1;
   }
+
   return translated;
 };
 
 const translateRoot = (value: string, paths: Paths): string => {
   if (resolve(paths.cwd, value) !== paths.root)
-    throw new Error('--root must identify the mosaic-benchmark project.');
+    {throw new Error('--root must identify the mosaic-benchmark project.');}
+
   return containerRoot;
 };
 
 const translateResult = (value: string, paths: Paths): string => {
   const child = relative(paths.results, resolve(paths.cwd, value));
+
   if (
     child === '' ||
     child === '..' ||
     child.startsWith(`..${sep}`) ||
     isAbsolute(child)
   )
-    throw new Error(`Campaign paths must be inside ${paths.results}.`);
+    {throw new Error(`Campaign paths must be inside ${paths.results}.`);}
+
   return `${containerResults}/${child.split(sep).join('/')}`;
 };
 
@@ -141,7 +155,8 @@ const ownershipArgs = (): readonly string[] => {
     typeof process.getuid !== 'function' ||
     typeof process.getgid !== 'function'
   )
-    return [];
+    {return [];}
+
   return [
     '--env',
     `MOSAIC_HOST_UID=${process.getuid()}`,
@@ -157,13 +172,15 @@ const executeCommand = (command: DockerCommand): Promise<number> =>
       env: command.environment,
       stdio: 'inherit',
     });
+
     child.once('error', reject);
+
     child.once('close', (code) => resolveResult(code ?? 1));
   });
-
 const invokedPath = process.argv[1];
+
 if (
   invokedPath !== undefined &&
   import.meta.url === pathToFileURL(invokedPath).href
 )
-  process.exitCode = await runDocker(process.argv.slice(2));
+  {process.exitCode = await runDocker(process.argv.slice(2));}

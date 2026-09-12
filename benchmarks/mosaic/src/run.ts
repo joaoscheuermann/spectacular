@@ -1,11 +1,13 @@
+import { readFileSync, unlinkSync } from 'node:fs';
+
+import pino, { type Logger } from 'pino';
+
 import {
   createFetchTransport,
   createUnifiedProvider,
   type HttpTransport,
   type LlmProvider,
 } from 'llms';
-import { readFileSync, unlinkSync } from 'node:fs';
-import pino, { type Logger } from 'pino';
 
 export type RunMode = 'direct' | 'mosaic';
 
@@ -54,13 +56,12 @@ export interface ProviderOptions {
 }
 
 export const defaultModel = 'deepseek/deepseek-v4-pro';
-
 const sensitiveName =
   /(?:master|private|api|access)[_-]?key|auth(?:orization)?|bearer|token|secret|password|credentials?|cookie/iu;
 
 const scrub = (environment: NodeJS.ProcessEnv): void => {
   for (const name of Object.keys(environment)) {
-    if (sensitiveName.test(name)) delete environment[name];
+    if (sensitiveName.test(name)) {delete environment[name];}
   }
 };
 
@@ -84,7 +85,7 @@ const credential = (
   environment: NodeJS.ProcessEnv,
   usesProcessEnvironment: boolean,
 ): string => {
-  if (!usesProcessEnvironment) return environment.OPENROUTER_API_KEY ?? '';
+  if (!usesProcessEnvironment) {return environment.OPENROUTER_API_KEY ?? '';}
 
   try {
     return credentialFromFile(environment);
@@ -98,6 +99,7 @@ export const createProvider = (
   options: ProviderOptions = {},
 ): ProviderProfile => {
   const environment = options.environment ?? process.env;
+
   const apiKey = credential(
     environment,
     options.environment === undefined || options.environment === process.env,

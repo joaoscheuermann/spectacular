@@ -3,13 +3,13 @@ import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 import {
-  defaultCompositionRerankerModel,
-  runCompositionCase,
   type CompositionArm,
   type CompositionCaseResult,
   type CompositionProfile,
   type CompositionRunInput,
   type CompositionSkill,
+  defaultCompositionRerankerModel,
+  runCompositionCase,
 } from './runner.js';
 import type { SraCorpusSkill, SraInstance } from './sra-fixtures.js';
 import type { SraRetrievalRecord } from './sra-metrics.js';
@@ -75,22 +75,31 @@ export const runSraDataset = async (
   dependencies: SraRunDependencies = {},
 ): Promise<SraRunSummary> => {
   const dataset = oneDataset(options.instances);
+
   const corpus = new Map(
     options.corpus.map((skill) => [skill.skill_id, skill]),
   );
+
   if (corpus.size !== options.corpus.length)
-    throw new Error('SRA corpus contains duplicate skill ids.');
+    {throw new Error('SRA corpus contains duplicate skill ids.');}
+
   const retrieval = retrievalMap(options.retrieval);
+
   validateRun(options, corpus, retrieval);
+
   await mkdir(dirname(options.outputPath), { recursive: true });
+
   const manifest = runManifest(options, dataset);
+
   const completedIds = await existingIds(
     options.outputPath,
     new Set(options.instances.map(({ instance_id: id }) => id)),
     manifest,
   );
   const manifestPath = `${options.outputPath}.run.json`;
+
   await requireRunIdentity(manifestPath, manifest, completedIds.size > 0);
+
   const pending = options.instances.filter(
     ({ instance_id: id }) => !completedIds.has(id),
   );
@@ -100,13 +109,16 @@ export const runSraDataset = async (
   for (const instance of pending) {
     const input = compositionInput(options, instance, corpus, retrieval);
     const result = await (dependencies.runCase ?? runCompositionCase)(input);
+
     await appendFile(
       options.outputPath,
       `${JSON.stringify(inferenceRecord(result, options.profile))}\n`,
       'utf8',
     );
+
     completed += 1;
-    if (result.status !== 'completed') failed += 1;
+
+    if (result.status !== 'completed') {failed += 1;}
   }
 
   return {
@@ -128,14 +140,18 @@ const compositionInput = (
   retrieval: ReadonlyMap<string, SraRetrievalRecord>,
 ): CompositionRunInput => {
   const record = retrieval.get(instance.instance_id);
+
   if (
     (options.arm === 'fixed-top-k' || options.arm === 'mosaic') &&
     record === undefined
   ) {
     throw new Error(`Missing retrieval for ${instance.instance_id}.`);
   }
-  if (record !== undefined) assertGold(instance, record);
+
+  if (record !== undefined) {assertGold(instance, record);}
+
   const ranked = record?.retrieved ?? [];
+
   const ids =
     options.arm === 'oracle'
       ? instance.skill_annotations
@@ -203,11 +219,14 @@ const retrievalMap = (
   values: readonly SraRetrievalRecord[],
 ): ReadonlyMap<string, SraRetrievalRecord> => {
   const result = new Map<string, SraRetrievalRecord>();
+
   values.forEach((record) => {
     if (result.has(record.instance_id))
-      throw new Error(`Duplicate retrieval: ${record.instance_id}`);
+      {throw new Error(`Duplicate retrieval: ${record.instance_id}`);}
+
     result.set(record.instance_id, record);
   });
+
   return result;
 };
 
@@ -217,10 +236,11 @@ const assertGold = (
 ): void => {
   const annotated = [...instance.skill_annotations].sort();
   const recorded = [...record.gold_skill_ids].sort();
+
   if (JSON.stringify(annotated) !== JSON.stringify(recorded))
-    throw new Error(
+    {throw new Error(
       `Retrieval gold skills differ for ${instance.instance_id}.`,
-    );
+    );}
 };
 
 const existingIds = async (
@@ -229,19 +249,24 @@ const existingIds = async (
   manifest: SraRunManifest,
 ): Promise<ReadonlySet<string>> => {
   let source: string;
+
   try {
     source = await readFile(path, 'utf8');
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return new Set();
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {return new Set();}
+
     throw error;
   }
+
   const ids = source
     .split('\n')
     .filter((line) => line.trim().length > 0)
     .map((line) => {
       const value = JSON.parse(line) as Readonly<Record<string, unknown>>;
+
       if (typeof value.instance_id !== 'string')
-        throw new Error('Existing SRA output has no instance_id.');
+        {throw new Error('Existing SRA output has no instance_id.');}
+
       if (
         value.dataset !== manifest.dataset ||
         value.method !== method(manifest.arm) ||
@@ -250,20 +275,27 @@ const existingIds = async (
       ) {
         throw new Error('Existing SRA output record has a different identity.');
       }
+
       validateStringArray(value.skill_ids_used, 'skill_ids_used');
+
       if (!isRecord(value.meta))
-        throw new Error('Existing SRA output record has invalid meta.');
+        {throw new Error('Existing SRA output record has invalid meta.');}
+
       validateStringArray(
         value.meta.candidate_skill_ids,
         'candidate_skill_ids',
         true,
       );
+
       return value.instance_id;
     });
+
   if (new Set(ids).size !== ids.length)
-    throw new Error('Existing SRA output contains duplicate instances.');
+    {throw new Error('Existing SRA output contains duplicate instances.');}
+
   if (ids.some((id) => !expected.has(id)))
-    throw new Error('Existing SRA output contains an unexpected instance.');
+    {throw new Error('Existing SRA output contains an unexpected instance.');}
+
   return new Set(ids);
 };
 
@@ -278,6 +310,7 @@ const runManifest = (
     maxSkills: options.maxSkills ?? 6,
     maxTurns: options.maxTurns ?? 16,
   };
+
   const inputs = {
     instancesSha256: digest('sra-instances-v1', options.instances),
     instanceCount: options.instances.length,
@@ -298,6 +331,7 @@ const runManifest = (
             ),
           ),
   };
+
   const unsigned = {
     schemaVersion: 1 as const,
     benchmark: 'SRA-Bench' as const,
@@ -311,6 +345,7 @@ const runManifest = (
     controls,
     inputs,
   };
+
   return {
     ...unsigned,
     runSha256: digest('sra-run-v1', unsigned),
@@ -323,26 +358,33 @@ const requireRunIdentity = async (
   hasOutput: boolean,
 ): Promise<void> => {
   let source: string;
+
   try {
     source = await readFile(path, 'utf8');
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {throw error;}
+
     if (hasOutput)
-      throw new Error('Existing SRA output has no run identity manifest.');
+      {throw new Error('Existing SRA output has no run identity manifest.');}
+
     await writeFile(path, `${JSON.stringify(expected, null, 2)}\n`, {
       encoding: 'utf8',
       flag: 'wx',
     });
+
     return;
   }
+
   let actual: unknown;
+
   try {
     actual = JSON.parse(source) as unknown;
   } catch {
     throw new Error('Existing SRA run identity manifest is invalid.');
   }
+
   if (canonicalJson(actual) !== canonicalJson(expected))
-    throw new Error('Existing SRA output belongs to a different run identity.');
+    {throw new Error('Existing SRA output belongs to a different run identity.');}
 };
 
 const digest = (domain: string, value: unknown): string =>
@@ -352,31 +394,42 @@ const digest = (domain: string, value: unknown): string =>
 
 const digestSequence = (domain: string, values: readonly unknown[]): string => {
   const hash = createHash('sha256').update(`${domain}\n`);
+
   values.forEach((value) => hash.update(`${canonicalJson(value)}\n`));
+
   return hash.digest('hex');
 };
 
 const canonicalJson = (value: unknown): string => {
-  if (value === null) return 'null';
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value === null) {return 'null';}
+
+  if (Array.isArray(value)) {return `[${value.map(canonicalJson).join(',')}]`;}
+
   if (typeof value === 'object') {
     const record = value as Readonly<Record<string, unknown>>;
+
     return `{${Object.keys(record)
       .filter((key) => record[key] !== undefined)
       .sort()
       .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
       .join(',')}}`;
   }
+
   const serialized = JSON.stringify(value);
-  if (serialized === undefined) throw new TypeError('Value is not JSON data.');
+
+  if (serialized === undefined) {throw new TypeError('Value is not JSON data.');}
+
   return serialized;
 };
 
 const oneDataset = (instances: readonly SraInstance[]): string => {
-  if (instances.length === 0) throw new Error('SRA run requires instances.');
+  if (instances.length === 0) {throw new Error('SRA run requires instances.');}
+
   const datasets = new Set(instances.map(({ dataset }) => dataset));
-  if (datasets.size !== 1) throw new Error('SRA run requires one dataset.');
-  return instances[0]!.dataset;
+
+  if (datasets.size !== 1) {throw new Error('SRA run requires one dataset.');}
+
+  return instances[0].dataset;
 };
 
 const method = (arm: CompositionArm): string =>
@@ -387,7 +440,8 @@ const validateStringArray = (
   label: string,
   required = false,
 ): void => {
-  if (value === undefined && !required) return;
+  if (value === undefined && !required) {return;}
+
   if (
     !Array.isArray(value) ||
     value.some((child) => typeof child !== 'string' || child.trim() === '') ||
@@ -406,44 +460,59 @@ const validateRun = (
   retrieval: ReadonlyMap<string, SraRetrievalRecord>,
 ): void => {
   const instanceIds = options.instances.map(({ instance_id: id }) => id);
+
   if (new Set(instanceIds).size !== instanceIds.length)
-    throw new Error('SRA run contains duplicate instances.');
+    {throw new Error('SRA run contains duplicate instances.');}
+
   const usesRanking = options.arm === 'fixed-top-k' || options.arm === 'mosaic';
+
   if (usesRanking && retrieval.size !== options.instances.length)
-    throw new Error('SRA ranked arms require one retrieval per instance.');
+    {throw new Error('SRA ranked arms require one retrieval per instance.');}
+
   if (!usesRanking && retrieval.size > 0)
-    throw new Error('SRA no-skills and oracle arms do not accept retrieval.');
+    {throw new Error('SRA no-skills and oracle arms do not accept retrieval.');}
+
   const knownInstances = new Set(instanceIds);
+
   if ([...retrieval.keys()].some((id) => !knownInstances.has(id)))
-    throw new Error('SRA retrieval contains an unexpected instance.');
+    {throw new Error('SRA retrieval contains an unexpected instance.');}
+
   options.instances.forEach((instance) => {
     if (
       new Set(instance.skill_annotations).size !==
       instance.skill_annotations.length
     )
-      throw new Error(`Duplicate gold skill for ${instance.instance_id}.`);
+      {throw new Error(`Duplicate gold skill for ${instance.instance_id}.`);}
+
     const record = retrieval.get(instance.instance_id);
+
     if (usesRanking && record === undefined)
-      throw new Error(`Missing retrieval for ${instance.instance_id}.`);
-    if (record !== undefined) assertGold(instance, record);
+      {throw new Error(`Missing retrieval for ${instance.instance_id}.`);}
+
+    if (record !== undefined) {assertGold(instance, record);}
+
     if (
       record !== undefined &&
       new Set(record.retrieved.map(({ skill_id: id }) => id)).size !==
         record.retrieved.length
     )
-      throw new Error(`Duplicate retrieved skill for ${instance.instance_id}.`);
+      {throw new Error(`Duplicate retrieved skill for ${instance.instance_id}.`);}
+
     if (
       record?.retrieved.some(
         ({ score }) => score !== undefined && !Number.isFinite(score),
       )
     )
-      throw new Error(`Invalid retrieval score for ${instance.instance_id}.`);
+      {throw new Error(`Invalid retrieval score for ${instance.instance_id}.`);}
+
     const requiredIds = [
       ...instance.skill_annotations,
       ...(record?.retrieved.map(({ skill_id: id }) => id) ?? []),
     ];
+
     requiredIds.forEach((id) => required(corpus, id));
   });
+
   const controls = [
     [options.topK ?? 3, 'topK'],
     [options.maxHintCandidates ?? 6, 'maxHintCandidates'],
@@ -451,12 +520,14 @@ const validateRun = (
     [options.maxSkills ?? 6, 'maxSkills'],
     [options.maxTurns ?? 16, 'maxTurns'],
   ] as const;
+
   controls.forEach(([value, label]) => {
     if (!Number.isSafeInteger(value) || value <= 0)
-      throw new Error(`${label} must be a positive safe integer.`);
+      {throw new Error(`${label} must be a positive safe integer.`);}
   });
+
   if ((options.maxSkills ?? 6) > (options.maxRetrievedCandidates ?? 50))
-    throw new Error('maxSkills must not exceed maxRetrievedCandidates.');
+    {throw new Error('maxSkills must not exceed maxRetrievedCandidates.');}
 };
 
 const required = <Value>(
@@ -464,7 +535,9 @@ const required = <Value>(
   id: string,
 ): Value => {
   const value = values.get(id);
-  if (value === undefined) throw new Error(`Missing corpus skill: ${id}`);
+
+  if (value === undefined) {throw new Error(`Missing corpus skill: ${id}`);}
+
   return value;
 };
 

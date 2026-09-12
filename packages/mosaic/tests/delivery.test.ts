@@ -15,6 +15,7 @@ test('assembles one terminal deliverable with additional artifacts and observati
       reference: 'urn:artifact:1',
     },
   ]);
+
   node.candidates = [
     {
       skillName: 'selected',
@@ -23,11 +24,13 @@ test('assembles one terminal deliverable with additional artifacts and observati
       rationale: 'Selected behavior is required.',
     },
   ];
+
   node.bundle = {
     goalId: 'final',
     skills: ['selected'],
     selectionRationale: 'The selected skill is sufficient.',
   };
+
   node.observations = [observation('final')];
 
   const action = await delivery(
@@ -37,9 +40,13 @@ test('assembles one terminal deliverable with additional artifacts and observati
   );
 
   assert.equal(action.type, 'finish');
-  if (action.type !== 'finish' || action.value === undefined) return;
+
+  if (action.type !== 'finish' || action.value === undefined) {return;}
+
   assert.equal(action.value.status, 'completed');
-  if (action.value.status !== 'completed') return;
+
+  if (action.value.status !== 'completed') {return;}
+
   assert.deepEqual(action.value.delivery, {
     markdown: '## Result',
     parts: [
@@ -59,9 +66,13 @@ test('assembles one terminal deliverable with additional artifacts and observati
       },
     ],
   });
+
   assert.deepEqual(action.value.nodes[0]?.candidates, node.candidates);
+
   assert.deepEqual(action.value.nodes[0]?.bundle, node.bundle);
+
   assert.notStrictEqual(action.value.nodes[0]?.candidates, node.candidates);
+
   assert.notStrictEqual(action.value.nodes[0]?.bundle, node.bundle);
 });
 
@@ -69,6 +80,7 @@ test('orders deliverables by stable topological order and preserves Markdown', a
   const source = completed('source', 3, [], false, 'private');
   const first = completed('first', 2, ['source'], true, ' first\n');
   const second = completed('second', 1, ['source'], true, 'second');
+
   const action = await delivery(
     state([{ revision: 1, nodes: [source, first, second] }]),
     context(),
@@ -76,13 +88,16 @@ test('orders deliverables by stable topological order and preserves Markdown', a
   );
 
   assert.equal(action.type, 'finish');
-  if (action.type !== 'finish' || action.value === undefined) return;
+
+  if (action.type !== 'finish' || action.value === undefined) {return;}
+
   assert.deepEqual(
     action.value.status === 'completed'
       ? action.value.delivery.parts.map(({ id }) => id)
       : [],
     ['first', 'second'],
   );
+
   assert.equal(
     action.value.status === 'completed' ? action.value.delivery.markdown : '',
     ' first\n\n\nsecond',
@@ -92,6 +107,7 @@ test('orders deliverables by stable topological order and preserves Markdown', a
 test('excludes completed nodes that are not deliverable', async () => {
   const preparation = completed('preparation', 0, [], false, 'private');
   const final = completed('final', 1, ['preparation'], true, 'public');
+
   const action = await delivery(
     state([{ revision: 1, nodes: [preparation, final] }]),
     context(),
@@ -99,13 +115,16 @@ test('excludes completed nodes that are not deliverable', async () => {
   );
 
   assert.equal(action.type, 'finish');
-  if (action.type !== 'finish' || action.value === undefined) return;
+
+  if (action.type !== 'finish' || action.value === undefined) {return;}
+
   assert.deepEqual(
     action.value.status === 'completed'
       ? action.value.delivery.parts.map(({ id }) => id)
       : [],
     ['final'],
   );
+
   assert.equal(
     action.value.status === 'completed' ? action.value.delivery.markdown : '',
     'public',
@@ -115,6 +134,7 @@ test('excludes completed nodes that are not deliverable', async () => {
 test('returns blocked without partial delivery and keeps topological node order', async () => {
   const root = completed('root', 2, [], false, 'private');
   const blocked = terminal('blocked', 0, ['root'], 'blocked');
+
   const action = await delivery(
     state([{ revision: 1, nodes: [root, blocked] }]),
     context(),
@@ -122,7 +142,9 @@ test('returns blocked without partial delivery and keeps topological node order'
   );
 
   assert.equal(action.type, 'finish');
-  if (action.type !== 'finish' || action.value === undefined) return;
+
+  if (action.type !== 'finish' || action.value === undefined) {return;}
+
   assert.deepEqual(action.value, {
     status: 'blocked',
     nodes: [
@@ -150,12 +172,14 @@ test('returns blocked without partial delivery and keeps topological node order'
       },
     ],
   });
+
   assert.equal('delivery' in action.value, false);
 });
 
 test('failed takes precedence over blocked in a terminal workflow', async () => {
   const blocked = terminal('blocked', 0, [], 'blocked');
   const failed = terminal('failed', 1, [], 'failed');
+
   const action = await delivery(
     state([{ revision: 1, nodes: [blocked, failed] }]),
     context(),
@@ -163,8 +187,11 @@ test('failed takes precedence over blocked in a terminal workflow', async () => 
   );
 
   assert.equal(action.type, 'finish');
-  if (action.type !== 'finish' || action.value === undefined) return;
+
+  if (action.type !== 'finish' || action.value === undefined) {return;}
+
   assert.equal(action.value.status, 'failed');
+
   assert.equal('delivery' in action.value, false);
 });
 
@@ -219,9 +246,11 @@ test('fails delivery for invalid graph and deliverable contracts', async () => {
       context(),
       handlers(),
     );
+
     assert.equal(action.type, 'fail');
+
     if (action.type === 'fail')
-      assert.match((action.error as Error).message, message);
+      {assert.match((action.error as Error).message, message);}
   }
 });
 
@@ -229,7 +258,9 @@ test('copies delivered artifacts and observations instead of retaining graph ref
   const node = completed('final', 0, [], true, 'result', [
     { kind: 'inline', mime: 'application/json', data: '{"ok":true}' },
   ]);
+
   node.observations = [observation('final')];
+
   const action = await delivery(
     state([{ revision: 1, nodes: [node] }]),
     context(),
@@ -237,13 +268,21 @@ test('copies delivered artifacts and observations instead of retaining graph ref
   );
 
   assert.equal(action.type, 'finish');
-  if (action.type !== 'finish' || action.value === undefined) return;
-  if (action.value.status !== 'completed') return;
+
+  if (action.type !== 'finish' || action.value === undefined) {return;}
+
+  if (action.value.status !== 'completed') {return;}
+
   const part = action.value.delivery.parts[0];
+
   assert.ok(part);
+
   assert.notStrictEqual(part.artifacts, node.artifacts);
+
   assert.notStrictEqual(part.artifacts[0], node.artifacts[1]);
+
   assert.notStrictEqual(part.observations, node.observations);
+
   assert.notStrictEqual(part.observations[0], node.observations[0]);
 });
 

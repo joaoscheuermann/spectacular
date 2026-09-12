@@ -1,12 +1,14 @@
+import { randomUUID } from 'node:crypto';
+import { homedir } from 'node:os';
+
+import pino from 'pino';
+
 import type { Skill } from 'bundle';
 import {
   mosaic as createMosaic,
   type MosaicAgent,
   type MosaicOptions,
 } from 'mosaic';
-import { randomUUID } from 'node:crypto';
-import { homedir } from 'node:os';
-import pino from 'pino';
 import type { Tool } from 'tool';
 
 import { mosaicEvent, mosaicResult } from './events.js';
@@ -35,24 +37,29 @@ export const mosaic = (dependencies: MosaicDependencies = {}): Runner => {
       const skills = await (dependencies.loadSkills ?? loadSkills)(
         dependencies.home ?? homedir(),
       );
+
       const terminal = (dependencies.createTerminal ?? createTerminal)({
         cwd: request.cwd,
         signal: request.signal,
       });
+
       const workflow = (dependencies.createWorkflow ?? createMosaic)(
         options(profile, skills, terminal),
       );
+
       const result = await workflow.prompt(request.prompt, {
         runId: (dependencies.randomUUID ?? randomUUID)(),
         signal: request.signal,
         capture: 'io',
         observer: async (event) => {
           const normalized = mosaicEvent(event);
-          if (normalized !== undefined) await emit(normalized);
+
+          if (normalized !== undefined) {await emit(normalized);}
         },
       });
       const delivery = mosaicResult(result);
-      if (delivery !== undefined) await emit(delivery);
+
+      if (delivery !== undefined) {await emit(delivery);}
     },
   };
 };

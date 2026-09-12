@@ -6,6 +6,7 @@ import * as z from 'zod';
 
 const choiceSchema = z.enum(['a', 'b', 'both', 'neither']);
 const winnerSchema = z.enum(['full skill', 'hints', 'both', 'neither']);
+
 const caseSchema = z
   .object({
     name: z.string().min(1),
@@ -13,6 +14,7 @@ const caseSchema = z
     source: z.string().min(1).optional(),
   })
   .strict();
+
 const configSchema = z
   .object({
     mode: z.enum(['human', 'judge']),
@@ -23,6 +25,7 @@ const configSchema = z
     cases: z.array(caseSchema).min(1),
   })
   .strict();
+
 const resultSchema = z
   .object({
     name: z.string().min(1),
@@ -37,6 +40,7 @@ const resultSchema = z
     skills: z.array(z.string()),
   })
   .strict();
+
 const pendingSchema = z
   .object({
     caseName: z.string().min(1),
@@ -49,6 +53,7 @@ const pendingSchema = z
     choice: choiceSchema.optional(),
   })
   .strict();
+
 const failureSchema = z
   .object({
     caseName: z.string().min(1),
@@ -57,6 +62,7 @@ const failureSchema = z
     code: z.string().min(1),
   })
   .strict();
+
 const runSchema = z
   .object({
     id: z.string().uuid(),
@@ -69,7 +75,6 @@ const runSchema = z
     failures: z.array(failureSchema),
   })
   .strict();
-
 const timestamp = () => new Date().toISOString();
 
 const invalidRun = (cause) =>
@@ -81,6 +86,7 @@ const firstUnfinishedRound = (run) => {
   const completed = new Set(
     run.results.map(({ name, round }) => keyOf(name, round)),
   );
+
   for (const current of run.config.cases) {
     for (let round = 1; round <= run.config.rounds; round += 1) {
       if (!completed.has(keyOf(current.name, round))) {
@@ -94,13 +100,16 @@ const firstUnfinishedRound = (run) => {
 
 const validateInvariants = (run) => {
   const caseNames = new Set(run.config.cases.map(({ name }) => name));
+
   if (caseNames.size !== run.config.cases.length) {
     throw invalidRun(new Error('Duplicate case names.'));
   }
 
   const completed = new Set();
+
   for (const result of run.results) {
     const key = keyOf(result.name, result.round);
+
     if (
       !caseNames.has(result.name) ||
       result.round > run.config.rounds ||
@@ -108,11 +117,13 @@ const validateInvariants = (run) => {
     ) {
       throw invalidRun(new Error('Invalid completed round.'));
     }
+
     completed.add(key);
   }
 
   if (run.pending !== null) {
     const key = keyOf(run.pending.caseName, run.pending.round);
+
     if (
       !caseNames.has(run.pending.caseName) ||
       run.pending.round > run.config.rounds ||
@@ -129,6 +140,7 @@ const validateInvariants = (run) => {
   }
 
   const next = firstUnfinishedRound(run);
+
   if (
     run.pending !== null &&
     (next === null ||
@@ -137,6 +149,7 @@ const validateInvariants = (run) => {
   ) {
     throw invalidRun(new Error('Pending round is not the next round.'));
   }
+
   if (run.status === 'completed' && next !== null) {
     throw invalidRun(new Error('Completed run has unfinished rounds.'));
   }
@@ -154,6 +167,7 @@ const parseRun = (value) => {
     ) {
       throw error;
     }
+
     throw invalidRun(error);
   }
 };
@@ -180,11 +194,13 @@ export const nextRound = (run) => {
   if (run.pending !== null) {
     return { caseName: run.pending.caseName, round: run.pending.round };
   }
+
   return firstUnfinishedRound(run);
 };
 
 export const beginRound = (run, pending, now) => {
   const next = nextRound(run);
+
   if (
     run.pending !== null ||
     next === null ||
@@ -212,6 +228,7 @@ const finishRound = (run, evaluation, now) => {
   const { caseName, round, goals, optionA, optionB, fullSkill, skills } =
     run.pending;
   const { choice, rationale } = evaluation;
+
   const winner =
     choice === 'both' || choice === 'neither'
       ? choice
@@ -247,6 +264,7 @@ export const completeRound = (run, rationale, now) => {
   if (run.pending?.choice === undefined) {
     throw new Error('Cannot complete an unanswered llm-lab round.');
   }
+
   return finishRound(run, { choice: run.pending.choice, rationale }, now);
 };
 
@@ -254,6 +272,7 @@ export const completeJudgment = (run, judgment, now) => {
   if (run.pending === null) {
     throw new Error('Cannot judge without a pending llm-lab round.');
   }
+
   const evaluation = z
     .object({
       choice: choiceSchema,
@@ -261,6 +280,7 @@ export const completeJudgment = (run, judgment, now) => {
     })
     .strict()
     .parse(judgment);
+
   return finishRound(run, evaluation, now);
 };
 
@@ -286,6 +306,7 @@ export const assertCompatibleRun = (run, expected) => {
     temperature: run.config.temperature,
     cases: run.config.cases,
   };
+
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
     throw new Error(
       'The checkpoint does not match the current llm-lab config.',
@@ -295,6 +316,7 @@ export const assertCompatibleRun = (run, expected) => {
 
 export const saveRun = async (path, value) => {
   let run;
+
   try {
     run = parseRun(value);
   } catch (error) {
@@ -302,6 +324,7 @@ export const saveRun = async (path, value) => {
   }
 
   await mkdir(dirname(path), { recursive: true });
+
   const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
 
   try {
@@ -310,9 +333,11 @@ export const saveRun = async (path, value) => {
       flag: 'wx',
       mode: 0o600,
     });
+
     await rename(temporary, path);
   } catch (error) {
     await unlink(temporary).catch(() => undefined);
+
     throw error;
   }
 };

@@ -1,8 +1,8 @@
-import { GraphSchema } from '../../schemas/graph.js';
 import { FinalDeliverySchema } from '../../schemas/delivery.js';
+import { GraphSchema } from '../../schemas/graph.js';
 import { MosaicResultSchema } from '../../schemas/result.js';
-import type { Graph, Node } from '../../types/graph.js';
 import type { FinalDeliveryPart } from '../../types/delivery.js';
+import type { Graph, Node } from '../../types/graph.js';
 import type { WorkflowNodeResult } from '../../types/result.js';
 import type { WorkflowHandler, WorkflowState } from '../../types/workflow.js';
 
@@ -24,6 +24,7 @@ export const delivery: WorkflowHandler = async (
     }
 
     const nodes = ordered.map(nodeResult);
+
     const status = nodes.some((node) => node.status === 'failed')
       ? 'failed'
       : nodes.some((node) => node.status === 'blocked')
@@ -32,22 +33,26 @@ export const delivery: WorkflowHandler = async (
 
     if (status !== 'completed') {
       const result = MosaicResultSchema.parse({ status, nodes });
+
       options.logger.info(
         { status, nodeIds: nodes.map(({ id }) => id) },
         'workflow terminated',
       );
+
       await runtime?.emit({
         type: 'delivery.created',
         stage: 'delivery',
         partIds: [],
         ...(runtime.capture === 'io' ? { delivery: null } : {}),
       });
+
       return finish(result);
     }
 
     const parts = ordered.filter(({ deliver }) => deliver).map(part);
+
     if (parts.length === 0)
-      throw new Error('Cannot deliver a graph without deliverable nodes.');
+      {throw new Error('Cannot deliver a graph without deliverable nodes.');}
 
     const delivery = FinalDeliverySchema.parse({
       markdown: parts.map(({ markdown }) => markdown).join('\n\n'),
@@ -69,6 +74,7 @@ export const delivery: WorkflowHandler = async (
       },
       'delivery assembled',
     );
+
     return finish(result);
   } catch (error) {
     return fail(error);
@@ -80,6 +86,7 @@ const isTerminal = (status: Node['status']): boolean =>
 
 const activeGraph = (state: WorkflowState): Graph => {
   const graph = state.graphs.at(-1);
+
   if (graph === undefined) {
     throw new Error('Cannot deliver without an active graph.');
   }
@@ -89,9 +96,11 @@ const activeGraph = (state: WorkflowState): Graph => {
 
 const topologicalOrder = (graph: Graph): Node[] => {
   const positions = new Map(graph.nodes.map((node, index) => [node.id, index]));
+
   const indegrees = new Map(
     graph.nodes.map((node) => [node.id, node.dependsOn.length]),
   );
+
   const dependents = new Map(
     graph.nodes.map((node) => [node.id, [] as string[]]),
   );
@@ -112,16 +121,23 @@ const topologicalOrder = (graph: Graph): Node[] => {
 
   while (ready.length > 0) {
     const id = ready.shift();
-    if (id === undefined) break;
+
+    if (id === undefined) {break;}
+
     const node = graph.nodes[position(positions, id)];
-    if (node === undefined) throw new Error(`Delivery node is missing: ${id}.`);
+
+    if (node === undefined) {throw new Error(`Delivery node is missing: ${id}.`);}
+
     ordered.push(node);
 
     for (const dependent of dependents.get(id) ?? []) {
       const next = (indegrees.get(dependent) ?? 0) - 1;
+
       indegrees.set(dependent, next);
-      if (next === 0) ready.push(dependent);
+
+      if (next === 0) {ready.push(dependent);}
     }
+
     ready.sort(
       (left, right) => position(positions, left) - position(positions, right),
     );
@@ -139,12 +155,15 @@ const position = (
   id: string,
 ): number => {
   const value = positions.get(id);
-  if (value === undefined) throw new Error(`Delivery node is missing: ${id}.`);
+
+  if (value === undefined) {throw new Error(`Delivery node is missing: ${id}.`);}
+
   return value;
 };
 
 const part = (node: Node): FinalDeliveryPart => {
   const [primary, ...artifacts] = node.artifacts;
+
   if (
     primary === undefined ||
     primary.kind !== 'inline' ||

@@ -7,10 +7,13 @@ const identifierSchema = z
 
 const findDuplicate = (values: readonly string[]): string | undefined => {
   const seen = new Set<string>();
+
   for (const value of values) {
-    if (seen.has(value)) return value;
+    if (seen.has(value)) {return value;}
+
     seen.add(value);
   }
+
   return undefined;
 };
 
@@ -19,6 +22,7 @@ const skillAnnotationsSchema = z
   .min(1)
   .superRefine((skillIds, context) => {
     const duplicate = findDuplicate(skillIds);
+
     if (duplicate) {
       context.addIssue({
         code: 'custom',
@@ -44,7 +48,6 @@ const instanceSchema = z
     skill_annotations: skillAnnotationsSchema,
   })
   .passthrough();
-
 const corpusSchema = z.array(corpusSkillSchema);
 const instancesSchema = z.array(instanceSchema);
 
@@ -70,7 +73,8 @@ const assertUniqueField = <T>(
   label: string,
 ): void => {
   const duplicate = findDuplicate(records.map(field));
-  if (duplicate) throw new Error(`duplicate ${label}: ${duplicate}`);
+
+  if (duplicate) {throw new Error(`duplicate ${label}: ${duplicate}`);}
 };
 
 const parseJson = (source: string, label: string): unknown => {
@@ -86,7 +90,9 @@ const parseJson = (source: string, label: string): unknown => {
 /** Validates an already parsed SRA-Bench corpus while retaining extra fields. */
 export const parseSraCorpus = (input: unknown): readonly SraCorpusSkill[] => {
   const corpus = corpusSchema.parse(input);
+
   assertUniqueField(corpus, (skill) => skill.skill_id, 'skill_id');
+
   return corpus;
 };
 
@@ -97,11 +103,13 @@ export const parseSraCorpusJson = (source: string): readonly SraCorpusSkill[] =>
 /** Validates already parsed SRA-Bench instances while retaining extra fields. */
 export const parseSraInstances = (input: unknown): readonly SraInstance[] => {
   const instances = instancesSchema.parse(input);
+
   assertUniqueField(
     instances,
     (instance) => instance.instance_id,
     'instance_id',
   );
+
   return instances;
 };
 

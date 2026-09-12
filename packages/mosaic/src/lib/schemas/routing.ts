@@ -22,7 +22,8 @@ export const OrderedBundleSchema = z
   })
   .strict()
   .superRefine((bundle, context) => {
-    if (new Set(bundle.skills).size === bundle.skills.length) return;
+    if (new Set(bundle.skills).size === bundle.skills.length) {return;}
+
     context.addIssue({
       code: 'custom',
       path: ['skills'],
@@ -45,7 +46,8 @@ export const validateRoutingTrace = (
   const names = node.candidates.map(({ skillName }) => skillName);
 
   node.candidates.forEach(({ rank }, index) => {
-    if (rank === index + 1) return;
+    if (rank === index + 1) {return;}
+
     context.addIssue({
       code: 'custom',
       path: [...prefix, 'candidates', index, 'rank'],
@@ -62,12 +64,14 @@ export const validateRoutingTrace = (
   }
 
   if (node.bundle === null) {
-    if (node.candidates.length === 0) return;
+    if (node.candidates.length === 0) {return;}
+
     context.addIssue({
       code: 'custom',
       path: [...prefix, 'bundle'],
       message: 'Candidates require a materialized bundle.',
     });
+
     return;
   }
 
@@ -81,7 +85,9 @@ export const validateRoutingTrace = (
 
   const selected = new Set(node.bundle.skills);
   const ordered = names.filter((name) => selected.has(name));
-  if (sameItems(node.bundle.skills, ordered)) return;
+
+  if (sameItems(node.bundle.skills, ordered)) {return;}
+
   context.addIssue({
     code: 'custom',
     path: [...prefix, 'bundle', 'skills'],

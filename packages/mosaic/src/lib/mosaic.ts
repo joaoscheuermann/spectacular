@@ -1,12 +1,12 @@
-import type { MosaicAgent } from './types/mosaic-agent.js';
-import type { MosaicResult } from './types/result.js';
-import type { MosaicOptions } from './types/mosaic-options.js';
-import { validateOptions } from './options.js';
-import { createMachine } from './workflow/machine.js';
 import { createRuntime } from './observability.js';
-import type { MosaicRunOptions } from './types/events.js';
-import type { MosaicEvaluationHooks } from './types/evaluation.js';
 import { createObservationIdAllocator } from './observation-ids.js';
+import { validateOptions } from './options.js';
+import type { MosaicEvaluationHooks } from './types/evaluation.js';
+import type { MosaicRunOptions } from './types/events.js';
+import type { MosaicAgent } from './types/mosaic-agent.js';
+import type { MosaicOptions } from './types/mosaic-options.js';
+import type { MosaicResult } from './types/result.js';
+import { createMachine } from './workflow/machine.js';
 
 export function mosaic(options: MosaicOptions): MosaicAgent {
   return createMosaic(options);
@@ -18,6 +18,7 @@ export function createMosaic(
   hooks?: MosaicEvaluationHooks,
 ): MosaicAgent {
   validateOptions(options);
+
   const machine = createMachine();
 
   return {
@@ -47,8 +48,10 @@ export function createMosaic(
           },
         });
 
-        if (runtime.hasFailed) throw runtime.failure;
-        if (result.status !== 'finished') throw result.error;
+        if (runtime.hasFailed) {throw runtime.failure;}
+
+        if (result.status !== 'finished') {throw result.error;}
+
         if (result.value === undefined) {
           throw new Error('Workflow finished without a terminal result.');
         }
@@ -59,14 +62,17 @@ export function createMosaic(
           durationMs: runtime.duration(timer),
           status: result.value.status,
         });
+
         return result.value;
       } catch (error) {
-        if (runtime.hasFailed) throw runtime.failure;
+        if (runtime.hasFailed) {throw runtime.failure;}
+
         await runtime.emit({
           type: 'run.failed',
           stage: 'run',
           durationMs: runtime.duration(timer),
         });
+
         throw error;
       }
     },

@@ -107,11 +107,13 @@ const selectStratum = (
       instance.skill_annotations.length === stratum.cardinality &&
       isEligible(instance),
   );
+
   if (eligible.length < stratum.count) {
     throw new Error(
       `SRA-Bench pilot requires ${stratum.count} eligible ${stratum.dataset} cardinality-${stratum.cardinality} instances; found ${eligible.length}.`,
     );
   }
+
   return eligible
     .map((instance) => ({ instance, score: selectionScore(instance) }))
     .sort(
@@ -150,17 +152,22 @@ export const buildSraSkillGolds = (
   corpus: readonly SraCorpusSkill[],
 ): readonly SraSkillGold[] => {
   const corpusSkillIds = new Set(corpus.map((skill) => skill.skill_id));
+
   return pilot.map((instance) => {
     assertPilotInstance(instance);
+
     const goldSkillIds = canonicalGoldSkillIds(instance);
+
     const missing = goldSkillIds.find(
       (skillId) => !corpusSkillIds.has(skillId),
     );
+
     if (missing) {
       throw new Error(
         `SRA-Bench instance ${instance.instance_id} references missing corpus skill ${missing}.`,
       );
     }
+
     return {
       instance_id: instance.instance_id,
       dataset: instance.dataset,

@@ -6,11 +6,11 @@ import type { MosaicAgent, MosaicOptions, MosaicResult } from 'mosaic';
 import type { MosaicEvaluationOptions } from 'mosaic/evaluation';
 
 import {
+  type CompositionCase,
+  type CompositionSkill,
   createCompositionWorkflow,
   defaultCompositionRerankerModel,
   runCompositionCase,
-  type CompositionCase,
-  type CompositionSkill,
 } from '../src/composition/runner.js';
 
 const provider = {
@@ -53,6 +53,7 @@ const ranking = [
 
 test('no-skills keeps P0 unchanged and exposes no skill catalog', async () => {
   const captured = captureWorkflow(completed([]));
+
   const workflow = createCompositionWorkflow(
     {
       arm: 'no-skills',
@@ -65,8 +66,11 @@ test('no-skills keeps P0 unchanged and exposes no skill catalog', async () => {
   );
 
   assert.deepEqual(captured.options?.skills.required, []);
+
   assert.deepEqual(captured.options?.skills.menu, []);
+
   assert.equal(captured.options?.routing.maxSkills, 0);
+
   assert.equal(
     await captured.evaluation?.hooks?.feedbackPlan?.(
       { request: 'request', graph: {} as never },
@@ -76,11 +80,13 @@ test('no-skills keeps P0 unchanged and exposes no skill catalog', async () => {
     ),
     'unchanged',
   );
+
   assert.ok(workflow);
 });
 
 test('fixed-top-k injects the frozen retrieval prefix without selection', () => {
   const captured = captureWorkflow(completed([]));
+
   createCompositionWorkflow(
     {
       arm: 'fixed-top-k',
@@ -97,11 +103,13 @@ test('fixed-top-k injects the frozen retrieval prefix without selection', () => 
     captured.options?.skills.required.map(({ description }) => description),
     [skills[0]?.description, skills[2]?.description],
   );
+
   assert.equal(captured.options?.routing.maxSkills, 0);
 });
 
 test('oracle injects every annotated skill in gold order', () => {
   const captured = captureWorkflow(completed([]));
+
   createCompositionWorkflow(
     {
       arm: 'oracle',
@@ -121,6 +129,7 @@ test('oracle injects every annotated skill in gold order', () => {
 
 test('mosaic receives the frozen shortlist and clips retrieval per hook limit', async () => {
   const captured = captureWorkflow(completed([]));
+
   createCompositionWorkflow(
     {
       arm: 'mosaic',
@@ -148,11 +157,14 @@ test('mosaic receives the frozen shortlist and clips retrieval per hook limit', 
   );
 
   assert.equal(captured.options?.routing.maxSkills, 2);
+
   assert.equal(
     captured.options?.models.reranker,
     defaultCompositionRerankerModel,
   );
+
   assert.equal(captured.options?.skills.menu.length, 3);
+
   assert.deepEqual(
     matches?.map(({ score }) => score),
     [3, 2],
@@ -161,9 +173,12 @@ test('mosaic receives the frozen shortlist and clips retrieval per hook limit', 
 
 test('run result preserves evaluator output and maps opaque bundle names to ids', async () => {
   const selectedNames: string[] = [];
+
   const captured = captureWorkflow(async (_input, _options) => {
     const names = captured.options?.skills.menu.map(({ name }) => name) ?? [];
-    selectedNames.push(names[0]!, names[2]!);
+
+    selectedNames.push(names[0], names[2]);
+
     return completed(selectedNames)('request');
   });
 
@@ -179,7 +194,9 @@ test('run result preserves evaluator output and maps opaque bundle names to ids'
   );
 
   assert.equal(result.rawOutput, 'ANSWER: 42');
+
   assert.deepEqual(result.skillIdsUsed, ['champ_001', 'champ_002']);
+
   assert.equal(result.status, 'completed');
 });
 
@@ -220,9 +237,12 @@ const captureWorkflow = (prompt: Prompt) => {
   } = {
     create: (options, evaluation) => {
       captured.options = options;
+
       captured.evaluation = evaluation;
+
       return { prompt };
     },
   };
+
   return captured;
 };

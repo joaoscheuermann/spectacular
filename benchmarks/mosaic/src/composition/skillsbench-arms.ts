@@ -73,26 +73,33 @@ const digest = (value: unknown): string =>
 const assertManifest = (manifest: SkillsbenchCompositionManifest): void => {
   const catalogIds = manifest.skills.map((skill) => skill.id);
   const taskIds = manifest.tasks.map((task) => task.id);
+
   if (new Set(catalogIds).size !== catalogIds.length)
-    throw new Error('SkillsBench catalog IDs must be unique.');
+    {throw new Error('SkillsBench catalog IDs must be unique.');}
+
   if (new Set(taskIds).size !== taskIds.length)
-    throw new Error('SkillsBench task IDs must be unique.');
+    {throw new Error('SkillsBench task IDs must be unique.');}
+
   const catalog = new Set(catalogIds);
+
   const invalid = manifest.tasks.find(
     (task) =>
       new Set(task.goldSkillIds).size !== task.goldSkillIds.length ||
       task.goldSkillIds.some((id) => !catalog.has(id)),
   );
+
   if (invalid !== undefined)
-    throw new Error(`Invalid gold skill association: ${invalid.id}`);
+    {throw new Error(`Invalid gold skill association: ${invalid.id}`);}
 };
 
 const isCompletePermutation = (
   expected: readonly string[],
   actual: readonly string[],
 ): boolean => {
-  if (expected.length !== actual.length) return false;
+  if (expected.length !== actual.length) {return false;}
+
   const unique = new Set(actual);
+
   return (
     unique.size === actual.length && expected.every((id) => unique.has(id))
   );
@@ -103,39 +110,50 @@ const normalizeRanking = (
   input: SkillsbenchFixedRankingInput,
 ): SkillsbenchFixedRanking => {
   if (input.catalogSha256 !== manifest.catalogSha256)
-    throw new Error(
+    {throw new Error(
       'Fixed ranking catalog digest does not match the manifest.',
-    );
+    );}
+
   const ranker = {
     id: input.ranker.id.trim(),
     revision: input.ranker.revision.trim(),
   };
+
   if (ranker.id === '' || ranker.revision === '')
-    throw new Error('Fixed ranker provenance is required.');
+    {throw new Error('Fixed ranker provenance is required.');}
+
   const ids = manifest.tasks.map((task) => task.id);
+
   if (
     input.tasks.length !== ids.length ||
     new Set(input.tasks.map((task) => task.id)).size !== ids.length
   )
-    throw new Error('Fixed ranking requires one complete ranking per task.');
+    {throw new Error('Fixed ranking requires one complete ranking per task.');}
+
   const byId = new Map(input.tasks.map((task) => [task.id, task.skillIds]));
   const catalogIds = manifest.skills.map((skill) => skill.id);
+
   const tasks = ids.map((id) => {
     const skillIds = byId.get(id);
+
     if (skillIds === undefined)
-      throw new Error('Fixed ranking requires one complete ranking per task.');
+      {throw new Error('Fixed ranking requires one complete ranking per task.');}
+
     if (!isCompletePermutation(catalogIds, skillIds))
-      throw new Error(
+      {throw new Error(
         `Fixed ranking is not a complete catalog permutation: ${id}`,
-      );
+      );}
+
     return { id, skillIds: [...skillIds] };
   });
+
   const unsigned = {
     schemaVersion: 1 as const,
     catalogSha256: input.catalogSha256,
     ranker,
     tasks,
   };
+
   return { ...unsigned, sha256: digest(unsigned) };
 };
 
@@ -161,7 +179,9 @@ export const defineSkillsbenchComposition = (
   ranking: SkillsbenchFixedRankingInput,
 ): SkillsbenchCompositionContract => {
   assertManifest(manifest);
+
   const fixedRanking = normalizeRanking(manifest, ranking);
+
   return {
     schemaVersion: 1,
     condition: 'skillsbench-composition',
@@ -184,34 +204,47 @@ export const resolveSkillsbenchCompositionArm = (
   options: ResolveSkillsbenchCompositionArmOptions,
 ): SkillsbenchArmAssignment => {
   const { contract, manifest, arm, taskId } = options;
+
   if (!linked(contract, manifest))
-    throw new Error(
+    {throw new Error(
       'Composition contract does not match the catalog manifest.',
-    );
+    );}
+
   const task = manifest.tasks.find((entry) => entry.id === taskId);
+
   if (task === undefined)
-    throw new Error(`Unknown SkillsBench task: ${taskId}`);
+    {throw new Error(`Unknown SkillsBench task: ${taskId}`);}
+
   const definition = contract.arms.find((entry) => entry.id === arm);
+
   if (definition === undefined)
-    throw new Error(`Unknown composition arm: ${arm}`);
+    {throw new Error(`Unknown composition arm: ${arm}`);}
+
   const catalogIds = manifest.skills.map((skill) => skill.id);
+
   if (definition.selection.kind === 'none')
-    return { kind: 'preloaded', skillIds: [] };
+    {return { kind: 'preloaded', skillIds: [] };}
+
   if (definition.selection.kind === 'oracle')
-    return { kind: 'preloaded', skillIds: [...task.goldSkillIds] };
+    {return { kind: 'preloaded', skillIds: [...task.goldSkillIds] };}
+
   if (definition.selection.kind === 'all')
-    return { kind: 'preloaded', skillIds: catalogIds };
+    {return { kind: 'preloaded', skillIds: catalogIds };}
+
   if (definition.selection.kind === 'mosaic-selective')
-    return {
+    {return {
       kind: 'selective',
       candidateSkillIds: catalogIds,
       maxSkills: definition.selection.maxSkills,
-    };
+    };}
+
   const ranking = contract.fixedRanking.tasks.find(
     (entry) => entry.id === taskId,
   );
+
   if (ranking === undefined)
-    throw new Error(`Fixed ranking is missing task: ${taskId}`);
+    {throw new Error(`Fixed ranking is missing task: ${taskId}`);}
+
   return {
     kind: 'preloaded',
     skillIds: ranking.skillIds.slice(0, definition.selection.k),

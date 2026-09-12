@@ -1,10 +1,11 @@
-import { createHash, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
 const execute = promisify(execFile);
+
 const tokenFields = [
   'inputTokens',
   'outputTokens',
@@ -26,11 +27,15 @@ const files = async (directory, extension, prefix) =>
 
 const digest = async (entries) => {
   const hash = createHash('sha256');
+
   for (const { name, path } of entries) {
     const data = await readFile(path);
+
     hash.update(name).update('\0').update(String(data.byteLength)).update('\0');
+
     hash.update(data);
   }
+
   return hash.digest('hex');
 };
 
@@ -52,18 +57,24 @@ const usageBucket = () => ({
 
 const addUsage = (bucket, usage) => {
   bucket.calls += 1;
-  if (usage === undefined || usage === null) return;
+
+  if (usage === undefined || usage === null) {return;}
 
   bucket.withUsage += 1;
-  for (const field of tokenFields) bucket.totals[field] += usage[field] ?? 0;
 
-  if (usage.cost === undefined || usage.cost === null) return;
+  for (const field of tokenFields) {bucket.totals[field] += usage[field] ?? 0;}
+
+  if (usage.cost === undefined || usage.cost === null) {return;}
+
   bucket.withCost += 1;
+
   const unit = usage.cost.unit ?? 'unspecified';
+
   const current = bucket.costs.get(unit) ?? {
     amount: 0,
     upstreamAmount: undefined,
   };
+
   bucket.costs.set(unit, {
     amount: current.amount + Number(usage.cost.amount ?? 0),
     upstreamAmount:
@@ -100,15 +111,21 @@ const createUsage = () => {
 
   const recordAttempt = ({ operation, model }) => {
     attemptSequence += 1;
+
     attempts.set(operation, (attempts.get(operation) ?? 0) + 1);
+
     return { attempt: attemptSequence, operation, model };
   };
 
   const record = ({ operation, model, usage }) => {
     sequence += 1;
+
     const operationBucket = operations.get(operation) ?? usageBucket();
+
     operations.set(operation, operationBucket);
+
     addUsage(total, usage);
+
     addUsage(operationBucket, usage);
 
     return {
@@ -121,6 +138,7 @@ const createUsage = () => {
 
   const snapshot = () => {
     const aggregate = snapshotBucket(total);
+
     return {
       ...aggregate,
       attempts: {
@@ -158,6 +176,7 @@ const repositoryIdentity = async (root) => {
       encoding: 'utf8',
     }),
   ]);
+
   return {
     commit: commit.stdout.trim(),
     dirty: status.stdout.trim().length > 0,
@@ -196,6 +215,7 @@ export const readInputIdentity = async (
         ? undefined
         : fileDigest(join(directory, 'fixtures', controlFixtureName)),
     ]);
+
   const [casesSha256, catalogSha256] = await Promise.all([
     digest(caseEntries),
     digest(catalogEntries),
@@ -233,27 +253,33 @@ export const createOutput = async ({
   const resultsPath = join(runDirectory, 'results.json');
   const logPath = join(runDirectory, 'output.log');
   const usage = createUsage();
+
   await mkdir(runDirectory, { recursive: true });
 
   const [localInputs, repository] = await Promise.all([
     readInputIdentity(directory, fixtureName, controlFixtureName),
     repositoryIdentity(root),
   ]);
+
   if (
     validatedInputIdentity !== undefined &&
     JSON.stringify(localInputs) !== JSON.stringify(validatedInputIdentity)
   ) {
     throw new Error('Local inputs changed after validation.');
   }
+
   const sources = sourceEntries(directory);
+
   const packageMetadata = [
     { name: 'package.json', path: join(root, 'package.json') },
     { name: 'package-lock.json', path: join(root, 'package-lock.json') },
   ];
+
   const [sourcesSha256, packageSha256] = await Promise.all([
     digest(sources),
     digest(packageMetadata),
   ]);
+
   const identity = {
     repository,
     fixture: {
@@ -287,6 +313,7 @@ export const createOutput = async ({
       arch: process.arch,
     },
   };
+
   const manifest = {
     schemaVersion: 1,
     runId: id,
@@ -298,6 +325,7 @@ export const createOutput = async ({
     identity,
     files: { log: 'output.log', results: 'results.json' },
   };
+
   await json(manifestPath, manifest);
 
   return {
@@ -310,6 +338,7 @@ export const createOutput = async ({
     async complete(results, metrics) {
       const completedAt = new Date().toISOString();
       const providerUsage = usage.snapshot();
+
       await json(resultsPath, {
         runId: id,
         mode,
@@ -319,6 +348,7 @@ export const createOutput = async ({
         providerUsage,
         results,
       });
+
       await json(manifestPath, {
         ...manifest,
         status: 'completed',

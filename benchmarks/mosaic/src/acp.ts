@@ -1,15 +1,17 @@
+import { randomUUID } from 'node:crypto';
+import { Readable, Writable } from 'node:stream';
+
 import {
   agent,
+  type AgentApp,
   methods,
   ndJsonStream,
   PROTOCOL_VERSION,
   RequestError,
-  type AgentApp,
   type SessionUpdate,
 } from '@agentclientprotocol/sdk';
+
 import { AgentErrorObject } from 'agent';
-import { randomUUID } from 'node:crypto';
-import { Readable, Writable } from 'node:stream';
 import { ProviderErrorObject } from 'llms';
 
 import { direct } from './direct.js';
@@ -37,10 +39,12 @@ type SafeFailure = {
 export const acp = (options: AcpOptions): AgentApp => {
   const sessions = new Map<string, Session>();
   const identifier = options.randomUUID ?? randomUUID;
+
   const builtIn =
     options.createRunner === undefined
       ? defaultRunner(options.mode)
       : undefined;
+
   const createRunner =
     options.createRunner ??
     (() => builtIn as Exclude<typeof builtIn, undefined>);
@@ -57,21 +61,28 @@ export const acp = (options: AcpOptions): AgentApp => {
     }))
     .onRequest(methods.agent.session.new, ({ params }) => {
       const sessionId = identifier();
+
       sessions.set(sessionId, { cwd: params.cwd });
+
       return { sessionId };
     })
     .onRequest(methods.agent.session.prompt, async (context) => {
       const { params } = context;
       const session = sessions.get(params.sessionId);
-      if (session === undefined) throw new Error('ACP session was not found.');
+
+      if (session === undefined) {throw new Error('ACP session was not found.');}
 
       session.controller?.abort();
+
       const controller = new AbortController();
+
       session.controller = controller;
+
       const signal = AbortSignal.any([controller.signal, context.signal]);
 
       try {
         const runner = await createRunner(options.mode);
+
         await runner.run(
           {
             prompt: textPrompt(params.prompt),
@@ -85,20 +96,25 @@ export const acp = (options: AcpOptions): AgentApp => {
             });
           },
         );
+
         return { stopReason: signal.aborted ? 'cancelled' : 'end_turn' };
       } catch (error) {
-        if (signal.aborted) return { stopReason: 'cancelled' };
+        if (signal.aborted) {return { stopReason: 'cancelled' };}
+
         const failure = safeFailure(error);
+
         reportFailure(failure);
+
         if (
           error instanceof AgentErrorObject &&
           error.data.code === 'invalid_structured_output'
         ) {
           return { stopReason: 'end_turn' };
         }
+
         throw RequestError.internalError(failure);
       } finally {
-        if (session.controller === controller) session.controller = undefined;
+        if (session.controller === controller) {session.controller = undefined;}
       }
     })
     .onNotification(methods.agent.session.cancel, ({ params }) => {
@@ -113,6 +129,7 @@ export const serveAcp = async (options: AcpOptions): Promise<void> => {
     Readable.toWeb(process.stdin),
   );
   const connection = acp(options).connect(stream);
+
   await connection.closed;
 };
 
@@ -123,6 +140,7 @@ export const sessionUpdate = (event: RunEvent): SessionUpdate => {
         sessionUpdate: 'agent_message_chunk',
         content: { type: 'text', text: event.delta },
       };
+
     case 'tool_started':
       return {
         sessionUpdate: 'tool_call',
@@ -133,6 +151,7 @@ export const sessionUpdate = (event: RunEvent): SessionUpdate => {
         status: 'in_progress',
         ...(event.input === undefined ? {} : { rawInput: event.input }),
       };
+
     case 'tool_completed':
       return {
         sessionUpdate: 'tool_call_update',
@@ -140,12 +159,14 @@ export const sessionUpdate = (event: RunEvent): SessionUpdate => {
         status: 'completed',
         ...(event.output === undefined ? {} : { rawOutput: event.output }),
       };
+
     case 'tool_failed':
       return {
         sessionUpdate: 'tool_call_update',
         toolCallId: event.callId,
         status: 'failed',
       };
+
     case 'status':
       return {
         sessionUpdate: 'plan',
@@ -181,13 +202,16 @@ const safeFailure = (error: unknown): SafeFailure | undefined => {
   if (error instanceof AgentErrorObject) {
     return { source: 'agent', code: error.data.code };
   }
+
   if (error instanceof ProviderErrorObject) {
     return { source: 'provider', code: error.data.code };
   }
+
   return undefined;
 };
 
 const defaultFailureReporter = (failure?: SafeFailure): void => {
   const code = failure === undefined ? '' : `: ${failure.code}`;
+
   process.stderr.write(`MOSAIC benchmark prompt failed${code}.\n`);
 };

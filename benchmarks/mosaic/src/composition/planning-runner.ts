@@ -1,21 +1,21 @@
 import type { MosaicOptions } from 'mosaic';
 import {
-  mosaic as evaluationMosaic,
   type ExecutionResult,
+  mosaic as evaluationMosaic,
   type MosaicEvaluationHooks,
 } from 'mosaic/evaluation';
 
-import {
-  PlanningCaseSchema,
-  PlanningGraphSchema,
-  type PlanningCase,
-  type PlanningGraph,
-  type PlanningObservation,
-} from './planning-schema.js';
 import { planningObservationSchema } from './planning-observation-schema.js';
 import {
-  scorePlanningTransition,
+  type PlanningCase,
+  PlanningCaseSchema,
+  type PlanningGraph,
+  PlanningGraphSchema,
+  type PlanningObservation,
+} from './planning-schema.js';
+import {
   type PlanningTransitionScore,
+  scorePlanningTransition,
 } from './planning-scoring.js';
 
 export const planningConditions = [
@@ -26,6 +26,7 @@ export const planningConditions = [
 ] as const;
 
 export type PlanningCondition = (typeof planningConditions)[number];
+
 export type PlanningSkill = PlanningCase['catalog'][number];
 
 export interface PlanningRevisionInput {
@@ -95,9 +96,11 @@ export const runPlanningConditions = async ({
   const benchmarkCase = PlanningCaseSchema.parse(inputCase);
   const selected = validateConditions(conditions);
   const observationSchema = planningObservationSchema(benchmarkCase);
+
   const p0 = PlanningGraphSchema.parse(
     await adapter.initialPlan(benchmarkCase),
   );
+
   const p0Observation = observationSchema.parse(
     await adapter.observe({
       case: benchmarkCase,
@@ -106,18 +109,21 @@ export const runPlanningConditions = async ({
       graph: p0,
     }),
   );
+
   assertObservationGraph(p0, p0Observation, 'p0');
+
   const retrievedIds = selected.includes('retrieved')
     ? validateEvidenceIds(
         benchmarkCase,
         await adapter.retrieve({ case: benchmarkCase, p0 }),
       )
     : [];
-
   const results: PlanningConditionResult[] = [];
+
   for (const condition of selected) {
     const evidence = evidenceFor(benchmarkCase, condition, retrievedIds);
     let p1: PlanningGraph | undefined;
+
     const hooks = createPlanningConditionHooks({
       case: benchmarkCase,
       condition,
@@ -128,12 +134,15 @@ export const runPlanningConditions = async ({
         p1 = graph;
       },
     });
+
     const result = await evaluationMosaic(mosaic, { hooks }).prompt(
       benchmarkCase.request,
     );
+
     if (result.status !== 'completed' || p1 === undefined) {
       throw new Error(`Planning condition did not complete: ${condition}`);
     }
+
     const p1Observation = observationSchema.parse(
       await adapter.observe({
         case: benchmarkCase,
@@ -142,7 +151,9 @@ export const runPlanningConditions = async ({
         graph: p1,
       }),
     );
+
     assertObservationGraph(p1, p1Observation, `p1/${condition}`);
+
     results.push({
       condition,
       evidenceSkillIds: evidence.map(({ id }) => id),
@@ -156,6 +167,7 @@ export const runPlanningConditions = async ({
       ),
     });
   }
+
   return results;
 };
 
@@ -179,6 +191,7 @@ export const createPlanningConditionHooks = ({
 }: PlanningConditionHookOptions): MosaicEvaluationHooks => {
   const benchmarkCase = PlanningCaseSchema.parse(inputCase);
   const p0 = PlanningGraphSchema.parse(inputP0);
+
   const selectedEvidence = evidenceFor(
     benchmarkCase,
     condition,
@@ -188,29 +201,38 @@ export const createPlanningConditionHooks = ({
   return {
     initialPlan: async ({ request }) => {
       assertRequest(benchmarkCase, request);
+
       return p0;
     },
     feedbackPlan: async ({ request, graph }) => {
       assertRequest(benchmarkCase, request);
+
       const materializedP0 = projectGraph(graph);
+
       if (stableJson(materializedP0) !== stableJson(p0)) {
         throw new Error('Mosaic P0 does not match the shared controlled plan.');
       }
+
       if (condition === 'no-hints') {
         await onP1?.(materializedP0);
+
         return 'unchanged';
       }
+
       const revised = await revise({
         case: benchmarkCase,
         condition,
         p0,
         evidence: selectedEvidence,
       });
+
       const p1 =
         revised === 'unchanged'
           ? materializedP0
           : PlanningGraphSchema.parse(revised);
+
       await onP1?.(p1);
+
       return revised === 'unchanged' ? 'unchanged' : p1;
     },
     routing: async ({ node }) => ({
@@ -265,6 +287,7 @@ const evidenceFor = (
               Math.max(1, benchmarkCase.gold.relevantSkillIds.length),
             );
   const byId = new Map(benchmarkCase.catalog.map((skill) => [skill.id, skill]));
+
   return ids.map((id) => byId.get(id)!);
 };
 
@@ -275,10 +298,13 @@ const validateEvidenceIds = (
   if (new Set(values).size !== values.length) {
     throw new TypeError('Planning evidence skill IDs must be unique.');
   }
+
   const known = new Set(benchmarkCase.catalog.map(({ id }) => id));
+
   if (values.some((id) => !known.has(id))) {
     throw new TypeError('Planning evidence contains an unknown skill ID.');
   }
+
   return [...values];
 };
 
@@ -286,6 +312,7 @@ const validateConditions = (
   values: readonly PlanningCondition[],
 ): readonly PlanningCondition[] => {
   const known = new Set<PlanningCondition>(planningConditions);
+
   if (
     values.length === 0 ||
     new Set(values).size !== values.length ||
@@ -295,6 +322,7 @@ const validateConditions = (
       'Planning conditions must be non-empty, known, and unique.',
     );
   }
+
   return [...values];
 };
 
@@ -314,7 +342,8 @@ const projectGraph = (
   });
 
 const assertRequest = (benchmarkCase: PlanningCase, request: string): void => {
-  if (request === benchmarkCase.request) return;
+  if (request === benchmarkCase.request) {return;}
+
   throw new Error('Planning hook request does not match its controlled case.');
 };
 
@@ -328,6 +357,7 @@ const assertObservationGraph = (
   const graphNodes = new Map(
     graph.nodes.map(({ id, dependsOn }) => [id, [...dependsOn].sort()]),
   );
+
   if (
     graphNodes.size !== observation.nodes.length ||
     observation.nodes.some(

@@ -4,14 +4,14 @@ import test from 'node:test';
 import type { ProviderRequest } from 'llms';
 
 import {
-  PlanningGraphSchema,
-  PlanningObservationSchema,
   createPlanningModelAdapter,
   planningCase,
-  retrievePlanningSkills,
   type PlanningGraph,
+  PlanningGraphSchema,
   type PlanningModelEvent,
   type PlanningObservation,
+  PlanningObservationSchema,
+  retrievePlanningSkills,
 } from '../src/composition/planning.js';
 import { fakeProvider, finish } from './support/provider.js';
 
@@ -27,6 +27,7 @@ test('retrieves every positive lexical match without oracle fields or a gold-siz
       },
     ],
   });
+
   const source = {
     request: 'Compare alpha, beta, and gamma.',
     catalog: [
@@ -60,15 +61,16 @@ test('retrieves every positive lexical match without oracle fields or a gold-siz
       },
     ],
   };
-
   const first = retrievePlanningSkills(source, graph);
   const second = retrievePlanningSkills(source, graph);
 
   assert.deepEqual(second, first);
+
   assert.deepEqual(
     new Set(first.map(({ skillId }) => skillId)),
     new Set(['skill.alpha', 'skill.beta', 'skill.gamma']),
   );
+
   assert.ok(
     first.every(
       ({ score, matchedTerms }) => score > 0 && matchedTerms.length > 0,
@@ -78,6 +80,7 @@ test('retrieves every positive lexical match without oracle fields or a gold-siz
 
 test('runs planning, revision, and observation through explicit structured agent calls', async () => {
   const benchmarkCase = planningCase('planning.software.c');
+
   const p0: PlanningGraph = {
     nodes: [
       {
@@ -91,17 +94,19 @@ test('runs planning, revision, and observation through explicit structured agent
       },
     ],
   };
+
   const p1: PlanningGraph = {
     nodes: [
       {
-        ...p0.nodes[0]!,
+        ...p0.nodes[0],
         doneWhen: [
-          ...p0.nodes[0]!.doneWhen,
+          ...p0.nodes[0].doneWhen,
           'Compatibility is compared at each affected call-site boundary.',
         ],
       },
     ],
   };
+
   const observation: PlanningObservation = {
     nodes: [
       {
@@ -118,12 +123,16 @@ test('runs planning, revision, and observation through explicit structured agent
   };
   const outputs: readonly unknown[] = [p0, p1, observation];
   let outputIndex = 0;
+
   const fake = fakeProvider((request) => {
     const output = outputs[outputIndex++];
+
     assert.notEqual(output, undefined);
+
     return structuredFinish(request, output, outputIndex);
   });
   const events: PlanningModelEvent[] = [];
+
   const adapter = createPlanningModelAdapter({
     provider: fake.provider,
     model: 'offline-model',
@@ -133,11 +142,13 @@ test('runs planning, revision, and observation through explicit structured agent
       events.push(event);
     },
   });
+
   const evidence = benchmarkCase.catalog.filter(
     ({ id }) => id === 'skill.compatibility-analysis',
   );
 
   assert.deepEqual(await adapter.initialPlan(benchmarkCase), p0);
+
   assert.deepEqual(
     await adapter.revise({
       case: benchmarkCase,
@@ -147,6 +158,7 @@ test('runs planning, revision, and observation through explicit structured agent
     }),
     p1,
   );
+
   assert.deepEqual(
     await adapter.observe({
       case: benchmarkCase,
@@ -156,45 +168,69 @@ test('runs planning, revision, and observation through explicit structured agent
     }),
     observation,
   );
+
   const retrieved = await adapter.retrieve({ case: benchmarkCase, p0 });
 
   assert.ok(retrieved.includes('skill.compatibility-analysis'));
+
   assert.equal(fake.requests.length, 3);
+
   assert.equal(outputIndex, 3);
+
   assert.ok(fake.requests.every(({ schema }) => schema === undefined));
+
   assert.ok(fake.requests.every(({ tools }) => tools?.length === 1));
 
   const prompts = fake.requests.map(userPrompt);
-  const initialMessages = requestText(fake.requests[0]!);
-  const revisionMessages = requestText(fake.requests[1]!);
+  const initialMessages = requestText(fake.requests[0]);
+  const revisionMessages = requestText(fake.requests[1]);
+
   assert.ok(prompts.every((prompt) => prompt.startsWith('#')));
+
   assert.ok(prompts.every((prompt) => !prompt.trimStart().startsWith('{')));
+
   assert.ok(!initialMessages.includes('compatibility-analysis'));
+
   assert.ok(!initialMessages.includes('role.assess-compatibility'));
+
   assert.ok(!initialMessages.includes('output.compatibility-assessment'));
+
   assert.ok(!initialMessages.includes('software.check-compatibility'));
-  assert.ok(prompts[1]!.includes('# Skill evidence'));
-  assert.ok(prompts[1]!.includes(evidence[0]!.body));
+
+  assert.ok(prompts[1].includes('# Skill evidence'));
+
+  assert.ok(prompts[1].includes(evidence[0].body));
+
   assert.ok(!revisionMessages.includes('retrieved'));
+
   assert.ok(!revisionMessages.includes('behaviorIds'));
+
   assert.ok(!revisionMessages.includes('relevance'));
+
   assert.ok(!revisionMessages.includes('role.assess-compatibility'));
+
   assert.ok(!revisionMessages.includes('output.compatibility-assessment'));
+
   assert.ok(!revisionMessages.includes('software.check-compatibility'));
-  assert.ok(prompts[2]!.includes('# Semantic label catalog'));
-  assert.ok(prompts[2]!.includes('role.assess-compatibility'));
+
+  assert.ok(prompts[2].includes('# Semantic label catalog'));
+
+  assert.ok(prompts[2].includes('role.assess-compatibility'));
 
   assert.equal(events.filter(({ type }) => type === 'model.call').length, 3);
+
   assert.equal(
     events.filter(({ type }) => type === 'model.completed').length,
     3,
   );
+
   assert.equal(
     events.filter(({ type }) => type === 'retrieval.completed').length,
     1,
   );
 
   assert.deepEqual(await adapter.initialPlan(benchmarkCase), p0);
+
   assert.deepEqual(
     await adapter.observe({
       case: benchmarkCase,
@@ -204,7 +240,9 @@ test('runs planning, revision, and observation through explicit structured agent
     }),
     observation,
   );
+
   assert.equal(fake.requests.length, 3);
+
   assert.deepEqual(
     events.flatMap((event) =>
       event.type === 'cache.hit' ? [event.operation] : [],
@@ -215,6 +253,7 @@ test('runs planning, revision, and observation through explicit structured agent
 
 test('reports every structured repair provider call', async () => {
   const benchmarkCase = planningCase('planning.artifacts.a');
+
   const valid: PlanningGraph = {
     nodes: [
       {
@@ -227,8 +266,10 @@ test('reports every structured repair provider call', async () => {
     ],
   };
   let attempt = 0;
+
   const fake = fakeProvider((request) => {
     attempt += 1;
+
     return structuredFinish(
       request,
       attempt === 1 ? { nodes: [] } : valid,
@@ -236,6 +277,7 @@ test('reports every structured repair provider call', async () => {
     );
   });
   const events: PlanningModelEvent[] = [];
+
   const adapter = createPlanningModelAdapter({
     provider: fake.provider,
     model: 'offline-model',
@@ -246,26 +288,33 @@ test('reports every structured repair provider call', async () => {
   });
 
   assert.deepEqual(await adapter.initialPlan(benchmarkCase), valid);
+
   assert.equal(fake.requests.length, 2);
+
   assert.deepEqual(
     events.flatMap((event) =>
       event.type === 'model.call' ? [event.call] : [],
     ),
     [1, 2],
   );
+
   assert.deepEqual(
     events.flatMap((event) =>
       event.type === 'structured.attempt' ? [event.runtimeAccepted] : [],
     ),
     [false, true],
   );
+
   const completed = events.find(({ type }) => type === 'model.completed');
+
   assert.equal(completed?.type, 'model.completed');
-  if (completed?.type === 'model.completed') assert.equal(completed.calls, 2);
+
+  if (completed?.type === 'model.completed') {assert.equal(completed.calls, 2);}
 });
 
 test('repairs an observation that uses labels outside the case catalog', async () => {
   const benchmarkCase = planningCase('planning.software.c');
+
   const graph: PlanningGraph = {
     nodes: [
       {
@@ -279,10 +328,11 @@ test('repairs an observation that uses labels outside the case catalog', async (
       },
     ],
   };
+
   const valid: PlanningObservation = {
     nodes: [
       {
-        id: graph.nodes[0]!.id,
+        id: graph.nodes[0].id,
         roleIds: ['role.assess-compatibility'],
         outputIds: ['output.compatibility-assessment'],
         behaviorIds: ['software.identify-contract-change'],
@@ -291,8 +341,10 @@ test('repairs an observation that uses labels outside the case catalog', async (
     ],
   };
   let attempt = 0;
+
   const fake = fakeProvider((request) => {
     attempt += 1;
+
     return structuredFinish(
       request,
       attempt === 1
@@ -309,6 +361,7 @@ test('repairs an observation that uses labels outside the case catalog', async (
     );
   });
   const events: PlanningModelEvent[] = [];
+
   const adapter = createPlanningModelAdapter({
     provider: fake.provider,
     model: 'offline-model',
@@ -327,7 +380,9 @@ test('repairs an observation that uses labels outside the case catalog', async (
     }),
     valid,
   );
+
   assert.equal(fake.requests.length, 2);
+
   assert.deepEqual(
     events.flatMap((event) =>
       event.type === 'structured.attempt' ? [event.runtimeAccepted] : [],
@@ -356,8 +411,9 @@ test('accepts underscore-bearing Mosaic node IDs in semantic observations', () =
     ],
   });
 
-  assert.equal(observation.nodes[0]!.id, 'n01:inspect_api_contract');
-  assert.deepEqual(observation.nodes[1]!.dependsOn, [
+  assert.equal(observation.nodes[0].id, 'n01:inspect_api_contract');
+
+  assert.deepEqual(observation.nodes[1].dependsOn, [
     'n01:inspect_api_contract',
   ]);
 });
@@ -372,7 +428,9 @@ const structuredFinish = (
       description ===
       'Submit the final structured output and end the agent run.',
   );
+
   assert.ok(terminal);
+
   return finish('', [
     {
       id: `call-${index}`,
@@ -386,7 +444,9 @@ const userPrompt = (request: ProviderRequest<unknown>): string => {
   const message = [...request.messages]
     .reverse()
     .find(({ role }) => role === 'user');
+
   assert.equal(typeof message?.content, 'string');
+
   return message!.content as string;
 };
 

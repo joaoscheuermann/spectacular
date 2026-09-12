@@ -11,8 +11,8 @@ import { devNull } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 
 import {
-  armOrder,
   type Arm,
+  armOrder,
   type ArmRun,
   type Benchmark,
   type CampaignCheck,
@@ -43,6 +43,7 @@ export type {
 } from './campaign-types.js';
 
 const model = 'openrouter/deepseek/deepseek-v4-pro';
+
 const releaseAssets = [
   'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.2.0/mosaic-bench-acp.mjs',
   'https://github.com/joaoscheuermann/spectacular/releases/download/mosaic-benchmark-v0.2.0/mosaic-bench-acp.mjs.sha256',
@@ -83,6 +84,7 @@ export const campaign = async (
 ): Promise<CampaignCheck | CampaignRun> => {
   const runner =
     options.runner ?? createProcessRunner(options.environment ?? process.env);
+
   return options.action === 'check'
     ? check(options, runner)
     : run(options, runner);
@@ -94,6 +96,7 @@ const check = async (
 ): Promise<CampaignCheck> => {
   const definition = definitions[options.benchmark];
   const root = resolve(options.rootDir);
+
   const commands: readonly Check[] = await Promise.all([
     executable('uvx', runner, root),
     executable('docker', runner, root),
@@ -118,6 +121,7 @@ const check = async (
     ),
     releaseChecksum(root, runner),
   ]);
+
   const files = await Promise.all([
     ...armOrder.map((arm) =>
       fileCheck(`manifest:${arm}`, join(root, 'agents', arm, 'manifest.toml')),
@@ -127,16 +131,19 @@ const check = async (
       join(root, 'dist', 'mosaic-bench-acp.mjs'),
     ),
   ]);
+
   const checks = [
     credentialCheck(options.environment ?? process.env),
     ...commands,
     ...files,
   ];
+
   return { ok: checks.every((item) => item.ok), checks };
 };
 
 const credentialCheck = (environment: NodeJS.ProcessEnv): Check => {
   const ok = (environment.OPENROUTER_API_KEY?.trim().length ?? 0) > 0;
+
   return {
     name: 'credential:OPENROUTER_API_KEY',
     ok,
@@ -146,6 +153,7 @@ const credentialCheck = (environment: NodeJS.ProcessEnv): Check => {
 
 const executable = (name: string, runner: CommandRunner, cwd: string) =>
   commandCheck(name, { file: name, args: ['--version'], cwd }, runner);
+
 const remoteRef = async (
   repo: string,
   ref: string,
@@ -159,6 +167,7 @@ const remoteRef = async (
       cwd,
     });
     const found = result.code === 0 && checkRemoteRef(ref, result.stdout);
+
     return {
       name: `remote-ref:${repo}`,
       ok: found,
@@ -168,8 +177,10 @@ const remoteRef = async (
     return { name: `remote-ref:${repo}`, ok: false, detail: 'not available' };
   }
 };
+
 const checkRemoteRef = (ref: string, output: string): boolean =>
   output.split('\n').some((line) => line.split('\t', 1)[0] === ref);
+
 const releaseChecksum = async (
   root: string,
   runner: CommandRunner,
@@ -177,18 +188,21 @@ const releaseChecksum = async (
   const bundle = join(root, 'dist', 'mosaic-bench-acp.mjs');
   const local = await digest(bundle);
   const pinned = await manifestBundleChecksum(root);
+
   if (local === undefined)
-    return {
+    {return {
       name: 'release-checksum',
       ok: false,
       detail: 'local bundle missing',
-    };
+    };}
+
   if (pinned === undefined)
-    return {
+    {return {
       name: 'release-checksum',
       ok: false,
       detail: 'manifest checksums missing or different',
-    };
+    };}
+
   try {
     const result = await runner({
       file: 'curl',
@@ -197,6 +211,7 @@ const releaseChecksum = async (
     });
     const declared = result.stdout.trim().split(/\s+/, 1)[0];
     const ok = result.code === 0 && local === pinned && declared === pinned;
+
     return {
       name: 'release-checksum',
       ok,
@@ -206,6 +221,7 @@ const releaseChecksum = async (
     return { name: 'release-checksum', ok: false, detail: 'not available' };
   }
 };
+
 const manifestBundleChecksum = async (
   root: string,
 ): Promise<string | undefined> => {
@@ -216,6 +232,7 @@ const manifestBundleChecksum = async (
           join(root, 'agents', arm, 'manifest.toml'),
           'utf8',
         );
+
         return /^BF_BUNDLE_SHA256=([a-f0-9]{64})$/im.exec(source)?.[1];
       } catch {
         return undefined;
@@ -223,10 +240,12 @@ const manifestBundleChecksum = async (
     }),
   );
   const [first] = checksums;
+
   return first !== undefined && checksums.every((value) => value === first)
     ? first
     : undefined;
 };
+
 const commandCheck = async (
   name: string,
   command: Command,
@@ -234,6 +253,7 @@ const commandCheck = async (
 ): Promise<Check> => {
   try {
     const result = await runner(command);
+
     return {
       name,
       ok: result.code === 0,
@@ -243,6 +263,7 @@ const commandCheck = async (
     return { name, ok: false, detail: 'not available' };
   }
 };
+
 const fileCheck = async (name: string, path: string): Promise<Check> => {
   try {
     return { name, ok: (await stat(path)).isFile(), detail: 'ok' };
@@ -256,20 +277,28 @@ const run = async (
   runner: CommandRunner,
 ): Promise<CampaignRun> => {
   if (options.yesPaidRun !== true)
-    throw new Error('Paid benchmark runs require yesPaidRun: true.');
+    {throw new Error('Paid benchmark runs require yesPaidRun: true.');}
+
   if (options.action === 'pilot' && options.benchmark !== 'skillsbench')
-    throw new Error('Pilot campaigns are only available for SkillsBench.');
+    {throw new Error('Pilot campaigns are only available for SkillsBench.');}
+
   if (options.benchmark === 'terminalbench')
-    await requireSkillsbenchReport(options.skillsbenchReport);
+    {await requireSkillsbenchReport(options.skillsbenchReport);}
+
   const preflight = await check(options, runner);
-  if (!preflight.ok) throw new Error('Benchmark preflight failed.');
+
+  if (!preflight.ok) {throw new Error('Benchmark preflight failed.');}
+
   const definition = definitions[options.benchmark];
   const root = resolve(options.rootDir);
   const resultsDir = join(root, 'results');
+
   await mkdir(resultsDir, { recursive: true });
+
   const directory = await mkdtemp(
     join(resultsDir, `${options.benchmark}-${options.action}-${randomUUID()}-`),
   );
+
   const action =
     options.action === 'smoke'
       ? 'smoke'
@@ -278,6 +307,7 @@ const run = async (
         : 'run';
   const campaignId = basename(directory);
   const includeTasks = action === 'pilot' ? skillsbenchPilotTasks : [];
+
   const expectedTasks =
     action === 'smoke'
       ? 1
@@ -287,9 +317,12 @@ const run = async (
   const sourcePath =
     action === 'smoke' ? definition.smokePath : definition.fullPath;
   const arms: ArmRun[] = [];
+
   for (const arm of armOrder) {
     const armDirectory = join(directory, arm);
+
     await mkdir(join(armDirectory, 'jobs'), { recursive: true });
+
     const command = evalCommand(
       root,
       armDirectory,
@@ -300,7 +333,9 @@ const run = async (
       includeTasks,
     );
     const result = await runner(command);
+
     await copyArmAssets(root, armDirectory, arm);
+
     await writeMetadata(
       armDirectory,
       metadata(
@@ -314,9 +349,12 @@ const run = async (
       ),
       result.code === 0,
     );
+
     arms.push({ arm, directory: armDirectory, command, result });
-    if (result.code !== 0) break;
+
+    if (result.code !== 0) {break;}
   }
+
   return { directory, arms };
 };
 
@@ -408,11 +446,13 @@ const requireSkillsbenchReport = async (
   path: string | undefined,
 ): Promise<void> => {
   if (path === undefined)
-    throw new Error('Terminal-Bench campaigns require skillsbenchReport.');
+    {throw new Error('Terminal-Bench campaigns require skillsbenchReport.');}
+
   try {
     const report: unknown = JSON.parse(await readFile(path, 'utf8'));
+
     if (!isValidSkillsbenchReport(report))
-      throw new Error('invalid SkillsBench report');
+      {throw new Error('invalid SkillsBench report');}
   } catch {
     throw new Error(
       'Terminal-Bench campaigns require a valid SkillsBench report.',
@@ -448,21 +488,25 @@ const writeMetadata = async (
     bundle: join(directory, 'bundle.mjs'),
     agentManifest: join(directory, 'agent-manifest.toml'),
   };
+
   const entries = await Promise.all(
     Object.entries(candidates).map(
       async ([name, path]) => [name, await digest(path)] as const,
     ),
   );
+
   const digests = Object.fromEntries(
     entries.filter(
       (entry): entry is readonly [string, string] => entry[1] !== undefined,
     ),
   );
+
   if (
     requireAll &&
     Object.keys(digests).length !== Object.keys(candidates).length
   )
-    throw new Error('Successful arm did not produce every required artifact.');
+    {throw new Error('Successful arm did not produce every required artifact.');}
+
   await writeFile(
     join(directory, 'metadata.json'),
     `${JSON.stringify({ ...value, digests }, null, 2)}\n`,

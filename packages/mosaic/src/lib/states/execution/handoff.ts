@@ -18,6 +18,7 @@ export const revisionExecutionHandoff = (
   for (let index = graphs.length - 1; index > 0; index -= 1) {
     const revised = graphs[index];
     const prior = graphs[index - 1];
+
     if (
       revised === undefined ||
       prior === undefined ||
@@ -28,26 +29,33 @@ export const revisionExecutionHandoff = (
     }
 
     const revisedNode = revised.nodes.find(({ id }) => id === node.id);
-    if (revisedNode === undefined) continue;
+
+    if (revisedNode === undefined) {continue;}
 
     const target = revisionNodes(prior)[0];
-    if (target === undefined) continue;
+
+    if (target === undefined) {continue;}
+
     const priorNode = prior.nodes.find(({ id }) => id === node.id);
     const directlyReset = target.id === node.id;
     const introduced = priorNode === undefined;
     const changed = introduced || !samePlan(priorNode, revisedNode);
-    if (!directlyReset && !changed) continue;
+
+    if (!directlyReset && !changed) {continue;}
 
     const outcome = target.outcome;
     const request = outcome?.revisionRequest;
-    if (outcome === null || request === null || request === undefined) continue;
+
+    if (outcome === null || request === null || request === undefined) {continue;}
 
     const falseCriteria = outcome.criteria.filter(
       ({ satisfied }) => !satisfied,
     );
+
     const citedLocalIds = new Set(
       falseCriteria.flatMap(({ observationIds }) => observationIds),
     );
+
     const citedObservations = target.observations.filter(({ id }) =>
       citedLocalIds.has(id),
     );
@@ -58,7 +66,7 @@ export const revisionExecutionHandoff = (
       requestedEffect: request.requestedEffect,
       falseCriteria: falseCriteria.map(({ criterionIndex }) => ({
         criterionIndex,
-        text: target.doneWhen[criterionIndex]!,
+        text: target.doneWhen[criterionIndex],
       })),
       observations: observations.map(({ toolName, input, output }) => ({
         toolName,
@@ -67,11 +75,12 @@ export const revisionExecutionHandoff = (
       })),
       omittedObservationCount: citedObservations.length - observations.length,
     };
-
     const targetRetained = revised.nodes.some(({ id }) => id === target.id);
     const replacementOrMerge = !targetRetained && changed;
+
     // Direct retries and structural descendants outrank collateral pending edits.
-    if (directlyReset || introduced || replacementOrMerge) return handoff;
+    if (directlyReset || introduced || replacementOrMerge) {return handoff;}
+
     changedFallback ??= handoff;
   }
 
@@ -94,9 +103,11 @@ const sameItems = (
 
 const compactHistoricalValue = (value: string): string => {
   const retained = observationValueEdge * 2;
-  if (value.length <= retained) return value;
+
+  if (value.length <= retained) {return value;}
 
   const omitted = value.length - retained;
+
   return [
     value.slice(0, observationValueEdge),
     `[${omitted} historical characters omitted]`,

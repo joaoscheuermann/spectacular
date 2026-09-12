@@ -37,7 +37,9 @@ const magnitudeOf = (vector: ReadonlyArray<number>): Magnitude | undefined => {
 
     if (scale < absolute) {
       sum = 1 + sum * (scale / absolute) ** 2;
+
       scale = absolute;
+
       continue;
     }
 
@@ -111,13 +113,13 @@ export const createVectorIndex = <Data = unknown>(
   const parentLogger = options?.logger;
 
   validateDimensions(dimensions);
+
   validateEmbedding(embedding);
+
   validateLogger(parentLogger, 'vector index');
 
   const logger = parentLogger.child({ component: 'victor' });
-
   const entries: Entry<Data>[] = [];
-
   const embed = async (data: string): Promise<Entry<Data>['vector']> =>
     validateVector(await embedding(data), dimensions);
 
@@ -151,6 +153,7 @@ export const createVectorIndex = <Data = unknown>(
         }
 
         entries.push({ data, vector, magnitude });
+
         logger.debug(
           { dimensions, entryCount: entries.length },
           'vector database add completed',
@@ -160,6 +163,7 @@ export const createVectorIndex = <Data = unknown>(
           { dimensions, entryCount: entries.length },
           'vector database add failed',
         );
+
         throw error;
       }
     },
@@ -178,6 +182,7 @@ export const createVectorIndex = <Data = unknown>(
             { ...fields, resultCount: 0 },
             'vector database search completed',
           );
+
           return [];
         }
 
@@ -209,9 +214,11 @@ export const createVectorIndex = <Data = unknown>(
           { ...fields, resultCount: results.length },
           'vector database search completed',
         );
+
         return results;
       } catch (error) {
         logger.debug(fields, 'vector database search failed');
+
         throw error;
       }
     },

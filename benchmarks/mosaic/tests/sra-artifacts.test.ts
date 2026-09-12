@@ -38,11 +38,13 @@ test('rejects duplicate instances and malformed rankings', () => {
     gold_skill_ids: ['a'],
     retrieved: [{ skill_id: 'a', score: 1 }],
   };
+
   assert.throws(
     () =>
       parseSraRetrievalResults(JSON.stringify({ results: [record, record] })),
     /duplicate instances/,
   );
+
   assert.throws(
     () =>
       parseSraRetrievalResults(

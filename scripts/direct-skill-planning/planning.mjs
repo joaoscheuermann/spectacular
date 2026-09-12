@@ -1,7 +1,8 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-import { createVectorIndex } from 'victor';
 import * as z from 'zod';
+
+import { createVectorIndex } from 'victor';
 
 import { goalsSystem, goalsUser } from '../full-skill-vs-hints/prompts.mjs';
 import {
@@ -49,11 +50,13 @@ export const indexSkills = async (
   onProviderFailure,
 ) => {
   const embeddingContext = new AsyncLocalStorage();
+
   const vectors = createVectorIndex({
     dimensions: config.embeddingDimensions,
     logger,
     embedding: async (input) => {
       const context = embeddingContext.getStore() ?? {};
+
       const result = await retryProvider(
         () =>
           provider.embedding({
@@ -69,6 +72,7 @@ export const indexSkills = async (
           onFailure: onProviderFailure,
         },
       );
+
       return result.embedding;
     },
   });
@@ -95,6 +99,7 @@ const normalizeRanking = (results, candidates, limit) => {
   }
 
   const seen = new Set();
+
   const ranked = results.map(({ index, relevanceScore }) => {
     if (
       !Number.isSafeInteger(index) ||
@@ -107,6 +112,7 @@ const normalizeRanking = (results, candidates, limit) => {
     }
 
     seen.add(index);
+
     return {
       skill: candidates[index].data,
       vectorScore: candidates[index].score,
@@ -135,6 +141,7 @@ const rankSkills = async ({
     ...context,
     operation: 'query_embedding',
   });
+
   const { results } = await retryProvider(
     () =>
       provider.rerank({
@@ -152,6 +159,7 @@ const rankSkills = async ({
     },
   );
   const reranked = normalizeRanking(results, shortlist, config.topK);
+
   const selected = reranked.filter(
     ({ rerankerScore }) => rerankerScore >= config.minRerankerScore,
   );
@@ -178,10 +186,13 @@ const rankByGoal = (deps, current, round, goals) =>
 
 const uniqueSkills = (byGoal) => {
   const seen = new Set();
+
   return byGoal.flatMap(({ selected }) =>
     selected.flatMap(({ skill }) => {
-      if (seen.has(skill.name)) return [];
+      if (seen.has(skill.name)) {return [];}
+
       seen.add(skill.name);
+
       return [skill];
     }),
   );
@@ -206,6 +217,7 @@ const revise = (deps, current, round, p0, skills, arm) =>
 
 export const generatePlans = async (deps, current, round) => {
   const prefix = `${current.name} ${round}/${deps.config.rounds}`;
+
   const [requestRanking, p0] = await Promise.all([
     deps.action(`${prefix}: retrieving skills from request`, () =>
       rankSkills({
@@ -236,6 +248,7 @@ export const generatePlans = async (deps, current, round) => {
       'direct',
     ),
   );
+
   const requestP1Promise = deps.action(`${prefix}: generating Request P1`, () =>
     revise(
       deps,
@@ -246,21 +259,25 @@ export const generatePlans = async (deps, current, round) => {
       'requestP1',
     ),
   );
+
   const byGoalPromise = deps.action(
     `${prefix}: retrieving skills per P0 goal`,
     () => rankByGoal(deps, current, round, p0),
   );
   const goalSkillsPromise = byGoalPromise.then(uniqueSkills);
+
   const directGoalPromise = goalSkillsPromise.then((skills) =>
     deps.action(`${prefix}: generating Direct Goal`, () =>
       generateDirect(deps, current, round, skills, 'directGoal'),
     ),
   );
+
   const goalP1Promise = goalSkillsPromise.then((skills) =>
     deps.action(`${prefix}: generating Goal P1`, () =>
       revise(deps, current, round, p0, skills, 'goalP1'),
     ),
   );
+
   const [direct, requestP1, byGoal, directGoal, goalP1] = await Promise.all([
     directPromise,
     requestP1Promise,

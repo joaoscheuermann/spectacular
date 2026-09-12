@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
-import { readFile, readdir, realpath, stat } from 'node:fs/promises';
+import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 
-import { armOrder, type Arm, type CampaignMetadata } from './campaign-types.js';
+import { type Arm, armOrder, type CampaignMetadata } from './campaign-types.js';
 import { skillsbenchPilotTasks } from './pilot.js';
 
 export type Json = Record<string, unknown>;
+
 export type ResumeEvidence = {
   readonly directory: string;
   readonly metadata: CampaignMetadata;
@@ -14,6 +15,7 @@ export type ResumeEvidence = {
 export const model = 'openrouter/deepseek/deepseek-v4-pro';
 export const commit = 'b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af';
 export const pilotTaskNames = new Set<string>(skillsbenchPilotTasks);
+
 export const digestNames = [
   'taskManifest',
   'runConfig',
@@ -53,33 +55,43 @@ export const loadEvidence = async (
   ]).catch(() => {
     throw new Error('Campaign has invalid resume evidence.');
   });
+
   if (dirname(directory) !== resultsDir)
-    throw new Error('Resume campaign must be a direct child of results/.');
+    {throw new Error('Resume campaign must be a direct child of results/.');}
+
   const candidates = await Promise.all(
     armOrder.map(async (arm) => {
       const armDirectory = join(directory, arm);
-      if (!(await isDirectory(armDirectory))) return undefined;
+
+      if (!(await isDirectory(armDirectory))) {return undefined;}
+
       const candidate = await loadMetadata(join(armDirectory, 'metadata.json'));
+
       if (
         !validMetadata(candidate, basename(directory), arm) ||
         !(await validArtifacts(root, armDirectory, candidate)) ||
         !(await validSelection(armDirectory, arm))
       )
-        throw new Error('Campaign has invalid resume evidence.');
+        {throw new Error('Campaign has invalid resume evidence.');}
+
       return candidate;
     }),
   );
+
   const metadata = candidates.find(
     (candidate): candidate is CampaignMetadata => candidate !== undefined,
   );
+
   if (metadata === undefined)
-    throw new Error('Campaign has invalid resume evidence.');
+    {throw new Error('Campaign has invalid resume evidence.');}
+
   return { directory, metadata };
 };
 
 const loadMetadata = async (path: string): Promise<unknown> => {
   try {
     const value: unknown = JSON.parse(await readFile(path, 'utf8'));
+
     return value;
   } catch {
     throw new Error('Campaign has invalid resume evidence.');
@@ -93,6 +105,7 @@ const validMetadata = (
 ): candidate is CampaignMetadata => {
   const metadata = record(candidate);
   const source = record(metadata.source);
+
   return (
     sameStrings(Object.keys(metadata).sort(), [...metadataNames].sort()) &&
     sameStrings(Object.keys(source).sort(), ['path', 'ref', 'repo']) &&
@@ -130,21 +143,26 @@ const validArtifacts = async (
     agentManifest: join(directory, 'agent-manifest.toml'),
   };
   const expected = record(metadata.digests);
+
   const actual = await Promise.all(
     digestNames.map(async (name) => [name, await digest(paths[name])] as const),
   );
+
   const recorded =
     sameStrings(Object.keys(expected).sort(), [...digestNames].sort()) &&
     actual.every(
       ([name, value]) => value !== undefined && expected[name] === value,
     );
-  if (!recorded) return false;
 
-  const arm = metadata.agent as Arm;
+  if (!recorded) {return false;}
+
+  const arm = metadata.agent;
+
   const [localBundle, localManifest] = await Promise.all([
     digest(join(root, 'dist', 'mosaic-bench-acp.mjs')),
     digest(join(root, 'agents', arm, 'manifest.toml')),
   ]);
+
   return (
     expected.bundle === localBundle && expected.agentManifest === localManifest
   );
@@ -160,6 +178,7 @@ const validSelection = async (
     results(join(directory, 'jobs')),
     directories(join(directory, 'jobs')),
   ]);
+
   const tasks = Array.isArray(manifest.tasks)
     ? manifest.tasks.map((task) => string(record(task).task_id))
     : [];
@@ -169,6 +188,7 @@ const validSelection = async (
   const usage = record(evaluation.usage_tracking);
   const manifestSource = record(manifest.source);
   const configSource = record(evaluation.source_provenance);
+
   return (
     manifest.schema_version === 1 &&
     manifest.total === skillsbenchPilotTasks.length &&
@@ -209,6 +229,7 @@ const sourceEvidence = (source: Json): boolean =>
 export const readJson = async (path: string): Promise<Json> => {
   try {
     const value: unknown = JSON.parse(await readFile(path, 'utf8'));
+
     return record(value);
   } catch {
     return {};
@@ -218,14 +239,19 @@ export const readJson = async (path: string): Promise<Json> => {
 const results = async (path: string): Promise<readonly string[]> => {
   try {
     const entries = await readdir(path, { withFileTypes: true });
+
     const nested = await Promise.all(
       entries.map(async (entry): Promise<readonly string[]> => {
         const child = join(path, entry.name);
-        if (entry.isDirectory()) return results(child);
-        if (entry.name !== 'result.json') return [];
+
+        if (entry.isDirectory()) {return results(child);}
+
+        if (entry.name !== 'result.json') {return [];}
+
         return [string((await readJson(child)).task_name)].filter(Boolean);
       }),
     );
+
     return nested.flat();
   } catch {
     return [];
@@ -270,14 +296,18 @@ const record = (value: unknown): Json =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
     ? (value as Json)
     : {};
+
 const string = (value: unknown): string =>
   typeof value === 'string' ? value : '';
+
 const strings = (value: unknown): readonly string[] | undefined =>
   Array.isArray(value) && value.every((item) => typeof item === 'string')
     ? value
     : undefined;
+
 const sorted = (values: readonly string[]): readonly string[] =>
   [...values].sort();
+
 const sameStrings = (
   left: readonly string[],
   right: readonly string[],

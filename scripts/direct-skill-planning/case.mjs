@@ -129,14 +129,19 @@ export const cases = [
 export const loadCatalog = async () => {
   const catalog = [...localCatalog, ...(await loadSkillsbenchCatalog())];
   const names = new Set(catalog.map(({ name }) => name));
-  if (names.size !== catalog.length) throw new Error('Duplicate skill names.');
+
+  if (names.size !== catalog.length) {throw new Error('Duplicate skill names.');}
+
   return catalog;
 };
 
 export const selectCases = (name) => {
-  if (name === undefined) return cases;
+  if (name === undefined) {return cases;}
+
   const selected = cases.find((current) => current.name === name);
-  if (selected !== undefined) return [selected];
+
+  if (selected !== undefined) {return [selected];}
+
   throw new Error(`Unknown case: ${name}`);
 };
 
@@ -150,9 +155,12 @@ export const tasksFor = (selected, rounds) =>
 
 export const expectedFor = (catalog, current) => {
   const byName = new Map(catalog.map((skill) => [skill.name, skill]));
+
   return current.expectedSkills.map((name) => {
     const skill = byName.get(name);
-    if (skill === undefined) throw new Error(`Unknown expected skill: ${name}`);
+
+    if (skill === undefined) {throw new Error(`Unknown expected skill: ${name}`);}
+
     return skill;
   });
 };

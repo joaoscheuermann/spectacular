@@ -5,15 +5,15 @@ import { AgentErrorObject } from 'agent';
 import type { LlmProvider, ProviderRequest } from 'llms';
 
 import type { PlannedGraph } from '../src/lib/schemas/graph.js';
+import type { Observation } from '../src/lib/schemas/observation.js';
 import { revision } from '../src/lib/states/revision/index.js';
 import {
-  localizedRevisionSchema,
   localizedRevisionCount,
+  localizedRevisionSchema,
   retiredNodeIds,
 } from '../src/lib/states/revision/localized.js';
 import type { Graph, Node } from '../src/lib/types/graph.js';
 import type { MosaicOptions } from '../src/lib/types/mosaic-options.js';
-import type { Observation } from '../src/lib/schemas/observation.js';
 import type { WorkflowState } from '../src/lib/types/workflow.js';
 import {
   mosaicProviders,
@@ -24,12 +24,17 @@ import {
 
 test('preserves completed nodes and resets retained target runtime state', async () => {
   const completed = node('completed', 0, 'completed', false);
+
   completed.artifacts = [
     { kind: 'inline', mime: 'text/plain', data: 'preserved result' },
   ];
+
   completed.candidates = [candidate('selected', 'Preserve me.')];
+
   completed.bundle = bundle('completed', ['selected'], 'Preserve me.');
+
   completed.tools = [{ name: 'lookup', description: 'Preserve me.' }];
+
   completed.observations = [
     {
       id: 'observation-completed',
@@ -40,15 +45,24 @@ test('preserves completed nodes and resets retained target runtime state', async
       output: 'preserved evidence',
     },
   ];
+
   assert.ok(completed.outcome);
-  completed.outcome.criteria[0]!.observationIds = ['observation-completed'];
+
+  completed.outcome.criteria[0].observationIds = ['observation-completed'];
+
   const target = node('target', 1, 'needs_revision', true, ['completed']);
+
   target.artifacts = [{ kind: 'inline', mime: 'text/plain', data: 'partial' }];
+
   target.candidates = [candidate('selected', 'Clear me.')];
+
   target.bundle = bundle('target', ['selected'], 'Clear me.');
+
   target.tools = [{ name: 'lookup', description: 'Clear me.' }];
+
   const pending = node('pending', 2, 'pending', true, ['completed']);
   const active: Graph = { revision: 1, nodes: [completed, target, pending] };
+
   const planned: PlannedGraph = {
     nodes: [
       plannedNode(completed),
@@ -60,11 +74,13 @@ test('preserves completed nodes and resets retained target runtime state', async
       { ...plannedNode(pending), goal: 'Changed pending result' },
     ],
   };
+
   requestRevision(target, [
     'context output',
     'hostile\n``````\ninvalidating output',
     'confirmation output',
   ]);
+
   const historicalOutcome = target.outcome;
   const harness = createHarness([planned]);
   const workflow = state(active);
@@ -76,52 +92,91 @@ test('preserves completed nodes and resets retained target runtime state', async
   );
 
   assert.equal(action.type, 'transition');
-  if (action.type !== 'transition') return;
+
+  if (action.type !== 'transition') {return;}
+
   const revised = action.state.graphs.at(-1);
+
   assert.ok(revised);
+
   assert.equal(revised.revision, 2);
+
   assert.deepEqual(revised.nodes[0], completed);
+
   assert.notStrictEqual(revised.nodes[0], completed);
+
   assert.notStrictEqual(revised.nodes[0]?.candidates, completed.candidates);
+
   assert.notStrictEqual(revised.nodes[0]?.bundle, completed.bundle);
+
   assert.notStrictEqual(revised.nodes[0]?.observations, completed.observations);
+
   assert.deepEqual(revised.nodes[1]?.candidates, []);
+
   assert.equal(revised.nodes[1]?.bundle, null);
+
   assert.deepEqual(revised.nodes[1]?.tools, []);
+
   assert.deepEqual(revised.nodes[1]?.artifacts, []);
+
   assert.deepEqual(revised.nodes[1]?.observations, []);
+
   assert.equal(revised.nodes[1]?.outcome, null);
+
   assert.equal(revised.nodes[1]?.termination, null);
+
   assert.strictEqual(target.outcome, historicalOutcome);
+
   assert.equal(target.observations.length, 3);
+
   assert.equal(target.outcome?.status, 'needs_revision');
+
   assert.equal(revised.nodes[1]?.status, 'pending');
+
   assert.equal(revised.nodes[2]?.status, 'pending');
+
   assert.equal(localizedRevisionCount(action.state.graphs), 1);
+
   assert.equal(harness.requests.length, 1);
+
   const request = harness.requests[0];
+
   assert.ok(request);
+
   assert.equal(request.schema, undefined);
+
   assert.equal(request.model, 'default');
+
   assert.equal(request.flags, undefined);
+
   assert.deepEqual(
     request.messages.map(({ role }) => role),
     ['system', 'system', 'user'],
   );
+
   assert.equal(request.tools?.length, 1);
+
   terminalTool(request);
+
   const prompt = userContent(request);
+
   assert.match(prompt, /## Revision\n\n```text\n1\n```/u);
+
   assert.match(prompt, /~~~text\nhostile\n`{6}\ninvalidating output/u);
+
   assert.ok(
     prompt.indexOf('context output') < prompt.indexOf('invalidating output'),
   );
+
   assert.ok(
     prompt.indexOf('invalidating output') <
       prompt.indexOf('confirmation output'),
   );
+
   assert.doesNotMatch(prompt, /provider-call-target/u);
+
   assert.doesNotMatch(prompt, /Call ID|Trigger Observation Reference/u);
+
   assert.doesNotMatch(prompt, /Planning Hints/u);
 });
 
@@ -131,12 +186,14 @@ test('retires removed target and pending IDs and rejects their later reuse', asy
   const pending = node('pending', 2, 'pending', true, ['completed']);
   const active: Graph = { revision: 1, nodes: [completed, target, pending] };
   const replacement = nodePlan('replacement', true, ['completed']);
+
   const harness = createHarness([
     { nodes: [plannedNode(completed), replacement] },
     {
       nodes: [plannedNode(completed), nodePlan('target', true, ['completed'])],
     },
   ]);
+
   requestRevision(target);
 
   const first = await revision(
@@ -144,15 +201,23 @@ test('retires removed target and pending IDs and rejects their later reuse', asy
     { input: 'Request.', options: harness.options },
     handlers(),
   );
+
   assert.equal(first.type, 'transition');
-  if (first.type !== 'transition') return;
+
+  if (first.type !== 'transition') {return;}
+
   assert.deepEqual(retiredNodeIds(first.state.graphs), ['target', 'pending']);
 
   const replacementNode = first.state.graphs.at(-1)?.nodes[1];
+
   assert.ok(replacementNode);
+
   replacementNode.status = 'needs_revision';
+
   requestRevision(replacementNode);
+
   const secondState = first.state;
+
   const second = await revision(
     secondState,
     { input: 'Request.', options: harness.options },
@@ -160,11 +225,14 @@ test('retires removed target and pending IDs and rejects their later reuse', asy
   );
 
   assert.equal(second.type, 'fail');
-  if (second.type !== 'fail') return;
+
+  if (second.type !== 'fail') {return;}
+
   assert.match(
     (second.error as Error).message,
     /reused retired node ID target/u,
   );
+
   assert.equal(localizedRevisionCount(secondState.graphs), 1);
 });
 
@@ -172,10 +240,12 @@ test('processes multiple revisions in deterministic node-wave order', async () =
   const completed = node('completed', 0, 'completed', false);
   const firstTarget = node('first', 1, 'needs_revision', true, ['completed']);
   const secondTarget = node('second', 2, 'needs_revision', true, ['completed']);
+
   const active: Graph = {
     revision: 1,
     nodes: [completed, firstTarget, secondTarget],
   };
+
   const firstPlan: PlannedGraph = {
     nodes: [
       plannedNode(completed),
@@ -183,6 +253,7 @@ test('processes multiple revisions in deterministic node-wave order', async () =
       { ...plannedNode(secondTarget), goal: 'Second revised' },
     ],
   };
+
   const secondPlan: PlannedGraph = {
     nodes: [
       plannedNode(completed),
@@ -190,8 +261,11 @@ test('processes multiple revisions in deterministic node-wave order', async () =
       { ...firstPlan.nodes[2], goal: 'Second may change while pending' },
     ],
   };
+
   requestRevision(firstTarget);
+
   requestRevision(secondTarget);
+
   const harness = createHarness([firstPlan, secondPlan]);
 
   const first = await revision(
@@ -199,11 +273,17 @@ test('processes multiple revisions in deterministic node-wave order', async () =
     { input: 'Request.', options: harness.options },
     handlers(),
   );
+
   assert.equal(first.type, 'transition');
-  if (first.type !== 'transition') return;
+
+  if (first.type !== 'transition') {return;}
+
   assert.equal(first.state.graphs.at(-1)?.nodes[1]?.status, 'needs_revision');
+
   assert.equal(first.state.graphs.at(-1)?.nodes[1]?.goal, firstTarget.goal);
+
   assert.equal(first.state.graphs.at(-1)?.nodes[2]?.status, 'pending');
+
   assert.equal(first.state.graphs.at(-1)?.nodes[2]?.goal, 'Second revised');
 
   const second = await revision(
@@ -211,19 +291,28 @@ test('processes multiple revisions in deterministic node-wave order', async () =
     { input: 'Request.', options: harness.options },
     handlers(),
   );
+
   assert.equal(second.type, 'transition');
-  if (second.type !== 'transition') return;
+
+  if (second.type !== 'transition') {return;}
+
   assert.equal(localizedRevisionCount(second.state.graphs), 2);
+
   assert.equal(second.state.graphs.at(-1)?.revision, 3);
+
   assert.equal(second.state.graphs.at(-1)?.nodes[1]?.goal, 'First revised');
-  assert.match(userContent(harness.requests[0]!), /second/u);
-  assert.match(userContent(harness.requests[1]!), /first/u);
+
+  assert.match(userContent(harness.requests[0]), /second/u);
+
+  assert.match(userContent(harness.requests[1]), /first/u);
 });
 
 test('repairs an exact localized no-op without consuming the revision limit', async () => {
   const target = node('target', 0, 'needs_revision', true);
   const active: Graph = { revision: 1, nodes: [target] };
+
   requestRevision(target);
+
   const harness = createHarness(
     [
       { nodes: [plannedNode(target)] },
@@ -246,19 +335,26 @@ test('repairs an exact localized no-op without consuming the revision limit', as
   );
 
   assert.equal(action.type, 'transition');
-  if (action.type !== 'transition') return;
+
+  if (action.type !== 'transition') {return;}
+
   assert.equal(harness.requests.length, 2);
+
   assert.equal(localizedRevisionCount(action.state.graphs), 1);
+
   assert.equal(action.state.graphs.at(-1)?.revision, 2);
+
   assert.equal(
     action.state.graphs.at(-1)?.nodes[0]?.goal,
     'Revised target result',
   );
-  const systemPrompt = harness.requests[0]!.messages.filter(
+
+  const systemPrompt = harness.requests[0].messages.filter(
     ({ role }) => role === 'system',
   )
     .map(({ content }) => (typeof content === 'string' ? content : ''))
     .join('\n');
+
   assert.match(systemPrompt, /exact no-op is not a revision/u);
 });
 
@@ -266,16 +362,20 @@ test('treats each planner-owned revisable field as a material exact change', () 
   const completed = node('completed', 0, 'completed', false);
   const target = node('target', 1, 'needs_revision', true, ['completed']);
   const fallback = node('fallback', 2, 'pending', true);
+
   requestRevision(target);
+
   const active: Graph = {
     revision: 1,
     nodes: [completed, target, fallback],
   };
+
   const baseline = {
     nodes: [plannedNode(completed), plannedNode(target), plannedNode(fallback)],
   };
   const schema = localizedRevisionSchema(active, target);
-  const targetPlan = baseline.nodes[1]!;
+  const targetPlan = baseline.nodes[1];
+
   const changes: PlannedGraph['nodes'][number][] = [
     { ...targetPlan, id: 'target-renamed' },
     { ...targetPlan, goal: 'Changed goal' },
@@ -285,20 +385,22 @@ test('treats each planner-owned revisable field as a material exact change', () 
   ];
 
   assert.equal(schema.safeParse(baseline).success, false);
+
   assert.equal(
     schema.safeParse({
       nodes: [
-        { ...baseline.nodes[0]!, goal: 'Protected-only change' },
-        baseline.nodes[1]!,
-        baseline.nodes[2]!,
+        { ...baseline.nodes[0], goal: 'Protected-only change' },
+        baseline.nodes[1],
+        baseline.nodes[2],
       ],
     }).success,
     false,
   );
+
   changes.forEach((changed) => {
     assert.equal(
       schema.safeParse({
-        nodes: [baseline.nodes[0]!, changed, baseline.nodes[2]!],
+        nodes: [baseline.nodes[0], changed, baseline.nodes[2]],
       }).success,
       true,
     );
@@ -309,7 +411,9 @@ test('repairs a protected-only change as a no-op in the revisable region', async
   const completed = node('completed', 0, 'completed', false);
   const target = node('target', 1, 'needs_revision', true, ['completed']);
   const active: Graph = { revision: 1, nodes: [completed, target] };
+
   requestRevision(target);
+
   const harness = createHarness(
     [
       {
@@ -335,10 +439,15 @@ test('repairs a protected-only change as a no-op in the revisable region', async
   );
 
   assert.equal(action.type, 'transition');
-  if (action.type !== 'transition') return;
+
+  if (action.type !== 'transition') {return;}
+
   assert.equal(harness.requests.length, 2);
+
   assert.equal(localizedRevisionCount(action.state.graphs), 1);
+
   assert.equal(action.state.graphs.at(-1)?.nodes[0]?.goal, completed.goal);
+
   assert.equal(
     action.state.graphs.at(-1)?.nodes[1]?.goal,
     'Valid revised target',
@@ -353,7 +462,9 @@ test('blocks without a provider call when the localized revision limit is zero o
     const target = node('target', 0, 'needs_revision', true);
     const active: Graph = { revision: 1, nodes: [target] };
     const harness = createHarness([], max);
+
     requestRevision(target);
+
     const workflow = state(active, count);
 
     const action = await revision(
@@ -363,14 +474,19 @@ test('blocks without a provider call when the localized revision limit is zero o
     );
 
     assert.equal(action.type, 'transition');
+
     assert.equal(target.status, 'blocked');
+
     assert.deepEqual(target.termination, {
       type: 'revision_limit',
       status: 'blocked',
       limit: max,
     });
+
     assert.equal(target.outcome?.status, 'needs_revision');
+
     assert.equal(harness.requests.length, 0);
+
     assert.equal(localizedRevisionCount(workflow.graphs), count);
   }
 });
@@ -380,6 +496,7 @@ test('derives localized revision consumption from the active revision field', ()
     revision: 7,
     nodes: [node('active', 0, 'pending', true)],
   };
+
   assert.equal(localizedRevisionCount([active]), 6);
 });
 
@@ -387,13 +504,16 @@ test('rejects changes to a completed node without consuming the revision', async
   const completed = node('completed', 0, 'completed', false);
   const target = node('target', 1, 'needs_revision', true, ['completed']);
   const active: Graph = { revision: 1, nodes: [completed, target] };
+
   const invalid: PlannedGraph = {
     nodes: [
       { ...plannedNode(completed), goal: 'Changed completed result' },
       plannedNode(target),
     ],
   };
+
   requestRevision(target);
+
   const workflow = state(active);
   const harness = createHarness([invalid]);
 
@@ -404,14 +524,19 @@ test('rejects changes to a completed node without consuming the revision', async
   );
 
   assert.equal(action.type, 'fail');
+
   assert.equal(localizedRevisionCount(workflow.graphs), 0);
+
   assert.equal(target.outcome?.revisionRequest?.goalId, 'target');
+
   assert.deepEqual(completed.artifacts, []);
 });
 
 test('validates the active graph and target request before calling the provider', async () => {
   const invalidGraphTarget = node('invalid-graph', 0, 'needs_revision', true);
+
   requestRevision(invalidGraphTarget);
+
   invalidGraphTarget.goal = ' ';
 
   const invalidRequestTarget = node(
@@ -420,8 +545,11 @@ test('validates the active graph and target request before calling the provider'
     'needs_revision',
     true,
   );
+
   requestRevision(invalidRequestTarget);
+
   assert.ok(invalidRequestTarget.outcome?.revisionRequest);
+
   invalidRequestTarget.outcome.revisionRequest.goalId = 'another-node';
 
   for (const target of [invalidGraphTarget, invalidRequestTarget]) {
@@ -435,13 +563,16 @@ test('validates the active graph and target request before calling the provider'
     );
 
     assert.equal(action.type, 'fail');
+
     assert.equal(harness.requests.length, 0);
+
     assert.equal(workflow.graphs.length, 2);
   }
 });
 
 test('does not append a graph when the provider fails or returns an invalid plan', async () => {
   const failure = new Error('provider unavailable');
+
   const cases = [
     { plans: [] as unknown[], failure },
     { plans: [{ nodes: [] }] as unknown[], failure: undefined },
@@ -449,7 +580,9 @@ test('does not append a graph when the provider fails or returns an invalid plan
 
   for (const input of cases) {
     const target = node('target', 0, 'needs_revision', true);
+
     requestRevision(target);
+
     const workflow = state({ revision: 1, nodes: [target] });
     const harness = createHarness(input.plans, 3, input.failure);
 
@@ -460,13 +593,19 @@ test('does not append a graph when the provider fails or returns an invalid plan
     );
 
     assert.equal(action.type, 'fail');
+
     assert.equal(harness.requests.length, input.failure === undefined ? 3 : 1);
+
     if (input.failure === undefined && action.type === 'fail') {
       assert.ok(action.error instanceof AgentErrorObject);
+
       assert.equal(action.error.data.code, 'invalid_structured_output');
     }
+
     assert.equal(workflow.graphs.length, 2);
+
     assert.equal(target.status, 'needs_revision');
+
     assert.equal(target.outcome?.revisionRequest?.goalId, 'target');
   }
 });
@@ -474,6 +613,7 @@ test('does not append a graph when the provider fails or returns an invalid plan
 const createHarness = (plans: readonly unknown[], max = 3, failure?: Error) => {
   let index = 0;
   const requests: ProviderRequest<unknown>[] = [];
+
   const options: MosaicOptions = {
     logger: { info: () => undefined, debug: () => undefined } as never,
     providers: mosaicProviders({
@@ -484,9 +624,13 @@ const createHarness = (plans: readonly unknown[], max = 3, failure?: Error) => {
       },
       complete: async (request: ProviderRequest<unknown>) => {
         requests.push(request);
-        if (failure !== undefined) throw failure;
+
+        if (failure !== undefined) {throw failure;}
+
         terminalTool(request);
+
         const plan = plans[index++] ?? plans.at(-1);
+
         return terminalFinish(request, plan);
       },
     } as unknown as LlmProvider),
@@ -531,6 +675,7 @@ const requestRevision = (
   outputs: readonly string[] = ['observed output'],
 ): void => {
   const goalId = target.id;
+
   const observations: Observation[] = outputs.map((output, index) => ({
     id: `observation-${goalId}-${index + 1}`,
     goalId,
@@ -539,8 +684,11 @@ const requestRevision = (
     input: `{"query":"evidence-${index + 1}"}`,
     output,
   }));
+
   target.status = 'needs_revision';
+
   target.observations = observations;
+
   target.outcome = {
     status: 'needs_revision',
     criteria: [
@@ -559,6 +707,7 @@ const requestRevision = (
     },
     reason: 'Revision required.',
   };
+
   target.termination = null;
 };
 

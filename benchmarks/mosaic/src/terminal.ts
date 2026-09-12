@@ -1,8 +1,10 @@
-import { stat } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
+import { stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { ToolDefinitionSchema, type Tool } from 'tool';
+
 import { z } from 'zod';
+
+import { type Tool,ToolDefinitionSchema } from 'tool';
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_TIMEOUT_MS = 600_000;
@@ -38,7 +40,9 @@ const output = z
   .strict();
 
 type TerminalInput = z.output<typeof input>;
+
 type TerminalOutput = z.output<typeof output>;
+
 type Capture = {
   readonly chunks: Buffer[];
   size: number;
@@ -52,7 +56,6 @@ const definition = ToolDefinitionSchema.parse({
   outputSchema: z.toJSONSchema(output, { io: 'output' }),
   strict: true,
 });
-
 const abortError = (): Error =>
   Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
 
@@ -96,11 +99,14 @@ const append = (
 
   if (available <= 0) {
     target.truncated = true;
+
     return;
   }
 
   target.chunks.push(chunk.subarray(0, available));
+
   target.size += Math.min(chunk.length, available);
+
   target.truncated ||= chunk.length > available;
 };
 
@@ -108,7 +114,7 @@ const terminate = (
   pid: number | undefined,
   signal: NodeJS.Signals = 'SIGTERM',
 ): void => {
-  if (pid === undefined) return;
+  if (pid === undefined) {return;}
 
   try {
     process.kill(-pid, signal);
@@ -131,6 +137,7 @@ const run = (
   new Promise((resolveRun, rejectRun) => {
     if (isAborted(signal)) {
       rejectRun(abortError());
+
       return;
     }
 
@@ -151,44 +158,60 @@ const run = (
       });
     } catch (error) {
       rejectRun(error);
+
       return;
     }
 
     const finish = (callback: () => void): void => {
-      if (settled) return;
+      if (settled) {return;}
+
       settled = true;
+
       clearTimeout(timer);
-      if (killTimer !== undefined) clearTimeout(killTimer);
+
+      if (killTimer !== undefined) {clearTimeout(killTimer);}
+
       signal?.removeEventListener('abort', onAbort);
+
       callback();
     };
+
     const stop = (): void => {
       terminate(child.pid);
+
       killTimer ??= setTimeout(
         () => terminate(child.pid, 'SIGKILL'),
         KILL_GRACE_MS,
       );
     };
+
     const onAbort = (): void => {
       aborted = true;
+
       stop();
     };
+
     const timer = setTimeout(() => {
       timedOut = true;
+
       stop();
     }, timeoutMs);
 
     child.stdout.on('data', (chunk: Buffer) =>
       append(stdout, chunk, stdout.size + stderr.size, outputLimit),
     );
+
     child.stderr.on('data', (chunk: Buffer) =>
       append(stderr, chunk, stdout.size + stderr.size, outputLimit),
     );
+
     child.once('error', (error) => finish(() => rejectRun(error)));
+
     child.once('close', (code) =>
       finish(() => {
         if (aborted) {
           rejectRun(abortError());
+
           return;
         }
 
@@ -203,9 +226,10 @@ const run = (
         );
       }),
     );
+
     signal?.addEventListener('abort', onAbort, { once: true });
 
-    if (isAborted(signal)) onAbort();
+    if (isAborted(signal)) {onAbort();}
   });
 
 /** Creates the benchmark's local terminal tool without a product sandbox. */
@@ -220,6 +244,7 @@ export const createTerminal = (options: {
   definition,
   execute: async (value: TerminalInput): Promise<TerminalOutput> => {
     const cwd = await workingDirectory(options.cwd, value.working_directory);
+
     return run(
       value.command,
       cwd,

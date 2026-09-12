@@ -18,7 +18,9 @@ export const terminalTool = (request: ProviderRequest<unknown>) => {
   );
 
   assert.ok(tool);
+
   assert.equal(tool.name, 'submit_structured_output');
+
   return tool;
 };
 
@@ -29,6 +31,7 @@ export const terminalFinish = (
 ): ProviderFinished<unknown> => {
   const tool = terminalTool(request);
   const argumentsJson = JSON.stringify(value);
+
   assert.notEqual(argumentsJson, undefined);
 
   return {
@@ -50,5 +53,6 @@ export const userContent = (request: ProviderRequest<unknown>): string => {
   if (typeof content !== 'string') {
     assert.fail('Expected one text user message.');
   }
+
   return content;
 };

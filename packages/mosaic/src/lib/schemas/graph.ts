@@ -1,11 +1,12 @@
 import * as z from 'zod';
+
 import { ToolMetadataSchema } from 'tool';
 
-import { validateGraphSchema } from './graph-validations.js';
+import { authorizedObservationIds } from '../observations.js';
 import { ArtifactSchema } from './artifact.js';
+import { validateGraphSchema } from './graph-validations.js';
 import { ObservationSchema } from './observation.js';
 import { NodeOutcomeSchema } from './outcome.js';
-import { authorizedObservationIds } from '../observations.js';
 import {
   OrderedBundleSchema,
   SkillCandidateSchema,
@@ -14,10 +15,12 @@ import {
 import { RuntimeTerminationSchema } from './termination.js';
 
 const NonEmptyStringSchema = z.string().trim().min(1);
+
 const DependenciesSchema = z
   .array(NonEmptyStringSchema)
   .superRefine((dependencies, context) => {
-    if (new Set(dependencies).size === dependencies.length) return;
+    if (new Set(dependencies).size === dependencies.length) {return;}
+
     context.addIssue({
       code: 'custom',
       message: 'Dependencies must be unique.',
@@ -48,6 +51,7 @@ const withGraphValidation = <Schema extends z.ZodType>(schema: Schema) =>
     const result = validateGraphSchema(
       data as { readonly nodes: readonly z.output<typeof PlannedNodeSchema>[] },
     );
+
     result.errors.forEach((message) =>
       context.addIssue({ code: 'custom', message, path: ['nodes'] }),
     );
@@ -96,9 +100,12 @@ export const GraphSchema = withGraphValidation(
     .strict(),
 ).superRefine((graph, context) => {
   validateObservationUniqueness(graph.nodes, context);
+
   graph.nodes.forEach((node, index) => {
     validateRoutingTrace(node, context, ['nodes', index]);
+
     validateRuntimeState(node, index, context);
+
     validateRuntimeOwnership(node, graph, index, context);
   });
 });
@@ -113,6 +120,7 @@ export const StrictGraphSchema = GraphSchema.superRefine((graph, context) => {
         message: 'Generated nodes must start pending.',
       });
     }
+
     if (node.index !== index) {
       context.addIssue({
         code: 'custom',
@@ -120,19 +128,22 @@ export const StrictGraphSchema = GraphSchema.superRefine((graph, context) => {
         message: `Generated node index must be ${index}.`,
       });
     }
+
     for (const field of [
       'candidates',
       'tools',
       'artifacts',
       'observations',
     ] as const) {
-      if (node[field].length === 0) continue;
+      if (node[field].length === 0) {continue;}
+
       context.addIssue({
         code: 'custom',
         path: ['nodes', index, field],
         message: `Generated node ${field} must be empty.`,
       });
     }
+
     if (
       node.bundle !== null ||
       node.outcome !== null ||
@@ -173,7 +184,8 @@ export const GraphHistorySchema = z
   .array(GraphSchema)
   .superRefine((graphs, context) => {
     graphs.forEach((graph, index) => {
-      if (graph.revision === index) return;
+      if (graph.revision === index) {return;}
+
       context.addIssue({
         code: 'custom',
         path: [index, 'revision'],
@@ -190,16 +202,17 @@ const validateRuntimeState = (
   context: z.RefinementCtx,
 ): void => {
   const path = ['nodes', index] as const;
+
   if (['pending', 'ready', 'running'].includes(node.status)) {
-    if (node.outcome === null && node.termination === null) return;
+    if (node.outcome === null && node.termination === null) {return;}
   } else if (node.status === 'completed') {
     if (node.outcome?.status === 'completed' && node.termination === null)
-      return;
+      {return;}
   } else if (node.status === 'needs_revision') {
     if (node.outcome?.status === 'needs_revision' && node.termination === null)
-      return;
+      {return;}
   } else if (node.status === 'failed') {
-    if (node.outcome?.status === 'failed' && node.termination === null) return;
+    if (node.outcome?.status === 'failed' && node.termination === null) {return;}
   } else {
     const modelBlocked =
       node.outcome?.status === 'blocked' && node.termination === null;
@@ -207,11 +220,13 @@ const validateRuntimeState = (
       node.outcome === null && node.termination?.type === 'turn_limit';
     const dependencyBlocked =
       node.outcome === null && node.termination?.type === 'dependency';
+
     const revisionBlocked =
       node.outcome?.status === 'needs_revision' &&
       node.termination?.type === 'revision_limit';
+
     if (modelBlocked || turnBlocked || dependencyBlocked || revisionBlocked)
-      return;
+      {return;}
   }
 
   context.addIssue({
@@ -249,9 +264,11 @@ const validateRuntimeOwnership = (
 
   if (node.outcome !== null) {
     const allowed = authorizedObservationIds(node, graph);
+
     node.outcome.criteria.forEach((criterion, criterionIndex) => {
       criterion.observationIds.forEach((id, idIndex) => {
-        if (allowed.has(id)) return;
+        if (allowed.has(id)) {return;}
+
         context.addIssue({
           code: 'custom',
           path: [
@@ -269,12 +286,16 @@ const validateRuntimeOwnership = (
     });
   }
 
-  if (node.termination?.type !== 'dependency') return;
+  if (node.termination?.type !== 'dependency') {return;}
+
   const expected = node.dependsOn.filter((id) => {
     const dependency = graph.nodes.find((candidate) => candidate.id === id);
+
     return dependency?.status !== 'completed';
   });
-  if (sameItems(node.termination.dependencyIds, expected)) return;
+
+  if (sameItems(node.termination.dependencyIds, expected)) {return;}
+
   context.addIssue({
     code: 'custom',
     path: ['nodes', index, 'termination', 'dependencyIds'],
@@ -288,12 +309,15 @@ const validateObservationUniqueness = (
   context: z.RefinementCtx,
 ): void => {
   const ids = new Set<string>();
+
   nodes.forEach((node, nodeIndex) => {
     node.observations.forEach(({ id }, observationIndex) => {
       if (!ids.has(id)) {
         ids.add(id);
+
         return;
       }
+
       context.addIssue({
         code: 'custom',
         path: ['nodes', nodeIndex, 'observations', observationIndex, 'id'],

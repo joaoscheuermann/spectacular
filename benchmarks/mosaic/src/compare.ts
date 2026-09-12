@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFile, readdir, writeFile } from 'node:fs/promises';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import type { Benchmark } from './campaign.js';
@@ -13,6 +13,7 @@ export type Metrics = {
   readonly totalTokens: number;
   readonly tasks: number;
 };
+
 export type PairedReadings = {
   readonly scoreDelta: number;
   readonly qualityWin: boolean;
@@ -20,6 +21,7 @@ export type PairedReadings = {
   readonly regressions: readonly string[];
   readonly ties: readonly string[];
 };
+
 export type CompareReport = {
   readonly benchmark: Benchmark | null;
   readonly valid: boolean;
@@ -30,6 +32,7 @@ export type CompareReport = {
   readonly paretoWin: boolean;
   readonly exitCode: 0 | 1 | 2;
 };
+
 export type CompareOptions = {
   readonly directDir: string;
   readonly mosaicDir: string;
@@ -44,12 +47,14 @@ export const isValidSkillsbenchReport = (
   const direct = record(report.direct);
   const mosaic = record(report.mosaic);
   const paired = record(report.paired);
+
   const metricsValid = (metrics: Json): boolean => {
     const reward = number(metrics.reward);
     const cost = number(metrics.costUsd);
     const costPerReward = number(metrics.costPerRewardUsd);
     const score = number(metrics.score);
     const tasks = number(metrics.tasks);
+
     return (
       arraysEqual(sortedKeys(metrics), [
         'costPerRewardUsd',
@@ -79,6 +84,7 @@ export const isValidSkillsbenchReport = (
   const mosaicWins = stringArray(paired.mosaicWins);
   const regressions = stringArray(paired.regressions);
   const ties = stringArray(paired.ties);
+
   const pairedTasks = [
     ...(mosaicWins ?? []),
     ...(regressions ?? []),
@@ -89,6 +95,7 @@ export const isValidSkillsbenchReport = (
   const mosaicScore = number(mosaic.score);
   const qualityWin =
     scoreDelta !== undefined && scoreDelta > 0 && report.valid === true;
+
   const pairedValid =
     arraysEqual(sortedKeys(paired), [
       'mosaicWins',
@@ -108,9 +115,11 @@ export const isValidSkillsbenchReport = (
     pairedTasks.every((task) => task.length > 0) &&
     new Set(pairedTasks).size === 87 &&
     pairedTasks.length === 87;
+
   const pareto =
     number(mosaic.score)! > number(direct.score)! &&
     number(mosaic.costUsd)! < number(direct.costUsd)!;
+
   return (
     arraysEqual(sortedKeys(report), [
       'benchmark',
@@ -135,7 +144,9 @@ export const isValidSkillsbenchReport = (
 };
 
 type Json = Record<string, unknown>;
+
 type Artifact = { readonly value: Json; readonly digest?: string };
+
 type ArmCampaign = {
   readonly metadata: Json;
   readonly taskManifest: Artifact;
@@ -155,6 +166,7 @@ const empty: Metrics = {
   tasks: 0,
 };
 const model = 'openrouter/deepseek/deepseek-v4-pro';
+
 const digestNames = [
   'taskManifest',
   'runConfig',
@@ -172,6 +184,7 @@ export const compare = async (
     load(options.mosaicDir),
   ]);
   const benchmark = benchmarkOf(direct.metadata);
+
   const reasons = [
     ...armIssues('direct', direct, 'mosaic-direct'),
     ...armIssues('mosaic', mosaic, 'mosaic'),
@@ -181,10 +194,12 @@ export const compare = async (
   const mosaicMetrics = metrics(mosaic.results);
   const valid = reasons.length === 0;
   const paired = pairedReadings(direct.results, mosaic.results, valid);
+
   const paretoWin =
     valid &&
     mosaicMetrics.score > directMetrics.score &&
     mosaicMetrics.costUsd < directMetrics.costUsd;
+
   const report: CompareReport = {
     benchmark,
     valid,
@@ -195,8 +210,10 @@ export const compare = async (
     paretoWin,
     exitCode: valid ? (paired.qualityWin ? 0 : 1) : 2,
   };
+
   if (options.reportPath)
-    await writeFile(options.reportPath, `${JSON.stringify(report, null, 2)}\n`);
+    {await writeFile(options.reportPath, `${JSON.stringify(report, null, 2)}\n`);}
+
   return report;
 };
 
@@ -210,6 +227,7 @@ const load = async (directory: string): Promise<ArmCampaign> => {
       digest(join(directory, 'bundle.mjs')),
       resultFiles(join(directory, 'jobs')),
     ]);
+
   return {
     metadata: await json(join(directory, 'metadata.json')),
     taskManifest,
@@ -225,17 +243,21 @@ const jsonArtifact = async (path: string): Promise<Artifact> => ({
   value: await json(path),
   digest: await digest(path),
 });
+
 const json = async (path: string): Promise<Json> => {
   try {
     const value: unknown = JSON.parse(await readFile(path, 'utf8'));
+
     return record(value);
   } catch {
     return {};
   }
 };
+
 const resultFiles = async (path: string): Promise<readonly Json[]> => {
   try {
     const entries = await readdir(path, { withFileTypes: true });
+
     const nested = await Promise.all(
       entries.map(
         (entry): Promise<readonly Json[] | Json | undefined> =>
@@ -246,6 +268,7 @@ const resultFiles = async (path: string): Promise<readonly Json[]> => {
               : Promise.resolve(undefined),
       ),
     );
+
     return nested.flatMap((entry) =>
       Array.isArray(entry) ? entry : entry ? [entry] : [],
     );
@@ -275,6 +298,7 @@ const metadataIssues = (
   const benchmark = benchmarkOf(metadata);
   const expected = number(metadata.expectedTasks);
   const source = record(metadata.source);
+
   const validKeys = [
     'action',
     'agent',
@@ -294,6 +318,7 @@ const metadataIssues = (
     'source',
     'usageTracking',
   ];
+
   const fixed =
     isCampaignAction(metadata.action) &&
     metadata.agent === arm &&
@@ -309,6 +334,7 @@ const metadataIssues = (
     string(metadata.campaignId).length > 0 &&
     arraysEqual(sortedKeys(metadata), validKeys);
   const sourceKeys = arraysEqual(sortedKeys(source), ['path', 'ref', 'repo']);
+
   return [
     ...(fixed ? [] : [`${name}: invalid metadata`]),
     ...(sourceKeys ? [] : [`${name}: invalid source metadata`]),
@@ -332,7 +358,7 @@ const validSource = (
   action: unknown,
 ): boolean => {
   if (benchmark === 'skillsbench')
-    return (
+    {return (
       source.repo === 'benchflow-ai/skillsbench' &&
       source.ref === 'b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af' &&
       skillMode === 'with-skill' &&
@@ -343,15 +369,17 @@ const validSource = (
         (action === 'smoke' &&
           source.path === 'tasks/jax-computing-basics' &&
           expected === 1))
-    );
+    );}
+
   if (benchmark === 'terminalbench')
-    return (
+    {return (
       source.repo === 'laude-institute/terminal-bench-2' &&
       source.ref === '2fd12b88aafdd04a52c298e3940bcb189f9766d6' &&
       skillMode === 'no-skill' &&
       ((action === 'run' && source.path === '.' && expected === 89) ||
         (action === 'smoke' && source.path === 'regex-log' && expected === 1))
-    );
+    );}
+
   return false;
 };
 
@@ -361,6 +389,7 @@ const sourceContract = (
   requireFileHashes: boolean,
 ): boolean => {
   const hashes = sourceFileHashes(source);
+
   return (
     source.type === 'github' &&
     source.repo === metadataSource.repo &&
@@ -377,6 +406,7 @@ const taskSourceMatches = (taskSource: Json, parentSource: Json): boolean => {
   const parentPath = string(parentSource.path).replace(/^\.|\/$/g, '');
   const taskPath = string(taskSource.path).replace(/^\.|\/$/g, '');
   const hashes = sourceFileHashes(taskSource);
+
   return (
     taskSource.type === parentSource.type &&
     taskSource.repo === parentSource.repo &&
@@ -394,6 +424,7 @@ const taskSourceMatches = (taskSource: Json, parentSource: Json): boolean => {
 const sameSourceEvidence = (left: Json, right: Json): boolean => {
   const leftHashes = sourceFileHashes(left);
   const rightHashes = sourceFileHashes(right);
+
   return (
     left.type === right.type &&
     left.repo === right.repo &&
@@ -425,6 +456,7 @@ const digestIssues = (
   campaign: ArmCampaign,
 ): readonly string[] => {
   const expected = record(campaign.metadata.digests);
+
   const actual: Record<(typeof digestNames)[number], string | undefined> = {
     taskManifest: campaign.taskManifest.digest,
     runConfig: campaign.runConfig.digest,
@@ -432,9 +464,11 @@ const digestIssues = (
     bundle: campaign.bundle,
     agentManifest: campaign.agentManifest,
   };
+
   const issues = digestNames.filter(
     (key) => typeof actual[key] !== 'string' || expected[key] !== actual[key],
   );
+
   return [
     ...(arraysEqual(sortedKeys(expected), [...digestNames].sort())
       ? []
@@ -452,13 +486,16 @@ const manifestIssues = (
   const tasks = manifest.tasks;
   const entries = Array.isArray(tasks) ? tasks.map(record) : [];
   const manifestIds = entries.map((task) => string(task.task_id));
+
   const resultNames = campaign.results.map((result) =>
     string(result.task_name),
   );
+
   const validNames =
     resultNames.length === expected &&
     resultNames.every(Boolean) &&
     new Set(resultNames).size === resultNames.length;
+
   const validManifestIds =
     manifestIds.length === expected &&
     manifestIds.every(Boolean) &&
@@ -467,6 +504,7 @@ const manifestIssues = (
       (task) =>
         sha256Digest(task.digest) && task.registry_digest_match !== false,
     );
+
   const valid =
     manifest.schema_version === 1 &&
     manifest.total === expected &&
@@ -480,6 +518,7 @@ const manifestIssues = (
       sourceNeedsTaskFiles(campaign.metadata),
     ) &&
     arraysEqual(sorted(manifestIds), sorted(resultNames));
+
   return valid ? [] : [`${name}: invalid task manifest`];
 };
 
@@ -495,6 +534,7 @@ const runConfigIssues = (
   const includeTasks = stringArray(evalConfig.include_tasks);
   const expectedIncludeTasks =
     campaign.metadata.action === 'pilot' ? skillsbenchPilotTasks : [];
+
   const valid =
     config.schema_version === 1 &&
     evalConfig.agent === campaign.metadata.agent &&
@@ -519,6 +559,7 @@ const runConfigIssues = (
       sourceNeedsTaskFiles(campaign.metadata),
     ) &&
     sameSourceEvidence(source, manifestSource);
+
   return valid ? [] : [`${name}: invalid run config`];
 };
 
@@ -529,21 +570,26 @@ const healthIssues = (
   const health = campaign.health.value;
   const expected = number(campaign.metadata.expectedTasks);
   const rows = health.rows;
+
   const resultsByTask = new Map(
     campaign.results.map((result) => [string(result.task_name), result]),
   );
+
   const resultTasks = sorted(
     campaign.results.map((result) => string(result.task_name)),
   );
+
   const healthTasks = Array.isArray(rows)
     ? sorted(rows.map((row) => string(record(row).task_id)))
     : [];
+
   const rowsValid =
     Array.isArray(rows) &&
     rows.length === expected &&
     rows.every((row) => {
       const value = record(row);
       const result = resultsByTask.get(string(value.task_id));
+
       return (
         value.scored === true &&
         hasNull(value, 'error') &&
@@ -557,12 +603,15 @@ const healthIssues = (
         positiveInteger(value.llm_trajectory_rows)
       );
     });
+
   const rowsWithToolCalls = Array.isArray(rows)
     ? rows.filter((row) => (number(record(row).tool_calls) ?? 0) > 0).length
     : -1;
+
   const zeroToolRows = Array.isArray(rows)
     ? rows.filter((row) => record(row).tool_calls === 0).length
     : -1;
+
   const valid =
     health.schema_version === 1 &&
     health.total_rows === expected &&
@@ -574,6 +623,7 @@ const healthIssues = (
     health.zero_tool_rows === zeroToolRows &&
     rowsValid &&
     arraysEqual(healthTasks, resultTasks);
+
   return valid ? [] : [`${name}: invalid health summary`];
 };
 
@@ -585,6 +635,7 @@ const resultIssues = (name: string, campaign: ArmCampaign): readonly string[] =>
     const taskDigest = manifestTaskDigest(campaign, string(result.task_name));
     const source = record(result.source);
     const reward = record(result.rewards).reward;
+
     const checks: readonly [string, boolean][] = [
       ['agent', result.agent === campaign.metadata.agent],
       ['agent_name', result.agent_name === 'mosaic-benchmark'],
@@ -618,6 +669,7 @@ const resultIssues = (name: string, campaign: ArmCampaign): readonly string[] =>
         taskSourceMatches(source, record(campaign.taskManifest.value.source)),
       ],
     ];
+
     return checks
       .filter(([, ok]) => !ok)
       .map(([field]) => `${name}:${index}: invalid ${field}`);
@@ -628,8 +680,11 @@ const manifestTaskDigest = (
   taskName: string,
 ): string | undefined => {
   const tasks = campaign.taskManifest.value.tasks;
-  if (!Array.isArray(tasks)) return undefined;
+
+  if (!Array.isArray(tasks)) {return undefined;}
+
   const task = tasks.map(record).find((entry) => entry.task_id === taskName);
+
   return task && sha256Digest(task.digest) ? task.digest : undefined;
 };
 
@@ -640,24 +695,31 @@ const pairIssues = (
   const directTasks = sorted(
     direct.results.map((result) => string(result.task_name)),
   );
+
   const mosaicTasks = sorted(
     mosaic.results.map((result) => string(result.task_name)),
   );
+
   const sameSource =
     JSON.stringify(direct.metadata.source) ===
     JSON.stringify(mosaic.metadata.source);
+
   const sameManifest =
     direct.taskManifest.digest !== undefined &&
     direct.taskManifest.digest === mosaic.taskManifest.digest;
+
   const sameRunConfig =
     stableJson(normalizedRunConfig(direct.runConfig.value)) ===
     stableJson(normalizedRunConfig(mosaic.runConfig.value));
+
   const sameCampaignId =
     string(direct.metadata.campaignId).length > 0 &&
     direct.metadata.campaignId === mosaic.metadata.campaignId;
+
   const sameAction =
     isCampaignAction(direct.metadata.action) &&
     direct.metadata.action === mosaic.metadata.action;
+
   return [
     ...(benchmarkOf(direct.metadata) === benchmarkOf(mosaic.metadata)
       ? []
@@ -675,15 +737,18 @@ const pairIssues = (
 };
 
 const metrics = (items: readonly Json[]): Metrics => {
-  if (items.length === 0) return empty;
+  if (items.length === 0) {return empty;}
+
   const reward = items.reduce(
     (sum, result) => sum + (number(record(result.rewards).reward) ?? 0),
     0,
   );
+
   const costUsd = items.reduce(
     (sum, result) => sum + (number(record(result.agent_result).cost_usd) ?? 0),
     0,
   );
+
   return {
     score: reward / items.length,
     reward,
@@ -697,6 +762,7 @@ const metrics = (items: readonly Json[]): Metrics => {
     tasks: items.length,
   };
 };
+
 const pairedReadings = (
   direct: readonly Json[],
   mosaic: readonly Json[],
@@ -707,28 +773,35 @@ const pairedReadings = (
       items.flatMap((result) => {
         const task = string(result.task_name);
         const reward = number(record(result.rewards).reward);
+
         return task.length > 0 && reward !== undefined ? [[task, reward]] : [];
       }),
     );
   const directRewards = rewards(direct);
   const mosaicRewards = rewards(mosaic);
+
   const tasks = sorted([
     ...new Set([...directRewards.keys(), ...mosaicRewards.keys()]),
   ]);
   const mosaicWins: string[] = [];
   const regressions: string[] = [];
   const ties: string[] = [];
+
   for (const task of tasks) {
     const directReward = directRewards.get(task);
     const mosaicReward = mosaicRewards.get(task);
-    if (directReward === undefined || mosaicReward === undefined) continue;
-    if (mosaicReward > directReward) mosaicWins.push(task);
-    else if (mosaicReward < directReward) regressions.push(task);
-    else ties.push(task);
+
+    if (directReward === undefined || mosaicReward === undefined) {continue;}
+
+    if (mosaicReward > directReward) {mosaicWins.push(task);}
+    else if (mosaicReward < directReward) {regressions.push(task);}
+    else {ties.push(task);}
   }
+
   const directMetrics = metrics(direct);
   const mosaicMetrics = metrics(mosaic);
   const scoreDelta = rounded(mosaicMetrics.score - directMetrics.score);
+
   return {
     scoreDelta,
     qualityWin: valid && scoreDelta > 0,
@@ -737,26 +810,34 @@ const pairedReadings = (
     ties,
   };
 };
+
 const normalizedRunConfig = (config: Json): Json => {
   const { jobs_dir: _jobsDir, eval: evalValue, ...rest } = config;
   const { agent: _agent, ...evalConfig } = record(evalValue);
+
   return { ...rest, eval: evalConfig };
 };
+
 const stableJson = (value: unknown): string => {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (Array.isArray(value)) {return `[${value.map(stableJson).join(',')}]`;}
+
   if (typeof value === 'object' && value !== null) {
     const object = value as Json;
+
     return `{${Object.keys(object)
       .sort()
       .map((key) => `${JSON.stringify(key)}:${stableJson(object[key])}`)
       .join(',')}}`;
   }
+
   return JSON.stringify(value) ?? 'null';
 };
+
 const benchmarkOf = (metadata: Json): Benchmark | null =>
   metadata.benchmark === 'skillsbench' || metadata.benchmark === 'terminalbench'
     ? metadata.benchmark
     : null;
+
 const digest = async (path: string): Promise<string | undefined> => {
   try {
     return createHash('sha256')
@@ -766,10 +847,12 @@ const digest = async (path: string): Promise<string | undefined> => {
     return undefined;
   }
 };
+
 const record = (value: unknown): Json =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
     ? (value as Json)
     : {};
+
 const sourceFileHashes = (source: Json): Json | undefined =>
   Object.hasOwn(source, 'file_hashes') &&
   typeof source.file_hashes === 'object' &&
@@ -777,36 +860,52 @@ const sourceFileHashes = (source: Json): Json | undefined =>
   !Array.isArray(source.file_hashes)
     ? (source.file_hashes as Json)
     : undefined;
+
 const number = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
 const string = (value: unknown): string =>
   typeof value === 'string' ? value : '';
+
 const unitInterval = (value: unknown): boolean => {
   const candidate = number(value);
+
   return candidate !== undefined && candidate >= 0 && candidate <= 1;
 };
+
 const positive = (value: unknown): boolean => (number(value) ?? 0) > 0;
+
 const approximatelyEqual = (left: number, right: number): boolean =>
   Math.abs(left - right) <= 1e-12;
+
 const rounded = (value: number): number => Number(value.toFixed(12));
+
 const nonnegativeInteger = (value: unknown): boolean =>
   Number.isSafeInteger(value) && (value as number) >= 0;
+
 const positiveInteger = (value: unknown): boolean =>
   Number.isSafeInteger(value) && (value as number) > 0;
+
 const isCampaignAction = (value: unknown): value is 'smoke' | 'pilot' | 'run' =>
   value === 'smoke' || value === 'pilot' || value === 'run';
+
 const sha256Digest = (value: unknown): value is string =>
   typeof value === 'string' && /^sha256:[a-f0-9]{64}$/i.test(value);
+
 const hasNull = (value: Json, key: string): boolean =>
   Object.hasOwn(value, key) && value[key] === null;
+
 const sortedKeys = (value: Json): readonly string[] =>
   Object.keys(value).sort();
+
 const sorted = (values: readonly string[]): readonly string[] =>
   [...values].sort();
+
 const stringArray = (value: unknown): readonly string[] | undefined =>
   Array.isArray(value) && value.every((item) => typeof item === 'string')
     ? value
     : undefined;
+
 const arraysEqual = (
   left: readonly string[],
   right: readonly string[],

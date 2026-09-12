@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+
 import { z } from 'zod';
 
 import {
+  createExecutionDecisionSchema,
+  createNodeDecisionSchema,
+  createNodeOutcomeSchema,
   NodeDecisionSchema,
   NodeOutcomeSchema,
-  createNodeDecisionSchema,
-  createExecutionDecisionSchema,
-  createNodeOutcomeSchema,
 } from '../src/lib/schemas/outcome.js';
 import type { Graph, Node } from '../src/lib/types/graph.js';
 
@@ -21,8 +22,10 @@ test('accepts a completed outcome with every criterion and a result', () => {
 
 test('accepts unique opaque observation IDs including an empty proof set', () => {
   const decision = completed();
-  decision.criteria[0]!.observationIds = ['observation-a', 'observation-c'];
-  decision.criteria[1]!.observationIds = [];
+
+  decision.criteria[0].observationIds = ['observation-a', 'observation-c'];
+
+  decision.criteria[1].observationIds = [];
 
   assert.equal(
     createNodeDecisionSchema(node).safeParse(decision).success,
@@ -33,7 +36,8 @@ test('accepts unique opaque observation IDs including an empty proof set', () =>
 test('rejects empty or duplicate observation IDs', () => {
   for (const observationIds of [[''], ['observation-a', 'observation-a']]) {
     const decision = completed();
-    decision.criteria[0]!.observationIds = observationIds;
+
+    decision.criteria[0].observationIds = observationIds;
 
     assert.equal(
       createNodeDecisionSchema(node).safeParse(decision).success,
@@ -44,9 +48,12 @@ test('rejects empty or duplicate observation IDs', () => {
 
 test('rejects an observation ID that was not presented to the node', () => {
   const observedNode = createNode();
+
   observedNode.observations = [observation('observation-1', observedNode.id)];
+
   const decision = completed();
-  decision.criteria[0]!.observationIds = ['observation-unknown'];
+
+  decision.criteria[0].observationIds = ['observation-unknown'];
 
   assert.equal(
     createNodeOutcomeSchema(observedNode).safeParse(decision).success,
@@ -57,6 +64,7 @@ test('rejects an observation ID that was not presented to the node', () => {
 test('requires a fresh local citation only for post-revision completion', () => {
   const freshId = 'fresh-local';
   const ancestorId = 'projected-ancestor';
+
   const schema = createExecutionDecisionSchema(
     node,
     () => [freshId, ancestorId],
@@ -64,21 +72,31 @@ test('requires a fresh local citation only for post-revision completion', () => 
   );
   const withoutCitation = completed();
   const ancestorOnly = completed();
-  ancestorOnly.criteria[0]!.observationIds = [ancestorId];
+
+  ancestorOnly.criteria[0].observationIds = [ancestorId];
+
   const withFreshCitation = completed();
-  withFreshCitation.criteria[0]!.observationIds = [freshId];
+
+  withFreshCitation.criteria[0].observationIds = [freshId];
+
   const blocked = nonCompleted('blocked');
-  blocked.criteria[0]!.satisfied = false;
+
+  blocked.criteria[0].satisfied = false;
 
   assert.equal(schema.safeParse(withoutCitation).success, false);
+
   assert.equal(schema.safeParse(ancestorOnly).success, false);
+
   assert.equal(schema.safeParse(withFreshCitation).success, true);
+
   assert.equal(schema.safeParse(blocked).success, true);
 });
 
 test('describes invalid observation IDs with bounded similarity-ranked authorized IDs', () => {
   const decision = completed();
-  decision.criteria[0]!.observationIds = ['private-observation'];
+
+  decision.criteria[0].observationIds = ['private-observation'];
+
   const authorized = [
     'observation-00',
     'observation-10',
@@ -93,27 +111,36 @@ test('describes invalid observation IDs with bounded similarity-ranked authorize
     'observation-100',
     'observation-110',
   ];
+
   const parsed = createExecutionDecisionSchema(
     createNode(),
     () => authorized,
   ).safeParse(decision);
 
   assert.equal(parsed.success, false);
-  if (parsed.success) return;
+
+  if (parsed.success) {return;}
+
   assert.deepEqual(parsed.error.issues[0]?.path, [
     'criteria',
     0,
     'observationIds',
     0,
   ]);
+
   const message = parsed.error.issues[0]?.message ?? '';
+
   assert.match(message, /^The observation ID is not authorized\./u);
+
   assert.match(message, /Most similar valid observation ID: observation-00/u);
+
   assert.match(
     message,
     /Other valid observation IDs: observation-10, observation-20, observation-30, observation-40, observation-50, observation-60, observation-70, observation-80, observation-90/u,
   );
+
   assert.match(message, /Showing 10 of 12 valid observation IDs; 2 omitted\./u);
+
   assert.doesNotMatch(
     message,
     /observation-100|observation-110|private-observation/u,
@@ -122,14 +149,18 @@ test('describes invalid observation IDs with bounded similarity-ranked authorize
 
 test('uses causal order to break equal observation ID distances', () => {
   const decision = completed();
-  decision.criteria[0]!.observationIds = ['observation-aa'];
+
+  decision.criteria[0].observationIds = ['observation-aa'];
+
   const parsed = createExecutionDecisionSchema(createNode(), () => [
     'observation-ab',
     'observation-ac',
   ]).safeParse(decision);
 
   assert.equal(parsed.success, false);
-  if (parsed.success) return;
+
+  if (parsed.success) {return;}
+
   assert.match(
     parsed.error.issues[0]?.message ?? '',
     /Most similar valid observation ID: observation-ab\nOther valid observation IDs: observation-ac/u,
@@ -138,23 +169,30 @@ test('uses causal order to break equal observation ID distances', () => {
 
 test('resolves authorized observation IDs during every execution parse', () => {
   const decision = completed();
-  decision.criteria[0]!.observationIds = ['observation-later'];
+
+  decision.criteria[0].observationIds = ['observation-later'];
+
   const authorized: string[] = [];
   const schema = createExecutionDecisionSchema(createNode(), () => authorized);
 
   assert.equal(schema.safeParse(decision).success, false);
+
   authorized.push('observation-later');
+
   assert.equal(schema.safeParse(decision).success, true);
 });
 
 test('describes single and empty authorized observation ID sets', () => {
   const decision = completed();
-  decision.criteria[0]!.observationIds = ['rejected-private-id'];
+
+  decision.criteria[0].observationIds = ['rejected-private-id'];
 
   const single = createExecutionDecisionSchema(createNode(), () => [
     'only-authorized-id',
   ]).safeParse(decision);
+
   assert.equal(single.success, false);
+
   if (!single.success) {
     assert.match(
       single.error.issues[0]?.message ?? '',
@@ -165,12 +203,15 @@ test('describes single and empty authorized observation ID sets', () => {
   const empty = createExecutionDecisionSchema(createNode(), () => []).safeParse(
     decision,
   );
+
   assert.equal(empty.success, false);
+
   if (!empty.success) {
     assert.match(
       empty.error.issues[0]?.message ?? '',
       /Most similar valid observation ID: none\.\nOther valid observation IDs: none\.\nUse \[\]\./u,
     );
+
     assert.doesNotMatch(
       empty.error.issues[0]?.message ?? '',
       /rejected-private-id/u,
@@ -180,28 +221,45 @@ test('describes single and empty authorized observation ID sets', () => {
 
 test('accepts local and cited transitive-ancestor observation IDs', () => {
   const root = createNode();
+
   root.id = 'root';
+
   root.status = 'completed';
+
   root.observations = [observation('observation-root', root.id)];
+
   const rootOutcome = completed();
-  rootOutcome.criteria[0]!.observationIds = ['observation-root'];
+
+  rootOutcome.criteria[0].observationIds = ['observation-root'];
+
   root.outcome = rootOutcome;
 
   const middle = createNode();
+
   middle.id = 'middle';
+
   middle.status = 'completed';
+
   middle.dependsOn = ['root'];
+
   const middleOutcome = completed();
-  middleOutcome.criteria[0]!.observationIds = ['observation-root'];
+
+  middleOutcome.criteria[0].observationIds = ['observation-root'];
+
   middle.outcome = middleOutcome;
 
   const current = createNode();
+
   current.id = 'current';
+
   current.dependsOn = ['middle'];
+
   current.observations = [observation('observation-local', current.id)];
+
   const graph: Graph = { revision: 1, nodes: [root, middle, current] };
   const decision = completed();
-  decision.criteria[0]!.observationIds = [
+
+  decision.criteria[0].observationIds = [
     'observation-root',
     'observation-local',
   ];
@@ -214,26 +272,41 @@ test('accepts local and cited transitive-ancestor observation IDs', () => {
 
 test('rejects uncited ancestor cross-branch descendant and retired observation IDs', () => {
   const ancestor = createNode();
+
   ancestor.id = 'ancestor';
+
   ancestor.status = 'completed';
+
   ancestor.observations = [observation('observation-ancestor', ancestor.id)];
+
   ancestor.outcome = completed();
 
   const current = createNode();
+
   current.id = 'current';
+
   current.dependsOn = ['ancestor'];
 
   const sibling = createNode();
+
   sibling.id = 'sibling';
+
   sibling.status = 'completed';
+
   sibling.observations = [observation('observation-sibling', sibling.id)];
+
   const siblingOutcome = completed();
-  siblingOutcome.criteria[0]!.observationIds = ['observation-sibling'];
+
+  siblingOutcome.criteria[0].observationIds = ['observation-sibling'];
+
   sibling.outcome = siblingOutcome;
 
   const descendant = createNode();
+
   descendant.id = 'descendant';
+
   descendant.dependsOn = ['current'];
+
   descendant.observations = [
     observation('observation-descendant', descendant.id),
   ];
@@ -250,7 +323,9 @@ test('rejects uncited ancestor cross-branch descendant and retired observation I
     'observation-retired',
   ]) {
     const decision = completed();
-    decision.criteria[0]!.observationIds = [id];
+
+    decision.criteria[0].observationIds = [id];
+
     assert.equal(
       createNodeOutcomeSchema(current, graph).safeParse(decision).success,
       false,
@@ -261,13 +336,16 @@ test('rejects uncited ancestor cross-branch descendant and retired observation I
 
 test('rejects completed outcomes with an unsatisfied criterion or no result', () => {
   const unsatisfied = completed();
-  unsatisfied.criteria[1]!.satisfied = false;
+
+  unsatisfied.criteria[1].satisfied = false;
+
   const missingResult = { ...completed(), result: null };
 
   assert.equal(
     createNodeDecisionSchema(node).safeParse(unsatisfied).success,
     false,
   );
+
   assert.equal(
     createNodeDecisionSchema(node).safeParse(missingResult).success,
     false,
@@ -276,6 +354,7 @@ test('rejects completed outcomes with an unsatisfied criterion or no result', ()
 
 test('requires null revision and reason fields for completed outcomes', () => {
   const withReason = { ...completed(), reason: 'Unexpected reason.' };
+
   const withRevision = {
     ...completed(),
     revisionRequest: {
@@ -289,6 +368,7 @@ test('requires null revision and reason fields for completed outcomes', () => {
     createNodeDecisionSchema(node).safeParse(withReason).success,
     false,
   );
+
   assert.equal(
     createNodeDecisionSchema(node).safeParse(withRevision).success,
     false,
@@ -297,14 +377,18 @@ test('requires null revision and reason fields for completed outcomes', () => {
 
 test('requires exactly one ordered evaluation per doneWhen criterion', () => {
   const missing = completed();
+
   missing.criteria.pop();
+
   const reordered = completed();
+
   reordered.criteria.reverse();
 
   assert.equal(
     createNodeDecisionSchema(node).safeParse(missing).success,
     false,
   );
+
   assert.equal(
     createNodeDecisionSchema(node).safeParse(reordered).success,
     false,
@@ -313,6 +397,7 @@ test('requires exactly one ordered evaluation per doneWhen criterion', () => {
 
 test('rejects blocked decisions and outcomes when every criterion is satisfied', () => {
   const blocked = nonCompleted('blocked');
+
   const schemas = [
     NodeDecisionSchema,
     createNodeDecisionSchema(node),
@@ -324,8 +409,11 @@ test('rejects blocked decisions and outcomes when every criterion is satisfied',
     const parsed = schema.safeParse(blocked);
 
     assert.equal(parsed.success, false);
-    if (parsed.success) return;
+
+    if (parsed.success) {return;}
+
     assert.deepEqual(parsed.error.issues[0]?.path, ['criteria']);
+
     assert.equal(
       parsed.error.issues[0]?.message,
       'A blocked outcome requires at least one unsatisfied criterion.',
@@ -339,9 +427,11 @@ test('accepts needs_revision only with a node-local semantic request and reason'
     invalidatedAssumption: 'The target exists.',
     requestedEffect: 'Replace the target-dependent goal.',
   };
+
   const valid = nonCompleted('needs_revision', {
     revisionRequest: request,
   });
+
   const wrongGoal = {
     ...valid,
     revisionRequest: { ...request, goalId: 'another-node' },
@@ -350,14 +440,17 @@ test('accepts needs_revision only with a node-local semantic request and reason'
   const missingReason = { ...valid, reason: null };
 
   assert.equal(createNodeDecisionSchema(node).safeParse(valid).success, true);
+
   assert.equal(
     createNodeDecisionSchema(node).safeParse(wrongGoal).success,
     false,
   );
+
   assert.equal(
     createNodeDecisionSchema(node).safeParse(missingRequest).success,
     false,
   );
+
   assert.equal(
     createNodeDecisionSchema(node).safeParse(missingReason).success,
     false,
@@ -367,9 +460,12 @@ test('accepts needs_revision only with a node-local semantic request and reason'
 test('accepts blocked and failed only without a promoted result and with a reason', () => {
   for (const status of ['blocked', 'failed'] as const) {
     const valid = nonCompleted(status);
-    if (status === 'blocked') valid.criteria[0]!.satisfied = false;
+
+    if (status === 'blocked') {valid.criteria[0].satisfied = false;}
+
     const withResult = { ...valid, result: completed().result };
     const withoutReason = { ...valid, reason: null };
+
     const withRevision = {
       ...valid,
       revisionRequest: {
@@ -380,14 +476,17 @@ test('accepts blocked and failed only without a promoted result and with a reaso
     };
 
     assert.equal(createNodeDecisionSchema(node).safeParse(valid).success, true);
+
     assert.equal(
       createNodeDecisionSchema(node).safeParse(withResult).success,
       false,
     );
+
     assert.equal(
       createNodeDecisionSchema(node).safeParse(withoutReason).success,
       false,
     );
+
     assert.equal(
       createNodeDecisionSchema(node).safeParse(withRevision).success,
       false,
@@ -400,6 +499,7 @@ test('rejects legacy observation reference fields and other unknown fields', () 
     ...completed(),
     observationRefs: ['call-1'],
   };
+
   const legacyRevision = nonCompleted('needs_revision', {
     revisionRequest: {
       goalId: node.id,
@@ -414,10 +514,12 @@ test('rejects legacy observation reference fields and other unknown fields', () 
     createNodeDecisionSchema(node).safeParse(legacyOutcome).success,
     false,
   );
+
   assert.equal(
     createNodeDecisionSchema(node).safeParse(legacyRevision).success,
     false,
   );
+
   assert.equal(createNodeDecisionSchema(node).safeParse(extra).success, false);
 });
 
@@ -427,14 +529,17 @@ test('describes every model-facing decision field with opaque ID scope', () => {
   });
 
   assertPropertiesAreDescribed(schema);
+
   assert.match(
     JSON.stringify(schema.properties?.criteria),
     /opaque observation IDs from this node or the projected ancestor evidence/u,
   );
+
   assert.match(
     JSON.stringify(schema.properties?.criteria),
     /Use \[\] when proof requires no tool result/u,
   );
+
   assert.match(
     JSON.stringify(schema.properties?.criteria),
     /position in the current node's doneWhen array/u,
@@ -444,12 +549,15 @@ test('describes every model-facing decision field with opaque ID scope', () => {
 function assertPropertiesAreDescribed(value: unknown): void {
   if (Array.isArray(value)) {
     value.forEach(assertPropertiesAreDescribed);
+
     return;
   }
-  if (typeof value !== 'object' || value === null) return;
+
+  if (typeof value !== 'object' || value === null) {return;}
 
   const record = value as Record<string, unknown>;
   const properties = record.properties;
+
   if (typeof properties === 'object' && properties !== null) {
     Object.entries(properties).forEach(([name, property]) => {
       assert.equal(
@@ -459,6 +567,7 @@ function assertPropertiesAreDescribed(value: unknown): void {
       );
     });
   }
+
   Object.values(record).forEach(assertPropertiesAreDescribed);
 }
 

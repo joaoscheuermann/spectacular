@@ -17,14 +17,17 @@ export interface PlanningBenchmarkManifest {
 /** Returns the closed 6-by-4 controlled planning benchmark identity. */
 export const planningBenchmarkManifest = (): PlanningBenchmarkManifest => {
   const caseIds = planningCases.map(({ id }) => id);
+
   const domains = counts(
     ['documents-finance', 'software', 'artifacts', 'communications'] as const,
     planningCases.map(({ domain }) => domain),
   );
+
   const compositionClasses = counts(
     ['A', 'B', 'C', 'D', 'E', 'F'] as const,
     planningCases.map(({ compositionClass }) => compositionClass),
   );
+
   return {
     schemaVersion: 1,
     benchmark: 'mosaic-p0-p1-controlled',
@@ -48,16 +51,22 @@ const counts = <Key extends string>(
   ) as Readonly<Record<Key, number>>;
 
 const canonicalJson = (value: unknown): string => {
-  if (value === null) return 'null';
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value === null) {return 'null';}
+
+  if (Array.isArray(value)) {return `[${value.map(canonicalJson).join(',')}]`;}
+
   if (typeof value === 'object') {
     const record = value as Readonly<Record<string, unknown>>;
+
     return `{${Object.keys(record)
       .sort()
       .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
       .join(',')}}`;
   }
+
   const serialized = JSON.stringify(value);
-  if (serialized === undefined) throw new TypeError('Value is not JSON data.');
+
+  if (serialized === undefined) {throw new TypeError('Value is not JSON data.');}
+
   return serialized;
 };

@@ -4,11 +4,6 @@ import { relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import {
-  createFetchTransport,
-  createUnifiedProvider,
-  ProviderErrorObject,
-} from 'llms';
-import {
   cancel,
   intro,
   isCancel,
@@ -21,7 +16,22 @@ import {
 import pino from 'pino';
 import * as z from 'zod';
 
+import {
+  createFetchTransport,
+  createUnifiedProvider,
+  ProviderErrorObject,
+} from 'llms';
+
 import { cases, loadSkills, runCases } from './cases.mjs';
+import {
+  extractHintsSystem,
+  goalsSystem,
+  goalsUser,
+  judgeSystem,
+  judgeUser,
+  reviewHintsSystem,
+  reviewSkillsSystem,
+} from './prompts.mjs';
 import {
   assertCompatibleRun,
   beginRound,
@@ -35,15 +45,6 @@ import {
   saveRun,
   setRunStatus,
 } from './state.mjs';
-import {
-  extractHintsSystem,
-  goalsSystem,
-  goalsUser,
-  judgeSystem,
-  judgeUser,
-  reviewHintsSystem,
-  reviewSkillsSystem,
-} from './prompts.mjs';
 
 const logger = pino({
   enabled: true,
@@ -51,13 +52,14 @@ const logger = pino({
     target: 'pino-pretty',
   },
 });
-
 const model = 'deepseek/deepseek-v4-pro';
 const judgeModel = 'google/gemini-3.7-flash';
 const temperature = 0;
 const checkpointDirectory = '.llm-lab/full-skill-vs-hints/runs';
+
 const action = (str, callback) => {
   log.step(str);
+
   return callback();
 };
 
@@ -150,6 +152,7 @@ const reviewWithHints = (provider, objective, goals, hints) =>
 const judgeComparison = (provider, objective, evaluation) =>
   action('Judging blind options', async () => {
     const { goals, optionA, optionB, skills } = evaluation;
+
     const result = await provider.complete({
       model: judgeModel,
       temperature,
@@ -162,8 +165,8 @@ const judgeComparison = (provider, objective, evaluation) =>
 
     return result.structured;
   });
-
 const command = 'npm run llm:full-skill-vs-hints';
+
 const help = `Usage:
   ${command}
   ${command} -- --resume .llm-lab/full-skill-vs-hints/runs/<run-id>.json
@@ -174,13 +177,16 @@ New runs use LLM_LAB_ROUNDS (default: 3). Judge mode generates and evaluates eve
 
 const configuredRounds = () => {
   const value = Number(process.env.LLM_LAB_ROUNDS ?? '3');
-  if (Number.isSafeInteger(value) && value >= 1) return value;
+
+  if (Number.isSafeInteger(value) && value >= 1) {return value;}
+
   throw new Error('LLM_LAB_ROUNDS must be a positive integer.');
 };
 
 const createProvider = () => {
   const apiKey = process.env.OPENROUTER_API_KEY?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY is required.');
+
+  if (!apiKey) {throw new Error('OPENROUTER_API_KEY is required.');}
 
   return createUnifiedProvider({
     transport: createFetchTransport(),
@@ -190,6 +196,7 @@ const createProvider = () => {
 };
 
 const displayPath = (path) => relative(process.cwd(), path) || path;
+
 const resumeMessage = (path, mode) =>
   `Resume with: ${command} -- ${mode === 'judge' ? '--judge ' : ''}--resume ${displayPath(path)}`;
 
@@ -197,6 +204,7 @@ const initializeRun = async (resume, mode) => {
   if (resume !== undefined) {
     const path = resolve(resume);
     const run = await loadRun(path);
+
     assertCompatibleRun(run, {
       mode,
       model,
@@ -204,9 +212,12 @@ const initializeRun = async (resume, mode) => {
       temperature,
       cases: runCases,
     });
+
     const resumed =
       run.status === 'completed' ? run : setRunStatus(run, 'running');
+
     await saveRun(path, resumed);
+
     return { path, run: resumed };
   }
 
@@ -219,7 +230,9 @@ const initializeRun = async (resume, mode) => {
     cases: runCases,
   });
   const path = resolve(checkpointDirectory, `${run.id}.json`);
+
   await saveRun(path, run);
+
   return { path, run };
 };
 
@@ -232,10 +245,12 @@ const failureCode = (error) =>
 
 const prepareRound = async (provider, current, round, skills) => {
   const goals = await generateGoals(provider, current.objective);
+
   const [reviewed, hints] = await Promise.all([
     reviewWithSkills(provider, current.objective, goals, skills),
     extractHints(provider, current.objective, goals, skills),
   ]);
+
   const reviewedWithHints = await reviewWithHints(
     provider,
     current.objective,
@@ -327,8 +342,10 @@ const main = async () => {
     },
     strict: true,
   });
+
   if (values.help === true) {
     console.log(help);
+
     return;
   }
 
@@ -345,6 +362,7 @@ const main = async () => {
       ? `Mosaic judge · ${judgeModel}`
       : 'Mosaic: full skill × hints',
   );
+
   note(
     `${displayPath(path)}\n${run.results.length} evaluations saved.`,
     'Run checkpoint',
@@ -352,44 +370,62 @@ const main = async () => {
 
   const pause = async (failed) => {
     run = setRunStatus(run, 'paused');
+
     await saveRun(path, run);
+
     cancel(`Run paused. ${resumeMessage(path, mode)}`);
-    if (failed) process.exitCode = 1;
+
+    if (failed) {process.exitCode = 1;}
   };
 
   try {
     while (nextRound(run) !== null) {
       const task = nextRound(run);
       const current = caseByName.get(task.caseName);
+
       log.info(`${current.name}: round ${task.round}/${run.config.rounds}`);
 
       if (run.pending === null) {
         try {
           let skills = skillCache.get(current.name);
+
           if (skills === undefined) {
             skills = await action(`Loading skills for ${current.name}`, () =>
               loadSkills(current),
             );
+
             skillCache.set(current.name, skills);
           }
+
           provider ??= createProvider();
+
           run = beginRound(
             run,
             await prepareRound(provider, current, task.round, skills),
           );
+
           await saveRun(path, run);
         } catch (error) {
           const code = failureCode(error);
+
           run = recordFailure(run, task, code);
+
           await saveRun(path, run);
+
           log.error(`Round failed (${code}).`);
+
           if (mode === 'judge') {
             await pause(true);
+
             return;
           }
+
           const recovery = await askFailureAction();
-          if (recovery === 'retry') continue;
+
+          if (recovery === 'retry') {continue;}
+
           await pause(true);
+
           return;
         }
       }
@@ -397,47 +433,68 @@ const main = async () => {
       if (mode === 'judge') {
         try {
           provider ??= createProvider();
+
           const judgment = await judgeComparison(
             provider,
             current.objective,
             run.pending,
           );
+
           run = completeJudgment(run, judgment);
+
           await saveRun(path, run);
+
           continue;
         } catch (error) {
           const code = failureCode(error);
+
           run = recordFailure(run, task, code);
+
           await saveRun(path, run);
+
           log.error(`Judge failed (${code}).`);
+
           await pause(true);
+
           return;
         }
       }
 
       showPendingRound(run.pending, current, run.config.rounds);
+
       if (run.pending.choice === undefined) {
         const choice = await askChoice();
+
         if (isCancel(choice)) {
           await pause(false);
+
           return;
         }
+
         run = recordChoice(run, choice);
+
         await saveRun(path, run);
       }
 
       const rationale = await askRationale();
+
       if (isCancel(rationale)) {
         await pause(false);
+
         return;
       }
+
       run = completeRound(run, rationale);
+
       await saveRun(path, run);
     }
 
     run = setRunStatus(run, 'completed');
+
     await saveRun(path, run);
+
     printResults(run);
+
     outro(`Run completed. Results saved to ${displayPath(path)}.`);
   } catch {
     await pause(true);

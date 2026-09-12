@@ -13,8 +13,9 @@ import {
   select,
   text,
 } from '@clack/prompts';
-import { createFetchTransport, createUnifiedProvider } from 'llms';
 import pino from 'pino';
+
+import { createFetchTransport, createUnifiedProvider } from 'llms';
 
 import { expectedFor, loadCatalog, selectCases, tasksFor } from './case.mjs';
 import { orientations, pairLabel, pairs, summarize } from './comparison.mjs';
@@ -41,9 +42,9 @@ const defaults = {
   topK: 10,
   minRerankerScore: 0.3,
 };
-
 const command = 'npm run llm:direct-skill-planning';
 const checkpointDirectory = '.llm-lab/direct-skill-planning/runs';
+
 const help = `Usage:
   ${command}
   ${command} -- --judge
@@ -75,12 +76,15 @@ Reliability:
 
 const action = (message, callback) => {
   log.step(message);
+
   return callback();
 };
 
 const configuredInteger = (name, fallback) => {
   const value = Number(process.env[name] ?? fallback);
-  if (Number.isSafeInteger(value) && value > 0) return value;
+
+  if (Number.isSafeInteger(value) && value > 0) {return value;}
+
   throw new Error(`${name} must be a positive integer.`);
 };
 
@@ -89,20 +93,25 @@ const configuredModel = (name, fallback) =>
 
 const configuredScore = (name, fallback) => {
   const value = Number(process.env[name] ?? fallback);
-  if (Number.isFinite(value) && value >= 0) return value;
+
+  if (Number.isFinite(value) && value >= 0) {return value;}
+
   throw new Error(`${name} must be a non-negative number.`);
 };
 
 const configuration = (catalog) => {
   const topK = configuredInteger('LLM_LAB_TOP_K', defaults.topK);
   const retrievalK = Math.min(catalog.length, defaults.retrievalK);
+
   if (topK > retrievalK) {
     throw new Error('LLM_LAB_TOP_K cannot exceed the vector shortlist size.');
   }
+
   const judgeModels = [
     configuredModel('LLM_LAB_JUDGE_MODEL', defaults.judgeModels[0]),
     defaults.judgeModels[1],
   ];
+
   if (new Set(judgeModels).size !== judgeModels.length) {
     throw new Error('Judge models must be unique.');
   }
@@ -123,7 +132,8 @@ const configuration = (catalog) => {
 
 const createProvider = (logger) => {
   const apiKey = process.env.OPENROUTER_API_KEY?.trim();
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY is required.');
+
+  if (!apiKey) {throw new Error('OPENROUTER_API_KEY is required.');}
 
   return createUnifiedProvider({
     transport: createFetchTransport(),
@@ -141,6 +151,7 @@ const askJudgment = async ({
   options,
 }) => {
   showComparison(current, round, rounds, pair, orientation, options);
+
   const choice = await select({
     message:
       'Which option correctly integrates relevant evidence while preserving the user objective?',
@@ -151,13 +162,16 @@ const askJudgment = async ({
       { value: 'neither', label: 'Neither integrates correctly' },
     ],
   });
-  if (isCancel(choice)) return null;
+
+  if (isCancel(choice)) {return null;}
 
   const rationale = await text({
     message: 'Rationale',
     placeholder: 'Optional',
   });
-  if (isCancel(rationale)) return null;
+
+  if (isCancel(rationale)) {return null;}
+
   return { choice, rationale };
 };
 
@@ -189,6 +203,7 @@ const compare = async ({
   }
 
   const responses = [];
+
   for (const [index, currentOptions] of options.entries()) {
     const response = await askJudgment({
       current,
@@ -198,7 +213,9 @@ const compare = async ({
       orientation: index + 1,
       options: currentOptions,
     });
-    if (response === null) return null;
+
+    if (response === null) {return null;}
+
     responses.push(response);
   }
 
@@ -230,9 +247,11 @@ const evaluate = async (deps, current, round, mode) => {
         }),
       ),
     );
+
     comparisons = comparisonsByPair.flat();
   } else {
     comparisons = [];
+
     for (const pair of pairs) {
       const pairComparisons = await compare({
         deps,
@@ -243,7 +262,9 @@ const evaluate = async (deps, current, round, mode) => {
         pair,
         expectedSkills,
       });
-      if (pairComparisons === null) return null;
+
+      if (pairComparisons === null) {return null;}
+
       comparisons.push(...pairComparisons);
     }
   }
@@ -270,8 +291,10 @@ const main = async () => {
     },
     strict: true,
   });
+
   if (values.help === true) {
     console.log(help);
+
     return;
   }
 
@@ -279,6 +302,7 @@ const main = async () => {
   const config = configuration(catalog);
   const selected = selectCases(values.case);
   const mode = values.judge === true ? 'judge' : 'human';
+
   let run = createRun({
     mode,
     model: config.model,
@@ -304,17 +328,21 @@ const main = async () => {
   const path = resolve(checkpointDirectory, `${run.id}.json`);
   const displayPath = relative(process.cwd(), path) || path;
   const checkpoint = createCheckpointWriter(path, run);
+
   const onProviderFailure = async (failure) => {
     const event = await checkpoint.recordProviderFailure(failure);
+
     log.warn(`Provider attempt failed: ${JSON.stringify(event)}`);
   };
 
   await saveRun(path, run);
+
   intro(
     mode === 'judge'
       ? `Direct skill planning judges · ${config.judgeModels.join(' + ')}`
       : 'Direct skill planning: Direct × Direct Goal × Request P1 × Goal P1',
   );
+
   note(`${displayPath}\n0 evaluations saved.`, 'Run checkpoint');
 
   try {
@@ -323,9 +351,11 @@ const main = async () => {
       transport: { target: 'pino-pretty' },
     });
     const provider = createProvider(logger);
+
     const vectors = await action('Indexing skill catalog', () =>
       indexSkills(provider, config, logger, catalog, onProviderFailure),
     );
+
     const deps = {
       provider,
       vectors,
@@ -340,41 +370,56 @@ const main = async () => {
       const evaluations = await Promise.allSettled(
         tasks.map(async ({ current, round }, index) => {
           log.info(`${current.name}: round ${round}/${config.rounds}`);
+
           const result = await evaluate(deps, current, round, mode);
+
           await checkpoint.saveResult(index, result);
+
           return result;
         }),
       );
+
       const results = evaluations.flatMap((evaluation) =>
         evaluation.status === 'fulfilled' ? [evaluation.value] : [],
       );
+
       const failure = evaluations.find(
         (evaluation) => evaluation.status === 'rejected',
       );
-      if (failure !== undefined) throw failure.reason;
+
+      if (failure !== undefined) {throw failure.reason;}
+
       const hasJudgeFailures = results.some((result) =>
         result.comparisons.some(
           (comparison) => comparison.status !== 'completed',
         ),
       );
+
       run = await checkpoint.finish(
         hasJudgeFailures ? 'completed_with_failures' : 'completed',
       );
     } else {
       for (const [index, { current, round }] of tasks.entries()) {
         log.info(`${current.name}: round ${round}/${config.rounds}`);
+
         const result = await evaluate(deps, current, round, mode);
+
         if (result === null) {
           run = await checkpoint.finish('paused');
+
           cancel(`Run paused. Results saved to ${displayPath}.`);
+
           return;
         }
+
         await checkpoint.saveResult(index, result);
       }
+
       run = await checkpoint.finish('completed');
     }
 
     printResults(run);
+
     outro(
       run.status === 'completed'
         ? `Run completed. Results saved to ${displayPath}.`
@@ -382,10 +427,13 @@ const main = async () => {
     );
   } catch (error) {
     const failure = providerFailure(error) ?? { code: 'unexpected_error' };
+
     run = await checkpoint.finish('paused', failure);
+
     cancel(
       `Run paused after ${JSON.stringify(failure)}. Results saved to ${displayPath}.`,
     );
+
     process.exitCode = 1;
   }
 };

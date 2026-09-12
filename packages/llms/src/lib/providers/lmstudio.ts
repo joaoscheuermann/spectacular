@@ -13,10 +13,10 @@ import type {
   ProviderMessage,
   ProviderMetadata,
   ProviderRequest,
-  ProviderRerankRequest,
   ProviderRerankFinished,
-  ProviderStructuredFinished,
+  ProviderRerankRequest,
   ProviderStreamEvent,
+  ProviderStructuredFinished,
   StructuredOutputSchema,
   StructuredOutputValue,
   UsageMetadata,
@@ -79,14 +79,18 @@ export const createLmStudioProvider = (
       readonly schema: Schema;
     },
   ): Promise<ProviderStructuredFinished<StructuredOutputValue<Schema>>>;
+
   async function complete<Output = JsonValue>(
     request: ProviderRequest<Output>,
   ): Promise<ProviderFinished<Output>>;
+
   async function complete<Output = JsonValue>(
     request: ProviderRequest<Output>,
   ): Promise<ProviderFinished<Output>> {
     requireRequestInput('lmstudio', request);
+
     const sensitiveOutput = request.flags?.sensitiveOutput === true;
+
     const response = await deps.transport.request({
       method: 'POST',
       url: `${baseUrl}/api/v1/chat`,
@@ -129,6 +133,7 @@ export const createLmStudioProvider = (
         request: ProviderRequest<Output>,
       ): AsyncIterable<ProviderStreamEvent<Output>> {
         requireRequestInput('lmstudio', request);
+
         const sensitiveOutput = request.flags?.sensitiveOutput === true;
         const text: string[] = [];
         const reasoning: string[] = [];
@@ -171,20 +176,27 @@ export const createLmStudioProvider = (
               event.data,
               sensitiveOutput,
             );
+
             return;
           }
 
           if (event.event === 'message.delta') {
             const content = stringField(payload, 'content') ?? '';
+
             text.push(content);
+
             yield { type: 'text.delta', delta: content };
+
             continue;
           }
 
           if (event.event === 'reasoning.delta') {
             const content = stringField(payload, 'content') ?? '';
+
             reasoning.push(content);
+
             yield { type: 'reasoning.delta', delta: content };
+
             continue;
           }
 
@@ -196,11 +208,13 @@ export const createLmStudioProvider = (
               event.data,
               sensitiveOutput,
             );
+
             continue;
           }
 
           if (event.event === 'chat.end') {
             const result = recordField(payload, 'result') ?? payload;
+
             const finish = parseStructuredOutput(
               'lmstudio',
               request,
@@ -213,6 +227,7 @@ export const createLmStudioProvider = (
             }
 
             yield { type: 'response.finished', finish };
+
             return;
           }
         }
@@ -372,10 +387,12 @@ const finished = (
   fallbackReasoning = '',
 ): ProviderFinished => {
   const output = arrayField(response, 'output').map(asRecord).filter(isRecord);
+
   const text = output
     .filter((item) => item.type === 'message')
     .map((item) => stringField(item, 'content') ?? '')
     .join('');
+
   const reasoning = output
     .filter((item) => item.type === 'reasoning')
     .map((item) => stringField(item, 'content') ?? '')
@@ -405,6 +422,7 @@ const usage = (
   const inputTokens = numberField(stats, 'input_tokens');
   const outputTokens = numberField(stats, 'total_output_tokens');
   const reasoningTokens = numberField(stats, 'reasoning_output_tokens');
+
   const totalTokens =
     inputTokens === undefined || outputTokens === undefined
       ? undefined

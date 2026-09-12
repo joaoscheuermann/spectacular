@@ -1,7 +1,7 @@
-import type { FinalDelivery } from './delivery.js';
+import type { Observation } from '../schemas/observation.js';
 import type { NodeOutcome } from '../schemas/outcome.js';
 import type { RuntimeTermination } from '../schemas/termination.js';
-import type { Observation } from '../schemas/observation.js';
+import type { FinalDelivery } from './delivery.js';
 import type { OrderedBundle, SkillCandidate } from './routing.js';
 
 export interface WorkflowNodeResult {

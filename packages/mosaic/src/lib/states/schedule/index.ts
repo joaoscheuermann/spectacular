@@ -14,7 +14,6 @@ export const schedule: WorkflowHandler = async (
   { transition, fail },
 ) => {
   const { graphs } = state;
-
   // Planning and revision append snapshots; scheduling always acts on the newest.
   const graph = graphs.at(-1);
 
@@ -45,9 +44,12 @@ export const schedule: WorkflowHandler = async (
 
   // A terminal non-completed dependency causally blocks each pending descendant.
   const prior = new Map(graph.nodes.map(({ id, status }) => [id, status]));
+
   propagateDependencyBlocks(graph.nodes);
+
   for (const node of graph.nodes) {
-    if (prior.get(node.id) === node.status) continue;
+    if (prior.get(node.id) === node.status) {continue;}
+
     await runtime?.emit({
       type: 'node.status',
       stage: 'schedule',
@@ -80,6 +82,7 @@ export const schedule: WorkflowHandler = async (
   // Scheduling owns pending -> ready; execution owns every later status change.
   for (const node of wave) {
     node.status = 'ready';
+
     await runtime?.emit({
       type: 'node.status',
       stage: 'schedule',
@@ -101,12 +104,14 @@ const propagateDependencyBlocks = (nodes: readonly Node[]): void => {
 
   while (changed) {
     changed = false;
+
     for (const node of nodes) {
-      if (node.status !== 'pending') continue;
+      if (node.status !== 'pending') {continue;}
 
       const dependencies = node.dependsOn
         .map((id) => nodes.find((candidate) => candidate.id === id))
         .filter((dependency): dependency is Node => dependency !== undefined);
+
       if (
         !dependencies.some(
           ({ status }) => status === 'blocked' || status === 'failed',
@@ -116,7 +121,9 @@ const propagateDependencyBlocks = (nodes: readonly Node[]): void => {
       }
 
       node.status = 'blocked';
+
       node.outcome = null;
+
       node.termination = {
         type: 'dependency',
         status: 'blocked',
@@ -124,6 +131,7 @@ const propagateDependencyBlocks = (nodes: readonly Node[]): void => {
           .filter(({ status }) => status !== 'completed')
           .map(({ id }) => id),
       };
+
       changed = true;
     }
   }

@@ -23,13 +23,15 @@ import { goalsSchema } from './schemas.mjs';
 import { messages } from './utils.mjs';
 
 const directory = dirname(fileURLToPath(import.meta.url));
+
 const { values } = parseArgs({
   options: { fixture: { type: 'string', default: defaultFixtureName } },
   strict: true,
   allowPositionals: false,
 });
 const fixtureName = values.fixture.trim();
-if (fixtureName.length === 0) throw new Error('--fixture must not be empty.');
+
+if (fixtureName.length === 0) {throw new Error('--fixture must not be empty.');}
 
 const config = {
   treatment: 'exposure',
@@ -46,9 +48,9 @@ const config = {
   comparisonProtocolSha256: comparisonProtocolSha256(),
   retry: { attempts: 5, delayMs: 15_000, backoffMultiplier: 2 },
 };
-
 // Input and fixture validation intentionally precedes provider construction.
 const inputs = await loadInputs({ fixtureName, withControl: true });
+
 const output = await createOutput({
   directory,
   config,
@@ -74,6 +76,7 @@ const completePlan = async (
     `Generating ${operation} for ${current.name}`,
     async () => {
       recordAttempt(operation, config.planningModel);
+
       const result = await provider.complete({
         model: config.planningModel,
         effort: config.planningEffort,
@@ -81,7 +84,9 @@ const completePlan = async (
         schema: goalsSchema,
         flags: { sensitiveOutput: true },
       });
+
       recordUsage(operation, config.planningModel, result.usage);
+
       return result.structured.goals;
     },
     config.retry,
@@ -96,6 +101,7 @@ const runCase = async (provider, current) => {
     withP0User(current.objective, current.goldSkills, current.p0),
   );
   const plans = { withoutP0: current.controlPlan, withP0 };
+
   const initial = await comparePlans({
     provider,
     action,
@@ -107,6 +113,7 @@ const runCase = async (provider, current) => {
     plans,
     options: orientations(plans),
   });
+
   const adjudication =
     initial.outcome === 'inconsistent'
       ? await comparePlans({
@@ -143,9 +150,11 @@ const corpusMetrics = (results) => {
   const uniqueGoldSkills = new Set(
     results.flatMap(({ goldSkills }) => goldSkills),
   );
+
   const adjudicatedCases = results.filter(
     ({ judgments }) => judgments.length === 4,
   ).length;
+
   return {
     localCases: inputs.cases.length,
     catalogSkills: inputs.catalog.length,
@@ -188,6 +197,7 @@ const corpusMetrics = (results) => {
 
 const main = async () => {
   const provider = createProvider();
+
   logger.info(
     {
       runId: output.id,
@@ -199,14 +209,18 @@ const main = async () => {
     },
     'Run started',
   );
+
   const results = await Promise.all(
     inputs.cases.map((current) => runCase(provider, current)),
   );
+
   const metrics = {
     corpus: corpusMetrics(results),
     comparison: aggregateExposureComparisons(results, config.judgeModel),
   };
+
   await output.complete(results, metrics);
+
   logger.info(
     { runId: output.id, cases: results.length, metrics },
     'Run completed',
@@ -217,6 +231,8 @@ try {
   await main();
 } catch (error) {
   logger.fatal({ error, runId: output.id }, 'Run failed');
+
   await output.fail();
+
   process.exitCode = 1;
 }

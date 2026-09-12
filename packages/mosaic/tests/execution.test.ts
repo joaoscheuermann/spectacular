@@ -1,20 +1,21 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { z } from 'zod';
+
 import type { Skill } from 'bundle';
 import type { LlmProvider, ProviderFinished, ProviderRequest } from 'llms';
-import { z } from 'zod';
 import type { Tool } from 'tool';
 
-import { execution } from '../src/lib/states/execution/index.js';
+import { createObservationIdAllocator } from '../src/lib/observation-ids.js';
 import type { NodeDecision } from '../src/lib/schemas/outcome.js';
+import { execution } from '../src/lib/states/execution/index.js';
 import type { Graph, Node } from '../src/lib/types/graph.js';
 import type {
   WorkflowContext,
   WorkflowState,
 } from '../src/lib/types/workflow.js';
 import { mosaicProviders } from './structured.js';
-import { createObservationIdAllocator } from '../src/lib/observation-ids.js';
 
 test('fails without executing workflow work when no graph exists', async () => {
   const action = await execution(
@@ -26,7 +27,9 @@ test('fails without executing workflow work when no graph exists', async () => {
   );
 
   assert.equal(action.type, 'fail');
-  if (action.type !== 'fail') return;
+
+  if (action.type !== 'fail') {return;}
+
   assert.equal(
     (action.error as Error).message,
     'Impossible to continue, missing active graph!',
@@ -36,6 +39,7 @@ test('fails without executing workflow work when no graph exists', async () => {
 test('completes a node stores result artifacts and schedules the next wave', async () => {
   const node = createNode('current');
   const graph: Graph = { revision: 1, nodes: [node] };
+
   const provider = createProvider([
     terminalFinish(
       completed({
@@ -47,7 +51,6 @@ test('completes a node stores result artifacts and schedules the next wave', asy
     ),
   ]);
   const harness = createHarness(graph, provider);
-
   const action = await execution(state([graph]), harness.context, handlers());
 
   assert.deepEqual(action, {
@@ -55,7 +58,9 @@ test('completes a node stores result artifacts and schedules the next wave', asy
     handler: 'schedule',
     state: state([graph]),
   });
+
   assert.equal(node.status, 'completed');
+
   assert.deepEqual(node.artifacts, [
     {
       kind: 'inline',
@@ -64,28 +69,35 @@ test('completes a node stores result artifacts and schedules the next wave', asy
     },
     { kind: 'inline', mime: 'text/plain', data: 'extra' },
   ]);
+
   assert.equal(provider.requests.length, 1);
+
   assert.equal(provider.requests[0]?.schema, undefined);
+
   assert.equal(provider.requests[0]?.tools?.length, 1);
+
   assert.equal(provider.requests[0]?.messages[0]?.role, 'system');
+
   assert.ok(provider.requests[0]?.messages.some(({ role }) => role === 'user'));
 });
 
 test('automatically records one returned tool observation for a completed node', async () => {
   const node = createNode('current', ['lookup']);
   const graph: Graph = { revision: 1, nodes: [node] };
+
   const provider = createProvider([
     toolFinish('call-1', 'lookup'),
     terminalFinish(completed()),
   ]);
   const calls: unknown[] = [];
+
   const harness = createHarness(graph, provider, [
     tool('lookup', async (payload) => {
       calls.push(payload);
+
       return { found: true };
     }),
   ]);
-
   const action = await execution(state([graph]), harness.context, handlers());
 
   assert.equal(
@@ -93,14 +105,23 @@ test('automatically records one returned tool observation for a completed node',
     'transition',
     action.type === 'fail' ? String(action.error) : undefined,
   );
+
   assert.equal(node.status, 'completed');
+
   assert.deepEqual(calls, [{ query: 'evidence' }]);
+
   assert.equal(provider.requests.length, 2);
+
   assert.equal(provider.requests[0]?.tools?.[0]?.name, 'lookup');
+
   assert.equal(provider.requests[0]?.schema, undefined);
+
   assert.equal(provider.requests[1]?.schema, undefined);
+
   assert.equal(provider.requests[0]?.tools?.length, 2);
-  if (action.type !== 'transition') return;
+
+  if (action.type !== 'transition') {return;}
+
   assert.deepEqual(
     node.observations.map(({ goalId, toolName, callId, input, output }) => ({
       goalId,
@@ -119,11 +140,13 @@ test('automatically records one returned tool observation for a completed node',
       },
     ],
   );
+
   assert.match(node.observations[0]?.id ?? '', /^[0-9a-f]{6}$/u);
 });
 
 test('does not reuse an observation ID retained by an earlier revision', async () => {
   const historical = createNode('historical');
+
   historical.observations = [
     {
       id: 'aaaaaa',
@@ -134,13 +157,16 @@ test('does not reuse an observation ID retained by an earlier revision', async (
       output: '{}',
     },
   ];
+
   const node = createNode('current', ['lookup']);
   const graph: Graph = { revision: 1, nodes: [node] };
+
   const provider = createProvider([
     toolFinish('call-1', 'lookup'),
     terminalFinish(completed()),
   ]);
   const harness = createHarness(graph, provider, [tool('lookup')]);
+
   const uuids = [
     'aaaaaa00-0000-4000-8000-000000000000',
     'bbbbbb00-0000-4000-8000-000000000000',
@@ -156,14 +182,19 @@ test('does not reuse an observation ID retained by an earlier revision', async (
   );
 
   assert.equal(action.type, 'transition');
+
   assert.equal(node.observations[0]?.id, 'bbbbbb');
 });
 
 test('hands a replacement node the newest applicable prior attempt without authorizing old evidence', async () => {
   const first = createNode('first');
+
   first.index = 0;
+
   first.doneWhen = ['First revision criterion.'];
+
   first.status = 'needs_revision';
+
   first.observations = [
     {
       id: '111111',
@@ -174,6 +205,7 @@ test('hands a replacement node the newest applicable prior attempt without autho
       output: 'newer unrelated revision output',
     },
   ];
+
   first.outcome = {
     ...nonCompleted('needs_revision', 'Revise first.'),
     revisionRequest: {
@@ -184,9 +216,13 @@ test('hands a replacement node the newest applicable prior attempt without autho
   };
 
   const second = createNode('second');
+
   second.index = 1;
+
   second.doneWhen = ['Already satisfied.', 'Old target must be replaced.'];
+
   second.status = 'needs_revision';
+
   second.observations = [
     {
       id: '222222',
@@ -205,6 +241,7 @@ test('hands a replacement node the newest applicable prior attempt without autho
       output: 'linked historical output',
     },
   ];
+
   second.outcome = {
     status: 'needs_revision',
     criteria: [
@@ -231,14 +268,22 @@ test('hands a replacement node the newest applicable prior attempt without autho
   };
 
   const replacementBefore = createNode('replacement');
+
   replacementBefore.index = 1;
+
   replacementBefore.status = 'pending';
+
   replacementBefore.bundle = null;
+
   replacementBefore.goal = 'Use the supported replacement.';
+
   const replacement = createNode('replacement', ['verify-revision']);
+
   replacement.goal = replacementBefore.goal;
+
   const active: Graph = { revision: 3, nodes: [replacement] };
   let currentObservationId = '';
+
   const provider = createProvider([], (request) => {
     const prompt = request.messages
       .filter(({ role }) => role === 'user')
@@ -246,39 +291,56 @@ test('hands a replacement node the newest applicable prior attempt without autho
       .join('\n');
 
     assert.match(prompt, /The original structure remains available\./u);
+
     assert.match(prompt, /Replace the target with a supported structure\./u);
+
     assert.match(prompt, /Old target must be replaced\./u);
+
     assert.match(prompt, /linked historical output/u);
+
     assert.doesNotMatch(
       prompt,
       /Already satisfied\.|unlinked historical output|Newer unrelated assumption/u,
     );
+
     assert.doesNotMatch(
       prompt,
       /222222|333333|call-unlinked-history|call-linked-history/u,
     );
+
     assert.match(prompt, /not citable evidence/u);
+
     assert.match(prompt, /cite only fresh observation IDs/u);
 
     if (provider.requests.length === 1) {
       const invalid = completed();
-      invalid.criteria[0]!.observationIds = ['333333'];
+
+      invalid.criteria[0].observationIds = ['333333'];
+
       return terminalFinish(invalid)(request);
     }
 
     if (provider.requests.length === 2) {
       const correction = correctionMessageFrom(request);
+
       assert.match(correction, /Most similar valid observation ID: none\./u);
+
       assert.match(correction, /fresh local observation ID/u);
+
       assert.doesNotMatch(correction, /333333/u);
+
       return toolFinish('call-current-revision', 'verify-revision');
     }
 
     currentObservationId = observationIdFrom(request);
+
     const corrected = completed();
-    corrected.criteria[0]!.observationIds = [currentObservationId];
+
+    corrected.criteria[0].observationIds = [currentObservationId];
+
     return terminalFinish(corrected)(request);
   });
+
   const harness = createHarness(active, provider, [
     tool('verify-revision', async () => ({ corrected: true })),
   ]);
@@ -295,19 +357,26 @@ test('hands a replacement node the newest applicable prior attempt without autho
   );
 
   assert.equal(action.type, 'transition');
+
   assert.equal(provider.requests.length, 3);
+
   assert.equal(replacement.status, 'completed');
+
   assert.match(currentObservationId, /^[0-9a-f]{6}$/u);
+
   assert.deepEqual(replacement.outcome?.criteria[0]?.observationIds, [
     currentObservationId,
   ]);
+
   assert.equal(replacement.observations[0]?.id, currentObservationId);
 });
 
 test('rejects a post-revision completion hook that does not cite its fresh observation', async () => {
   const prior = revisionTarget('prior');
   const current = createNode('prior');
+
   current.goal = 'Revised prior goal.';
+
   const active: Graph = { revision: 2, nodes: [current] };
   const decision = completed() as NodeDecision;
   const provider = createProvider([]);
@@ -328,24 +397,34 @@ test('rejects a post-revision completion hook that does not cite its fresh obser
   );
 
   assert.equal(action.type, 'fail');
-  if (action.type !== 'fail') return;
+
+  if (action.type !== 'fail') {return;}
+
   assert.match(
     (action.error as Error).message,
     /completed post-revision outcome must cite at least one fresh local observation ID/u,
   );
+
   assert.equal(current.status, 'running');
+
   assert.equal(current.outcome, null);
+
   assert.equal(current.observations.length, 1);
+
   assert.equal(provider.requests.length, 0);
 });
 
 test('accepts a post-revision completion hook that cites its fresh observation', async () => {
   const prior = revisionTarget('prior');
   const current = createNode('prior');
+
   current.goal = 'Revised prior goal.';
+
   const active: Graph = { revision: 2, nodes: [current] };
   const decision = completed() as NodeDecision;
-  decision.criteria[0]!.observationIds = ['eeeeee'];
+
+  decision.criteria[0].observationIds = ['eeeeee'];
+
   const provider = createProvider([]);
   const harness = createHarness(active, provider);
 
@@ -364,21 +443,32 @@ test('accepts a post-revision completion hook that cites its fresh observation',
   );
 
   assert.equal(action.type, 'transition');
+
   assert.equal(current.status, 'completed');
+
   assert.deepEqual(current.outcome?.criteria[0]?.observationIds, ['eeeeee']);
+
   assert.equal(current.observations[0]?.id, 'eeeeee');
+
   assert.equal(provider.requests.length, 0);
 });
 
 test('rejects a hook observation ID retained by an earlier snapshot', async () => {
   const prior = revisionTarget('prior');
+
   prior.observations = [freshObservation(prior.id, 'aaaaaa')];
-  prior.outcome!.criteria[0]!.observationIds = ['aaaaaa'];
+
+  prior.outcome!.criteria[0].observationIds = ['aaaaaa'];
+
   const current = createNode('prior');
+
   current.goal = 'Revised prior goal.';
+
   const active: Graph = { revision: 2, nodes: [current] };
   const decision = completed() as NodeDecision;
-  decision.criteria[0]!.observationIds = ['aaaaaa'];
+
+  decision.criteria[0].observationIds = ['aaaaaa'];
+
   const provider = createProvider([]);
   const harness = createHarness(active, provider);
 
@@ -397,10 +487,15 @@ test('rejects a hook observation ID retained by an earlier snapshot', async () =
   );
 
   assert.equal(action.type, 'fail');
-  if (action.type !== 'fail') return;
+
+  if (action.type !== 'fail') {return;}
+
   assert.match((action.error as Error).message, /already reserved/u);
+
   assert.equal(current.outcome, null);
+
   assert.deepEqual(current.observations, []);
+
   assert.equal(provider.requests.length, 0);
 });
 
@@ -408,7 +503,9 @@ test('allows tool-free blocked and failed hooks after a revision handoff', async
   for (const status of ['blocked', 'failed'] as const) {
     const prior = revisionTarget(`prior-${status}`);
     const current = createNode(`prior-${status}`);
+
     current.goal = `Revised ${status} goal.`;
+
     const active: Graph = { revision: 2, nodes: [current] };
     const provider = createProvider([]);
     const harness = createHarness(active, provider);
@@ -428,8 +525,11 @@ test('allows tool-free blocked and failed hooks after a revision handoff', async
     );
 
     assert.equal(action.type, 'transition');
+
     assert.equal(current.status, status);
+
     assert.deepEqual(current.observations, []);
+
     assert.equal(provider.requests.length, 0);
   }
 });
@@ -439,64 +539,85 @@ test('repairs a similar unauthorized observation ID before completing', async ()
   const graph: Graph = { revision: 1, nodes: [node] };
   let authorizedId = '';
   let rejectedId = '';
+
   const provider = createProvider([], (request) => {
-    if (provider.requests.length === 1) return toolFinish('call-1', 'lookup');
+    if (provider.requests.length === 1) {return toolFinish('call-1', 'lookup');}
 
     authorizedId ||= observationIdFrom(request);
+
     rejectedId ||= `${authorizedId.slice(0, -1)}x`;
+
     if (provider.requests.length === 2) {
       const invalid = completed();
-      invalid.criteria[0]!.observationIds = [rejectedId];
+
+      invalid.criteria[0].observationIds = [rejectedId];
+
       return terminalFinish(invalid)(request);
     }
 
     const correction = correctionMessageFrom(request);
+
     assert.match(correction, /The observation ID is not authorized\./u);
+
     assert.match(
       correction,
       new RegExp(`Most similar valid observation ID: ${authorizedId}`, 'u'),
     );
+
     assert.doesNotMatch(correction, new RegExp(rejectedId, 'u'));
+
     const corrected = completed();
-    corrected.criteria[0]!.observationIds = [authorizedId];
+
+    corrected.criteria[0].observationIds = [authorizedId];
+
     return terminalFinish(corrected)(request);
   });
+
   const harness = createHarness(graph, provider, [
     tool('lookup', async () => ({ found: true })),
   ]);
-
   const action = await execution(state([graph]), harness.context, handlers());
 
   assert.equal(action.type, 'transition');
+
   assert.equal(provider.requests.length, 3);
+
   assert.equal(node.status, 'completed');
+
   assert.deepEqual(node.outcome?.criteria[0]?.observationIds, [authorizedId]);
 });
 
 test('repairs the Spring criterion 12 without accepting corruption at criteria 5 and 7', async () => {
   const node = createNode('spring', ['lookup']);
+
   node.doneWhen = Array.from(
     { length: 13 },
     (_, index) => `Spring migration criterion ${index}.`,
   );
+
   const graph: Graph = { revision: 1, nodes: [node] };
   let authorizedId = '';
+
   const provider = createProvider([], (request) => {
-    if (provider.requests.length === 1) return toolFinish('call-1', 'lookup');
+    if (provider.requests.length === 1) {return toolFinish('call-1', 'lookup');}
 
     authorizedId ||= observationIdFrom(request);
+
     const criteria = node.doneWhen.map((_, index) => ({
       criterionIndex: index,
       satisfied: true,
       evidence: `criterion-${index}-proof`,
       observationIds: index === 12 ? [authorizedId] : [],
     }));
+
     if (provider.requests.length === 2) {
-      criteria[12]!.observationIds = [`${authorizedId.slice(0, -1)}x`];
+      criteria[12].observationIds = [`${authorizedId.slice(0, -1)}x`];
     } else {
-      criteria[5]!.criterionIndex = 50;
-      criteria[7]!.satisfied = 'corrupted' as unknown as boolean;
+      criteria[5].criterionIndex = 50;
+
+      criteria[7].satisfied = 'corrupted' as unknown as boolean;
     }
+
     return terminalFinish({
       status: 'completed',
       criteria,
@@ -506,21 +627,28 @@ test('repairs the Spring criterion 12 without accepting corruption at criteria 5
     })(request);
   });
   const harness = createHarness(graph, provider, [tool('lookup')]);
-
   const action = await execution(state([graph]), harness.context, handlers());
 
   assert.equal(action.type, 'transition');
+
   assert.equal(provider.requests.length, 3);
+
   assert.equal(node.status, 'completed');
+
   assert.equal(node.outcome?.criteria[5]?.criterionIndex, 5);
+
   assert.equal(node.outcome?.criteria[7]?.satisfied, true);
+
   assert.deepEqual(node.outcome?.criteria[12]?.observationIds, [authorizedId]);
 });
 
 test('authorizes projected ancestors while excluding sibling observations', async () => {
   const ancestor = createNode('ancestor');
+
   ancestor.status = 'completed';
+
   ancestor.deliver = false;
+
   ancestor.observations = [
     {
       id: 'observation-ancestor',
@@ -531,14 +659,21 @@ test('authorizes projected ancestors while excluding sibling observations', asyn
       output: '{"valid":true}',
     },
   ];
+
   const ancestorOutcome = completed() as NodeDecision;
-  ancestorOutcome.criteria[0]!.observationIds = ['observation-ancestor'];
+
+  ancestorOutcome.criteria[0].observationIds = ['observation-ancestor'];
+
   ancestor.outcome = ancestorOutcome;
 
   const sibling = createNode('sibling');
+
   sibling.index = 1;
+
   sibling.status = 'completed';
+
   sibling.deliver = false;
+
   sibling.observations = [
     {
       id: 'observation-sibling',
@@ -549,36 +684,50 @@ test('authorizes projected ancestors while excluding sibling observations', asyn
       output: '{"valid":false}',
     },
   ];
+
   const siblingOutcome = completed() as NodeDecision;
-  siblingOutcome.criteria[0]!.observationIds = ['observation-sibling'];
+
+  siblingOutcome.criteria[0].observationIds = ['observation-sibling'];
+
   sibling.outcome = siblingOutcome;
 
   const node = createNode('current');
+
   node.index = 2;
+
   node.dependsOn = [ancestor.id];
+
   const graph: Graph = { revision: 1, nodes: [ancestor, sibling, node] };
   const invalid = completed();
-  invalid.criteria[0]!.observationIds = ['observation-sibling'];
+
+  invalid.criteria[0].observationIds = ['observation-sibling'];
+
   const corrected = completed();
-  corrected.criteria[0]!.observationIds = ['observation-ancestor'];
+
+  corrected.criteria[0].observationIds = ['observation-ancestor'];
+
   const provider = createProvider([
     terminalFinish(invalid),
     (request) => {
       const correction = correctionMessageFrom(request);
+
       assert.match(
         correction,
         /Most similar valid observation ID: observation-ancestor/u,
       );
+
       assert.doesNotMatch(correction, /observation-sibling/u);
+
       return terminalFinish(corrected)(request);
     },
   ]);
   const harness = createHarness(graph, provider);
-
   const action = await execution(state([graph]), harness.context, handlers());
 
   assert.equal(action.type, 'transition');
+
   assert.equal(node.status, 'completed');
+
   assert.deepEqual(node.outcome?.criteria[0]?.observationIds, [
     'observation-ancestor',
   ]);
@@ -588,7 +737,9 @@ test('rejects an unauthorized observation ID returned by an execution hook', asy
   const node = createNode('current');
   const graph: Graph = { revision: 1, nodes: [node] };
   const decision = completed() as NodeDecision;
-  decision.criteria[0]!.observationIds = ['ffffff'];
+
+  decision.criteria[0].observationIds = ['ffffff'];
+
   const provider = createProvider([]);
   const harness = createHarness(graph, provider);
 
@@ -616,16 +767,22 @@ test('rejects an unauthorized observation ID returned by an execution hook', asy
   );
 
   assert.equal(action.type, 'fail');
+
   assert.equal(node.outcome, null);
+
   assert.equal(node.observations.length, 1);
+
   assert.deepEqual(node.artifacts, []);
+
   assert.notEqual(node.status, 'completed');
+
   assert.equal(provider.requests.length, 0);
 });
 
 test('automatically records every returned observation in tool-result order', async () => {
   const node = createNode('current', ['first', 'second']);
   const graph: Graph = { revision: 1, nodes: [node] };
+
   const provider = createProvider([
     toolCallsFinish([
       { id: 'call-first', name: 'first', query: 'alpha' },
@@ -633,16 +790,19 @@ test('automatically records every returned observation in tool-result order', as
     ]),
     terminalFinish(completed()),
   ]);
+
   const harness = createHarness(graph, provider, [
     tool('first', async ({ query }) => ({ value: `${String(query)} result` })),
     tool('second', async ({ query }) => ({ value: `${String(query)} result` })),
   ]);
-
   const action = await execution(state([graph]), harness.context, handlers());
 
   assert.equal(action.type, 'transition');
-  if (action.type !== 'transition') return;
+
+  if (action.type !== 'transition') {return;}
+
   assert.equal(node.status, 'completed');
+
   assert.deepEqual(
     node.observations.map(({ toolName, callId, input, output }) => ({
       toolName,
@@ -670,12 +830,14 @@ test('automatically records every returned observation in tool-result order', as
 test('blocks on turn exhaustion after retaining ordered observations without artifacts', async () => {
   const node = createNode('bounded', ['first', 'second']);
   const graph: Graph = { revision: 1, nodes: [node] };
+
   const provider = createProvider([
     toolCallsFinish([
       { id: 'call-first', name: 'first', query: 'alpha' },
       { id: 'call-second', name: 'second', query: 'beta' },
     ]),
   ]);
+
   const harness = createHarness(
     graph,
     provider,
@@ -687,15 +849,20 @@ test('blocks on turn exhaustion after retaining ordered observations without art
     [],
     1,
   );
-
   const action = await execution(state([graph]), harness.context, handlers());
 
   assert.equal(action.type, 'transition');
-  if (action.type !== 'transition') return;
+
+  if (action.type !== 'transition') {return;}
+
   assert.equal(provider.requests.length, 1);
+
   assert.equal(node.status, 'blocked');
+
   assert.equal(node.outcome, null);
+
   assert.deepEqual(node.artifacts, []);
+
   assert.deepEqual(
     node.observations.map(({ toolName, callId, output }) => ({
       toolName,
@@ -715,6 +882,7 @@ test('blocks on turn exhaustion after retaining ordered observations without art
       },
     ],
   );
+
   assert.deepEqual(harness.logs.at(-1), {
     bindings: { nodeId: 'bounded', status: 'blocked' },
     message: 'node execution did not complete',
@@ -723,6 +891,7 @@ test('blocks on turn exhaustion after retaining ordered observations without art
 
 test('resolves selected skill references without treating rationales as instructions', async () => {
   const node = createNode('current');
+
   node.candidates = [
     {
       skillName: 'selected',
@@ -737,13 +906,16 @@ test('resolves selected skill references without treating rationales as instruct
       rationale: 'private rejected rationale',
     },
   ];
+
   node.bundle = {
     goalId: 'current',
     skills: ['selected'],
     selectionRationale: 'private global rationale',
   };
+
   const graph: Graph = { revision: 1, nodes: [node] };
   const provider = createProvider([terminalFinish(completed())]);
+
   const harness = createHarness(
     graph,
     provider,
@@ -751,20 +923,27 @@ test('resolves selected skill references without treating rationales as instruct
     [skill('selected'), skill('rejected')],
     [skill('universal')],
   );
-
   const action = await execution(state([graph]), harness.context, handlers());
 
   assert.equal(action.type, 'transition');
+
   const system = provider.requests[0]?.messages[0]?.content ?? '';
+
   const user = provider.requests[0]?.messages
     .filter(({ role }) => role === 'user')
     .map(({ content }) => content ?? '')
     .join('\n');
+
   assert.equal(typeof system, 'string');
+
   assert.equal(typeof user, 'string');
-  if (typeof system !== 'string' || typeof user !== 'string') return;
+
+  if (typeof system !== 'string' || typeof user !== 'string') {return;}
+
   assert.match(system, /universal body/u);
+
   assert.match(user, /selected body/u);
+
   assert.doesNotMatch(
     user,
     /rejected body|private rationale|private rejected rationale|private global rationale/u,
@@ -775,18 +954,23 @@ test('preserves each semantic terminal status and resolves the wave', async () =
   for (const status of ['blocked', 'failed'] as const) {
     const node = createNode(`node-${status}`);
     const graph: Graph = { revision: 1, nodes: [node] };
+
     const provider = createProvider([
       terminalFinish(nonCompleted(status, `${status} private reason`)),
     ]);
     const harness = createHarness(graph, provider);
-
     const action = await execution(state([graph]), harness.context, handlers());
 
     assert.equal(action.type, 'transition');
-    if (action.type !== 'transition') continue;
+
+    if (action.type !== 'transition') {continue;}
+
     assert.equal(node.status, status);
+
     assert.equal(node.outcome?.status, status);
+
     assert.equal(node.outcome?.reason, `${status} private reason`);
+
     assert.deepEqual(node.artifacts, []);
   }
 });
@@ -794,6 +978,7 @@ test('preserves each semantic terminal status and resolves the wave', async () =
 test('stores needs_revision with every node observation and does not promote a partial result', async () => {
   const node = createNode('current', ['first', 'middle', 'last']);
   const graph: Graph = { revision: 1, nodes: [node] };
+
   const provider = createProvider([
     toolCallsFinish([
       { id: 'call-first', name: 'first', query: 'first' },
@@ -810,19 +995,24 @@ test('stores needs_revision with every node observation and does not promote a p
       },
     }),
   ]);
+
   const harness = createHarness(graph, provider, [
     tool('first', async () => ({ stage: 'context' })),
     tool('middle', async () => ({ exists: false })),
     tool('last', async () => ({ stage: 'confirmation' })),
   ]);
-
   const action = await execution(state([graph]), harness.context, handlers());
 
   assert.equal(action.type, 'transition');
-  if (action.type !== 'transition') return;
+
+  if (action.type !== 'transition') {return;}
+
   assert.equal(action.handler, 'schedule');
+
   assert.equal(node.status, 'needs_revision');
+
   assert.deepEqual(node.artifacts, []);
+
   assert.deepEqual(
     node.observations.map(({ toolName, output }) => ({
       toolName,
@@ -834,13 +1024,16 @@ test('stores needs_revision with every node observation and does not promote a p
       { toolName: 'last', output: '{"stage":"confirmation"}' },
     ],
   );
+
   assert.equal(node.outcome?.revisionRequest?.goalId, 'current');
+
   assert.equal(node.observations.length, 3);
 });
 
 test('fails needs_revision when the node produced no observation', async () => {
   const node = createNode('current');
   const graph: Graph = { revision: 1, nodes: [node] };
+
   const provider = createProvider([
     terminalFinish({
       ...nonCompleted('needs_revision', 'Revision required.'),
@@ -852,12 +1045,14 @@ test('fails needs_revision when the node produced no observation', async () => {
     }),
   ]);
   const harness = createHarness(graph, provider);
-
   const action = await execution(state([graph]), harness.context, handlers());
 
   assert.equal(action.type, 'fail');
-  if (action.type !== 'fail') return;
+
+  if (action.type !== 'fail') {return;}
+
   assert.equal(node.status, 'running');
+
   assert.match(
     (action.error as Error).message,
     /requires a local observation/u,
@@ -878,15 +1073,18 @@ test('propagates provider and tool failures with their exact identity', async ()
   );
 
   assert.equal(providerAction.type, 'fail');
+
   if (providerAction.type === 'fail') {
     assert.strictEqual(providerAction.error, providerError);
   }
+
   assert.equal(providerNode.status, 'running');
 
   const toolNode = createNode('tool', ['lookup']);
   const toolGraph: Graph = { revision: 1, nodes: [toolNode] };
   const toolProvider = createProvider([toolFinish('call-failure', 'lookup')]);
   const toolError = new Error('tool payload detail');
+
   const toolHarness = createHarness(toolGraph, toolProvider, [
     tool('lookup', async () => {
       throw toolError;
@@ -900,9 +1098,11 @@ test('propagates provider and tool failures with their exact identity', async ()
   );
 
   assert.equal(toolAction.type, 'fail');
+
   if (toolAction.type === 'fail') {
     assert.strictEqual((toolAction.error as Error).cause, toolError);
   }
+
   assert.equal(toolNode.status, 'running');
 });
 
@@ -911,20 +1111,24 @@ test('waits for the whole concurrent wave and resolves semantic outcomes', async
   const blockedNode = createNode('blocked');
   const graph: Graph = { revision: 1, nodes: [completedNode, blockedNode] };
   let completionIndex = 0;
+
   const provider = createProvider([], (request) => {
     const current = completionIndex++;
+
     const terminal =
       current === 0
         ? terminalFinish(completed())
         : terminalFinish(nonCompleted('blocked', 'No useful action.'));
+
     return terminal(request);
   });
   const harness = createHarness(graph, provider);
-
   const action = await execution(state([graph]), harness.context, handlers());
 
   assert.equal(action.type, 'transition');
+
   assert.equal(completedNode.status, 'completed');
+
   assert.equal(blockedNode.status, 'blocked');
 });
 
@@ -948,11 +1152,15 @@ function createProvider(
     },
     complete: async (request: ProviderRequest<unknown>) => {
       requests.push(request);
+
       const selected = complete?.(request) ?? steps[index++];
       const step =
         typeof selected === 'function' ? selected(request) : selected;
-      if (step instanceof Error) throw step;
-      if (step === undefined) throw new Error('Missing fake provider step.');
+
+      if (step instanceof Error) {throw step;}
+
+      if (step === undefined) {throw new Error('Missing fake provider step.');}
+
       return step;
     },
   } as unknown as LlmProvider;
@@ -969,6 +1177,7 @@ function createHarness(
   maxTurns = 8,
 ) {
   const logs: unknown[] = [];
+
   const context: WorkflowContext = {
     input: 'Complete the request.',
     options: {
@@ -1005,6 +1214,7 @@ function createHarness(
   };
 
   void graph;
+
   return { context, logs };
 }
 
@@ -1059,7 +1269,9 @@ function createNode(id: string, toolNames: readonly string[] = []): Node {
 
 function revisionTarget(id: string): Node {
   const target = createNode(id);
+
   target.status = 'needs_revision';
+
   target.outcome = {
     ...nonCompleted('needs_revision', 'Revision required.'),
     revisionRequest: {
@@ -1068,6 +1280,7 @@ function revisionTarget(id: string): Node {
       requestedEffect: 'Use a supported replacement.',
     },
   };
+
   return target;
 }
 
@@ -1153,6 +1366,7 @@ function terminalFinish(
     );
 
     assert.ok(terminal);
+
     return {
       text: '',
       finishReason: 'tool_calls',
@@ -1173,7 +1387,9 @@ function observationIdFrom(request: ProviderRequest<unknown>): string {
     .map(({ content }) => (typeof content === 'string' ? content : ''))
     .join('\n');
   const match = content.match(/\b[0-9a-f]{6}\b/u);
+
   assert.ok(match);
+
   return match[0];
 }
 
@@ -1182,7 +1398,9 @@ function correctionMessageFrom(request: ProviderRequest<unknown>): string {
     .filter(({ role }) => role === 'system')
     .map(({ content }) => (typeof content === 'string' ? content : ''))
     .find((content) => content.startsWith('# Structured output correction'));
+
   assert.ok(correction);
+
   return correction;
 }
 

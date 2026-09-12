@@ -62,7 +62,8 @@ const judgePlans = async ({
 
 const failedOrientation = (options, index, error) => {
   const failure = providerFailure(error);
-  if (failure === null) throw error;
+
+  if (failure === null) {throw error;}
 
   return {
     orientation: index + 1,
@@ -94,11 +95,13 @@ export const compareWithJudge = async ({
       }),
     ),
   );
+
   const judgments = responses.flatMap((response, index) =>
     response.status === 'fulfilled'
       ? [summarizeJudgment(pair, options, response.value, index)]
       : [],
   );
+
   const failures = responses.flatMap((response, index) =>
     response.status === 'rejected'
       ? [failedOrientation(options, index, response.reason)]

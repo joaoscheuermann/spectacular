@@ -1,6 +1,7 @@
 import * as z from 'zod';
 
 const skillName = z.string().trim().min(1);
+
 const uniqueNames = (schema) =>
   schema.refine((names) => new Set(names).size === names.length, {
     message: 'Skill names must be unique.',
@@ -31,6 +32,7 @@ export const caseSchema = z
       })
       .superRefine(({ expected, useful, noise }, context) => {
         const owners = new Map();
+
         const categories = [
           ['expected', expected],
           ['useful', useful],
@@ -40,10 +42,13 @@ export const caseSchema = z
         for (const [category, names] of categories) {
           for (const name of names) {
             const owner = owners.get(name);
+
             if (!owner) {
               owners.set(name, category);
+
               continue;
             }
+
             context.addIssue({
               code: 'custom',
               message: `${name} appears in both ${owner} and ${category}.`,

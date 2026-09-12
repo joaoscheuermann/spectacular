@@ -10,7 +10,6 @@ const uniqueNames = (schema) =>
   schema.refine((names) => new Set(names).size === names.length, {
     message: 'Skill names must be unique.',
   });
-
 const skillNames = uniqueNames(z.array(nonEmptyString));
 
 const noiseSchema = z.record(
@@ -34,18 +33,23 @@ export const caseSchema = z
       })
       .superRefine(({ expected, useful, noise }, context) => {
         const owners = new Map();
+
         const categories = [
           ['expected', expected],
           ['useful', useful],
           ['noise', Object.keys(noise)],
         ];
+
         for (const [category, names] of categories) {
           for (const name of names) {
             const owner = owners.get(name);
+
             if (owner === undefined) {
               owners.set(name, category);
+
               continue;
             }
+
             context.addIssue({
               code: 'custom',
               message: `${name} appears in both ${owner} and ${category}.`,
@@ -84,7 +88,6 @@ export const goalsSchema = z
     goals: z.array(nonEmptyString).min(1),
   })
   .strict();
-
 export const judgmentChoices = Object.freeze(['a', 'b', 'both', 'neither']);
 
 export const judgmentSchema = z
@@ -127,6 +130,7 @@ const persistedJudgmentsSchema = z
         });
       }
     }
+
     for (let index = 0; index < values.length; index += 2) {
       if (
         values[index]?.withoutP0Option === values[index + 1]?.withoutP0Option

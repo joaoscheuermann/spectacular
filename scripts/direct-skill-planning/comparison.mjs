@@ -34,12 +34,12 @@ export const pairs = [
     right: 'goalP1',
   },
 ];
-
 export const pairLabel = ({ left, right }) =>
   `${armLabels[left]} × ${armLabels[right]}`;
 
 export const orientations = (plans, pair) => {
   const leftOption = randomInt(2) === 0 ? 'a' : 'b';
+
   const first = {
     leftOption,
     optionA: leftOption === 'a' ? plans[pair.left] : plans[pair.right],
@@ -57,7 +57,8 @@ export const orientations = (plans, pair) => {
 };
 
 const outcome = (pair, leftOption, choice) => {
-  if (choice === 'both' || choice === 'neither') return choice;
+  if (choice === 'both' || choice === 'neither') {return choice;}
+
   return choice === leftOption ? pair.left : pair.right;
 };
 
@@ -73,6 +74,7 @@ export const summarize = (pair, options, responses) => {
   const judgments = responses.map((response, index) =>
     summarizeJudgment(pair, options, response, index),
   );
+
   const winner = judgments.every(
     (judgment) => judgment.winner === judgments[0].winner,
   )

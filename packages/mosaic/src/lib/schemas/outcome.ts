@@ -35,11 +35,14 @@ export const CriterionSchema = z
       .array(z.string().trim().min(1))
       .superRefine((ids, context) => {
         const seen = new Set<string>();
+
         ids.forEach((id, position) => {
           if (!seen.has(id)) {
             seen.add(id);
+
             return;
           }
+
           context.addIssue({
             code: 'custom',
             path: [position],
@@ -116,6 +119,7 @@ const DecisionFieldsSchema = z
   .strict();
 
 type Decision = z.output<typeof DecisionFieldsSchema>;
+
 type RefinementContext = z.RefinementCtx;
 
 /** Strict semantic decision contract authored by the executing model. */
@@ -140,6 +144,7 @@ export const createNodeDecisionSchema = (node: Node) =>
     criteria: DecisionFieldsSchema.shape.criteria.length(node.doneWhen.length),
   }).superRefine((outcome, context) => {
     validateCriteria(node, outcome, context);
+
     validateStatus(node.id, outcome, context);
   });
 
@@ -147,10 +152,11 @@ export const createNodeDecisionSchema = (node: Node) =>
 export const createExecutionDecisionSchema = (
   node: Node,
   getAuthorizedObservationIds: () => readonly string[],
-  getRequiredCurrentObservationIds?: (() => readonly string[]) | undefined,
+  getRequiredCurrentObservationIds?: (() => readonly string[])  ,
 ) =>
   createNodeDecisionSchema(node).superRefine((outcome, context) => {
     validateObservationIds(outcome, context, getAuthorizedObservationIds);
+
     validateCurrentRevisionEvidence(
       outcome,
       context,
@@ -162,15 +168,17 @@ export const createExecutionDecisionSchema = (
 export const createNodeOutcomeSchema = (
   node: Node,
   graph?: Graph,
-  getRequiredCurrentObservationIds?: (() => readonly string[]) | undefined,
+  getRequiredCurrentObservationIds?: (() => readonly string[])  ,
 ) =>
   NodeOutcomeSchema.superRefine((outcome, context) => {
     validateCriteria(node, outcome, context);
+
     validateObservationIds(outcome, context, () =>
       graph === undefined
         ? node.observations.map(({ id }) => id)
         : [...authorizedObservationIds(node, graph)],
     );
+
     if (outcome.status === 'needs_revision' && node.observations.length === 0) {
       context.addIssue({
         code: 'custom',
@@ -178,6 +186,7 @@ export const createNodeOutcomeSchema = (
         message: 'A needs_revision outcome requires a local observation.',
       });
     }
+
     if (
       outcome.status === 'needs_revision' &&
       outcome.revisionRequest?.goalId !== node.id
@@ -188,6 +197,7 @@ export const createNodeOutcomeSchema = (
         message: `Revision goalId must be ${node.id}.`,
       });
     }
+
     validateCurrentRevisionEvidence(
       outcome,
       context,
@@ -210,7 +220,7 @@ const validateCriteria = (
   }
 
   outcome.criteria.forEach((criterion, index) => {
-    if (criterion.criterionIndex === index) return;
+    if (criterion.criterionIndex === index) {return;}
 
     context.addIssue({
       code: 'custom',
@@ -230,7 +240,7 @@ const validateObservationIds = (
 
   outcome.criteria.forEach((criterion, criterionPosition) => {
     criterion.observationIds.forEach((observationId, idPosition) => {
-      if (allowed.has(observationId)) return;
+      if (allowed.has(observationId)) {return;}
 
       context.addIssue({
         code: 'invalid_value',
@@ -285,24 +295,27 @@ const levenshtein = (left: string, right: string): number => {
   const source = [...left];
   const target = [...right];
   let previous = target.map((_, index) => index + 1);
+
   previous.unshift(0);
 
   source.forEach((sourceCharacter, sourceIndex) => {
     const current = [sourceIndex + 1];
+
     target.forEach((targetCharacter, targetIndex) => {
       current.push(
         Math.min(
-          current[targetIndex]! + 1,
-          previous[targetIndex + 1]! + 1,
-          previous[targetIndex]! +
+          current[targetIndex] + 1,
+          previous[targetIndex + 1] + 1,
+          previous[targetIndex] +
             (sourceCharacter === targetCharacter ? 0 : 1),
         ),
       );
     });
+
     previous = current;
   });
 
-  return previous[target.length]!;
+  return previous[target.length];
 };
 
 const validateStatus = (
@@ -313,6 +326,7 @@ const validateStatus = (
   /** Each terminal status owns a distinct result/revision/reason combination. */
   if (outcome.status === 'completed') {
     validateCompleted(outcome, context);
+
     return;
   }
 
@@ -326,6 +340,7 @@ const validateStatus = (
 
   if (outcome.status === 'needs_revision') {
     validateRevision(nodeId, outcome, context);
+
     return;
   }
 
@@ -370,10 +385,12 @@ const validateCurrentRevisionEvidence = (
   }
 
   const currentIds = new Set(getRequiredCurrentObservationIds());
+
   const citesCurrent = outcome.criteria.some(({ observationIds }) =>
     observationIds.some((id) => currentIds.has(id)),
   );
-  if (citesCurrent) return;
+
+  if (citesCurrent) {return;}
 
   context.addIssue({
     code: 'custom',
@@ -435,6 +452,7 @@ const validateRevision = (
       path: ['revisionRequest'],
       message: 'A needs_revision outcome requires a revision request.',
     });
+
     return;
   }
 

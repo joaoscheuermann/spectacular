@@ -5,7 +5,9 @@ const format = /^[0-9a-f]{6}$/u;
 
 export interface ObservationIdAllocator {
   next(): string;
+
   reserve(ids: Iterable<string>): void;
+
   claim(ids: Iterable<string>): void;
 }
 
@@ -19,14 +21,17 @@ export const createObservationIdAllocator = (
     next: () => {
       for (let attempt = 0; attempt < attempts; attempt += 1) {
         const id = createUuid().slice(0, 6).toLowerCase();
+
         if (!format.test(id)) {
           throw new Error(
             'Mosaic observation ID allocation returned an invalid UUID.',
           );
         }
-        if (reserved.has(id)) continue;
+
+        if (reserved.has(id)) {continue;}
 
         reserved.add(id);
+
         return id;
       }
 
@@ -35,23 +40,27 @@ export const createObservationIdAllocator = (
       );
     },
     reserve: (ids) => {
-      for (const id of ids) reserved.add(id);
+      for (const id of ids) {reserved.add(id);}
     },
     claim: (ids) => {
       const claimed = [...ids];
       const seen = new Set<string>();
+
       for (const id of claimed) {
         if (!format.test(id)) {
           throw new Error(
             'Mosaic observation ID must use six lowercase hexadecimal characters.',
           );
         }
+
         if (reserved.has(id) || seen.has(id)) {
           throw new Error('Mosaic observation ID is already reserved.');
         }
+
         seen.add(id);
       }
-      for (const id of claimed) reserved.add(id);
+
+      for (const id of claimed) {reserved.add(id);}
     },
   };
 };

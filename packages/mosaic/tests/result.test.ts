@@ -36,12 +36,14 @@ test('accepts only strict runtime-owned termination variants', () => {
 
   for (const termination of terminations) {
     assert.equal(RuntimeTerminationSchema.safeParse(termination).success, true);
+
     assert.equal(
       RuntimeTerminationSchema.safeParse({ ...termination, reason: 'invented' })
         .success,
       false,
     );
   }
+
   assert.equal(
     RuntimeTerminationSchema.safeParse({
       type: 'turn_limit',
@@ -51,6 +53,7 @@ test('accepts only strict runtime-owned termination variants', () => {
     }).success,
     false,
   );
+
   assert.equal(
     RuntimeTerminationSchema.safeParse({
       type: 'dependency',
@@ -124,13 +127,16 @@ test('allows delivery only on completed workflow results', () => {
     },
     nodes: [node('completed', completedOutcome(), null)],
   };
+
   const blocked = {
     status: 'blocked',
     nodes: [node('blocked', blockedOutcome(), null)],
   };
 
   assert.equal(MosaicResultSchema.safeParse(completed).success, true);
+
   assert.equal(MosaicResultSchema.safeParse(blocked).success, true);
+
   assert.equal(
     MosaicResultSchema.safeParse({
       ...blocked,
@@ -138,6 +144,7 @@ test('allows delivery only on completed workflow results', () => {
     }).success,
     false,
   );
+
   assert.equal(
     MosaicResultSchema.safeParse({
       status: 'blocked',
@@ -145,6 +152,7 @@ test('allows delivery only on completed workflow results', () => {
     }).success,
     false,
   );
+
   assert.equal(
     MosaicResultSchema.safeParse({
       ...completed,
@@ -170,6 +178,7 @@ test('validates the complete routing trace exposed on node results', () => {
   };
 
   assert.equal(WorkflowNodeResultSchema.safeParse(routed).success, true);
+
   for (const invalid of [
     { ...routed, candidates: [candidate('alpha', Number.NaN, 1)] },
     {

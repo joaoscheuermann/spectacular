@@ -10,9 +10,11 @@ import {
 } from './sra-metrics.js';
 
 export const sraSkillProjections = ['selected', 'candidates'] as const;
+
 export type SraSkillProjection = (typeof sraSkillProjections)[number];
 
 const IdentifierSchema = z.string().trim().min(1);
+
 const GoldSchema = z
   .object({
     instance_id: IdentifierSchema,
@@ -20,6 +22,7 @@ const GoldSchema = z
     gold_skill_ids: z.array(IdentifierSchema).min(1),
   })
   .strict();
+
 const InferenceSchema = z
   .object({
     instance_id: IdentifierSchema,
@@ -38,24 +41,30 @@ export interface SraOutputSkillMetrics {
 }
 
 type Gold = z.output<typeof GoldSchema>;
+
 type Inference = z.output<typeof InferenceSchema>;
 
 /** Parses the frozen pilot gold artifact emitted by `sra prepare`. */
 export const parseSraSkillGoldsJson = (source: string): readonly Gold[] => {
   let value: unknown;
+
   try {
     value = JSON.parse(source) as unknown;
   } catch {
     throw new Error('SRA skill gold artifact is not valid JSON.');
   }
+
   const records = z.array(GoldSchema).min(1).parse(value);
+
   assertUnique(
     records.map(({ instance_id: id }) => id),
     'gold instance',
   );
+
   records.forEach((record) =>
     assertUnique(record.gold_skill_ids, `gold skill for ${record.instance_id}`),
   );
+
   return records;
 };
 
@@ -64,7 +73,9 @@ export const parseSraInferenceJsonl = (
   source: string,
 ): readonly Inference[] => {
   const lines = source.split('\n').filter((line) => line.trim() !== '');
-  if (lines.length === 0) throw new Error('SRA inference output is empty.');
+
+  if (lines.length === 0) {throw new Error('SRA inference output is empty.');}
+
   const records = lines.map((line, index) => {
     try {
       return InferenceSchema.parse(JSON.parse(line) as unknown);
@@ -72,10 +83,12 @@ export const parseSraInferenceJsonl = (
       throw new Error(`Invalid SRA inference record at line ${index + 1}.`);
     }
   });
+
   assertUnique(
     records.map(({ instance_id: id }) => id),
     'inference instance',
   );
+
   return records;
 };
 
@@ -87,32 +100,43 @@ export const scoreSraOutputSkills = (
   k: number,
 ): SraOutputSkillMetrics => {
   if (!sraSkillProjections.includes(projection))
-    throw new Error(`Unknown SRA skill projection: ${projection as string}`);
+    {throw new Error(`Unknown SRA skill projection: ${projection as string}`);}
+
   const datasets = new Set(inference.map(({ dataset }) => dataset));
+
   if (datasets.size !== 1)
-    throw new Error('SRA output scoring requires one dataset.');
-  const dataset = inference[0]!.dataset;
+    {throw new Error('SRA output scoring requires one dataset.');}
+
+  const dataset = inference[0].dataset;
+
   const goldById = new Map(
     golds
       .filter((record) => record.dataset === dataset)
       .map((record) => [record.instance_id, record]),
   );
+
   assertSameInstances(inference, goldById);
+
   const records: readonly SraRetrievalRecord[] = inference.map((record) => {
     const gold = goldById.get(record.instance_id)!;
+
     if (gold.dataset !== record.dataset)
-      throw new Error(`SRA dataset differs for ${record.instance_id}.`);
+      {throw new Error(`SRA dataset differs for ${record.instance_id}.`);}
+
     const ids =
       projection === 'selected'
         ? (record.skill_ids_used ?? [])
         : record.meta.candidate_skill_ids;
+
     assertUnique(ids, `${projection} skill for ${record.instance_id}`);
+
     return {
       instance_id: record.instance_id,
       gold_skill_ids: gold.gold_skill_ids,
       retrieved: ids.map((skill_id) => ({ skill_id })),
     };
   });
+
   return {
     projection,
     dataset,
@@ -132,16 +156,20 @@ export const scoreSraOutputFile = async (
     readFile(inputPath, 'utf8'),
     readFile(goldPath, 'utf8'),
   ]);
+
   const result = scoreSraOutputSkills(
     parseSraInferenceJsonl(input),
     parseSraSkillGoldsJson(gold),
     projection,
     k,
   );
+
   if (outputPath !== undefined) {
     await mkdir(dirname(outputPath), { recursive: true });
+
     await writeFile(outputPath, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
   }
+
   return result;
 };
 
@@ -159,5 +187,5 @@ const assertSameInstances = (
 
 const assertUnique = (values: readonly string[], label: string): void => {
   if (new Set(values).size !== values.length)
-    throw new Error(`Duplicate ${label} identifier.`);
+    {throw new Error(`Duplicate ${label} identifier.`);}
 };

@@ -19,17 +19,25 @@ export const createProcessRunner =
       });
       let stdout = '';
       let stderr = '';
+
       child.stdout.on('data', (chunk: Buffer) => {
         const value = chunk.toString();
+
         stdout += value;
+
         output.write(value);
       });
+
       child.stderr.on('data', (chunk: Buffer) => {
         const value = chunk.toString();
+
         stderr += value;
+
         output.write(value);
       });
+
       child.once('error', reject);
+
       child.once('close', (code) =>
         resolveResult({ code: code ?? 1, stdout, stderr }),
       );

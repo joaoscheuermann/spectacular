@@ -1,9 +1,9 @@
 import type * as z from 'zod';
 
-import { NodeSchema, GraphSchema } from '../schemas/graph.js';
+import { GraphSchema,NodeSchema } from '../schemas/graph.js';
+import type { Observation } from '../schemas/observation.js';
 import type { NodeOutcome } from '../schemas/outcome.js';
 import type { RuntimeTermination } from '../schemas/termination.js';
-import type { Observation } from '../schemas/observation.js';
 import type { OrderedBundle, SkillCandidate } from './routing.js';
 
 export interface NodeRuntimeState {
@@ -15,4 +15,5 @@ export interface NodeRuntimeState {
 }
 
 export type Node = z.output<typeof NodeSchema>;
+
 export type Graph = z.output<typeof GraphSchema>;

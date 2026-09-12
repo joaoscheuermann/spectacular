@@ -1,9 +1,10 @@
 import { mkdir, stat, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
+import pino from 'pino';
+
 import type { ReasoningEffort } from 'llms';
 import type { MosaicOptions } from 'mosaic';
-import pino from 'pino';
 
 import { planningCases } from './cases/index.js';
 import { planningBenchmarkManifest } from './planning-artifacts.js';
@@ -65,9 +66,12 @@ export const runPlanningBenchmark = async (
   options: PlanningBenchmarkRunOptions,
 ): Promise<PlanningBenchmarkRunSummary> => {
   const outputDir = resolve(options.outputDir);
+
   await requireAbsent(outputDir);
+
   const selected = selectCases(options.caseIds);
   const manifest = planningBenchmarkManifest();
+
   const runIdentity = {
     schemaVersion: 1,
     benchmark: manifest.benchmark,
@@ -79,22 +83,29 @@ export const runPlanningBenchmark = async (
     judge: 'same-model-rubric-observation',
     retrieval: 'deterministic-positive-lexical-v1',
   } as const;
+
   await mkdir(join(outputDir, 'cases'), { recursive: true });
+
   await writeJson(join(outputDir, 'run.json'), runIdentity);
+
   await options.progress?.({ type: 'run.started', caseCount: selected.length });
 
   const runs = [];
   let modelCallCount = 0;
+
   for (const [index, benchmarkCase] of selected.entries()) {
     const caseIndex = index + 1;
+
     await options.progress?.({
       type: 'case.started',
       caseId: benchmarkCase.id,
       caseIndex,
       caseCount: selected.length,
     });
+
     const events: PlanningModelEvent[] = [];
     let caseModelCallCount = 0;
+
     const adapter = createPlanningModelAdapter({
       provider: options.profile.provider,
       model: options.profile.model,
@@ -103,18 +114,23 @@ export const runPlanningBenchmark = async (
       ...(options.signal === undefined ? {} : { signal: options.signal }),
       onEvent: async (event) => {
         events.push(event);
+
         if (event.type === 'model.call') {
           modelCallCount += 1;
+
           caseModelCallCount += 1;
         }
+
         await options.progress?.(event);
       },
     });
+
     const results = await runPlanningConditions({
       case: benchmarkCase,
       mosaic: engineOptions(options.profile),
       adapter,
     });
+
     const run = {
       case: {
         id: benchmarkCase.id,
@@ -123,11 +139,14 @@ export const runPlanningBenchmark = async (
       },
       results,
     };
+
     runs.push(run);
+
     await writeJson(join(outputDir, 'cases', `${benchmarkCase.id}.json`), {
       ...run,
       events,
     });
+
     await options.progress?.({
       type: 'case.completed',
       caseId: benchmarkCase.id,
@@ -146,26 +165,34 @@ export const runPlanningBenchmark = async (
     modelCallCount,
     metrics: aggregatePlanningRuns(runs),
   };
+
   await writeJson(join(outputDir, 'summary.json'), summary);
+
   await options.progress?.({
     type: 'run.completed',
     caseCount: runs.length,
     modelCallCount,
   });
+
   return summary;
 };
 
 const selectCases = (ids: readonly string[] | undefined) => {
-  if (ids === undefined) return planningCases;
+  if (ids === undefined) {return planningCases;}
+
   if (ids.length === 0 || new Set(ids).size !== ids.length)
-    throw new Error('Planning case selection must be non-empty and unique.');
+    {throw new Error('Planning case selection must be non-empty and unique.');}
+
   const byId = new Map(
     planningCases.map((benchmarkCase) => [benchmarkCase.id, benchmarkCase]),
   );
+
   return ids.map((id) => {
     const benchmarkCase = byId.get(id);
+
     if (benchmarkCase === undefined)
-      throw new Error(`Unknown planning case: ${id}`);
+      {throw new Error(`Unknown planning case: ${id}`);}
+
     return benchmarkCase;
   });
 };
@@ -195,16 +222,17 @@ const engineOptions = (profile: CompositionProfile): MosaicOptions => ({
   skills: { required: [], menu: [], retriever: noSearch },
   tools: { required: [], menu: [], retriever: noSearch },
 });
-
 const noSearch = { search: async (): Promise<readonly never[]> => [] };
 
 const requireAbsent = async (path: string): Promise<void> => {
   try {
     await stat(path);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {return;}
+
     throw error;
   }
+
   throw new Error(`Planning output directory already exists: ${path}`);
 };
 

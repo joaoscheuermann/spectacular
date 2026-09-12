@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, realpath, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
@@ -14,13 +14,16 @@ test('describes its POSIX shell contract to the model', () => {
   const description = terminal.definition.description ?? '';
 
   assert.match(description, /POSIX `sh -c`/u);
+
   assert.match(description, /Bash-only syntax/u);
 });
 
 test('uses the session directory and captures stdout, stderr, and exit codes', async () => {
   const root = await createRoot();
+
   try {
     const terminal = createTerminal({ cwd: root });
+
     const result = await terminal.execute({
       command: 'printf output; printf error >&2; exit 7',
     });
@@ -39,16 +42,21 @@ test('uses the session directory and captures stdout, stderr, and exit codes', a
 
 test('resolves and validates the requested working directory', async () => {
   const root = await createRoot();
+
   try {
     const nested = join(root, 'nested');
+
     await mkdir(nested);
+
     const terminal = createTerminal({ cwd: root });
+
     const result = await terminal.execute({
       command: 'pwd',
       working_directory: 'nested',
     });
 
     assert.equal(result.stdout.trim(), await realpath(resolve(nested)));
+
     await assert.rejects(
       terminal.execute({ command: 'true', working_directory: 'missing' }),
       /Working directory/,
@@ -60,6 +68,7 @@ test('resolves and validates the requested working directory', async () => {
 
 test('terminates commands that exceed the timeout', async () => {
   const root = await createRoot();
+
   try {
     const result = await createTerminal({ cwd: root }).execute({
       command: 'sleep 5',
@@ -67,6 +76,7 @@ test('terminates commands that exceed the timeout', async () => {
     });
 
     assert.equal(result.exit_code, -1);
+
     assert.equal(result.timed_out, true);
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -75,12 +85,14 @@ test('terminates commands that exceed the timeout', async () => {
 
 test('marks output as truncated after the compact output limit', async () => {
   const root = await createRoot();
+
   try {
     const result = await createTerminal({ cwd: root }).execute({
       command: 'i=0; while [ "$i" -lt 20000 ]; do printf x; i=$((i + 1)); done',
     });
 
     assert.equal(result.truncated, true);
+
     assert.ok(Buffer.byteLength(result.stdout) <= 12 * 1024);
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -89,17 +101,23 @@ test('marks output as truncated after the compact output limit', async () => {
 
 test('clamps a larger per-call output limit without rejecting it', async () => {
   const root = await createRoot();
+
   try {
     const terminal = createTerminal({ cwd: root });
+
     const parsed = terminal.input.safeParse({
       command: 'i=0; while [ "$i" -lt 20000 ]; do printf x; i=$((i + 1)); done',
       max_output_chars: 30_000,
     });
 
     assert.equal(parsed.success, true);
-    if (!parsed.success) return;
+
+    if (!parsed.success) {return;}
+
     const result = await terminal.execute(parsed.data);
+
     assert.equal(result.truncated, true);
+
     assert.ok(result.stdout.length <= 12 * 1024);
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -114,19 +132,23 @@ test('cancels the detached process group when its signal aborts', async () => {
   try {
     const terminal = createTerminal({ cwd: root, signal: controller.signal });
     const started = Date.now();
+
     await assert.rejects(
       terminal.execute({ command: "trap '' TERM; while :; do sleep 1; done" }),
       (error: unknown) => error instanceof Error && error.name === 'AbortError',
     );
+
     assert.ok(Date.now() - started < 1_000);
   } finally {
     clearTimeout(timer);
+
     await rm(root, { recursive: true, force: true });
   }
 });
 
 test('does not expose sensitive parent environment variables to commands', async () => {
   const root = await createRoot();
+
   const secrets = {
     OPENROUTER_API_KEY: 'openrouter-test-key',
     OPENROUTER_API_KEY_FILE: '/tmp/openrouter-test-credential',
@@ -138,12 +160,14 @@ test('does not expose sensitive parent environment variables to commands', async
     TEST_CREDENTIALS: 'test-credentials',
     TEST_ACCESS_KEY: 'test-access-key',
   };
+
   const previous = Object.fromEntries(
     Object.keys(secrets).map((name) => [name, process.env[name]]),
   );
 
   try {
     Object.assign(process.env, secrets);
+
     const result = await createTerminal({ cwd: root }).execute({
       command: 'env',
     });
@@ -154,9 +178,11 @@ test('does not expose sensitive parent environment variables to commands', async
   } finally {
     for (const name of Object.keys(secrets)) {
       const value = previous[name];
-      if (value === undefined) delete process.env[name];
-      else process.env[name] = value;
+
+      if (value === undefined) {delete process.env[name];}
+      else {process.env[name] = value;}
     }
+
     await rm(root, { recursive: true, force: true });
   }
 });

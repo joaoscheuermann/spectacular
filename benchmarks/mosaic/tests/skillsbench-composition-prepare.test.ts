@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -7,10 +7,10 @@ import test from 'node:test';
 import type { SkillsbenchCatalog } from '../src/composition/skillsbench-catalog.js';
 import {
   buildSkillsbenchFixedRanking,
+  type SkillsbenchCommandRunner,
   skillsbenchCompositionPin,
   verifySkillsbenchCheckout,
   writeSkillsbenchPreparation,
-  type SkillsbenchCommandRunner,
 } from '../src/composition/skillsbench-prepare.js';
 
 test('pins the preflighted canonical v1.1 catalog and ranking identities', () => {
@@ -25,6 +25,7 @@ test('pins the preflighted canonical v1.1 catalog and ranking identities', () =>
 });
 
 const sha = (value: string): string => value.repeat(64);
+
 const catalog = (golds: readonly string[] = ['alpha']): SkillsbenchCatalog => ({
   manifest: {
     schemaVersion: 1,
@@ -57,18 +58,23 @@ test('ranks full catalog permutations without consulting task golds', async () =
     ['task-two', 'Format a presentation deck.'],
   ]);
   const readTask = async (id: string) => prompts.get(id)!;
+
   const first = await buildSkillsbenchFixedRanking(
     catalog(['alpha']),
     readTask,
   );
+
   const changedGold = await buildSkillsbenchFixedRanking(
     catalog(['beta', 'gamma']),
     readTask,
   );
 
   assert.deepEqual(changedGold, first);
+
   assert.deepEqual(first.tasks[0]?.skillIds, ['gamma', 'alpha', 'beta']);
+
   assert.deepEqual(first.tasks[1]?.skillIds, ['beta', 'alpha', 'gamma']);
+
   assert.ok(
     first.tasks.every(
       ({ skillIds }) =>
@@ -81,19 +87,26 @@ test('verifies exact Git root, revision, cleanliness, and file modes', async () 
   const root = await mkdtemp(join(tmpdir(), 'skillsbench-git-'));
   const calls: readonly string[][] = [];
   const mutableCalls = calls as string[][];
+
   const runner: SkillsbenchCommandRunner = {
     run: async (_command, args) => {
       mutableCalls.push([...args]);
+
       const operation = args.slice(2).join(' ');
+
       if (operation === 'rev-parse --show-toplevel')
-        return { stdout: `${root}\n` };
+        {return { stdout: `${root}\n` };}
+
       if (operation === 'rev-parse HEAD')
-        return { stdout: 'b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af\n' };
+        {return { stdout: 'b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af\n' };}
+
       return { stdout: '' };
     },
   };
+
   try {
     assert.equal(await verifySkillsbenchCheckout(root, runner), root);
+
     assert.equal(calls.length, 4);
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -102,29 +115,38 @@ test('verifies exact Git root, revision, cleanliness, and file modes', async () 
 
 test('fails closed on dirty checkout and writes preparation exclusively', async () => {
   const root = await mkdtemp(join(tmpdir(), 'skillsbench-prepare-'));
+
   const dirty: SkillsbenchCommandRunner = {
     run: async (_command, args) => {
       const operation = args.slice(2).join(' ');
+
       if (operation === 'rev-parse --show-toplevel')
-        return { stdout: `${root}\n` };
+        {return { stdout: `${root}\n` };}
+
       if (operation === 'rev-parse HEAD')
-        return { stdout: 'b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af\n' };
+        {return { stdout: 'b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af\n' };}
+
       return { stdout: '?? tasks/task-one/leak.txt\n' };
     },
   };
   const output = join(root, 'artifact.json');
   const preparation = { schemaVersion: 1, benchmark: 'fixture' } as never;
+
   try {
     await assert.rejects(
       verifySkillsbenchCheckout(root, dirty),
       /must be clean/,
     );
+
     await writeSkillsbenchPreparation(output, preparation);
+
     assert.deepEqual(JSON.parse(await readFile(output, 'utf8')), preparation);
+
     await assert.rejects(
       writeSkillsbenchPreparation(output, preparation),
       /EEXIST/,
     );
+
     assert.deepEqual((await readdir(root)).sort(), ['artifact.json']);
   } finally {
     await rm(root, { recursive: true, force: true });

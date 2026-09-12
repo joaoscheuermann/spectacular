@@ -8,18 +8,27 @@ export const validateOptions = (options: MosaicOptions): void => {
   const { models, routing, execution, revision, skills, tools } = options;
 
   requireProfile('planning', models.planning);
+
   requireProfile('revision', models.revision);
+
   requireProfile('execution', models.execution);
+
   requireModel('reranker', models.reranker);
+
   requireModel('embedder', models.embedder);
+
   requireInteger('routing.maxHintCandidates', routing.maxHintCandidates, 1);
+
   requireInteger(
     'routing.maxRetrievedCandidates',
     routing.maxRetrievedCandidates,
     1,
   );
+
   requireInteger('routing.maxSkills', routing.maxSkills, 0);
+
   requireInteger('execution.maxTurns', execution?.maxTurns, 1);
+
   requireInteger('revision.max', revision?.max, 0);
 
   if (routing.maxSkills > routing.maxRetrievedCandidates) {
@@ -29,10 +38,15 @@ export const validateOptions = (options: MosaicOptions): void => {
   }
 
   requireRetriever('skills.retriever', skills.retriever);
+
   requireRetriever('tools.retriever', tools.retriever);
+
   requireUnique('skills.menu', skills.menu);
+
   requireUnique('skills.required', skills.required);
+
   requireUnique('tools.menu', tools.menu);
+
   requireUnique('tools.required', tools.required);
 
   validateCatalogs(options);
@@ -44,8 +58,11 @@ const validateCatalogs = ({ skills, tools }: MosaicOptions): void => {
   const baseToolNames = new Set(tools.required.map(({ name }) => name));
 
   requireSubset('skills.required', skills.required, skillNames);
+
   requireSubset('tools.required', tools.required, toolNames);
+
   validateAllowedTools(skills.menu, toolNames);
+
   validateRequiredSkillTools(skills.required, baseToolNames);
 };
 
@@ -80,10 +97,10 @@ const validateRequiredSkillTools = (
 };
 
 const requireModel = (name: string, value: string): void => {
-  if (value.trim().length > 0) return;
+  if (value.trim().length > 0) {return;}
+
   throw new TypeError(`Mosaic models.${name} must be a non-empty string.`);
 };
-
 const efforts = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
 
 const requireProfile = (
@@ -91,7 +108,9 @@ const requireProfile = (
   profile: MosaicOptions['models'][typeof name],
 ): void => {
   requireModel(`${name}.model`, profile.model);
-  if (efforts.has(profile.effort)) return;
+
+  if (efforts.has(profile.effort)) {return;}
+
   throw new TypeError(`Mosaic models.${name}.effort is invalid.`);
 };
 
@@ -101,7 +120,8 @@ const requireInteger = (
   minimum: number,
 ): void => {
   if (value !== undefined && Number.isSafeInteger(value) && value >= minimum)
-    return;
+    {return;}
+
   throw new TypeError(`Mosaic ${name} must be an integer >= ${minimum}.`);
 };
 
@@ -113,6 +133,7 @@ const requireRetriever = (name: string, value: object): void => {
   ) {
     return;
   }
+
   throw new TypeError(`Mosaic ${name} must provide search.`);
 };
 
@@ -125,6 +146,7 @@ const requireUnique = (
   for (const value of values) {
     if (!seen.has(value.name)) {
       seen.add(value.name);
+
       continue;
     }
 
@@ -138,6 +160,8 @@ const requireSubset = (
   menu: ReadonlySet<string>,
 ): void => {
   const missing = values.find(({ name: value }) => !menu.has(value));
-  if (missing === undefined) return;
+
+  if (missing === undefined) {return;}
+
   throw new TypeError(`Mosaic ${name} contains unavailable ${missing.name}.`);
 };

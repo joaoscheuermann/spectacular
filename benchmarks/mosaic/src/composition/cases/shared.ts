@@ -1,7 +1,7 @@
 import {
-  PlanningCaseSchema,
   type CompositionClass,
   type PlanningCase,
+  PlanningCaseSchema,
   type PlanningDomain,
   type PlanningPhaseCriteria,
 } from '../planning-schema.js';

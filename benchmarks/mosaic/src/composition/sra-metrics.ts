@@ -50,13 +50,16 @@ const assertUniqueSkillIds = (
   label: 'gold' | 'retrieved',
 ): void => {
   const seen = new Set<string>();
+
   for (const skillId of skillIds) {
     if (!skillId || skillId !== skillId.trim()) {
       throw new Error(`${label} skill_id must be a non-empty trimmed string.`);
     }
+
     if (seen.has(skillId)) {
       throw new Error(`duplicate ${label} skill_id: ${skillId}`);
     }
+
     seen.add(skillId);
   }
 };
@@ -83,14 +86,19 @@ export const scoreSraRetrieval = (
   k: number,
 ): SraQueryRetrievalMetrics => {
   assertPositiveInteger(k, 'k');
+
   if (!record.instance_id || record.instance_id !== record.instance_id.trim()) {
     throw new Error('instance_id must be a non-empty trimmed string.');
   }
+
   if (record.gold_skill_ids.length === 0) {
     throw new Error('gold_skill_ids must contain at least one skill.');
   }
+
   const retrievedSkillIds = record.retrieved.map((skill) => skill.skill_id);
+
   assertUniqueSkillIds(record.gold_skill_ids, 'gold');
+
   assertUniqueSkillIds(retrievedSkillIds, 'retrieved');
 
   const gold = new Set(record.gold_skill_ids);
@@ -98,10 +106,12 @@ export const scoreSraRetrieval = (
   const hits = selected.filter((skillId) => gold.has(skillId)).length;
   const recallAtK = hits / gold.size;
   const setPrecisionAtK = selected.length === 0 ? 0 : hits / selected.length;
+
   const setF1AtK =
     recallAtK + setPrecisionAtK === 0
       ? 0
       : (2 * recallAtK * setPrecisionAtK) / (recallAtK + setPrecisionAtK);
+
   const firstRelevantIndex = retrievedSkillIds.findIndex((skillId) =>
     gold.has(skillId),
   );
@@ -132,10 +142,12 @@ const assertUniqueInstances = (
   records: readonly SraRetrievalRecord[],
 ): void => {
   const instanceIds = records.map((record) => record.instance_id);
+
   const duplicate = instanceIds.find(
     (instanceId, index) => instanceIds.indexOf(instanceId) !== index,
   );
-  if (duplicate) throw new Error(`duplicate instance_id: ${duplicate}`);
+
+  if (duplicate) {throw new Error(`duplicate instance_id: ${duplicate}`);}
 };
 
 /** Macro-averages retrieval metrics over a non-empty collection of queries. */
@@ -144,11 +156,15 @@ export const aggregateSraRetrievalMetrics = (
   k: number,
 ): SraAggregateRetrievalMetrics => {
   assertPositiveInteger(k, 'k');
+
   if (records.length === 0) {
     throw new Error('SRA-Bench metrics require at least one retrieval record.');
   }
+
   assertUniqueInstances(records);
+
   const perQuery = records.map((record) => scoreSraRetrieval(record, k));
+
   return {
     k,
     queryCount: perQuery.length,

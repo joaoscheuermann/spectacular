@@ -7,11 +7,11 @@ import test from 'node:test';
 import type { LlmProvider } from 'llms';
 
 import type { CompositionRunInput } from '../src/composition/runner.js';
-import { runSraDataset } from '../src/composition/sra-run.js';
 import {
   parseSraCorpus,
   parseSraInstances,
 } from '../src/composition/sra-fixtures.js';
+import { runSraDataset } from '../src/composition/sra-run.js';
 
 const profile = {
   provider: {} as LlmProvider,
@@ -47,8 +47,8 @@ const retrieval = instances.map((instance) => ({
   gold_skill_ids: instance.skill_annotations,
   retrieved: [
     { skill_id: 'noise', score: 4 },
-    { skill_id: instance.skill_annotations[0]!, score: 3 },
-    { skill_id: instance.skill_annotations[1]!, score: 2 },
+    { skill_id: instance.skill_annotations[0], score: 3 },
+    { skill_id: instance.skill_annotations[1], score: 2 },
   ],
 }));
 
@@ -71,6 +71,7 @@ test('writes official inference JSONL while preserving the frozen ranking', asyn
       {
         runCase: async (input) => {
           inputs.push(input);
+
           return {
             id: input.benchmarkCase.id,
             dataset: input.benchmarkCase.dataset,
@@ -83,6 +84,7 @@ test('writes official inference JSONL while preserving the frozen ranking', asyn
         },
       },
     );
+
     const records = (await readFile(outputPath, 'utf8'))
       .trim()
       .split('\n')
@@ -98,11 +100,14 @@ test('writes official inference JSONL while preserving the frozen ranking', asyn
       runSha256: result.runSha256,
       manifestPath: `${outputPath}.run.json`,
     });
+
     assert.match(result.runSha256, /^[a-f0-9]{64}$/u);
+
     assert.deepEqual(
       inputs[0]?.ranking.map(({ skillId }) => skillId),
       ['noise', 'champ_a', 'champ_b'],
     );
+
     assert.deepEqual(records[0], {
       instance_id: 'champ_00001',
       dataset: 'champ',
@@ -131,9 +136,11 @@ test('resumes complete records without invoking the model again', async () => {
       profile,
       outputPath,
     };
+
     const dependencies = {
       runCase: async (input: CompositionRunInput) => {
         calls += 1;
+
         return {
           id: input.benchmarkCase.id,
           dataset: input.benchmarkCase.dataset,
@@ -147,10 +154,13 @@ test('resumes complete records without invoking the model again', async () => {
     };
 
     await runSraDataset(options, dependencies);
+
     const resumed = await runSraDataset(options, dependencies);
 
     assert.equal(calls, 1);
+
     assert.equal(resumed.completed, 0);
+
     assert.equal(resumed.skipped, 1);
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -162,7 +172,7 @@ test('rejects mixed datasets and rankings whose gold set changed', async () => {
     () =>
       runSraDataset({
         arm: 'no-skills',
-        instances: [instances[0]!, { ...instances[1]!, dataset: 'other' }],
+        instances: [instances[0], { ...instances[1], dataset: 'other' }],
         corpus,
         retrieval: [],
         profile,
@@ -170,13 +180,14 @@ test('rejects mixed datasets and rankings whose gold set changed', async () => {
       }),
     /one dataset/,
   );
+
   await assert.rejects(
     () =>
       runSraDataset({
         arm: 'mosaic',
         instances: instances.slice(0, 1),
         corpus,
-        retrieval: [{ ...retrieval[0]!, gold_skill_ids: ['champ_a'] }],
+        retrieval: [{ ...retrieval[0], gold_skill_ids: ['champ_a'] }],
         profile,
         outputPath: 'unused.jsonl',
       }),
@@ -187,6 +198,7 @@ test('rejects mixed datasets and rankings whose gold set changed', async () => {
 test('refuses to resume output under a different closed run identity', async () => {
   const root = await mkdtemp(join(tmpdir(), 'mosaic-sra-identity-'));
   const outputPath = join(root, 'mosaic.jsonl');
+
   try {
     const base = {
       arm: 'oracle' as const,
@@ -196,6 +208,7 @@ test('refuses to resume output under a different closed run identity', async () 
       profile,
       outputPath,
     };
+
     await runSraDataset(base, {
       runCase: async (input) => ({
         id: input.benchmarkCase.id,
@@ -228,6 +241,7 @@ test('refuses to resume output under a different closed run identity', async () 
 test('refuses a mixed or mutated inference record during resume', async () => {
   const root = await mkdtemp(join(tmpdir(), 'mosaic-sra-record-'));
   const outputPath = join(root, 'oracle.jsonl');
+
   const options = {
     arm: 'oracle' as const,
     instances: instances.slice(0, 1),
@@ -236,6 +250,7 @@ test('refuses a mixed or mutated inference record during resume', async () => {
     profile,
     outputPath,
   };
+
   try {
     await runSraDataset(options, {
       runCase: async (input) => ({
@@ -248,10 +263,12 @@ test('refuses a mixed or mutated inference record during resume', async () => {
         candidateSkillIds: [],
       }),
     });
+
     const record = JSON.parse(await readFile(outputPath, 'utf8')) as Record<
       string,
       unknown
     >;
+
     await writeFile(
       outputPath,
       `${JSON.stringify({ ...record, model: 'different-model' })}\n`,

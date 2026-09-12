@@ -1,22 +1,24 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import type { ProviderProfile } from '../src/run.js';
-import {
-  runCompositionCommand,
-  type CompositionCommandDependencies,
-} from '../src/composition-cli.js';
 import type { SkillsbenchPreparation } from '../src/composition/skillsbench-prepare.js';
+import {
+  type CompositionCommandDependencies,
+  runCompositionCommand,
+} from '../src/composition-cli.js';
+import type { ProviderProfile } from '../src/run.js';
 
 const profile = {} as ProviderProfile;
 
 test('dispatches network-free SRA pilot preparation', async () => {
   let received: unknown;
+
   const result = await runCompositionCommand(
     ['sra', 'prepare', '--source', '/source', '--output', '/output'],
     {
       prepareSra: async (options) => {
         received = options;
+
         return { schemaVersion: 1 } as never;
       },
     },
@@ -26,12 +28,14 @@ test('dispatches network-free SRA pilot preparation', async () => {
     sourceRoot: '/source',
     outputDir: '/output',
   });
+
   assert.deepEqual(result, { schemaVersion: 1 });
 });
 
 test('prepares a global SkillsBench catalog without creating a provider', async () => {
   let prepared: unknown;
   let written: unknown;
+
   const preparation = {
     catalogManifest: {
       counts: { tasks: 87, catalogSkills: 196 },
@@ -42,6 +46,7 @@ test('prepares a global SkillsBench catalog without creating a provider', async 
       arms: [{ id: 'no-skills' }, { id: 'mosaic-selective' }],
     },
   } as unknown as SkillsbenchPreparation;
+
   const result = await runCompositionCommand(
     [
       'skillsbench',
@@ -54,6 +59,7 @@ test('prepares a global SkillsBench catalog without creating a provider', async 
     {
       prepareSkillsbench: async (options) => {
         prepared = options;
+
         return preparation;
       },
       writeSkillsbench: async (...args) => {
@@ -66,7 +72,9 @@ test('prepares a global SkillsBench catalog without creating a provider', async 
   );
 
   assert.deepEqual(prepared, { sourceRoot: '/checkout' });
+
   assert.deepEqual(written, ['/artifact.json', preparation]);
+
   assert.deepEqual(result, {
     benchmark: 'SkillsBench Composition',
     outputPath: '/artifact.json',
@@ -80,9 +88,11 @@ test('prepares a global SkillsBench catalog without creating a provider', async 
 
 test('describes the controlled planning matrix without a provider', async () => {
   let called = false;
+
   const result = await runCompositionCommand(['planning', 'manifest'], {
     planningManifest: () => {
       called = true;
+
       return { benchmark: 'mosaic-p0-p1-controlled' } as never;
     },
     createProfile: () => {
@@ -91,28 +101,33 @@ test('describes the controlled planning matrix without a provider', async () => 
   });
 
   assert.equal(called, true);
+
   assert.deepEqual(result, { benchmark: 'mosaic-p0-p1-controlled' });
 });
 
 test('requires paid approval before a controlled planning run', async () => {
   let called = false;
+
   await assert.rejects(
     runCompositionCommand(
       ['planning', 'run', '--output', '/output', '--case', 'planning.a'],
       {
         createProfile: () => {
           called = true;
+
           return profile;
         },
       },
     ),
     /yes-paid-run/,
   );
+
   assert.equal(called, false);
 });
 
 test('dispatches selected controlled planning cases after approval', async () => {
   let received: unknown;
+
   const result = await runCompositionCommand(
     [
       'planning',
@@ -131,6 +146,7 @@ test('dispatches selected controlled planning cases after approval', async () =>
       createProfile: () => profile,
       runPlanning: async (options) => {
         received = options;
+
         return { caseCount: 2 } as never;
       },
     },
@@ -142,11 +158,13 @@ test('dispatches selected controlled planning cases after approval', async () =>
     caseIds: ['planning.a', 'planning.b'],
     maxTurns: 4,
   });
+
   assert.deepEqual(result, { caseCount: 2 });
 });
 
 test('scores an official retrieval artifact without a provider', async () => {
   let received: unknown;
+
   const result = await runCompositionCommand(
     [
       'sra',
@@ -161,17 +179,20 @@ test('scores an official retrieval artifact without a provider', async () => {
     {
       scoreSra: async (...args) => {
         received = args;
+
         return { k: 5 } as never;
       },
     },
   );
 
   assert.deepEqual(received, ['/retrieval.json', 5, '/metrics.json']);
+
   assert.deepEqual(result, { k: 5 });
 });
 
 test('scores selected SRA bundles without a provider', async () => {
   let received: unknown;
+
   const result = await runCompositionCommand(
     [
       'sra',
@@ -190,6 +211,7 @@ test('scores selected SRA bundles without a provider', async () => {
     {
       scoreSraOutput: async (...args) => {
         received = args;
+
         return { projection: 'selected' } as never;
       },
     },
@@ -202,18 +224,22 @@ test('scores selected SRA bundles without a provider', async () => {
     8,
     '/selection.json',
   ]);
+
   assert.deepEqual(result, { projection: 'selected' });
 });
 
 test('rejects a paid SRA run before reading inputs or creating a provider', async () => {
   let called = false;
+
   const dependencies: CompositionCommandDependencies = {
     readFile: async () => {
       called = true;
+
       return '';
     },
     createProfile: () => {
       called = true;
+
       return profile;
     },
   };
@@ -237,12 +263,14 @@ test('rejects a paid SRA run before reading inputs or creating a provider', asyn
       ),
     /yes-paid-run/,
   );
+
   assert.equal(called, false);
 });
 
 test('dispatches an approved SRA arm with explicit frozen controls', async () => {
   const reads: string[] = [];
   let received: unknown;
+
   const result = await runCompositionCommand(
     [
       'sra',
@@ -268,24 +296,27 @@ test('dispatches an approved SRA arm with explicit frozen controls', async () =>
     {
       readFile: async (path) => {
         reads.push(path);
+
         if (path === '/instances.json')
-          return JSON.stringify([
+          {return JSON.stringify([
             {
               instance_id: 'champ_1',
               dataset: 'champ',
               question: 'Question?',
               skill_annotations: ['a', 'b'],
             },
-          ]);
+          ]);}
+
         if (path === '/corpus.json')
-          return JSON.stringify(
+          {return JSON.stringify(
             ['a', 'b'].map((id) => ({
               skill_id: id,
               name: id,
               description: id,
               content: id,
             })),
-          );
+          );}
+
         return JSON.stringify({
           results: [
             {
@@ -302,6 +333,7 @@ test('dispatches an approved SRA arm with explicit frozen controls', async () =>
       createProfile: () => profile,
       runSra: async (options) => {
         received = options;
+
         return { completed: 1 } as never;
       },
     },
@@ -312,7 +344,9 @@ test('dispatches an approved SRA arm with explicit frozen controls', async () =>
     '/corpus.json',
     '/retrieval.json',
   ]);
+
   assert.equal((received as { readonly arm: string }).arm, 'mosaic');
+
   assert.deepEqual(
     {
       maxHintCandidates: (received as { maxHintCandidates: number })
@@ -323,5 +357,6 @@ test('dispatches an approved SRA arm with explicit frozen controls', async () =>
     },
     { maxHintCandidates: 6, maxRetrievedCandidates: 50, maxSkills: 6 },
   );
+
   assert.deepEqual(result, { completed: 1 });
 });

@@ -220,6 +220,7 @@ const refreshChatGptToken = async (
   }
 
   const refreshed = parseRefreshResponse(response.body);
+
   const nextAuth = {
     ...auth,
     tokens: {
@@ -382,7 +383,7 @@ const readAuthJson = async (
   try {
     const parsed = asRecord(JSON.parse(await readFile(path, 'utf8')));
 
-    return parsed as CodexAuthJson | undefined;
+    return parsed;
   } catch (cause) {
     if ((cause as NodeJS.ErrnoException).code === 'ENOENT') {
       return undefined;

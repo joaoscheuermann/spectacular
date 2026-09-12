@@ -13,7 +13,9 @@ test('hands an exactly retained revision target its prior attempt', () => {
   const changed = node('changed', 2);
   const revisedTarget = node('target', 1);
   const revisedChanged = node('changed', 2);
+
   revisedChanged.goal = 'Changed pending goal.';
+
   const graphs: Graph[] = [
     { revision: 1, nodes: [unchanged, target, changed] },
     {
@@ -35,8 +37,9 @@ test('hands an exactly retained revision target its prior attempt', () => {
     ],
     omittedObservationCount: 0,
   });
+
   assert.equal(
-    revisionExecutionHandoff(graphs[1]!.nodes[0]!, graphs),
+    revisionExecutionHandoff(graphs[1].nodes[0], graphs),
     undefined,
   );
 });
@@ -46,10 +49,12 @@ test('walks stacked revisions to hand a replacement the newest applicable reques
     invalidatedAssumption: 'First assumption.',
     requestedEffect: 'Revise first.',
   });
+
   const second = revisionNode('second', 1, {
     invalidatedAssumption: 'Second assumption.',
     requestedEffect: 'Replace second.',
   });
+
   second.observations.unshift({
     id: 'aaaaaa',
     goalId: second.id,
@@ -58,16 +63,20 @@ test('walks stacked revisions to hand a replacement the newest applicable reques
     input: '{}',
     output: 'unlinked output',
   });
+
   const replacementAtTwo = node('replacement', 1);
+
   replacementAtTwo.goal = 'Replacement goal.';
+
   const replacementAtThree = node('replacement', 0);
+
   replacementAtThree.goal = replacementAtTwo.goal;
+
   const graphs: Graph[] = [
     { revision: 1, nodes: [first, second] },
     { revision: 2, nodes: [first, replacementAtTwo] },
     { revision: 3, nodes: [replacementAtThree] },
   ];
-
   const handoff = revisionExecutionHandoff(replacementAtThree, graphs);
 
   assert.deepEqual(handoff, {
@@ -83,8 +92,10 @@ test('walks stacked revisions to hand a replacement the newest applicable reques
     ],
     omittedObservationCount: 0,
   });
-  assert.equal('id' in handoff!.observations[0]!, false);
-  assert.equal('callId' in handoff!.observations[0]!, false);
+
+  assert.equal('id' in handoff.observations[0], false);
+
+  assert.equal('callId' in handoff.observations[0], false);
 });
 
 test('prefers a replacement lineage over a newer collateral pending edit', () => {
@@ -92,13 +103,17 @@ test('prefers a replacement lineage over a newer collateral pending edit', () =>
     invalidatedAssumption: 'First assumption.',
     requestedEffect: 'Revise first.',
   });
+
   const second = revisionNode('second', 1, {
     invalidatedAssumption: 'Second assumption.',
     requestedEffect: 'Replace second.',
   });
   const replacementAtTwo = node('replacement', 1);
+
   replacementAtTwo.goal = 'Initial replacement goal.';
+
   const replacementAtThree = node('replacement', 1);
+
   replacementAtThree.goal = 'Collateral edit from the first revision.';
 
   const handoff = revisionExecutionHandoff(replacementAtThree, [
@@ -108,6 +123,7 @@ test('prefers a replacement lineage over a newer collateral pending edit', () =>
   ]);
 
   assert.equal(handoff?.invalidatedAssumption, 'Second assumption.');
+
   assert.equal(handoff?.requestedEffect, 'Replace second.');
 });
 
@@ -116,14 +132,18 @@ test('prefers a merge lineage over a newer collateral pending edit', () => {
     invalidatedAssumption: 'First assumption.',
     requestedEffect: 'Revise first.',
   });
+
   const second = revisionNode('second', 1, {
     invalidatedAssumption: 'Second assumption.',
     requestedEffect: 'Merge second into pending.',
   });
   const pendingAtOne = node('pending', 2);
   const mergedAtTwo = node('pending', 1);
+
   mergedAtTwo.goal = 'Pending now absorbs second.';
+
   const editedAtThree = node('pending', 1);
+
   editedAtThree.goal = 'Collateral edit while revising first.';
 
   const handoff = revisionExecutionHandoff(editedAtThree, [
@@ -133,6 +153,7 @@ test('prefers a merge lineage over a newer collateral pending edit', () => {
   ]);
 
   assert.equal(handoff?.invalidatedAssumption, 'Second assumption.');
+
   assert.equal(handoff?.requestedEffect, 'Merge second into pending.');
 });
 
@@ -141,7 +162,9 @@ test('omits unlinked local observations instead of copying the prior ledger', ()
     invalidatedAssumption: 'Assumption.',
     requestedEffect: 'Effect.',
   });
-  target.outcome!.criteria[0]!.observationIds = ['ancestor-only'];
+
+  target.outcome!.criteria[0].observationIds = ['ancestor-only'];
+
   target.observations.push({
     id: 'bbbbbb',
     goalId: target.id,
@@ -150,6 +173,7 @@ test('omits unlinked local observations instead of copying the prior ledger', ()
     input: '{}',
     output: 'confirmation output',
   });
+
   const revised = node('target', 0);
 
   const handoff = revisionExecutionHandoff(revised, [
@@ -158,6 +182,7 @@ test('omits unlinked local observations instead of copying the prior ledger', ()
   ]);
 
   assert.deepEqual(handoff?.observations, []);
+
   assert.equal(handoff?.omittedObservationCount, 0);
 });
 
@@ -166,6 +191,7 @@ test('bounds linked historical observations and their payloads', () => {
     invalidatedAssumption: 'Assumption.',
     requestedEffect: 'Effect.',
   });
+
   target.observations = Array.from({ length: 7 }, (_, index) => ({
     id: `${index + 1}`.repeat(6),
     goalId: target.id,
@@ -174,9 +200,11 @@ test('bounds linked historical observations and their payloads', () => {
     input: `input-${index}-${'i'.repeat(900)}`,
     output: `output-${index}-${'o'.repeat(900)}`,
   }));
-  target.outcome!.criteria[0]!.observationIds = target.observations.map(
+
+  target.outcome!.criteria[0].observationIds = target.observations.map(
     ({ id }) => id,
   );
+
   const revised = node('target', 0);
 
   const handoff = revisionExecutionHandoff(revised, [
@@ -188,7 +216,9 @@ test('bounds linked historical observations and their payloads', () => {
     handoff?.observations.map(({ toolName }) => toolName),
     ['inspect-2', 'inspect-3', 'inspect-4', 'inspect-5', 'inspect-6'],
   );
+
   assert.equal(handoff?.omittedObservationCount, 2);
+
   assert.ok(
     handoff?.observations.every(
       ({ input, output }) =>
@@ -226,7 +256,9 @@ const revisionNode = (
   },
 ): Node => {
   const target = node(id, index);
+
   target.status = 'needs_revision';
+
   target.observations = [
     {
       id: 'cccccc',
@@ -237,6 +269,7 @@ const revisionNode = (
       output: `${id} output`,
     },
   ];
+
   target.outcome = {
     status: 'needs_revision',
     criteria: [
@@ -251,5 +284,6 @@ const revisionNode = (
     revisionRequest: { goalId: id, ...request },
     reason: 'The plan must change.',
   };
+
   return target;
 };

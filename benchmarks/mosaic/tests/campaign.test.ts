@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {
-  mkdtemp,
   mkdir,
+  mkdtemp,
   readFile,
   rm,
   stat,
@@ -22,6 +22,7 @@ import {
 const skillsCommit = 'b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af';
 const terminalCommit = '2fd12b88aafdd04a52c298e3940bcb189f9766d6';
 const providerEnvironment = { OPENROUTER_API_KEY: 'test-key' };
+
 const pilotTasks = [
   'data-to-d3',
   'earthquake-phase-association',
@@ -34,12 +35,15 @@ const pilotTasks = [
   'travel-planning',
   'xlsx-recover-data',
 ] as const;
+
 const fullTaskNames = Array.from(
   { length: 87 },
   (_, index) => `task-${index + 1}`,
 );
+
 const fullMetrics = (score: number, costUsd: number, totalTokens: number) => {
   const reward = score * 87;
+
   return {
     score,
     reward,
@@ -49,6 +53,7 @@ const fullMetrics = (score: number, costUsd: number, totalTokens: number) => {
     tasks: 87,
   };
 };
+
 const fullPaired = (qualityWin: boolean) => ({
   scoreDelta: qualityWin ? 0.3 : -0.3,
   qualityWin,
@@ -56,6 +61,7 @@ const fullPaired = (qualityWin: boolean) => ({
   regressions: qualityWin ? [] : fullTaskNames,
   ties: [],
 });
+
 const campaign = (options: CampaignOptions) =>
   executeCampaign({ environment: providerEnvironment, ...options });
 
@@ -63,18 +69,24 @@ const setup = async (): Promise<string> => {
   const root = await mkdtemp(join(tmpdir(), 'mosaic-campaign-'));
   const bundle = 'generated bundle\n';
   const bundleChecksum = createHash('sha256').update(bundle).digest('hex');
+
   await mkdir(join(root, 'dist'), { recursive: true });
+
   await writeFile(join(root, 'dist', 'mosaic-bench-acp.mjs'), bundle);
+
   await Promise.all(
     ['mosaic', 'mosaic-direct'].map(async (agent) => {
       const directory = join(root, 'agents', agent);
+
       await mkdir(directory, { recursive: true });
+
       await writeFile(
         join(directory, 'manifest.toml'),
         `name = "${agent}"\nBF_BUNDLE_SHA256=${bundleChecksum}\n`,
       );
     }),
   );
+
   await writeFile(
     join(root, 'skillsbench-report.json'),
     JSON.stringify({
@@ -88,6 +100,7 @@ const setup = async (): Promise<string> => {
       exitCode: 0,
     }),
   );
+
   return root;
 };
 
@@ -104,34 +117,41 @@ const artifactRunner = async (
     const commit = command.args[1]?.includes('terminal-bench-2')
       ? terminalCommit
       : skillsCommit;
+
     return { code: 0, stdout: `${commit}\trefs/tags/pinned\n`, stderr: '' };
   }
+
   if (command.file === 'curl' && command.args.at(-1)?.endsWith('.sha256'))
-    return {
+    {return {
       code: 0,
       stdout: `${await digest(root)}  mosaic-bench-acp.mjs\n`,
       stderr: '',
-    };
+    };}
+
   if (command.file === 'uvx' && command.args.includes('--from')) {
     await writeArtifacts(command);
   }
+
   return { code: 0, stdout: 'ok\n', stderr: '' };
 };
 
 const writeArtifacts = async (command: Command): Promise<void> => {
   const value = (flag: string): string =>
-    command.args[command.args.indexOf(flag) + 1]!;
+    command.args[command.args.indexOf(flag) + 1];
   const agent = value('--agent');
   const skillMode = value('--skill-mode');
   const expected = Number(value('--expected-tasks'));
+
   const task = command.args.includes('tasks/jax-computing-basics')
     ? 'jax-computing-basics'
     : 'regex-log';
+
   const manifest = {
     schema_version: 1,
     total: expected,
     tasks: [{ task_id: task }],
   };
+
   const runConfig = {
     schema_version: 1,
     eval: {
@@ -146,6 +166,7 @@ const writeArtifacts = async (command: Command): Promise<void> => {
     },
     retry_attempts: 0,
   };
+
   const health = {
     schema_version: 1,
     total_rows: expected,
@@ -160,6 +181,7 @@ const writeArtifacts = async (command: Command): Promise<void> => {
       verifier_error: null,
     })),
   };
+
   await Promise.all([
     writeFile(value('--task-manifest-out'), JSON.stringify(manifest)),
     writeFile(value('--run-config-out'), JSON.stringify(runConfig)),
@@ -174,8 +196,11 @@ const paidCommands = (commands: readonly Command[]): readonly Command[] =>
 
 test('assembles both smoke arms after a verified preflight', async (t) => {
   const root = await setup();
+
   t.after(() => rm(root, { recursive: true, force: true }));
+
   const commands: Command[] = [];
+
   const result = await campaign({
     benchmark: 'skillsbench',
     action: 'smoke',
@@ -183,15 +208,20 @@ test('assembles both smoke arms after a verified preflight', async (t) => {
     yesPaidRun: true,
     runner: async (command) => {
       commands.push(command);
+
       return artifactRunner(root, command);
     },
   });
+
   assert.equal('arms' in result, true);
-  if (!('arms' in result)) return;
+
+  if (!('arms' in result)) {return;}
+
   assert.deepEqual(
     result.arms.map((arm) => arm.arm),
     ['mosaic', 'mosaic-direct'],
   );
+
   assert.deepEqual(
     paidCommands(commands).map((command) => command.args),
     result.arms.map((arm) => [
@@ -236,6 +266,7 @@ test('assembles both smoke arms after a verified preflight', async (t) => {
       '1',
     ]),
   );
+
   assert.equal(
     commands.some(
       (command) =>
@@ -243,9 +274,11 @@ test('assembles both smoke arms after a verified preflight', async (t) => {
     ),
     true,
   );
+
   const metadata = JSON.parse(
-    await readFile(join(result.arms[0]!.directory, 'metadata.json'), 'utf8'),
+    await readFile(join(result.arms[0].directory, 'metadata.json'), 'utf8'),
   );
+
   assert.deepEqual(
     {
       action: metadata.action,
@@ -272,6 +305,7 @@ test('assembles both smoke arms after a verified preflight', async (t) => {
       usageTracking: 'required',
     },
   );
+
   assert.deepEqual(Object.keys(metadata.digests).sort(), [
     'agentManifest',
     'bundle',
@@ -279,24 +313,30 @@ test('assembles both smoke arms after a verified preflight', async (t) => {
     'runConfig',
     'taskManifest',
   ]);
+
   const secondMetadata = JSON.parse(
-    await readFile(join(result.arms[1]!.directory, 'metadata.json'), 'utf8'),
+    await readFile(join(result.arms[1].directory, 'metadata.json'), 'utf8'),
   );
+
   assert.deepEqual(
     [secondMetadata.campaignId, secondMetadata.action],
     [metadata.campaignId, metadata.action],
   );
+
   await Promise.all(
     ['agent-manifest.toml', 'bundle.mjs'].map((file) =>
-      stat(join(result.arms[0]!.directory, file)),
+      stat(join(result.arms[0].directory, file)),
     ),
   );
 });
 
 test('assembles the fixed ten-task SkillsBench pilot for both arms', async (t) => {
   const root = await setup();
+
   t.after(() => rm(root, { recursive: true, force: true }));
+
   const commands: Command[] = [];
+
   const result = await campaign({
     benchmark: 'skillsbench',
     action: 'pilot',
@@ -304,30 +344,39 @@ test('assembles the fixed ten-task SkillsBench pilot for both arms', async (t) =
     yesPaidRun: true,
     runner: async (command) => {
       commands.push(command);
+
       return artifactRunner(root, command);
     },
   });
+
   assert.equal('arms' in result, true);
-  if (!('arms' in result)) return;
+
+  if (!('arms' in result)) {return;}
 
   for (const command of paidCommands(commands)) {
     const includeTasks = command.args.flatMap((value, index) =>
-      value === '--include' ? [command.args[index + 1]!] : [],
+      value === '--include' ? [command.args[index + 1]] : [],
     );
+
     assert.equal(
       command.args[command.args.indexOf('--source-path') + 1],
       'tasks',
     );
+
     assert.equal(
       command.args[command.args.indexOf('--expected-tasks') + 1],
       '10',
     );
+
     assert.deepEqual(includeTasks, pilotTasks);
   }
+
   assert.equal(result.arms.length, 2);
+
   const metadata = JSON.parse(
-    await readFile(join(result.arms[0]!.directory, 'metadata.json'), 'utf8'),
+    await readFile(join(result.arms[0].directory, 'metadata.json'), 'utf8'),
   );
+
   assert.deepEqual(
     [metadata.action, metadata.source.path, metadata.expectedTasks],
     ['pilot', 'tasks', 10],
@@ -336,8 +385,11 @@ test('assembles the fixed ten-task SkillsBench pilot for both arms', async (t) =
 
 test('rejects a Terminal-Bench pilot before commands or results', async (t) => {
   const root = await setup();
+
   t.after(() => rm(root, { recursive: true, force: true }));
+
   let calls = 0;
+
   await assert.rejects(
     campaign({
       benchmark: 'terminalbench',
@@ -347,19 +399,25 @@ test('rejects a Terminal-Bench pilot before commands or results', async (t) => {
       skillsbenchReport: join(root, 'skillsbench-report.json'),
       runner: async () => {
         calls += 1;
+
         return { code: 0, stdout: '', stderr: '' };
       },
     }),
     /only available for SkillsBench/,
   );
+
   assert.equal(calls, 0);
+
   await assert.rejects(stat(join(root, 'results')));
 });
 
 test('rejects an unconfirmed paid run before every command', async (t) => {
   const root = await setup();
+
   t.after(() => rm(root, { recursive: true, force: true }));
+
   let calls = 0;
+
   await assert.rejects(
     campaign({
       benchmark: 'skillsbench',
@@ -367,46 +425,59 @@ test('rejects an unconfirmed paid run before every command', async (t) => {
       rootDir: root,
       runner: async () => {
         calls += 1;
+
         return { code: 0, stdout: '', stderr: '' };
       },
     }),
     /yesPaidRun/,
   );
+
   assert.equal(calls, 0);
 });
 
 test('checks the actual runner, assets, checksum, local bundle, and remote commit', async (t) => {
   const root = await setup();
+
   t.after(() => rm(root, { recursive: true, force: true }));
+
   const commands: Command[] = [];
+
   const result = await campaign({
     benchmark: 'skillsbench',
     action: 'check',
     rootDir: root,
     runner: async (command) => {
       commands.push(command);
+
       return artifactRunner(root, command);
     },
   });
+
   assert.equal('checks' in result, true);
-  if (!('checks' in result)) return;
+
+  if (!('checks' in result)) {return;}
+
   assert.equal(result.ok, true);
+
   assert.equal(
     commands.some(
       (command) => command.file === 'uvx' && command.args[0] === '--version',
     ),
     true,
   );
+
   assert.equal(
     commands.some((command) => command.file === 'uv'),
     false,
   );
+
   assert.equal(
     commands.some(
       (command) => command.file === 'curl' && command.args[0] === '--version',
     ),
     true,
   );
+
   assert.equal(
     commands.some(
       (command) =>
@@ -415,6 +486,7 @@ test('checks the actual runner, assets, checksum, local bundle, and remote commi
     ),
     true,
   );
+
   assert.equal(
     commands.some(
       (command) =>
@@ -423,6 +495,7 @@ test('checks the actual runner, assets, checksum, local bundle, and remote commi
     ),
     true,
   );
+
   assert.equal(
     commands
       .filter(
@@ -433,10 +506,12 @@ test('checks the actual runner, assets, checksum, local bundle, and remote commi
       ),
     true,
   );
+
   assert.equal(
     result.checks.find((check) => check.name === 'release-checksum')?.ok,
     true,
   );
+
   assert.equal(
     result.checks.find(
       (check) => check.name === 'credential:OPENROUTER_API_KEY',
@@ -447,6 +522,7 @@ test('checks the actual runner, assets, checksum, local bundle, and remote commi
 
 test('rejects a paid campaign without OPENROUTER_API_KEY before creating results', async (t) => {
   const root = await setup();
+
   t.after(() => rm(root, { recursive: true, force: true }));
 
   await assert.rejects(
@@ -460,29 +536,37 @@ test('rejects a paid campaign without OPENROUTER_API_KEY before creating results
     }),
     /preflight/,
   );
+
   await assert.rejects(stat(join(root, 'results')));
 });
 
 test('rejects a release sidecar that does not match the local bundle', async (t) => {
   const root = await setup();
+
   t.after(() => rm(root, { recursive: true, force: true }));
+
   const result = await campaign({
     benchmark: 'skillsbench',
     action: 'check',
     rootDir: root,
     runner: async (command) => {
       if (command.file === 'curl' && command.args.at(-1)?.endsWith('.sha256'))
-        return {
+        {return {
           code: 0,
           stdout: `${'0'.repeat(64)}  mosaic-bench-acp.mjs\n`,
           stderr: '',
-        };
+        };}
+
       return artifactRunner(root, command);
     },
   });
+
   assert.equal('checks' in result, true);
-  if (!('checks' in result)) return;
+
+  if (!('checks' in result)) {return;}
+
   assert.equal(result.ok, false);
+
   assert.equal(
     result.checks.find((check) => check.name === 'release-checksum')?.ok,
     false,
@@ -491,20 +575,27 @@ test('rejects a release sidecar that does not match the local bundle', async (t)
 
 test('rejects different bundle pins in the two manifests', async (t) => {
   const root = await setup();
+
   t.after(() => rm(root, { recursive: true, force: true }));
+
   await writeFile(
     join(root, 'agents', 'mosaic', 'manifest.toml'),
     `name = "mosaic"\nBF_BUNDLE_SHA256=${'0'.repeat(64)}\n`,
   );
+
   const result = await campaign({
     benchmark: 'skillsbench',
     action: 'check',
     rootDir: root,
     runner: (command) => artifactRunner(root, command),
   });
+
   assert.equal('checks' in result, true);
-  if (!('checks' in result)) return;
+
+  if (!('checks' in result)) {return;}
+
   assert.equal(result.ok, false);
+
   assert.equal(
     result.checks.find((check) => check.name === 'release-checksum')?.detail,
     'manifest checksums missing or different',
@@ -513,8 +604,11 @@ test('rejects different bundle pins in the two manifests', async (t) => {
 
 test('stops after a failed first paid arm', async (t) => {
   const root = await setup();
+
   t.after(() => rm(root, { recursive: true, force: true }));
+
   const commands: Command[] = [];
+
   const result = await campaign({
     benchmark: 'skillsbench',
     action: 'smoke',
@@ -522,22 +616,32 @@ test('stops after a failed first paid arm', async (t) => {
     yesPaidRun: true,
     runner: async (command) => {
       commands.push(command);
+
       if (command.file === 'uvx' && command.args.includes('--from'))
-        return { code: 1, stdout: '', stderr: 'failed' };
+        {return { code: 1, stdout: '', stderr: 'failed' };}
+
       return artifactRunner(root, command);
     },
   });
+
   assert.equal('arms' in result, true);
-  if (!('arms' in result)) return;
+
+  if (!('arms' in result)) {return;}
+
   assert.equal(result.arms.length, 1);
+
   assert.equal(result.arms[0]?.arm, 'mosaic');
+
   assert.equal(paidCommands(commands).length, 1);
 });
 
 test('fails a paid preflight before creating results', async (t) => {
   const root = await setup();
+
   t.after(() => rm(root, { recursive: true, force: true }));
+
   await rm(join(root, 'dist', 'mosaic-bench-acp.mjs'));
+
   await assert.rejects(
     campaign({
       benchmark: 'skillsbench',
@@ -548,13 +652,17 @@ test('fails a paid preflight before creating results', async (t) => {
     }),
     /preflight/,
   );
+
   await assert.rejects(stat(join(root, 'results')));
 });
 
 test('requires a valid SkillsBench report before a paid Terminal-Bench campaign', async (t) => {
   const root = await setup();
+
   t.after(() => rm(root, { recursive: true, force: true }));
+
   let calls = 0;
+
   await assert.rejects(
     campaign({
       benchmark: 'terminalbench',
@@ -563,12 +671,15 @@ test('requires a valid SkillsBench report before a paid Terminal-Bench campaign'
       yesPaidRun: true,
       runner: async () => {
         calls += 1;
+
         return { code: 0, stdout: '', stderr: '' };
       },
     }),
     /skillsbenchReport/,
   );
+
   assert.equal(calls, 0);
+
   const result = await campaign({
     benchmark: 'terminalbench',
     action: 'smoke',
@@ -577,14 +688,18 @@ test('requires a valid SkillsBench report before a paid Terminal-Bench campaign'
     skillsbenchReport: join(root, 'skillsbench-report.json'),
     runner: (command) => artifactRunner(root, command),
   });
+
   assert.equal('arms' in result, true);
 });
 
 test('rejects minimal and smoke SkillsBench reports before Terminal-Bench commands', async (t) => {
   const root = await setup();
+
   t.after(() => rm(root, { recursive: true, force: true }));
+
   const minimal = join(root, 'minimal.json');
   const smoke = join(root, 'smoke.json');
+
   await Promise.all([
     writeFile(
       minimal,
@@ -624,7 +739,9 @@ test('rejects minimal and smoke SkillsBench reports before Terminal-Bench comman
       }),
     ),
   ]);
+
   let calls = 0;
+
   const options = (skillsbenchReport: string) => ({
     benchmark: 'terminalbench' as const,
     action: 'smoke' as const,
@@ -633,18 +750,25 @@ test('rejects minimal and smoke SkillsBench reports before Terminal-Bench comman
     skillsbenchReport,
     runner: async (): Promise<CommandResult> => {
       calls += 1;
+
       return { code: 0, stdout: '', stderr: '' };
     },
   });
+
   await assert.rejects(campaign(options(minimal)), /valid SkillsBench report/);
+
   await assert.rejects(campaign(options(smoke)), /valid SkillsBench report/);
+
   assert.equal(calls, 0);
 });
 
 test('accepts a full valid non-Pareto SkillsBench report for Terminal-Bench', async (t) => {
   const root = await setup();
+
   t.after(() => rm(root, { recursive: true, force: true }));
+
   const report = join(root, 'skillsbench-no-pareto.json');
+
   await writeFile(
     report,
     JSON.stringify({
@@ -658,6 +782,7 @@ test('accepts a full valid non-Pareto SkillsBench report for Terminal-Bench', as
       exitCode: 1,
     }),
   );
+
   const result = await campaign({
     benchmark: 'terminalbench',
     action: 'smoke',
@@ -666,12 +791,15 @@ test('accepts a full valid non-Pareto SkillsBench report for Terminal-Bench', as
     skillsbenchReport: report,
     runner: (command) => artifactRunner(root, command),
   });
+
   assert.equal('arms' in result, true);
 });
 
 test('creates a fresh campaign directory for every paid campaign', async (t) => {
   const root = await setup();
+
   t.after(() => rm(root, { recursive: true, force: true }));
+
   const options = {
     benchmark: 'skillsbench' as const,
     action: 'smoke' as const,
@@ -679,11 +807,15 @@ test('creates a fresh campaign directory for every paid campaign', async (t) => 
     yesPaidRun: true,
     runner: (command: Command) => artifactRunner(root, command),
   };
+
   const [first, second] = await Promise.all([
     campaign(options),
     campaign(options),
   ]);
+
   assert.equal('directory' in first && 'directory' in second, true);
-  if (!('directory' in first) || !('directory' in second)) return;
+
+  if (!('directory' in first) || !('directory' in second)) {return;}
+
   assert.notEqual(first.directory, second.directory);
 });

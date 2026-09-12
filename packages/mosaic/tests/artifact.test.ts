@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+
 import * as z from 'zod';
 
 import {
@@ -17,6 +18,7 @@ test('accepts and normalizes both discriminated artifact variants', () => {
     }),
     { kind: 'inline', mime: 'text/plain', data: '' },
   );
+
   assert.deepEqual(
     ArtifactReferenceSchema.parse({
       kind: 'reference',
@@ -60,5 +62,6 @@ test('uses provider-compatible anyOf for artifact JSON Schema variants', () => {
   });
 
   assert.ok('anyOf' in schema);
+
   assert.equal('oneOf' in schema, false);
 });

@@ -1,11 +1,11 @@
 import {
+  type PlanningCase,
   PlanningCaseSchema,
+  type PlanningGraph,
   PlanningGraphSchema,
+  type PlanningObservation,
   PlanningObservationSchema,
   planningPhaseAtoms,
-  type PlanningCase,
-  type PlanningGraph,
-  type PlanningObservation,
   type PlanningPhaseCriteria,
 } from './planning-schema.js';
 
@@ -50,6 +50,7 @@ export const scorePlanning = (
 ): PlanningScore => {
   const current = PlanningCaseSchema.parse(benchmarkCase);
   const observed = validateObservation(current, observation);
+
   return scoreCriteria(phase, current, current.criteria[phase], observed);
 };
 
@@ -64,21 +65,25 @@ export const scorePlanningTransition = (
   const observedP1 = validateObservation(current, p1);
   const p0Score = scoreCriteria('p0', current, current.criteria.p0, observedP0);
   const p1Score = scoreCriteria('p1', current, current.criteria.p1, observedP1);
+
   const p0AgainstP1 = scoreCriteria(
     'p1',
     current,
     current.criteria.p1,
     observedP0,
   );
+
   const p1Retention = scoreCriteria(
     'p0',
     current,
     current.criteria.p0,
     observedP1,
   );
+
   const retained = new Map(
     p1Retention.criteria.map((criterion) => [criterion.id, criterion.passed]),
   );
+
   const regressions = p0Score.criteria
     .filter(({ id, passed }) => passed && retained.get(id) !== true)
     .map(({ id }) => id);
@@ -101,6 +106,7 @@ export const planningGoldObservation = (
 ): PlanningObservation => {
   const current = PlanningCaseSchema.parse(benchmarkCase);
   const criteria = current.criteria[phase];
+
   const nodes = criteria.roles.map((role, index) => ({
     id: `n${String(index + 1).padStart(2, '0')}`,
     roleIds: [role.roleId],
@@ -108,28 +114,36 @@ export const planningGoldObservation = (
     behaviorIds: [...role.behaviorIds],
     dependsOn: [] as string[],
   }));
+
   const byRole = new Map(
     nodes.flatMap((node) =>
       node.roleIds.map((roleId) => [roleId, node] as const),
     ),
   );
+
   const dependencies = new Map(
     current.gold.dependencies.map((dependency) => [dependency.id, dependency]),
   );
+
   criteria.dependencyIds.forEach((id) => {
     const dependency = dependencies.get(id);
-    if (dependency === undefined) return;
+
+    if (dependency === undefined) {return;}
+
     const before = byRole.get(dependency.beforeRoleId);
     const after = byRole.get(dependency.afterRoleId);
+
     if (
       before === undefined ||
       after === undefined ||
       before.id === after.id ||
       after.dependsOn.includes(before.id)
     )
-      return;
+      {return;}
+
     after.dependsOn.push(before.id);
   });
+
   return PlanningObservationSchema.parse({ nodes });
 };
 
@@ -141,15 +155,18 @@ export const planningGraphFromObservation = (
   const current = PlanningCaseSchema.parse(benchmarkCase);
   const observed = validateObservation(current, observation);
   const roles = new Map(current.gold.roles.map((role) => [role.id, role]));
+
   const outputs = new Map(
     current.gold.outputs.map((output) => [output.id, output.description]),
   );
+
   const behaviors = new Map(
     current.gold.behaviors.map((behavior) => [
       behavior.id,
       behavior.description,
     ]),
   );
+
   const dependedOn = new Set(
     observed.nodes.flatMap(({ dependsOn }) => dependsOn),
   );
@@ -160,9 +177,11 @@ export const planningGraphFromObservation = (
         (id) => roles.get(id)!.description,
       );
       const outputDescriptions = node.outputIds.map((id) => outputs.get(id)!);
+
       const behaviorDescriptions = node.behaviorIds.map(
         (id) => behaviors.get(id)!,
       );
+
       return {
         id: node.id,
         goal: [...roleDescriptions, ...outputDescriptions].join(' '),
@@ -184,25 +203,33 @@ const scoreCriteria = (
   observation: PlanningObservation,
 ): PlanningScore => {
   const nodesByRole = new Map<string, PlanningObservation['nodes'][number][]>();
+
   observation.nodes.forEach((node) =>
     node.roleIds.forEach((roleId) => {
       const nodes = nodesByRole.get(roleId) ?? [];
+
       nodes.push(node);
+
       nodesByRole.set(roleId, nodes);
     }),
   );
+
   const results: PlanningCriterionResult[] = [];
+
   expected.roles.forEach(({ roleId, outputIds, behaviorIds }) => {
     const nodes = nodesByRole.get(roleId) ?? [];
     const observedOutputs = new Set(nodes.flatMap(({ outputIds: ids }) => ids));
+
     const observedBehaviors = new Set(
       nodes.flatMap(({ behaviorIds: ids }) => ids),
     );
+
     results.push({
       id: `role:${roleId}`,
       kind: 'role',
       passed: nodes.length > 0,
     });
+
     outputIds.forEach((id) =>
       results.push({
         id: `output:${roleId}:${id}`,
@@ -210,6 +237,7 @@ const scoreCriteria = (
         passed: observedOutputs.has(id),
       }),
     );
+
     behaviorIds.forEach((id) =>
       results.push({
         id: `behavior:${roleId}:${id}`,
@@ -225,10 +253,12 @@ const scoreCriteria = (
       dependency,
     ]),
   );
+
   expected.dependencyIds.forEach((id) => {
     const dependency = dependencies.get(id)!;
     const before = nodesByRole.get(dependency.beforeRoleId) ?? [];
     const after = nodesByRole.get(dependency.afterRoleId) ?? [];
+
     results.push({
       id: `dependency:${id}`,
       kind: 'dependency',
@@ -245,6 +275,7 @@ const scoreCriteria = (
   const observedBehaviors = new Set(
     observation.nodes.flatMap(({ behaviorIds }) => behaviorIds),
   );
+
   expected.forbiddenBehaviorIds.forEach((id) =>
     results.push({
       id: `forbidden:${id}`,
@@ -252,6 +283,7 @@ const scoreCriteria = (
       passed: !observedBehaviors.has(id),
     }),
   );
+
   results.push({
     id: 'node-count',
     kind: 'node-count',
@@ -262,6 +294,7 @@ const scoreCriteria = (
 
   const expectedAtoms = planningPhaseAtoms(expected);
   const actualAtoms = new Set(results.map(({ id }) => id));
+
   if (
     expectedAtoms.size !== actualAtoms.size ||
     [...expectedAtoms].some((atom) => !actualAtoms.has(atom))
@@ -270,8 +303,10 @@ const scoreCriteria = (
       'Planning scorer did not materialize every expected criterion.',
     );
   }
+
   const passedCount = results.filter(({ passed }) => passed).length;
   const score = rounded(passedCount / results.length);
+
   return {
     phase,
     passed: passedCount === results.length,
@@ -290,6 +325,7 @@ const validateObservation = (
   const roles = new Set(benchmarkCase.gold.roles.map(({ id }) => id));
   const outputs = new Set(benchmarkCase.gold.outputs.map(({ id }) => id));
   const behaviors = new Set(benchmarkCase.gold.behaviors.map(({ id }) => id));
+
   parsed.nodes.forEach((node) => {
     for (const [values, known, label] of [
       [node.roleIds, roles, 'role'],
@@ -297,6 +333,7 @@ const validateObservation = (
       [node.behaviorIds, behaviors, 'behavior'],
     ] as const) {
       const unknown = values.find((id) => !known.has(id));
+
       if (unknown !== undefined) {
         throw new TypeError(
           `Planning observation contains an unknown ${label} ID.`,
@@ -304,6 +341,7 @@ const validateObservation = (
       }
     }
   });
+
   return parsed;
 };
 
@@ -315,13 +353,19 @@ const dependsTransitively = (
   const byId = new Map(observation.nodes.map((node) => [node.id, node]));
   const pending = [...(byId.get(nodeId)?.dependsOn ?? [])];
   const visited = new Set<string>();
+
   while (pending.length > 0) {
     const current = pending.shift()!;
-    if (current === dependencyId) return true;
-    if (visited.has(current)) continue;
+
+    if (current === dependencyId) {return true;}
+
+    if (visited.has(current)) {continue;}
+
     visited.add(current);
+
     pending.push(...(byId.get(current)?.dependsOn ?? []));
   }
+
   return false;
 };
 

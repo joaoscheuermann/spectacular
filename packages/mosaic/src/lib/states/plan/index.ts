@@ -1,3 +1,4 @@
+import { evaluate } from '../../evaluation.js';
 import * as goalsPrompt from '../../prompts/goals.js';
 import * as revisionPrompt from '../../prompts/revision.js';
 import {
@@ -6,7 +7,6 @@ import {
   PlannedGraphSchema,
 } from '../../schemas/graph.js';
 import { completeStructured } from '../../structured.js';
-import { evaluate } from '../../evaluation.js';
 import type { WorkflowHandler } from '../../types/workflow.js';
 import { hints } from './hints.js';
 
@@ -24,6 +24,7 @@ export const plan: WorkflowHandler = async (
 
     // P0 and P1 exhaust the initial planning lifecycle; later changes use revision.
     const active = state.graphs.at(-1);
+
     if (active !== undefined && active.revision >= 1) {
       return fail(new Error('Graph generation supports only P0 and P1.'));
     }
@@ -31,6 +32,7 @@ export const plan: WorkflowHandler = async (
     // No active graph means P0; the runtime alone assigns the next revision.
     const phase = active === undefined ? 'p0' : 'p1';
     const revision = active === undefined ? 0 : active.revision + 1;
+
     options.logger.info(
       {
         phase,
@@ -80,6 +82,7 @@ export const plan: WorkflowHandler = async (
                 revision,
               }),
           );
+
     const planned =
       result === 'unchanged'
         ? PlannedGraphSchema.parse({
@@ -94,7 +97,6 @@ export const plan: WorkflowHandler = async (
             ),
           })
         : PlannedGraphSchema.parse(result);
-
     // Materialization assigns pending status, stable indices, and empty ledgers.
     const next = materializeGraph(planned, revision);
 

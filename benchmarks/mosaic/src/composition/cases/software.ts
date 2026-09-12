@@ -4,9 +4,9 @@ import {
   catalogBehavior,
   criterion,
   dependency,
+  type DomainFixture,
   phase,
   requestBehavior,
-  type DomainFixture,
 } from './shared.js';
 
 const fixture: DomainFixture = {

@@ -6,6 +6,7 @@ const timestamp = () => new Date().toISOString();
 
 export const createRun = (config) => {
   const now = timestamp();
+
   return {
     id: randomUUID(),
     status: 'running',
@@ -34,6 +35,7 @@ export const checkpointRun = (
 
 export const saveRun = async (path, run) => {
   await mkdir(dirname(path), { recursive: true });
+
   const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
 
   try {
@@ -42,9 +44,11 @@ export const saveRun = async (path, run) => {
       flag: 'wx',
       mode: 0o600,
     });
+
     await rename(temporary, path);
   } catch (error) {
     await unlink(temporary).catch(() => undefined);
+
     throw error;
   }
 };
@@ -64,9 +68,12 @@ export const createCheckpointWriter = (path, initialRun) => {
         status,
         failure,
       );
+
       await saveRun(path, run);
+
       return run;
     });
+
     return writes;
   };
 
@@ -77,12 +84,16 @@ export const createCheckpointWriter = (path, initialRun) => {
         timestamp: timestamp(),
         ...failure,
       };
+
       providerFailures.push(event);
+
       await write(run.status);
+
       return event;
     },
     saveResult(index, result) {
       results[index] = result;
+
       return write(run.status);
     },
     finish(status, failure) {

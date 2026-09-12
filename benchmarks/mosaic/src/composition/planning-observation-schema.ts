@@ -1,12 +1,13 @@
 import {
+  type PlanningCase,
   PlanningCaseSchema,
   PlanningObservationSchema,
-  type PlanningCase,
 } from './planning-schema.js';
 
 /** Binds semantic observation labels to one validated planning case catalog. */
 export const planningObservationSchema = (input: PlanningCase) => {
   const benchmarkCase = PlanningCaseSchema.parse(input);
+
   const labels = [
     ['roleIds', new Set(benchmarkCase.gold.roles.map(({ id }) => id)), 'Role'],
     [
@@ -25,7 +26,8 @@ export const planningObservationSchema = (input: PlanningCase) => {
     value.nodes.forEach((node, nodeIndex) => {
       labels.forEach(([field, known, label]) => {
         node[field].forEach((id, labelIndex) => {
-          if (known.has(id)) return;
+          if (known.has(id)) {return;}
+
           context.addIssue({
             code: 'custom',
             path: ['nodes', nodeIndex, field, labelIndex],

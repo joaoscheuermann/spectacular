@@ -18,7 +18,8 @@ export const RuntimeTerminationSchema = z.discriminatedUnion('type', [
       .array(z.string().trim().min(1))
       .min(1)
       .superRefine((ids, context) => {
-        if (new Set(ids).size === ids.length) return;
+        if (new Set(ids).size === ids.length) {return;}
+
         context.addIssue({
           code: 'custom',
           message: 'Dependency IDs must be unique.',

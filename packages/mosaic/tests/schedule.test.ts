@@ -9,7 +9,9 @@ test('fails when the workflow has no active graph', async () => {
   const action = await schedule(state([]), {} as never, handlers());
 
   assert.equal(action.type, 'fail');
-  if (action.type !== 'fail') return;
+
+  if (action.type !== 'fail') {return;}
+
   assert.equal(
     (action.error as Error).message,
     'Impossible to continue, missing active graph!',
@@ -21,7 +23,6 @@ test('routes every completed graph through delivery', async () => {
     createNode('first', 0, [], 'completed'),
     createNode('second', 1, [], 'completed'),
   ]);
-
   const action = await schedule(state([graph]), {} as never, handlers());
 
   assert.deepEqual(action, {
@@ -35,7 +36,6 @@ test('schedules only the last graph in the workflow', async () => {
   const older = createGraph([createNode('older', 0)]);
   const active = createGraph([createNode('active', 0)]);
   const graphs = [older, active];
-
   const workflow = state(graphs);
   const action = await schedule(workflow, {} as never, handlers());
 
@@ -44,7 +44,9 @@ test('schedules only the last graph in the workflow', async () => {
     handler: 'bundle',
     state: workflow,
   });
+
   assert.equal(older.nodes[0]?.status, 'pending');
+
   assert.equal(active.nodes[0]?.status, 'ready');
 });
 
@@ -52,16 +54,18 @@ test('marks a dependent node ready when all its dependencies are completed', asy
   const completed = createNode('completed', 0, [], 'completed');
   const dependent = createNode('dependent', 1, ['completed']);
   const graph = createGraph([completed, dependent]);
-
   const action = await schedule(state([graph]), {} as never, handlers());
 
   assert.equal(action.type, 'transition');
+
   assert.equal(completed.status, 'completed');
+
   assert.equal(dependent.status, 'ready');
 });
 
 test('blocks descendants causally and continues an independent branch', async () => {
   const blocked = createNode('blocked', 0, [], 'blocked');
+
   blocked.outcome = {
     status: 'blocked',
     criteria: [
@@ -76,21 +80,25 @@ test('blocks descendants causally and continues an independent branch', async ()
     revisionRequest: null,
     reason: 'No useful action remains.',
   };
+
   const child = createNode('child', 1, ['blocked']);
   const grandchild = createNode('grandchild', 2, ['child']);
   const independent = createNode('independent', 3);
   const graph = createGraph([blocked, child, grandchild, independent]);
-
   const action = await schedule(state([graph]), {} as never, handlers());
 
   assert.equal(action.type, 'transition');
+
   assert.equal(action.type === 'transition' ? action.handler : '', 'bundle');
+
   assert.equal(independent.status, 'ready');
+
   assert.deepEqual(child.termination, {
     type: 'dependency',
     status: 'blocked',
     dependencyIds: ['blocked'],
   });
+
   assert.deepEqual(grandchild.termination, {
     type: 'dependency',
     status: 'blocked',
@@ -102,6 +110,7 @@ test('routes a node-owned localized revision to revision before scheduling work'
   const target = createNode('target', 0, [], 'needs_revision');
   const graph = createGraph([target]);
   const workflow = state([graph]);
+
   const observation = {
     id: 'observation-target',
     goalId: 'target',
@@ -110,7 +119,9 @@ test('routes a node-owned localized revision to revision before scheduling work'
     input: '{}',
     output: '{}',
   };
+
   target.observations = [observation];
+
   target.outcome = {
     status: 'needs_revision',
     criteria: [
@@ -142,15 +153,17 @@ test('routes a node-owned localized revision to revision before scheduling work'
 test('fails safely when needs_revision has no runtime request', async () => {
   const target = createNode('target', 0, [], 'needs_revision');
   const workflow = state([createGraph([target])]);
-
   const action = await schedule(workflow, {} as never, handlers());
 
   assert.equal(action.type, 'fail');
-  if (action.type !== 'fail') return;
+
+  if (action.type !== 'fail') {return;}
+
   assert.equal(
     (action.error as Error).message,
     'Revision node is missing its runtime request.',
   );
+
   assert.equal(target.status, 'needs_revision');
 });
 
@@ -159,10 +172,10 @@ test('marks at most five eligible nodes ready in descending index order', async 
     createNode(`node-${index}`, index),
   );
   const graph = createGraph(nodes);
-
   const action = await schedule(state([graph]), {} as never, handlers());
 
   assert.equal(action.type, 'transition');
+
   assert.deepEqual(
     nodes.map(({ status }) => status),
     ['pending', 'ready', 'ready', 'ready', 'ready', 'ready'],
@@ -173,15 +186,17 @@ test('fails when pending nodes cannot become ready', async () => {
   const prerequisite = createNode('prerequisite', 0, [], 'ready');
   const dependent = createNode('dependent', 1, ['prerequisite']);
   const graph = createGraph([prerequisite, dependent]);
-
   const action = await schedule(state([graph]), {} as never, handlers());
 
   assert.equal(action.type, 'fail');
-  if (action.type !== 'fail') return;
+
+  if (action.type !== 'fail') {return;}
+
   assert.equal(
     (action.error as Error).message,
     'Impossible to continue, missing ready nodes!',
   );
+
   assert.equal(dependent.status, 'pending');
 });
 

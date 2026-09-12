@@ -33,8 +33,11 @@ export interface MosaicRuntime {
   readonly hasFailed: boolean;
   readonly failure: unknown;
   emit(event: MosaicEventInput): Promise<void>;
+
   timer(): Timer;
+
   duration(timer: Timer): number;
+
   provider(
     provider: LlmProvider,
     stage: MosaicStage,
@@ -48,14 +51,17 @@ export const createRuntime = (
   options: MosaicRunOptions = {},
 ): MosaicRuntime => {
   const capture = options.capture ?? 'structure';
+
   if (capture !== 'structure' && capture !== 'io') {
     throw new TypeError('Mosaic capture must be structure or io.');
   }
 
   const runId = options.runId ?? randomUUID();
+
   if (!uuid.test(runId)) {
     throw new TypeError('Mosaic runId must be a UUID.');
   }
+
   const observer = options.observer;
   let sequence = 0;
   let observedMs = 0;
@@ -65,29 +71,38 @@ export const createRuntime = (
 
   const emit = async (input: MosaicEventInput): Promise<void> => {
     options.signal?.throwIfAborted();
-    if (failed) throw failure;
-    if (observer === undefined) return;
+
+    if (failed) {throw failure;}
+
+    if (observer === undefined) {return;}
 
     const event = immutable({
       schemaVersion: 3 as const,
       runId,
       sequence: ++sequence,
       ...input,
-    } as MosaicEvent);
+    });
+
     const delivery = queue.then(async () => {
-      if (failed) throw failure;
+      if (failed) {throw failure;}
+
       const startedAt = performance.now();
+
       try {
         await observer(event);
       } catch (error) {
         failed = true;
+
         failure = error;
+
         throw error;
       } finally {
         observedMs += performance.now() - startedAt;
       }
     });
+
     queue = delivery.catch(() => undefined);
+
     await delivery;
   };
 
@@ -118,7 +133,6 @@ export const createRuntime = (
 
   return runtime;
 };
-
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
@@ -132,12 +146,16 @@ const observedProvider = (
   new Proxy(provider, {
     get(target, property, receiver) {
       if (property === 'complete')
-        return complete(target, runtime, stage, nodeId, revision);
+        {return complete(target, runtime, stage, nodeId, revision);}
+
       if (property === 'stream')
-        return stream(target, runtime, stage, nodeId, revision);
+        {return stream(target, runtime, stage, nodeId, revision);}
+
       if (property === 'rerank')
-        return rerank(target, runtime, stage, nodeId, revision);
+        {return rerank(target, runtime, stage, nodeId, revision);}
+
       const value = Reflect.get(target, property, receiver) as unknown;
+
       return typeof value === 'function' ? value.bind(target) : value;
     },
   });
@@ -154,6 +172,7 @@ const complete =
     request: ProviderRequest<Output>,
   ): Promise<ProviderFinished<Output>> => {
     const current = withSignal(request, runtime.signal);
+
     await requestEvent(
       runtime,
       provider.metadata.id,
@@ -163,8 +182,10 @@ const complete =
       nodeId,
       revision,
     );
+
     const timer = runtime.timer();
     const response = await provider.complete(current);
+
     await responseEvent(
       runtime,
       provider.metadata.id,
@@ -176,6 +197,7 @@ const complete =
       nodeId,
       revision,
     );
+
     return response;
   };
 
@@ -188,6 +210,7 @@ const stream = (
 ) =>
   async function* <Output = JsonValue>(request: ProviderRequest<Output>) {
     const current = withSignal(request, runtime.signal);
+
     await requestEvent(
       runtime,
       provider.metadata.id,
@@ -197,7 +220,9 @@ const stream = (
       nodeId,
       revision,
     );
+
     const timer = runtime.timer();
+
     for await (const event of provider.stream(current)) {
       if (event.type === 'response.finished') {
         await responseEvent(
@@ -212,6 +237,7 @@ const stream = (
           revision,
         );
       }
+
       yield event;
     }
   };
@@ -226,6 +252,7 @@ const rerank =
   ) =>
   async (request: ProviderRerankRequest) => {
     const current = withSignal(request, runtime.signal);
+
     await runtime.emit({
       type: 'model.request',
       providerId: provider.metadata.id,
@@ -238,8 +265,10 @@ const rerank =
         ? { content: { query: current.query, documents: current.documents } }
         : {}),
     });
+
     const timer = runtime.timer();
     const response = await provider.rerank(current);
+
     await runtime.emit({
       type: 'model.response',
       providerId: provider.metadata.id,
@@ -251,6 +280,7 @@ const rerank =
       ...(revision === undefined ? {} : { revision }),
       ...(runtime.capture === 'io' ? { content: response.results } : {}),
     });
+
     return response;
   };
 
@@ -310,10 +340,11 @@ const withSignal = <Request extends { readonly signal?: AbortSignal }>(
 ): Request =>
   signal === undefined || request.signal !== undefined
     ? request
-    : ({ ...request, signal } as Request);
+    : ({ ...request, signal });
 
 const visibleRequest = (request: ProviderRequest): unknown => {
   const terminalNames = structuredToolNames(request);
+
   const repairing = request.messages.some(
     ({ role, content }) =>
       role === 'system' &&
@@ -365,10 +396,12 @@ const redactTerminalCalls = <Call extends { readonly name: string }>(
   terminalNames: ReadonlySet<string>,
 ): readonly unknown[] =>
   calls.map((call) => {
-    if (!terminalNames.has(call.name)) return call;
+    if (!terminalNames.has(call.name)) {return call;}
+
     const { arguments: _arguments, ...safe } = call as Call & {
       readonly arguments?: string;
     };
+
     return safe;
   });
 
@@ -379,6 +412,8 @@ const freeze = <Value>(value: Value): Value => {
   if (typeof value !== 'object' || value === null || Object.isFrozen(value)) {
     return value;
   }
-  for (const nested of Object.values(value)) freeze(nested);
+
+  for (const nested of Object.values(value)) {freeze(nested);}
+
   return Object.freeze(value);
 };

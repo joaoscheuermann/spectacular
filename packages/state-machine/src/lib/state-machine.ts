@@ -75,10 +75,12 @@ const createActions = <
     handler,
     state: copy(state),
   });
+
   const finish: StateMachineFinishFunction<Finished> = (value) => ({
     type: 'finish',
     value,
   });
+
   const fail: StateMachineFailFunction<Failed> = (error) => ({
     type: 'fail',
     error,
@@ -268,7 +270,7 @@ const isAction = <
   isFail<Failed>(value);
 
 const copy = <State extends object>(state: State): State =>
-  ({ ...state }) as State;
+  ({ ...state });
 
 const isObject = (value: unknown): value is object =>
   typeof value === 'object' && value !== null;

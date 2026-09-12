@@ -39,13 +39,17 @@ test('parses downloaded SRA-Bench JSON without stripping extra fields', () => {
   const instances = parseSraInstancesJson(JSON.stringify(instanceFixture));
 
   assert.equal(corpus[0]?.tools, null);
+
   assert.deepEqual(instances[0]?.eval_data, { answer: '42' });
+
   assert.deepEqual(parseSraCorpus(corpusFixture), corpus);
+
   assert.deepEqual(parseSraInstances(instanceFixture), instances);
 });
 
 test('rejects malformed JSON and missing required fixture fields', () => {
   assert.throws(() => parseSraCorpusJson('{'), /valid JSON/);
+
   assert.throws(
     () =>
       parseSraInstances([
@@ -64,10 +68,12 @@ test('rejects duplicate corpus, instance, and annotation identifiers', () => {
     () => parseSraCorpus([corpusFixture[0], corpusFixture[0]]),
     /duplicate skill_id: champ_001/,
   );
+
   assert.throws(
     () => parseSraInstances([instanceFixture[0], instanceFixture[0]]),
     /duplicate instance_id: champ_00001/,
   );
+
   assert.throws(
     () =>
       parseSraInstances([
