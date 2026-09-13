@@ -803,6 +803,22 @@ with high effort; execution independently uses `openai/gpt-6-astra` with low
 effort. Criteria use `openai/gpt-5.6-sol` and completion judging uses
 `openai/gpt-5.6-sol`, both with high effort.
 
+The private `scripts/direct-skills-e2e` experiment uses P0 solely for per-goal
+hybrid skill retrieval, reranking and per-goal keep/drop selection. Approved
+skills are united by name in first-accepted order; approval by any goal retains
+the skill, without a global gate. It then executes
+the original request in one direct-agent conversation without exposing P0.
+The executor receives selected skill bodies and always-available core instructions
+in its system prompt, with the original request and environment in its user message,
+all core tools and a host-bound `search_skills` tool. That tool reuses the run's
+index, retrieves and reranks using the request plus current need, performs focused
+keep/drop selection, and returns complete selected bodies without adding tools.
+It has no P1, execution graph, generated criteria or completion judge. Completed
+status is executor self-assessment. It follows mosaic-e2e's Docker isolation,
+workspace export, UUID manifests, source hashes, JSONL traces, individual stage
+files and usage capture. It has independent sources and output, the same bundled
+CSV case, provider-free preparation, and no infrastructure retries or resume.
+
 The SkillsBench composition condition scans a caller-verified clean checkout of
 the existing v1.1 pin into a deterministic global catalog, hashes every package,
 namespaces same-name/different-body collisions, and preserves task-to-skill gold
