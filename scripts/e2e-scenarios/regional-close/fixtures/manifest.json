@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "generator_sha256": "ec0a220fcced10dc493ea6666aadf2cefa67f3952b8d74e94be0e01596dcec2d",
+  "request_sha256": "7336ef419a4e2419cfbf1ae3bb24157f202bdfce34c7963b0ee7709f9320c7e2",
+  "inputs": {
+    "regions.csv": "247d2604a53dce904df102e3a0218708875152601d93f357279638bd8189b19d",
+    "aliases.csv": "2aaf1098d027aab735faa79f9ca0f038449f9623da523a2dfe2fa606ab770ab5",
+    "population.csv": "c8210ab3967121a25fba22c6721ccda524dc31ef06551c47f842f558be663af4",
+    "income.csv": "2885d6df5c58ed24d8473358ad669eb5389a13ffb51292d8e5e9573ff768177f"
+  },
+  "expected_sha256": "71a32f07a6ecfb492a7a5dc4c5b61196c3ff1a039b4deab44223088efb221b81"
+}

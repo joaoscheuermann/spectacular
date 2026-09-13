@@ -1,0 +1,9 @@
+warehouse,zone,transit_days,base_cents,unit_cents,carbon_per_unit
+001,N,1,30,20,2
+003,S,1,70,45,5
+002,N,2,50,25,3
+001,E,3,30,50,4
+002,E,1,50,55,5
+003,N,3,70,30,4
+002,S,3,50,40,4
+001,S,2,30,35,3

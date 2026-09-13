@@ -1,0 +1,2729 @@
+{
+  "bom.csv": [
+    {
+      "product": "A",
+      "component": "A",
+      "quantity_per_unit": 1
+    },
+    {
+      "product": "B",
+      "component": "B",
+      "quantity_per_unit": 1
+    },
+    {
+      "product": "C",
+      "component": "C",
+      "quantity_per_unit": 1
+    },
+    {
+      "product": "D",
+      "component": "D",
+      "quantity_per_unit": 1
+    },
+    {
+      "product": "K1",
+      "component": "A",
+      "quantity_per_unit": 2
+    },
+    {
+      "product": "K1",
+      "component": "B",
+      "quantity_per_unit": 1
+    },
+    {
+      "product": "K2",
+      "component": "A",
+      "quantity_per_unit": 1
+    },
+    {
+      "product": "K2",
+      "component": "C",
+      "quantity_per_unit": 2
+    },
+    {
+      "product": "K3",
+      "component": "A",
+      "quantity_per_unit": 3
+    },
+    {
+      "product": "K3",
+      "component": "B",
+      "quantity_per_unit": 1
+    },
+    {
+      "product": "K3",
+      "component": "C",
+      "quantity_per_unit": 2
+    },
+    {
+      "product": "K3",
+      "component": "D",
+      "quantity_per_unit": 1
+    },
+    {
+      "product": "K4",
+      "component": "A",
+      "quantity_per_unit": 7
+    },
+    {
+      "product": "K4",
+      "component": "B",
+      "quantity_per_unit": 3
+    },
+    {
+      "product": "K4",
+      "component": "C",
+      "quantity_per_unit": 2
+    },
+    {
+      "product": "K4",
+      "component": "D",
+      "quantity_per_unit": 1
+    }
+  ],
+  "assignments.csv": [
+    {
+      "day": "2025-04-01",
+      "order_id": "O01-01",
+      "product": "K4",
+      "quantity": 2,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-01",
+      "order_id": "O01-02",
+      "product": "K3",
+      "quantity": 2,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 30,
+      "freight_cents": 100,
+      "carbon": 6
+    },
+    {
+      "day": "2025-04-01",
+      "order_id": "O01-03",
+      "product": "A",
+      "quantity": 3,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 90,
+      "carbon": 6
+    },
+    {
+      "day": "2025-04-01",
+      "order_id": "O01-04",
+      "product": "B",
+      "quantity": 1,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 30,
+      "freight_cents": 105,
+      "carbon": 5
+    },
+    {
+      "day": "2025-04-01",
+      "order_id": "O01-05",
+      "product": "D",
+      "quantity": 1,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 90,
+      "carbon": 4
+    },
+    {
+      "day": "2025-04-01",
+      "order_id": "O01-06",
+      "product": "C",
+      "quantity": 3,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-01",
+      "order_id": "O01-07",
+      "product": "K4",
+      "quantity": 3,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-01",
+      "order_id": "O01-08",
+      "product": "K3",
+      "quantity": 2,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-01",
+      "order_id": "O01-09",
+      "product": "C",
+      "quantity": 3,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 20,
+      "freight_cents": 90,
+      "carbon": 6
+    },
+    {
+      "day": "2025-04-01",
+      "order_id": "O01-10",
+      "product": "K1",
+      "quantity": 1,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 30,
+      "freight_cents": 105,
+      "carbon": 5
+    },
+    {
+      "day": "2025-04-02",
+      "order_id": "O02-01",
+      "product": "K4",
+      "quantity": 2,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 130,
+      "carbon": 8
+    },
+    {
+      "day": "2025-04-02",
+      "order_id": "O02-02",
+      "product": "K3",
+      "quantity": 2,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-02",
+      "order_id": "O02-03",
+      "product": "C",
+      "quantity": 1,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 20,
+      "freight_cents": 105,
+      "carbon": 5
+    },
+    {
+      "day": "2025-04-02",
+      "order_id": "O02-04",
+      "product": "A",
+      "quantity": 3,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-02",
+      "order_id": "O02-05",
+      "product": "K2",
+      "quantity": 3,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-02",
+      "order_id": "O02-06",
+      "product": "D",
+      "quantity": 2,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 160,
+      "carbon": 10
+    },
+    {
+      "day": "2025-04-02",
+      "order_id": "O02-07",
+      "product": "K1",
+      "quantity": 1,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 90,
+      "carbon": 4
+    },
+    {
+      "day": "2025-04-02",
+      "order_id": "O02-08",
+      "product": "K1",
+      "quantity": 1,
+      "warehouse": "003",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 115,
+      "carbon": 5
+    },
+    {
+      "day": "2025-04-02",
+      "order_id": "O02-09",
+      "product": "K2",
+      "quantity": 2,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 70,
+      "carbon": 4
+    },
+    {
+      "day": "2025-04-02",
+      "order_id": "O02-10",
+      "product": "K2",
+      "quantity": 2,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-03",
+      "order_id": "O03-01",
+      "product": "K4",
+      "quantity": 2,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 130,
+      "carbon": 8
+    },
+    {
+      "day": "2025-04-03",
+      "order_id": "O03-02",
+      "product": "K3",
+      "quantity": 2,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 30,
+      "freight_cents": 100,
+      "carbon": 6
+    },
+    {
+      "day": "2025-04-03",
+      "order_id": "O03-03",
+      "product": "K4",
+      "quantity": 3,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-03",
+      "order_id": "O03-04",
+      "product": "K2",
+      "quantity": 3,
+      "warehouse": "003",
+      "accepted": 1,
+      "priority_points": 10,
+      "freight_cents": 205,
+      "carbon": 15
+    },
+    {
+      "day": "2025-04-03",
+      "order_id": "O03-05",
+      "product": "K4",
+      "quantity": 3,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-03",
+      "order_id": "O03-06",
+      "product": "K2",
+      "quantity": 1,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 30,
+      "freight_cents": 50,
+      "carbon": 2
+    },
+    {
+      "day": "2025-04-03",
+      "order_id": "O03-07",
+      "product": "D",
+      "quantity": 1,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 20,
+      "freight_cents": 105,
+      "carbon": 5
+    },
+    {
+      "day": "2025-04-03",
+      "order_id": "O03-08",
+      "product": "D",
+      "quantity": 2,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-03",
+      "order_id": "O03-09",
+      "product": "K2",
+      "quantity": 3,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 10,
+      "freight_cents": 90,
+      "carbon": 6
+    },
+    {
+      "day": "2025-04-03",
+      "order_id": "O03-10",
+      "product": "K2",
+      "quantity": 2,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-04",
+      "order_id": "O04-01",
+      "product": "K4",
+      "quantity": 2,
+      "warehouse": "003",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 160,
+      "carbon": 10
+    },
+    {
+      "day": "2025-04-04",
+      "order_id": "O04-02",
+      "product": "K3",
+      "quantity": 2,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 30,
+      "freight_cents": 100,
+      "carbon": 6
+    },
+    {
+      "day": "2025-04-04",
+      "order_id": "O04-03",
+      "product": "A",
+      "quantity": 1,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 75,
+      "carbon": 3
+    },
+    {
+      "day": "2025-04-04",
+      "order_id": "O04-04",
+      "product": "C",
+      "quantity": 2,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-04",
+      "order_id": "O04-05",
+      "product": "K1",
+      "quantity": 2,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 160,
+      "carbon": 10
+    },
+    {
+      "day": "2025-04-04",
+      "order_id": "O04-06",
+      "product": "K3",
+      "quantity": 1,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 30,
+      "freight_cents": 50,
+      "carbon": 2
+    },
+    {
+      "day": "2025-04-04",
+      "order_id": "O04-07",
+      "product": "K3",
+      "quantity": 2,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 70,
+      "carbon": 4
+    },
+    {
+      "day": "2025-04-04",
+      "order_id": "O04-08",
+      "product": "K4",
+      "quantity": 3,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-04",
+      "order_id": "O04-09",
+      "product": "K1",
+      "quantity": 3,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-04",
+      "order_id": "O04-10",
+      "product": "K1",
+      "quantity": 2,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 20,
+      "freight_cents": 70,
+      "carbon": 4
+    },
+    {
+      "day": "2025-04-05",
+      "order_id": "O05-01",
+      "product": "K4",
+      "quantity": 2,
+      "warehouse": "003",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 160,
+      "carbon": 10
+    },
+    {
+      "day": "2025-04-05",
+      "order_id": "O05-02",
+      "product": "K3",
+      "quantity": 2,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-05",
+      "order_id": "O05-03",
+      "product": "K2",
+      "quantity": 2,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-05",
+      "order_id": "O05-04",
+      "product": "K1",
+      "quantity": 1,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 80,
+      "carbon": 4
+    },
+    {
+      "day": "2025-04-05",
+      "order_id": "O05-05",
+      "product": "K4",
+      "quantity": 3,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-05",
+      "order_id": "O05-06",
+      "product": "D",
+      "quantity": 1,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 50,
+      "carbon": 2
+    },
+    {
+      "day": "2025-04-05",
+      "order_id": "O05-07",
+      "product": "K2",
+      "quantity": 1,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 75,
+      "carbon": 3
+    },
+    {
+      "day": "2025-04-05",
+      "order_id": "O05-08",
+      "product": "B",
+      "quantity": 1,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-05",
+      "order_id": "O05-09",
+      "product": "K2",
+      "quantity": 1,
+      "warehouse": "003",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 115,
+      "carbon": 5
+    },
+    {
+      "day": "2025-04-05",
+      "order_id": "O05-10",
+      "product": "B",
+      "quantity": 3,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 90,
+      "carbon": 6
+    },
+    {
+      "day": "2025-04-06",
+      "order_id": "O06-01",
+      "product": "K4",
+      "quantity": 2,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 160,
+      "carbon": 10
+    },
+    {
+      "day": "2025-04-06",
+      "order_id": "O06-02",
+      "product": "K3",
+      "quantity": 2,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 30,
+      "freight_cents": 100,
+      "carbon": 6
+    },
+    {
+      "day": "2025-04-06",
+      "order_id": "O06-03",
+      "product": "B",
+      "quantity": 2,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 30,
+      "freight_cents": 70,
+      "carbon": 4
+    },
+    {
+      "day": "2025-04-06",
+      "order_id": "O06-04",
+      "product": "K4",
+      "quantity": 1,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-06",
+      "order_id": "O06-05",
+      "product": "B",
+      "quantity": 3,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 20,
+      "freight_cents": 90,
+      "carbon": 6
+    },
+    {
+      "day": "2025-04-06",
+      "order_id": "O06-06",
+      "product": "K1",
+      "quantity": 3,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-06",
+      "order_id": "O06-07",
+      "product": "A",
+      "quantity": 1,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-06",
+      "order_id": "O06-08",
+      "product": "B",
+      "quantity": 3,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-06",
+      "order_id": "O06-09",
+      "product": "B",
+      "quantity": 1,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 30,
+      "freight_cents": 105,
+      "carbon": 5
+    },
+    {
+      "day": "2025-04-06",
+      "order_id": "O06-10",
+      "product": "K1",
+      "quantity": 2,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 130,
+      "carbon": 8
+    },
+    {
+      "day": "2025-04-07",
+      "order_id": "O07-01",
+      "product": "K4",
+      "quantity": 2,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-07",
+      "order_id": "O07-02",
+      "product": "K3",
+      "quantity": 2,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-07",
+      "order_id": "O07-03",
+      "product": "B",
+      "quantity": 1,
+      "warehouse": "003",
+      "accepted": 1,
+      "priority_points": 20,
+      "freight_cents": 115,
+      "carbon": 5
+    },
+    {
+      "day": "2025-04-07",
+      "order_id": "O07-04",
+      "product": "K3",
+      "quantity": 1,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 30,
+      "freight_cents": 75,
+      "carbon": 3
+    },
+    {
+      "day": "2025-04-07",
+      "order_id": "O07-05",
+      "product": "K3",
+      "quantity": 1,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-07",
+      "order_id": "O07-06",
+      "product": "K3",
+      "quantity": 2,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 70,
+      "carbon": 4
+    },
+    {
+      "day": "2025-04-07",
+      "order_id": "O07-07",
+      "product": "K3",
+      "quantity": 2,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 100,
+      "carbon": 6
+    },
+    {
+      "day": "2025-04-07",
+      "order_id": "O07-08",
+      "product": "D",
+      "quantity": 1,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 50,
+      "carbon": 2
+    },
+    {
+      "day": "2025-04-07",
+      "order_id": "O07-09",
+      "product": "D",
+      "quantity": 1,
+      "warehouse": "003",
+      "accepted": 1,
+      "priority_points": 30,
+      "freight_cents": 115,
+      "carbon": 5
+    },
+    {
+      "day": "2025-04-07",
+      "order_id": "O07-10",
+      "product": "A",
+      "quantity": 3,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 180,
+      "carbon": 12
+    },
+    {
+      "day": "2025-04-08",
+      "order_id": "O08-01",
+      "product": "K4",
+      "quantity": 2,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-08",
+      "order_id": "O08-02",
+      "product": "K3",
+      "quantity": 2,
+      "warehouse": "003",
+      "accepted": 1,
+      "priority_points": 30,
+      "freight_cents": 160,
+      "carbon": 10
+    },
+    {
+      "day": "2025-04-08",
+      "order_id": "O08-03",
+      "product": "A",
+      "quantity": 2,
+      "warehouse": "003",
+      "accepted": 1,
+      "priority_points": 20,
+      "freight_cents": 160,
+      "carbon": 10
+    },
+    {
+      "day": "2025-04-08",
+      "order_id": "O08-04",
+      "product": "B",
+      "quantity": 2,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 70,
+      "carbon": 4
+    },
+    {
+      "day": "2025-04-08",
+      "order_id": "O08-05",
+      "product": "B",
+      "quantity": 3,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 90,
+      "carbon": 6
+    },
+    {
+      "day": "2025-04-08",
+      "order_id": "O08-06",
+      "product": "K3",
+      "quantity": 3,
+      "warehouse": "003",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 205,
+      "carbon": 15
+    },
+    {
+      "day": "2025-04-08",
+      "order_id": "O08-07",
+      "product": "A",
+      "quantity": 3,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-08",
+      "order_id": "O08-08",
+      "product": "B",
+      "quantity": 3,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-08",
+      "order_id": "O08-09",
+      "product": "B",
+      "quantity": 3,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-08",
+      "order_id": "O08-10",
+      "product": "A",
+      "quantity": 2,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-09",
+      "order_id": "O09-01",
+      "product": "K4",
+      "quantity": 2,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-09",
+      "order_id": "O09-02",
+      "product": "K3",
+      "quantity": 2,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 30,
+      "freight_cents": 100,
+      "carbon": 6
+    },
+    {
+      "day": "2025-04-09",
+      "order_id": "O09-03",
+      "product": "K3",
+      "quantity": 1,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-09",
+      "order_id": "O09-04",
+      "product": "K4",
+      "quantity": 3,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-09",
+      "order_id": "O09-05",
+      "product": "K2",
+      "quantity": 3,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-09",
+      "order_id": "O09-06",
+      "product": "D",
+      "quantity": 1,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 20,
+      "freight_cents": 75,
+      "carbon": 3
+    },
+    {
+      "day": "2025-04-09",
+      "order_id": "O09-07",
+      "product": "D",
+      "quantity": 3,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 125,
+      "carbon": 9
+    },
+    {
+      "day": "2025-04-09",
+      "order_id": "O09-08",
+      "product": "C",
+      "quantity": 1,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 75,
+      "carbon": 3
+    },
+    {
+      "day": "2025-04-09",
+      "order_id": "O09-09",
+      "product": "C",
+      "quantity": 3,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 135,
+      "carbon": 9
+    },
+    {
+      "day": "2025-04-09",
+      "order_id": "O09-10",
+      "product": "K3",
+      "quantity": 3,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 20,
+      "freight_cents": 90,
+      "carbon": 6
+    },
+    {
+      "day": "2025-04-10",
+      "order_id": "O10-01",
+      "product": "K4",
+      "quantity": 2,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-10",
+      "order_id": "O10-02",
+      "product": "K3",
+      "quantity": 2,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 30,
+      "freight_cents": 160,
+      "carbon": 10
+    },
+    {
+      "day": "2025-04-10",
+      "order_id": "O10-03",
+      "product": "K4",
+      "quantity": 2,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 100,
+      "carbon": 6
+    },
+    {
+      "day": "2025-04-10",
+      "order_id": "O10-04",
+      "product": "K4",
+      "quantity": 3,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-10",
+      "order_id": "O10-05",
+      "product": "K4",
+      "quantity": 3,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-10",
+      "order_id": "O10-06",
+      "product": "K3",
+      "quantity": 2,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 20,
+      "freight_cents": 70,
+      "carbon": 4
+    },
+    {
+      "day": "2025-04-10",
+      "order_id": "O10-07",
+      "product": "K4",
+      "quantity": 2,
+      "warehouse": "003",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 160,
+      "carbon": 10
+    },
+    {
+      "day": "2025-04-10",
+      "order_id": "O10-08",
+      "product": "A",
+      "quantity": 3,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 20,
+      "freight_cents": 90,
+      "carbon": 6
+    },
+    {
+      "day": "2025-04-10",
+      "order_id": "O10-09",
+      "product": "K2",
+      "quantity": 1,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 10,
+      "freight_cents": 80,
+      "carbon": 4
+    },
+    {
+      "day": "2025-04-10",
+      "order_id": "O10-10",
+      "product": "K3",
+      "quantity": 3,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-11",
+      "order_id": "O11-01",
+      "product": "K4",
+      "quantity": 2,
+      "warehouse": "003",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 160,
+      "carbon": 10
+    },
+    {
+      "day": "2025-04-11",
+      "order_id": "O11-02",
+      "product": "K3",
+      "quantity": 2,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 30,
+      "freight_cents": 100,
+      "carbon": 6
+    },
+    {
+      "day": "2025-04-11",
+      "order_id": "O11-03",
+      "product": "K3",
+      "quantity": 1,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 65,
+      "carbon": 3
+    },
+    {
+      "day": "2025-04-11",
+      "order_id": "O11-04",
+      "product": "B",
+      "quantity": 1,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 20,
+      "freight_cents": 90,
+      "carbon": 4
+    },
+    {
+      "day": "2025-04-11",
+      "order_id": "O11-05",
+      "product": "K2",
+      "quantity": 2,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 20,
+      "freight_cents": 70,
+      "carbon": 4
+    },
+    {
+      "day": "2025-04-11",
+      "order_id": "O11-06",
+      "product": "B",
+      "quantity": 1,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-11",
+      "order_id": "O11-07",
+      "product": "K2",
+      "quantity": 3,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-11",
+      "order_id": "O11-08",
+      "product": "B",
+      "quantity": 2,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 10,
+      "freight_cents": 70,
+      "carbon": 4
+    },
+    {
+      "day": "2025-04-11",
+      "order_id": "O11-09",
+      "product": "K3",
+      "quantity": 2,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 30,
+      "freight_cents": 100,
+      "carbon": 6
+    },
+    {
+      "day": "2025-04-11",
+      "order_id": "O11-10",
+      "product": "K1",
+      "quantity": 1,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 30,
+      "freight_cents": 75,
+      "carbon": 3
+    },
+    {
+      "day": "2025-04-12",
+      "order_id": "O12-01",
+      "product": "K4",
+      "quantity": 2,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-12",
+      "order_id": "O12-02",
+      "product": "K3",
+      "quantity": 2,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 30,
+      "freight_cents": 70,
+      "carbon": 4
+    },
+    {
+      "day": "2025-04-12",
+      "order_id": "O12-03",
+      "product": "K3",
+      "quantity": 3,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 30,
+      "freight_cents": 90,
+      "carbon": 6
+    },
+    {
+      "day": "2025-04-12",
+      "order_id": "O12-04",
+      "product": "B",
+      "quantity": 3,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-12",
+      "order_id": "O12-05",
+      "product": "K1",
+      "quantity": 3,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 30,
+      "freight_cents": 170,
+      "carbon": 12
+    },
+    {
+      "day": "2025-04-12",
+      "order_id": "O12-06",
+      "product": "K3",
+      "quantity": 1,
+      "warehouse": "003",
+      "accepted": 1,
+      "priority_points": 40,
+      "freight_cents": 115,
+      "carbon": 5
+    },
+    {
+      "day": "2025-04-12",
+      "order_id": "O12-07",
+      "product": "K3",
+      "quantity": 1,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 10,
+      "freight_cents": 105,
+      "carbon": 5
+    },
+    {
+      "day": "2025-04-12",
+      "order_id": "O12-08",
+      "product": "D",
+      "quantity": 2,
+      "warehouse": "002",
+      "accepted": 1,
+      "priority_points": 30,
+      "freight_cents": 160,
+      "carbon": 10
+    },
+    {
+      "day": "2025-04-12",
+      "order_id": "O12-09",
+      "product": "C",
+      "quantity": 3,
+      "warehouse": "",
+      "accepted": 0,
+      "priority_points": 0,
+      "freight_cents": 0,
+      "carbon": 0
+    },
+    {
+      "day": "2025-04-12",
+      "order_id": "O12-10",
+      "product": "C",
+      "quantity": 3,
+      "warehouse": "001",
+      "accepted": 1,
+      "priority_points": 10,
+      "freight_cents": 90,
+      "carbon": 6
+    }
+  ],
+  "stock.csv": [
+    {
+      "day": "2025-04-01",
+      "warehouse": "001",
+      "component": "A",
+      "opening": 19,
+      "used": 3,
+      "closing": 16
+    },
+    {
+      "day": "2025-04-01",
+      "warehouse": "001",
+      "component": "B",
+      "opening": 33,
+      "used": 0,
+      "closing": 33
+    },
+    {
+      "day": "2025-04-01",
+      "warehouse": "001",
+      "component": "C",
+      "opening": 27,
+      "used": 3,
+      "closing": 24
+    },
+    {
+      "day": "2025-04-01",
+      "warehouse": "001",
+      "component": "D",
+      "opening": 15,
+      "used": 0,
+      "closing": 15
+    },
+    {
+      "day": "2025-04-01",
+      "warehouse": "002",
+      "component": "A",
+      "opening": 20,
+      "used": 8,
+      "closing": 12
+    },
+    {
+      "day": "2025-04-01",
+      "warehouse": "002",
+      "component": "B",
+      "opening": 17,
+      "used": 4,
+      "closing": 13
+    },
+    {
+      "day": "2025-04-01",
+      "warehouse": "002",
+      "component": "C",
+      "opening": 20,
+      "used": 4,
+      "closing": 16
+    },
+    {
+      "day": "2025-04-01",
+      "warehouse": "002",
+      "component": "D",
+      "opening": 18,
+      "used": 3,
+      "closing": 15
+    },
+    {
+      "day": "2025-04-01",
+      "warehouse": "003",
+      "component": "A",
+      "opening": 30,
+      "used": 0,
+      "closing": 30
+    },
+    {
+      "day": "2025-04-01",
+      "warehouse": "003",
+      "component": "B",
+      "opening": 8,
+      "used": 0,
+      "closing": 8
+    },
+    {
+      "day": "2025-04-01",
+      "warehouse": "003",
+      "component": "C",
+      "opening": 13,
+      "used": 0,
+      "closing": 13
+    },
+    {
+      "day": "2025-04-01",
+      "warehouse": "003",
+      "component": "D",
+      "opening": 28,
+      "used": 0,
+      "closing": 28
+    },
+    {
+      "day": "2025-04-02",
+      "warehouse": "001",
+      "component": "A",
+      "opening": 20,
+      "used": 16,
+      "closing": 4
+    },
+    {
+      "day": "2025-04-02",
+      "warehouse": "001",
+      "component": "B",
+      "opening": 17,
+      "used": 6,
+      "closing": 11
+    },
+    {
+      "day": "2025-04-02",
+      "warehouse": "001",
+      "component": "C",
+      "opening": 14,
+      "used": 8,
+      "closing": 6
+    },
+    {
+      "day": "2025-04-02",
+      "warehouse": "001",
+      "component": "D",
+      "opening": 11,
+      "used": 2,
+      "closing": 9
+    },
+    {
+      "day": "2025-04-02",
+      "warehouse": "002",
+      "component": "A",
+      "opening": 31,
+      "used": 2,
+      "closing": 29
+    },
+    {
+      "day": "2025-04-02",
+      "warehouse": "002",
+      "component": "B",
+      "opening": 25,
+      "used": 1,
+      "closing": 24
+    },
+    {
+      "day": "2025-04-02",
+      "warehouse": "002",
+      "component": "C",
+      "opening": 24,
+      "used": 1,
+      "closing": 23
+    },
+    {
+      "day": "2025-04-02",
+      "warehouse": "002",
+      "component": "D",
+      "opening": 18,
+      "used": 2,
+      "closing": 16
+    },
+    {
+      "day": "2025-04-02",
+      "warehouse": "003",
+      "component": "A",
+      "opening": 30,
+      "used": 2,
+      "closing": 28
+    },
+    {
+      "day": "2025-04-02",
+      "warehouse": "003",
+      "component": "B",
+      "opening": 19,
+      "used": 1,
+      "closing": 18
+    },
+    {
+      "day": "2025-04-02",
+      "warehouse": "003",
+      "component": "C",
+      "opening": 32,
+      "used": 0,
+      "closing": 32
+    },
+    {
+      "day": "2025-04-02",
+      "warehouse": "003",
+      "component": "D",
+      "opening": 18,
+      "used": 0,
+      "closing": 18
+    },
+    {
+      "day": "2025-04-03",
+      "warehouse": "001",
+      "component": "A",
+      "opening": 18,
+      "used": 18,
+      "closing": 0
+    },
+    {
+      "day": "2025-04-03",
+      "warehouse": "001",
+      "component": "B",
+      "opening": 16,
+      "used": 6,
+      "closing": 10
+    },
+    {
+      "day": "2025-04-03",
+      "warehouse": "001",
+      "component": "C",
+      "opening": 13,
+      "used": 12,
+      "closing": 1
+    },
+    {
+      "day": "2025-04-03",
+      "warehouse": "001",
+      "component": "D",
+      "opening": 16,
+      "used": 2,
+      "closing": 14
+    },
+    {
+      "day": "2025-04-03",
+      "warehouse": "002",
+      "component": "A",
+      "opening": 17,
+      "used": 6,
+      "closing": 11
+    },
+    {
+      "day": "2025-04-03",
+      "warehouse": "002",
+      "component": "B",
+      "opening": 30,
+      "used": 2,
+      "closing": 28
+    },
+    {
+      "day": "2025-04-03",
+      "warehouse": "002",
+      "component": "C",
+      "opening": 10,
+      "used": 4,
+      "closing": 6
+    },
+    {
+      "day": "2025-04-03",
+      "warehouse": "002",
+      "component": "D",
+      "opening": 14,
+      "used": 3,
+      "closing": 11
+    },
+    {
+      "day": "2025-04-03",
+      "warehouse": "003",
+      "component": "A",
+      "opening": 19,
+      "used": 3,
+      "closing": 16
+    },
+    {
+      "day": "2025-04-03",
+      "warehouse": "003",
+      "component": "B",
+      "opening": 16,
+      "used": 0,
+      "closing": 16
+    },
+    {
+      "day": "2025-04-03",
+      "warehouse": "003",
+      "component": "C",
+      "opening": 21,
+      "used": 6,
+      "closing": 15
+    },
+    {
+      "day": "2025-04-03",
+      "warehouse": "003",
+      "component": "D",
+      "opening": 33,
+      "used": 0,
+      "closing": 33
+    },
+    {
+      "day": "2025-04-04",
+      "warehouse": "001",
+      "component": "A",
+      "opening": 28,
+      "used": 13,
+      "closing": 15
+    },
+    {
+      "day": "2025-04-04",
+      "warehouse": "001",
+      "component": "B",
+      "opening": 22,
+      "used": 5,
+      "closing": 17
+    },
+    {
+      "day": "2025-04-04",
+      "warehouse": "001",
+      "component": "C",
+      "opening": 21,
+      "used": 6,
+      "closing": 15
+    },
+    {
+      "day": "2025-04-04",
+      "warehouse": "001",
+      "component": "D",
+      "opening": 31,
+      "used": 3,
+      "closing": 28
+    },
+    {
+      "day": "2025-04-04",
+      "warehouse": "002",
+      "component": "A",
+      "opening": 15,
+      "used": 11,
+      "closing": 4
+    },
+    {
+      "day": "2025-04-04",
+      "warehouse": "002",
+      "component": "B",
+      "opening": 29,
+      "used": 4,
+      "closing": 25
+    },
+    {
+      "day": "2025-04-04",
+      "warehouse": "002",
+      "component": "C",
+      "opening": 31,
+      "used": 4,
+      "closing": 27
+    },
+    {
+      "day": "2025-04-04",
+      "warehouse": "002",
+      "component": "D",
+      "opening": 31,
+      "used": 2,
+      "closing": 29
+    },
+    {
+      "day": "2025-04-04",
+      "warehouse": "003",
+      "component": "A",
+      "opening": 17,
+      "used": 14,
+      "closing": 3
+    },
+    {
+      "day": "2025-04-04",
+      "warehouse": "003",
+      "component": "B",
+      "opening": 25,
+      "used": 6,
+      "closing": 19
+    },
+    {
+      "day": "2025-04-04",
+      "warehouse": "003",
+      "component": "C",
+      "opening": 33,
+      "used": 4,
+      "closing": 29
+    },
+    {
+      "day": "2025-04-04",
+      "warehouse": "003",
+      "component": "D",
+      "opening": 28,
+      "used": 2,
+      "closing": 26
+    },
+    {
+      "day": "2025-04-05",
+      "warehouse": "001",
+      "component": "A",
+      "opening": 19,
+      "used": 2,
+      "closing": 17
+    },
+    {
+      "day": "2025-04-05",
+      "warehouse": "001",
+      "component": "B",
+      "opening": 27,
+      "used": 4,
+      "closing": 23
+    },
+    {
+      "day": "2025-04-05",
+      "warehouse": "001",
+      "component": "C",
+      "opening": 17,
+      "used": 0,
+      "closing": 17
+    },
+    {
+      "day": "2025-04-05",
+      "warehouse": "001",
+      "component": "D",
+      "opening": 11,
+      "used": 1,
+      "closing": 10
+    },
+    {
+      "day": "2025-04-05",
+      "warehouse": "002",
+      "component": "A",
+      "opening": 30,
+      "used": 1,
+      "closing": 29
+    },
+    {
+      "day": "2025-04-05",
+      "warehouse": "002",
+      "component": "B",
+      "opening": 33,
+      "used": 0,
+      "closing": 33
+    },
+    {
+      "day": "2025-04-05",
+      "warehouse": "002",
+      "component": "C",
+      "opening": 11,
+      "used": 2,
+      "closing": 9
+    },
+    {
+      "day": "2025-04-05",
+      "warehouse": "002",
+      "component": "D",
+      "opening": 27,
+      "used": 0,
+      "closing": 27
+    },
+    {
+      "day": "2025-04-05",
+      "warehouse": "003",
+      "component": "A",
+      "opening": 17,
+      "used": 15,
+      "closing": 2
+    },
+    {
+      "day": "2025-04-05",
+      "warehouse": "003",
+      "component": "B",
+      "opening": 20,
+      "used": 6,
+      "closing": 14
+    },
+    {
+      "day": "2025-04-05",
+      "warehouse": "003",
+      "component": "C",
+      "opening": 22,
+      "used": 6,
+      "closing": 16
+    },
+    {
+      "day": "2025-04-05",
+      "warehouse": "003",
+      "component": "D",
+      "opening": 22,
+      "used": 2,
+      "closing": 20
+    },
+    {
+      "day": "2025-04-06",
+      "warehouse": "001",
+      "component": "A",
+      "opening": 27,
+      "used": 10,
+      "closing": 17
+    },
+    {
+      "day": "2025-04-06",
+      "warehouse": "001",
+      "component": "B",
+      "opening": 16,
+      "used": 9,
+      "closing": 7
+    },
+    {
+      "day": "2025-04-06",
+      "warehouse": "001",
+      "component": "C",
+      "opening": 28,
+      "used": 4,
+      "closing": 24
+    },
+    {
+      "day": "2025-04-06",
+      "warehouse": "001",
+      "component": "D",
+      "opening": 25,
+      "used": 2,
+      "closing": 23
+    },
+    {
+      "day": "2025-04-06",
+      "warehouse": "002",
+      "component": "A",
+      "opening": 32,
+      "used": 14,
+      "closing": 18
+    },
+    {
+      "day": "2025-04-06",
+      "warehouse": "002",
+      "component": "B",
+      "opening": 31,
+      "used": 7,
+      "closing": 24
+    },
+    {
+      "day": "2025-04-06",
+      "warehouse": "002",
+      "component": "C",
+      "opening": 33,
+      "used": 4,
+      "closing": 29
+    },
+    {
+      "day": "2025-04-06",
+      "warehouse": "002",
+      "component": "D",
+      "opening": 9,
+      "used": 2,
+      "closing": 7
+    },
+    {
+      "day": "2025-04-06",
+      "warehouse": "003",
+      "component": "A",
+      "opening": 15,
+      "used": 0,
+      "closing": 15
+    },
+    {
+      "day": "2025-04-06",
+      "warehouse": "003",
+      "component": "B",
+      "opening": 22,
+      "used": 0,
+      "closing": 22
+    },
+    {
+      "day": "2025-04-06",
+      "warehouse": "003",
+      "component": "C",
+      "opening": 19,
+      "used": 0,
+      "closing": 19
+    },
+    {
+      "day": "2025-04-06",
+      "warehouse": "003",
+      "component": "D",
+      "opening": 21,
+      "used": 0,
+      "closing": 21
+    },
+    {
+      "day": "2025-04-07",
+      "warehouse": "001",
+      "component": "A",
+      "opening": 10,
+      "used": 9,
+      "closing": 1
+    },
+    {
+      "day": "2025-04-07",
+      "warehouse": "001",
+      "component": "B",
+      "opening": 33,
+      "used": 2,
+      "closing": 31
+    },
+    {
+      "day": "2025-04-07",
+      "warehouse": "001",
+      "component": "C",
+      "opening": 31,
+      "used": 4,
+      "closing": 27
+    },
+    {
+      "day": "2025-04-07",
+      "warehouse": "001",
+      "component": "D",
+      "opening": 15,
+      "used": 3,
+      "closing": 12
+    },
+    {
+      "day": "2025-04-07",
+      "warehouse": "002",
+      "component": "A",
+      "opening": 10,
+      "used": 9,
+      "closing": 1
+    },
+    {
+      "day": "2025-04-07",
+      "warehouse": "002",
+      "component": "B",
+      "opening": 8,
+      "used": 3,
+      "closing": 5
+    },
+    {
+      "day": "2025-04-07",
+      "warehouse": "002",
+      "component": "C",
+      "opening": 25,
+      "used": 6,
+      "closing": 19
+    },
+    {
+      "day": "2025-04-07",
+      "warehouse": "002",
+      "component": "D",
+      "opening": 18,
+      "used": 3,
+      "closing": 15
+    },
+    {
+      "day": "2025-04-07",
+      "warehouse": "003",
+      "component": "A",
+      "opening": 13,
+      "used": 0,
+      "closing": 13
+    },
+    {
+      "day": "2025-04-07",
+      "warehouse": "003",
+      "component": "B",
+      "opening": 9,
+      "used": 1,
+      "closing": 8
+    },
+    {
+      "day": "2025-04-07",
+      "warehouse": "003",
+      "component": "C",
+      "opening": 27,
+      "used": 0,
+      "closing": 27
+    },
+    {
+      "day": "2025-04-07",
+      "warehouse": "003",
+      "component": "D",
+      "opening": 19,
+      "used": 1,
+      "closing": 18
+    },
+    {
+      "day": "2025-04-08",
+      "warehouse": "001",
+      "component": "A",
+      "opening": 25,
+      "used": 0,
+      "closing": 25
+    },
+    {
+      "day": "2025-04-08",
+      "warehouse": "001",
+      "component": "B",
+      "opening": 32,
+      "used": 5,
+      "closing": 27
+    },
+    {
+      "day": "2025-04-08",
+      "warehouse": "001",
+      "component": "C",
+      "opening": 15,
+      "used": 0,
+      "closing": 15
+    },
+    {
+      "day": "2025-04-08",
+      "warehouse": "001",
+      "component": "D",
+      "opening": 11,
+      "used": 0,
+      "closing": 11
+    },
+    {
+      "day": "2025-04-08",
+      "warehouse": "002",
+      "component": "A",
+      "opening": 11,
+      "used": 0,
+      "closing": 11
+    },
+    {
+      "day": "2025-04-08",
+      "warehouse": "002",
+      "component": "B",
+      "opening": 13,
+      "used": 0,
+      "closing": 13
+    },
+    {
+      "day": "2025-04-08",
+      "warehouse": "002",
+      "component": "C",
+      "opening": 30,
+      "used": 0,
+      "closing": 30
+    },
+    {
+      "day": "2025-04-08",
+      "warehouse": "002",
+      "component": "D",
+      "opening": 21,
+      "used": 0,
+      "closing": 21
+    },
+    {
+      "day": "2025-04-08",
+      "warehouse": "003",
+      "component": "A",
+      "opening": 34,
+      "used": 17,
+      "closing": 17
+    },
+    {
+      "day": "2025-04-08",
+      "warehouse": "003",
+      "component": "B",
+      "opening": 19,
+      "used": 5,
+      "closing": 14
+    },
+    {
+      "day": "2025-04-08",
+      "warehouse": "003",
+      "component": "C",
+      "opening": 28,
+      "used": 10,
+      "closing": 18
+    },
+    {
+      "day": "2025-04-08",
+      "warehouse": "003",
+      "component": "D",
+      "opening": 22,
+      "used": 5,
+      "closing": 17
+    },
+    {
+      "day": "2025-04-09",
+      "warehouse": "001",
+      "component": "A",
+      "opening": 16,
+      "used": 9,
+      "closing": 7
+    },
+    {
+      "day": "2025-04-09",
+      "warehouse": "001",
+      "component": "B",
+      "opening": 18,
+      "used": 3,
+      "closing": 15
+    },
+    {
+      "day": "2025-04-09",
+      "warehouse": "001",
+      "component": "C",
+      "opening": 9,
+      "used": 9,
+      "closing": 0
+    },
+    {
+      "day": "2025-04-09",
+      "warehouse": "001",
+      "component": "D",
+      "opening": 29,
+      "used": 3,
+      "closing": 26
+    },
+    {
+      "day": "2025-04-09",
+      "warehouse": "002",
+      "component": "A",
+      "opening": 19,
+      "used": 6,
+      "closing": 13
+    },
+    {
+      "day": "2025-04-09",
+      "warehouse": "002",
+      "component": "B",
+      "opening": 8,
+      "used": 2,
+      "closing": 6
+    },
+    {
+      "day": "2025-04-09",
+      "warehouse": "002",
+      "component": "C",
+      "opening": 12,
+      "used": 5,
+      "closing": 7
+    },
+    {
+      "day": "2025-04-09",
+      "warehouse": "002",
+      "component": "D",
+      "opening": 10,
+      "used": 6,
+      "closing": 4
+    },
+    {
+      "day": "2025-04-09",
+      "warehouse": "003",
+      "component": "A",
+      "opening": 10,
+      "used": 0,
+      "closing": 10
+    },
+    {
+      "day": "2025-04-09",
+      "warehouse": "003",
+      "component": "B",
+      "opening": 18,
+      "used": 0,
+      "closing": 18
+    },
+    {
+      "day": "2025-04-09",
+      "warehouse": "003",
+      "component": "C",
+      "opening": 14,
+      "used": 0,
+      "closing": 14
+    },
+    {
+      "day": "2025-04-09",
+      "warehouse": "003",
+      "component": "D",
+      "opening": 17,
+      "used": 0,
+      "closing": 17
+    },
+    {
+      "day": "2025-04-10",
+      "warehouse": "001",
+      "component": "A",
+      "opening": 32,
+      "used": 24,
+      "closing": 8
+    },
+    {
+      "day": "2025-04-10",
+      "warehouse": "001",
+      "component": "B",
+      "opening": 11,
+      "used": 8,
+      "closing": 3
+    },
+    {
+      "day": "2025-04-10",
+      "warehouse": "001",
+      "component": "C",
+      "opening": 19,
+      "used": 10,
+      "closing": 9
+    },
+    {
+      "day": "2025-04-10",
+      "warehouse": "001",
+      "component": "D",
+      "opening": 24,
+      "used": 4,
+      "closing": 20
+    },
+    {
+      "day": "2025-04-10",
+      "warehouse": "002",
+      "component": "A",
+      "opening": 11,
+      "used": 6,
+      "closing": 5
+    },
+    {
+      "day": "2025-04-10",
+      "warehouse": "002",
+      "component": "B",
+      "opening": 11,
+      "used": 2,
+      "closing": 9
+    },
+    {
+      "day": "2025-04-10",
+      "warehouse": "002",
+      "component": "C",
+      "opening": 20,
+      "used": 4,
+      "closing": 16
+    },
+    {
+      "day": "2025-04-10",
+      "warehouse": "002",
+      "component": "D",
+      "opening": 26,
+      "used": 2,
+      "closing": 24
+    },
+    {
+      "day": "2025-04-10",
+      "warehouse": "003",
+      "component": "A",
+      "opening": 28,
+      "used": 14,
+      "closing": 14
+    },
+    {
+      "day": "2025-04-10",
+      "warehouse": "003",
+      "component": "B",
+      "opening": 9,
+      "used": 6,
+      "closing": 3
+    },
+    {
+      "day": "2025-04-10",
+      "warehouse": "003",
+      "component": "C",
+      "opening": 9,
+      "used": 4,
+      "closing": 5
+    },
+    {
+      "day": "2025-04-10",
+      "warehouse": "003",
+      "component": "D",
+      "opening": 15,
+      "used": 2,
+      "closing": 13
+    },
+    {
+      "day": "2025-04-11",
+      "warehouse": "001",
+      "component": "A",
+      "opening": 22,
+      "used": 11,
+      "closing": 11
+    },
+    {
+      "day": "2025-04-11",
+      "warehouse": "001",
+      "component": "B",
+      "opening": 32,
+      "used": 5,
+      "closing": 27
+    },
+    {
+      "day": "2025-04-11",
+      "warehouse": "001",
+      "component": "C",
+      "opening": 23,
+      "used": 10,
+      "closing": 13
+    },
+    {
+      "day": "2025-04-11",
+      "warehouse": "001",
+      "component": "D",
+      "opening": 31,
+      "used": 3,
+      "closing": 28
+    },
+    {
+      "day": "2025-04-11",
+      "warehouse": "002",
+      "component": "A",
+      "opening": 11,
+      "used": 8,
+      "closing": 3
+    },
+    {
+      "day": "2025-04-11",
+      "warehouse": "002",
+      "component": "B",
+      "opening": 9,
+      "used": 4,
+      "closing": 5
+    },
+    {
+      "day": "2025-04-11",
+      "warehouse": "002",
+      "component": "C",
+      "opening": 33,
+      "used": 4,
+      "closing": 29
+    },
+    {
+      "day": "2025-04-11",
+      "warehouse": "002",
+      "component": "D",
+      "opening": 9,
+      "used": 2,
+      "closing": 7
+    },
+    {
+      "day": "2025-04-11",
+      "warehouse": "003",
+      "component": "A",
+      "opening": 26,
+      "used": 14,
+      "closing": 12
+    },
+    {
+      "day": "2025-04-11",
+      "warehouse": "003",
+      "component": "B",
+      "opening": 8,
+      "used": 6,
+      "closing": 2
+    },
+    {
+      "day": "2025-04-11",
+      "warehouse": "003",
+      "component": "C",
+      "opening": 13,
+      "used": 4,
+      "closing": 9
+    },
+    {
+      "day": "2025-04-11",
+      "warehouse": "003",
+      "component": "D",
+      "opening": 25,
+      "used": 2,
+      "closing": 23
+    },
+    {
+      "day": "2025-04-12",
+      "warehouse": "001",
+      "component": "A",
+      "opening": 17,
+      "used": 15,
+      "closing": 2
+    },
+    {
+      "day": "2025-04-12",
+      "warehouse": "001",
+      "component": "B",
+      "opening": 29,
+      "used": 5,
+      "closing": 24
+    },
+    {
+      "day": "2025-04-12",
+      "warehouse": "001",
+      "component": "C",
+      "opening": 22,
+      "used": 13,
+      "closing": 9
+    },
+    {
+      "day": "2025-04-12",
+      "warehouse": "001",
+      "component": "D",
+      "opening": 15,
+      "used": 5,
+      "closing": 10
+    },
+    {
+      "day": "2025-04-12",
+      "warehouse": "002",
+      "component": "A",
+      "opening": 11,
+      "used": 9,
+      "closing": 2
+    },
+    {
+      "day": "2025-04-12",
+      "warehouse": "002",
+      "component": "B",
+      "opening": 32,
+      "used": 4,
+      "closing": 28
+    },
+    {
+      "day": "2025-04-12",
+      "warehouse": "002",
+      "component": "C",
+      "opening": 32,
+      "used": 2,
+      "closing": 30
+    },
+    {
+      "day": "2025-04-12",
+      "warehouse": "002",
+      "component": "D",
+      "opening": 29,
+      "used": 3,
+      "closing": 26
+    },
+    {
+      "day": "2025-04-12",
+      "warehouse": "003",
+      "component": "A",
+      "opening": 10,
+      "used": 3,
+      "closing": 7
+    },
+    {
+      "day": "2025-04-12",
+      "warehouse": "003",
+      "component": "B",
+      "opening": 24,
+      "used": 1,
+      "closing": 23
+    },
+    {
+      "day": "2025-04-12",
+      "warehouse": "003",
+      "component": "C",
+      "opening": 8,
+      "used": 2,
+      "closing": 6
+    },
+    {
+      "day": "2025-04-12",
+      "warehouse": "003",
+      "component": "D",
+      "opening": 13,
+      "used": 1,
+      "closing": 12
+    }
+  ],
+  "daily.csv": [
+    {
+      "day": "2025-04-01",
+      "orders": 10,
+      "accepted_orders": 6,
+      "rejected_orders": 4,
+      "priority_points": 190,
+      "units": 11,
+      "freight_cents": 580,
+      "carbon": 32,
+      "budget_remaining": 20,
+      "carbon_remaining": 8,
+      "signature": "~|002|001|002|002|~|~|~|001|002"
+    },
+    {
+      "day": "2025-04-02",
+      "orders": 10,
+      "accepted_orders": 6,
+      "rejected_orders": 4,
+      "priority_points": 220,
+      "units": 9,
+      "freight_cents": 670,
+      "carbon": 36,
+      "budget_remaining": 5,
+      "carbon_remaining": 12,
+      "signature": "001|~|002|~|~|002|002|003|001|~"
+    },
+    {
+      "day": "2025-04-03",
+      "orders": 10,
+      "accepted_orders": 6,
+      "rejected_orders": 4,
+      "priority_points": 140,
+      "units": 12,
+      "freight_cents": 680,
+      "carbon": 42,
+      "budget_remaining": 70,
+      "carbon_remaining": 14,
+      "signature": "001|002|~|003|~|001|002|~|001|~"
+    },
+    {
+      "day": "2025-04-04",
+      "orders": 10,
+      "accepted_orders": 7,
+      "rejected_orders": 3,
+      "priority_points": 240,
+      "units": 12,
+      "freight_cents": 685,
+      "carbon": 39,
+      "budget_remaining": 140,
+      "carbon_remaining": 1,
+      "signature": "003|002|002|~|002|001|001|~|~|001"
+    },
+    {
+      "day": "2025-04-05",
+      "orders": 10,
+      "accepted_orders": 6,
+      "rejected_orders": 4,
+      "priority_points": 240,
+      "units": 9,
+      "freight_cents": 570,
+      "carbon": 30,
+      "budget_remaining": 30,
+      "carbon_remaining": 18,
+      "signature": "003|~|~|001|~|001|002|~|003|001"
+    },
+    {
+      "day": "2025-04-06",
+      "orders": 10,
+      "accepted_orders": 6,
+      "rejected_orders": 4,
+      "priority_points": 190,
+      "units": 12,
+      "freight_cents": 655,
+      "carbon": 39,
+      "budget_remaining": 20,
+      "carbon_remaining": 17,
+      "signature": "002|001|001|~|001|~|~|~|002|001"
+    },
+    {
+      "day": "2025-04-07",
+      "orders": 10,
+      "accepted_orders": 7,
+      "rejected_orders": 3,
+      "priority_points": 240,
+      "units": 11,
+      "freight_cents": 705,
+      "carbon": 37,
+      "budget_remaining": 45,
+      "carbon_remaining": 3,
+      "signature": "~|~|003|002|~|001|002|001|003|001"
+    },
+    {
+      "day": "2025-04-08",
+      "orders": 10,
+      "accepted_orders": 5,
+      "rejected_orders": 5,
+      "priority_points": 170,
+      "units": 12,
+      "freight_cents": 685,
+      "carbon": 45,
+      "budget_remaining": 140,
+      "carbon_remaining": 3,
+      "signature": "~|003|003|001|001|003|~|~|~|~"
+    },
+    {
+      "day": "2025-04-09",
+      "orders": 10,
+      "accepted_orders": 6,
+      "rejected_orders": 4,
+      "priority_points": 190,
+      "units": 13,
+      "freight_cents": 600,
+      "carbon": 36,
+      "budget_remaining": 0,
+      "carbon_remaining": 20,
+      "signature": "~|002|~|~|~|002|002|002|001|001"
+    },
+    {
+      "day": "2025-04-10",
+      "orders": 10,
+      "accepted_orders": 6,
+      "rejected_orders": 4,
+      "priority_points": 160,
+      "units": 12,
+      "freight_cents": 660,
+      "carbon": 40,
+      "budget_remaining": 15,
+      "carbon_remaining": 0,
+      "signature": "~|002|001|~|~|001|003|001|001|~"
+    },
+    {
+      "day": "2025-04-11",
+      "orders": 10,
+      "accepted_orders": 8,
+      "rejected_orders": 2,
+      "priority_points": 220,
+      "units": 13,
+      "freight_cents": 730,
+      "carbon": 40,
+      "budget_remaining": 20,
+      "carbon_remaining": 8,
+      "signature": "003|001|001|002|001|~|~|001|002|002"
+    },
+    {
+      "day": "2025-04-12",
+      "orders": 10,
+      "accepted_orders": 7,
+      "rejected_orders": 3,
+      "priority_points": 180,
+      "units": 15,
+      "freight_cents": 800,
+      "carbon": 48,
+      "budget_remaining": 25,
+      "carbon_remaining": 8,
+      "signature": "~|001|001|~|002|003|002|002|~|001"
+    }
+  ],
+  "report.json": {
+    "days": 12,
+    "orders": 120,
+    "accepted_orders": 76,
+    "rejected_orders": 44,
+    "priority_points": 2380,
+    "units": 141,
+    "freight_cents": 8020,
+    "carbon": 464,
+    "component_units_used": 641
+  }
+}

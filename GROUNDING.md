@@ -819,6 +819,36 @@ workspace export, UUID manifests, source hashes, JSONL traces, individual stage
 files and usage capture. It has independent sources and output, the same bundled
 CSV case, provider-free preparation, and no infrastructure retries or resume.
 
+The shared private `scripts/e2e-scenarios/regional-close` case supplies original,
+deterministically generated CSV inputs and one Markdown request to both E2E
+runners through their existing request/workspace options. It exercises revision
+selection, alias normalization, population recovery, national income quartiles,
+weighted aggregation and complete exclusion auditing for 240 synthetic regions.
+It adds no model tools, dependencies, container images or orchestration behavior.
+Only its `inputs/` directory enters the agent workspace; the generator and frozen
+expected outputs remain host-side. Its standard-library Python scorer reads the
+exported workspace tar without extraction or agent-code execution, verifies
+unchanged inputs and every required output against hash-bound expected facts,
+and reports artifact success separately from runtime status and recorded cost.
+The case has no established model failure rate and is not a SkillsBench
+reproduction or an equal-compute comparison: Direct and MOSAIC retain their
+existing different turn budgets. No paid execution is part of fixture generation
+or scoring.
+
+The same private scenario surface includes `inventory-replay` and
+`warehouse-allocation`, using unchanged E2E runners and local-only synthetic
+inputs. Inventory replay separates received-time revision selection from
+effective-time replay, cancellations, FIFO issue/return provenance and atomic
+transfers. Its gold artifacts derive from closed-form canonical lot allocations.
+Warehouse allocation combines nested kit expansion with indivisible orders,
+shared inventory, capacity, freight and carbon constraints, and an exact
+lexicographic objective certified by exhaustive per-day enumeration. The two
+scenarios share `scripts/e2e-scenarios/artifacts.py` for frozen identity checks,
+read-only in-memory tar scoring, exact artifact coverage and runtime/cost reports.
+Only scenario `inputs/` enter the sandbox; generators and expected artifacts stay
+host-side. They add no agent tools, skills, runtime dependencies or paid runs and
+establish no comparative success rate or equal-compute claim.
+
 The SkillsBench composition condition scans a caller-verified clean checkout of
 the existing v1.1 pin into a deterministic global catalog, hashes every package,
 namespaces same-name/different-body collisions, and preserves task-to-skill gold

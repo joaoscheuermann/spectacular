@@ -1,0 +1,72 @@
+{
+  "scenario": "warehouse-allocation-v1",
+  "sources": {
+    "generate.py": "5991f6b93984db6380737275953183670e1dd6e3a3a516c77245b911aa6870e1",
+    "request.md": "eadd1767c71d41beaf4f199d4dd37cf085ef0f8c92b53f5fbd4aa419952d87f8",
+    "score.py": "4266af95385a0bc815130d6f5737f2e3b6261faa522c0106e3cb74901dbcb1c4"
+  },
+  "scorer_sha256": "a78318ab9e561ccbe23a83402714c3991724d650d2e4d507145176bd4d08c271",
+  "inputs": {
+    "products.csv": "f458275b2590494c2f52d32892c13c340e9c830a9b931275f8e6cd2a4437abf4",
+    "bom.csv": "8b5b557007d036b3c67242630182da85174ad213db298f9107e72f01e9d8ba7e",
+    "aliases.csv": "c47fafa28cbbd6789270efe63064b656df05461923a59bd04b5cb338c7ad7a77",
+    "warehouses.csv": "692f0003a95358c38477a5ec4a617ccdfe9aa8b363921733b4da5acbdadd3fb5",
+    "inventory.csv": "78cf8b145b442c1aa76557a3d99df90bf502ae2b3975c186c5c0aaea8941a97c",
+    "capacity.csv": "2cf91e966a265999203c9ac90cbcd06b2c66eedb8901ca82b6b65b062559a176",
+    "limits.csv": "0cd9538c15b9d00d1c41ed2e5f253e17ee9d3b46987020a649ae0a39ab378e7e",
+    "lanes.csv": "9edc573a4ebf4cc1825c11f3f528e1aa7d6fad8e8141a81c06d3bc08b6d4ee04",
+    "orders.csv": "acc19f1c1b7b18cbdb5bc9ff35dd9da293dd5473e4be9866275fc7dd37ebdf9c"
+  },
+  "expected_sha256": "705ce0124e47acd46e6587713a13ecac9453c1caeb7a4fc0de7cb97f42e30719",
+  "contracts": {
+    "bom.csv": {
+      "keys": [
+        "product",
+        "component"
+      ],
+      "numeric": [
+        "quantity_per_unit"
+      ]
+    },
+    "assignments.csv": {
+      "keys": [
+        "order_id"
+      ],
+      "numeric": [
+        "quantity",
+        "accepted",
+        "priority_points",
+        "freight_cents",
+        "carbon"
+      ]
+    },
+    "stock.csv": {
+      "keys": [
+        "day",
+        "warehouse",
+        "component"
+      ],
+      "numeric": [
+        "opening",
+        "used",
+        "closing"
+      ]
+    },
+    "daily.csv": {
+      "keys": [
+        "day"
+      ],
+      "numeric": [
+        "orders",
+        "accepted_orders",
+        "rejected_orders",
+        "priority_points",
+        "units",
+        "freight_cents",
+        "carbon",
+        "budget_remaining",
+        "carbon_remaining"
+      ]
+    }
+  }
+}

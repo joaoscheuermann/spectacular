@@ -1,0 +1,59 @@
+{
+  "scenario": "inventory-replay-v1",
+  "sources": {
+    "generate.py": "b8cfe64ce901fd6d39323725a67cfcd90297386b8a0849b5ddf15490eacff4aa",
+    "request.md": "8cf3f1c59def7f7061d37b89a85374d474ac93d3a67a4874f8912b1f172bdc46",
+    "score.py": "487b8786ce4bbac3bb32b94521aff597bf93d9d9a60248b58bcf561bfdd5f4de"
+  },
+  "scorer_sha256": "a78318ab9e561ccbe23a83402714c3991724d650d2e4d507145176bd4d08c271",
+  "inputs": {
+    "products.csv": "04a5310ee344574bf6782a2efb5c28cdf8f60748d35b5018747d6f58c6c05b64",
+    "warehouses.csv": "1421980aa4d96e1a88d2dabcecff742396f616766c9b1a16023a3a20d9becd79",
+    "aliases.csv": "1564a1fc3a530e7b89004fc47f162c931b5c2c82e1127494eb41e99e11a8284a",
+    "events.csv": "20bc9eeb32f8a6c0c3c7163d0a03f34eba5e75f3f2c7694b5bc19a022df149be"
+  },
+  "expected_sha256": "bf8429ab2a2c083063b61854f171d44df933427497ea893bd32b63e092b4d197",
+  "contracts": {
+    "audit.csv": {
+      "keys": [
+        "record_id"
+      ],
+      "numeric": []
+    },
+    "allocations.csv": {
+      "keys": [
+        "event_id",
+        "leg",
+        "fragment"
+      ],
+      "numeric": [
+        "fragment",
+        "quantity",
+        "unit_cost",
+        "value"
+      ]
+    },
+    "lots.csv": {
+      "keys": [
+        "warehouse",
+        "sku",
+        "lot_id"
+      ],
+      "numeric": [
+        "quantity",
+        "unit_cost",
+        "value"
+      ]
+    },
+    "stock.csv": {
+      "keys": [
+        "warehouse",
+        "sku"
+      ],
+      "numeric": [
+        "quantity",
+        "value"
+      ]
+    }
+  }
+}

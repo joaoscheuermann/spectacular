@@ -1,0 +1,8628 @@
+{
+  "audit.csv": [
+    {
+      "record_id": "E001-01-r2",
+      "event_id": "E001-01",
+      "sku": "00001",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E001-01-r1",
+      "event_id": "E001-01",
+      "sku": "00001",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E001-01-r9",
+      "event_id": "E001-01",
+      "sku": "00001",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E001-02-r2",
+      "event_id": "E001-02",
+      "sku": "00001",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E001-02-r1",
+      "event_id": "E001-02",
+      "sku": "00001",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E001-02-r9",
+      "event_id": "E001-02",
+      "sku": "00001",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E001-03-r2",
+      "event_id": "E001-03",
+      "sku": "00001",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E001-03-r1",
+      "event_id": "E001-03",
+      "sku": "00001",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E001-03-r9",
+      "event_id": "E001-03",
+      "sku": "00001",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E001-04-r2",
+      "event_id": "E001-04",
+      "sku": "00001",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E001-04-r1",
+      "event_id": "E001-04",
+      "sku": "00001",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E001-04-r9",
+      "event_id": "E001-04",
+      "sku": "00001",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E001-05-r2",
+      "event_id": "E001-05",
+      "sku": "00001",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E001-05-r1",
+      "event_id": "E001-05",
+      "sku": "00001",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E001-05-r9",
+      "event_id": "E001-05",
+      "sku": "00001",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E001-06-r2",
+      "event_id": "E001-06",
+      "sku": "00001",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E001-06-r1",
+      "event_id": "E001-06",
+      "sku": "00001",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E001-06-r9",
+      "event_id": "E001-06",
+      "sku": "00001",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E001-07-r2",
+      "event_id": "E001-07",
+      "sku": "00001",
+      "reason": "insufficient_stock"
+    },
+    {
+      "record_id": "E001-07-r1",
+      "event_id": "E001-07",
+      "sku": "00001",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E001-07-r9",
+      "event_id": "E001-07",
+      "sku": "00001",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E001-08-r2",
+      "event_id": "E001-08",
+      "sku": "00001",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E001-08-r1",
+      "event_id": "E001-08",
+      "sku": "00001",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E001-08-r9",
+      "event_id": "E001-08",
+      "sku": "00001",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E001-09-r2",
+      "event_id": "E001-09",
+      "sku": "00001",
+      "reason": "cancelled"
+    },
+    {
+      "record_id": "E001-09-r1",
+      "event_id": "E001-09",
+      "sku": "00001",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E001-09-r9",
+      "event_id": "E001-09",
+      "sku": "00001",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E001-10-r2",
+      "event_id": "E001-10",
+      "sku": "MISSING",
+      "reason": "after_close"
+    },
+    {
+      "record_id": "E001-11-r2",
+      "event_id": "E001-11",
+      "sku": "MISSING",
+      "reason": "unknown_warehouse"
+    },
+    {
+      "record_id": "E001-12-r2",
+      "event_id": "E001-12",
+      "sku": "MISSING",
+      "reason": "unknown_sku"
+    },
+    {
+      "record_id": "E001-13-r2",
+      "event_id": "E001-13",
+      "sku": "99999",
+      "reason": "inactive_sku"
+    },
+    {
+      "record_id": "E001-14-r2",
+      "event_id": "E001-14",
+      "sku": "00001",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E002-01-r2",
+      "event_id": "E002-01",
+      "sku": "00002",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E002-01-r1",
+      "event_id": "E002-01",
+      "sku": "00002",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E002-01-r9",
+      "event_id": "E002-01",
+      "sku": "00002",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E002-02-r2",
+      "event_id": "E002-02",
+      "sku": "00002",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E002-02-r1",
+      "event_id": "E002-02",
+      "sku": "00002",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E002-02-r9",
+      "event_id": "E002-02",
+      "sku": "00002",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E002-03-r2",
+      "event_id": "E002-03",
+      "sku": "00002",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E002-03-r1",
+      "event_id": "E002-03",
+      "sku": "00002",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E002-03-r9",
+      "event_id": "E002-03",
+      "sku": "00002",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E002-04-r2",
+      "event_id": "E002-04",
+      "sku": "00002",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E002-04-r1",
+      "event_id": "E002-04",
+      "sku": "00002",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E002-04-r9",
+      "event_id": "E002-04",
+      "sku": "00002",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E002-05-r2",
+      "event_id": "E002-05",
+      "sku": "00002",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E002-05-r1",
+      "event_id": "E002-05",
+      "sku": "00002",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E002-05-r9",
+      "event_id": "E002-05",
+      "sku": "00002",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E002-06-r2",
+      "event_id": "E002-06",
+      "sku": "00002",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E002-06-r1",
+      "event_id": "E002-06",
+      "sku": "00002",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E002-06-r9",
+      "event_id": "E002-06",
+      "sku": "00002",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E002-07-r2",
+      "event_id": "E002-07",
+      "sku": "00002",
+      "reason": "insufficient_stock"
+    },
+    {
+      "record_id": "E002-07-r1",
+      "event_id": "E002-07",
+      "sku": "00002",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E002-07-r9",
+      "event_id": "E002-07",
+      "sku": "00002",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E002-08-r2",
+      "event_id": "E002-08",
+      "sku": "00002",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E002-08-r1",
+      "event_id": "E002-08",
+      "sku": "00002",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E002-08-r9",
+      "event_id": "E002-08",
+      "sku": "00002",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E002-09-r2",
+      "event_id": "E002-09",
+      "sku": "00002",
+      "reason": "cancelled"
+    },
+    {
+      "record_id": "E002-09-r1",
+      "event_id": "E002-09",
+      "sku": "00002",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E002-09-r9",
+      "event_id": "E002-09",
+      "sku": "00002",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E002-10-r2",
+      "event_id": "E002-10",
+      "sku": "MISSING",
+      "reason": "after_close"
+    },
+    {
+      "record_id": "E002-11-r2",
+      "event_id": "E002-11",
+      "sku": "MISSING",
+      "reason": "unknown_warehouse"
+    },
+    {
+      "record_id": "E002-12-r2",
+      "event_id": "E002-12",
+      "sku": "MISSING",
+      "reason": "unknown_sku"
+    },
+    {
+      "record_id": "E002-13-r2",
+      "event_id": "E002-13",
+      "sku": "99999",
+      "reason": "inactive_sku"
+    },
+    {
+      "record_id": "E002-14-r2",
+      "event_id": "E002-14",
+      "sku": "00002",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E003-01-r2",
+      "event_id": "E003-01",
+      "sku": "00003",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E003-01-r1",
+      "event_id": "E003-01",
+      "sku": "00003",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E003-01-r9",
+      "event_id": "E003-01",
+      "sku": "00003",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E003-02-r2",
+      "event_id": "E003-02",
+      "sku": "00003",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E003-02-r1",
+      "event_id": "E003-02",
+      "sku": "00003",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E003-02-r9",
+      "event_id": "E003-02",
+      "sku": "00003",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E003-03-r2",
+      "event_id": "E003-03",
+      "sku": "00003",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E003-03-r1",
+      "event_id": "E003-03",
+      "sku": "00003",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E003-03-r9",
+      "event_id": "E003-03",
+      "sku": "00003",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E003-04-r2",
+      "event_id": "E003-04",
+      "sku": "00003",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E003-04-r1",
+      "event_id": "E003-04",
+      "sku": "00003",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E003-04-r9",
+      "event_id": "E003-04",
+      "sku": "00003",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E003-05-r2",
+      "event_id": "E003-05",
+      "sku": "00003",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E003-05-r1",
+      "event_id": "E003-05",
+      "sku": "00003",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E003-05-r9",
+      "event_id": "E003-05",
+      "sku": "00003",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E003-06-r2",
+      "event_id": "E003-06",
+      "sku": "00003",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E003-06-r1",
+      "event_id": "E003-06",
+      "sku": "00003",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E003-06-r9",
+      "event_id": "E003-06",
+      "sku": "00003",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E003-07-r2",
+      "event_id": "E003-07",
+      "sku": "00003",
+      "reason": "insufficient_stock"
+    },
+    {
+      "record_id": "E003-07-r1",
+      "event_id": "E003-07",
+      "sku": "00003",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E003-07-r9",
+      "event_id": "E003-07",
+      "sku": "00003",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E003-08-r2",
+      "event_id": "E003-08",
+      "sku": "00003",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E003-08-r1",
+      "event_id": "E003-08",
+      "sku": "00003",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E003-08-r9",
+      "event_id": "E003-08",
+      "sku": "00003",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E003-09-r2",
+      "event_id": "E003-09",
+      "sku": "00003",
+      "reason": "cancelled"
+    },
+    {
+      "record_id": "E003-09-r1",
+      "event_id": "E003-09",
+      "sku": "00003",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E003-09-r9",
+      "event_id": "E003-09",
+      "sku": "00003",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E003-10-r2",
+      "event_id": "E003-10",
+      "sku": "MISSING",
+      "reason": "after_close"
+    },
+    {
+      "record_id": "E003-11-r2",
+      "event_id": "E003-11",
+      "sku": "MISSING",
+      "reason": "unknown_warehouse"
+    },
+    {
+      "record_id": "E003-12-r2",
+      "event_id": "E003-12",
+      "sku": "MISSING",
+      "reason": "unknown_sku"
+    },
+    {
+      "record_id": "E003-13-r2",
+      "event_id": "E003-13",
+      "sku": "99999",
+      "reason": "inactive_sku"
+    },
+    {
+      "record_id": "E003-14-r2",
+      "event_id": "E003-14",
+      "sku": "00003",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E004-01-r2",
+      "event_id": "E004-01",
+      "sku": "00004",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E004-01-r1",
+      "event_id": "E004-01",
+      "sku": "00004",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E004-01-r9",
+      "event_id": "E004-01",
+      "sku": "00004",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E004-02-r2",
+      "event_id": "E004-02",
+      "sku": "00004",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E004-02-r1",
+      "event_id": "E004-02",
+      "sku": "00004",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E004-02-r9",
+      "event_id": "E004-02",
+      "sku": "00004",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E004-03-r2",
+      "event_id": "E004-03",
+      "sku": "00004",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E004-03-r1",
+      "event_id": "E004-03",
+      "sku": "00004",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E004-03-r9",
+      "event_id": "E004-03",
+      "sku": "00004",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E004-04-r2",
+      "event_id": "E004-04",
+      "sku": "00004",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E004-04-r1",
+      "event_id": "E004-04",
+      "sku": "00004",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E004-04-r9",
+      "event_id": "E004-04",
+      "sku": "00004",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E004-05-r2",
+      "event_id": "E004-05",
+      "sku": "00004",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E004-05-r1",
+      "event_id": "E004-05",
+      "sku": "00004",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E004-05-r9",
+      "event_id": "E004-05",
+      "sku": "00004",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E004-06-r2",
+      "event_id": "E004-06",
+      "sku": "00004",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E004-06-r1",
+      "event_id": "E004-06",
+      "sku": "00004",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E004-06-r9",
+      "event_id": "E004-06",
+      "sku": "00004",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E004-07-r2",
+      "event_id": "E004-07",
+      "sku": "00004",
+      "reason": "insufficient_stock"
+    },
+    {
+      "record_id": "E004-07-r1",
+      "event_id": "E004-07",
+      "sku": "00004",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E004-07-r9",
+      "event_id": "E004-07",
+      "sku": "00004",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E004-08-r2",
+      "event_id": "E004-08",
+      "sku": "00004",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E004-08-r1",
+      "event_id": "E004-08",
+      "sku": "00004",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E004-08-r9",
+      "event_id": "E004-08",
+      "sku": "00004",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E004-09-r2",
+      "event_id": "E004-09",
+      "sku": "00004",
+      "reason": "cancelled"
+    },
+    {
+      "record_id": "E004-09-r1",
+      "event_id": "E004-09",
+      "sku": "00004",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E004-09-r9",
+      "event_id": "E004-09",
+      "sku": "00004",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E004-10-r2",
+      "event_id": "E004-10",
+      "sku": "MISSING",
+      "reason": "after_close"
+    },
+    {
+      "record_id": "E004-11-r2",
+      "event_id": "E004-11",
+      "sku": "MISSING",
+      "reason": "unknown_warehouse"
+    },
+    {
+      "record_id": "E004-12-r2",
+      "event_id": "E004-12",
+      "sku": "MISSING",
+      "reason": "unknown_sku"
+    },
+    {
+      "record_id": "E004-13-r2",
+      "event_id": "E004-13",
+      "sku": "99999",
+      "reason": "inactive_sku"
+    },
+    {
+      "record_id": "E004-14-r2",
+      "event_id": "E004-14",
+      "sku": "00004",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E005-01-r2",
+      "event_id": "E005-01",
+      "sku": "00005",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E005-01-r1",
+      "event_id": "E005-01",
+      "sku": "00005",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E005-01-r9",
+      "event_id": "E005-01",
+      "sku": "00005",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E005-02-r2",
+      "event_id": "E005-02",
+      "sku": "00005",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E005-02-r1",
+      "event_id": "E005-02",
+      "sku": "00005",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E005-02-r9",
+      "event_id": "E005-02",
+      "sku": "00005",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E005-03-r2",
+      "event_id": "E005-03",
+      "sku": "00005",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E005-03-r1",
+      "event_id": "E005-03",
+      "sku": "00005",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E005-03-r9",
+      "event_id": "E005-03",
+      "sku": "00005",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E005-04-r2",
+      "event_id": "E005-04",
+      "sku": "00005",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E005-04-r1",
+      "event_id": "E005-04",
+      "sku": "00005",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E005-04-r9",
+      "event_id": "E005-04",
+      "sku": "00005",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E005-05-r2",
+      "event_id": "E005-05",
+      "sku": "00005",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E005-05-r1",
+      "event_id": "E005-05",
+      "sku": "00005",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E005-05-r9",
+      "event_id": "E005-05",
+      "sku": "00005",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E005-06-r2",
+      "event_id": "E005-06",
+      "sku": "00005",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E005-06-r1",
+      "event_id": "E005-06",
+      "sku": "00005",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E005-06-r9",
+      "event_id": "E005-06",
+      "sku": "00005",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E005-07-r2",
+      "event_id": "E005-07",
+      "sku": "00005",
+      "reason": "insufficient_stock"
+    },
+    {
+      "record_id": "E005-07-r1",
+      "event_id": "E005-07",
+      "sku": "00005",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E005-07-r9",
+      "event_id": "E005-07",
+      "sku": "00005",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E005-08-r2",
+      "event_id": "E005-08",
+      "sku": "00005",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E005-08-r1",
+      "event_id": "E005-08",
+      "sku": "00005",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E005-08-r9",
+      "event_id": "E005-08",
+      "sku": "00005",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E005-09-r2",
+      "event_id": "E005-09",
+      "sku": "00005",
+      "reason": "cancelled"
+    },
+    {
+      "record_id": "E005-09-r1",
+      "event_id": "E005-09",
+      "sku": "00005",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E005-09-r9",
+      "event_id": "E005-09",
+      "sku": "00005",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E005-10-r2",
+      "event_id": "E005-10",
+      "sku": "MISSING",
+      "reason": "after_close"
+    },
+    {
+      "record_id": "E005-11-r2",
+      "event_id": "E005-11",
+      "sku": "MISSING",
+      "reason": "unknown_warehouse"
+    },
+    {
+      "record_id": "E005-12-r2",
+      "event_id": "E005-12",
+      "sku": "MISSING",
+      "reason": "unknown_sku"
+    },
+    {
+      "record_id": "E005-13-r2",
+      "event_id": "E005-13",
+      "sku": "99999",
+      "reason": "inactive_sku"
+    },
+    {
+      "record_id": "E005-14-r2",
+      "event_id": "E005-14",
+      "sku": "00005",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E006-01-r2",
+      "event_id": "E006-01",
+      "sku": "00006",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E006-01-r1",
+      "event_id": "E006-01",
+      "sku": "00006",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E006-01-r9",
+      "event_id": "E006-01",
+      "sku": "00006",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E006-02-r2",
+      "event_id": "E006-02",
+      "sku": "00006",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E006-02-r1",
+      "event_id": "E006-02",
+      "sku": "00006",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E006-02-r9",
+      "event_id": "E006-02",
+      "sku": "00006",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E006-03-r2",
+      "event_id": "E006-03",
+      "sku": "00006",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E006-03-r1",
+      "event_id": "E006-03",
+      "sku": "00006",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E006-03-r9",
+      "event_id": "E006-03",
+      "sku": "00006",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E006-04-r2",
+      "event_id": "E006-04",
+      "sku": "00006",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E006-04-r1",
+      "event_id": "E006-04",
+      "sku": "00006",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E006-04-r9",
+      "event_id": "E006-04",
+      "sku": "00006",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E006-05-r2",
+      "event_id": "E006-05",
+      "sku": "00006",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E006-05-r1",
+      "event_id": "E006-05",
+      "sku": "00006",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E006-05-r9",
+      "event_id": "E006-05",
+      "sku": "00006",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E006-06-r2",
+      "event_id": "E006-06",
+      "sku": "00006",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E006-06-r1",
+      "event_id": "E006-06",
+      "sku": "00006",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E006-06-r9",
+      "event_id": "E006-06",
+      "sku": "00006",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E006-07-r2",
+      "event_id": "E006-07",
+      "sku": "00006",
+      "reason": "insufficient_stock"
+    },
+    {
+      "record_id": "E006-07-r1",
+      "event_id": "E006-07",
+      "sku": "00006",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E006-07-r9",
+      "event_id": "E006-07",
+      "sku": "00006",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E006-08-r2",
+      "event_id": "E006-08",
+      "sku": "00006",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E006-08-r1",
+      "event_id": "E006-08",
+      "sku": "00006",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E006-08-r9",
+      "event_id": "E006-08",
+      "sku": "00006",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E006-09-r2",
+      "event_id": "E006-09",
+      "sku": "00006",
+      "reason": "cancelled"
+    },
+    {
+      "record_id": "E006-09-r1",
+      "event_id": "E006-09",
+      "sku": "00006",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E006-09-r9",
+      "event_id": "E006-09",
+      "sku": "00006",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E006-10-r2",
+      "event_id": "E006-10",
+      "sku": "MISSING",
+      "reason": "after_close"
+    },
+    {
+      "record_id": "E006-11-r2",
+      "event_id": "E006-11",
+      "sku": "MISSING",
+      "reason": "unknown_warehouse"
+    },
+    {
+      "record_id": "E006-12-r2",
+      "event_id": "E006-12",
+      "sku": "MISSING",
+      "reason": "unknown_sku"
+    },
+    {
+      "record_id": "E006-13-r2",
+      "event_id": "E006-13",
+      "sku": "99999",
+      "reason": "inactive_sku"
+    },
+    {
+      "record_id": "E006-14-r2",
+      "event_id": "E006-14",
+      "sku": "00006",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E007-01-r2",
+      "event_id": "E007-01",
+      "sku": "00007",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E007-01-r1",
+      "event_id": "E007-01",
+      "sku": "00007",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E007-01-r9",
+      "event_id": "E007-01",
+      "sku": "00007",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E007-02-r2",
+      "event_id": "E007-02",
+      "sku": "00007",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E007-02-r1",
+      "event_id": "E007-02",
+      "sku": "00007",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E007-02-r9",
+      "event_id": "E007-02",
+      "sku": "00007",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E007-03-r2",
+      "event_id": "E007-03",
+      "sku": "00007",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E007-03-r1",
+      "event_id": "E007-03",
+      "sku": "00007",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E007-03-r9",
+      "event_id": "E007-03",
+      "sku": "00007",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E007-04-r2",
+      "event_id": "E007-04",
+      "sku": "00007",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E007-04-r1",
+      "event_id": "E007-04",
+      "sku": "00007",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E007-04-r9",
+      "event_id": "E007-04",
+      "sku": "00007",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E007-05-r2",
+      "event_id": "E007-05",
+      "sku": "00007",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E007-05-r1",
+      "event_id": "E007-05",
+      "sku": "00007",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E007-05-r9",
+      "event_id": "E007-05",
+      "sku": "00007",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E007-06-r2",
+      "event_id": "E007-06",
+      "sku": "00007",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E007-06-r1",
+      "event_id": "E007-06",
+      "sku": "00007",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E007-06-r9",
+      "event_id": "E007-06",
+      "sku": "00007",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E007-07-r2",
+      "event_id": "E007-07",
+      "sku": "00007",
+      "reason": "insufficient_stock"
+    },
+    {
+      "record_id": "E007-07-r1",
+      "event_id": "E007-07",
+      "sku": "00007",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E007-07-r9",
+      "event_id": "E007-07",
+      "sku": "00007",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E007-08-r2",
+      "event_id": "E007-08",
+      "sku": "00007",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E007-08-r1",
+      "event_id": "E007-08",
+      "sku": "00007",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E007-08-r9",
+      "event_id": "E007-08",
+      "sku": "00007",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E007-09-r2",
+      "event_id": "E007-09",
+      "sku": "00007",
+      "reason": "cancelled"
+    },
+    {
+      "record_id": "E007-09-r1",
+      "event_id": "E007-09",
+      "sku": "00007",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E007-09-r9",
+      "event_id": "E007-09",
+      "sku": "00007",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E007-10-r2",
+      "event_id": "E007-10",
+      "sku": "MISSING",
+      "reason": "after_close"
+    },
+    {
+      "record_id": "E007-11-r2",
+      "event_id": "E007-11",
+      "sku": "MISSING",
+      "reason": "unknown_warehouse"
+    },
+    {
+      "record_id": "E007-12-r2",
+      "event_id": "E007-12",
+      "sku": "MISSING",
+      "reason": "unknown_sku"
+    },
+    {
+      "record_id": "E007-13-r2",
+      "event_id": "E007-13",
+      "sku": "99999",
+      "reason": "inactive_sku"
+    },
+    {
+      "record_id": "E007-14-r2",
+      "event_id": "E007-14",
+      "sku": "00007",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E008-01-r2",
+      "event_id": "E008-01",
+      "sku": "00008",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E008-01-r1",
+      "event_id": "E008-01",
+      "sku": "00008",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E008-01-r9",
+      "event_id": "E008-01",
+      "sku": "00008",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E008-02-r2",
+      "event_id": "E008-02",
+      "sku": "00008",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E008-02-r1",
+      "event_id": "E008-02",
+      "sku": "00008",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E008-02-r9",
+      "event_id": "E008-02",
+      "sku": "00008",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E008-03-r2",
+      "event_id": "E008-03",
+      "sku": "00008",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E008-03-r1",
+      "event_id": "E008-03",
+      "sku": "00008",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E008-03-r9",
+      "event_id": "E008-03",
+      "sku": "00008",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E008-04-r2",
+      "event_id": "E008-04",
+      "sku": "00008",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E008-04-r1",
+      "event_id": "E008-04",
+      "sku": "00008",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E008-04-r9",
+      "event_id": "E008-04",
+      "sku": "00008",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E008-05-r2",
+      "event_id": "E008-05",
+      "sku": "00008",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E008-05-r1",
+      "event_id": "E008-05",
+      "sku": "00008",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E008-05-r9",
+      "event_id": "E008-05",
+      "sku": "00008",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E008-06-r2",
+      "event_id": "E008-06",
+      "sku": "00008",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E008-06-r1",
+      "event_id": "E008-06",
+      "sku": "00008",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E008-06-r9",
+      "event_id": "E008-06",
+      "sku": "00008",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E008-07-r2",
+      "event_id": "E008-07",
+      "sku": "00008",
+      "reason": "insufficient_stock"
+    },
+    {
+      "record_id": "E008-07-r1",
+      "event_id": "E008-07",
+      "sku": "00008",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E008-07-r9",
+      "event_id": "E008-07",
+      "sku": "00008",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E008-08-r2",
+      "event_id": "E008-08",
+      "sku": "00008",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E008-08-r1",
+      "event_id": "E008-08",
+      "sku": "00008",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E008-08-r9",
+      "event_id": "E008-08",
+      "sku": "00008",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E008-09-r2",
+      "event_id": "E008-09",
+      "sku": "00008",
+      "reason": "cancelled"
+    },
+    {
+      "record_id": "E008-09-r1",
+      "event_id": "E008-09",
+      "sku": "00008",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E008-09-r9",
+      "event_id": "E008-09",
+      "sku": "00008",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E008-10-r2",
+      "event_id": "E008-10",
+      "sku": "MISSING",
+      "reason": "after_close"
+    },
+    {
+      "record_id": "E008-11-r2",
+      "event_id": "E008-11",
+      "sku": "MISSING",
+      "reason": "unknown_warehouse"
+    },
+    {
+      "record_id": "E008-12-r2",
+      "event_id": "E008-12",
+      "sku": "MISSING",
+      "reason": "unknown_sku"
+    },
+    {
+      "record_id": "E008-13-r2",
+      "event_id": "E008-13",
+      "sku": "99999",
+      "reason": "inactive_sku"
+    },
+    {
+      "record_id": "E008-14-r2",
+      "event_id": "E008-14",
+      "sku": "00008",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E009-01-r2",
+      "event_id": "E009-01",
+      "sku": "00009",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E009-01-r1",
+      "event_id": "E009-01",
+      "sku": "00009",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E009-01-r9",
+      "event_id": "E009-01",
+      "sku": "00009",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E009-02-r2",
+      "event_id": "E009-02",
+      "sku": "00009",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E009-02-r1",
+      "event_id": "E009-02",
+      "sku": "00009",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E009-02-r9",
+      "event_id": "E009-02",
+      "sku": "00009",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E009-03-r2",
+      "event_id": "E009-03",
+      "sku": "00009",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E009-03-r1",
+      "event_id": "E009-03",
+      "sku": "00009",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E009-03-r9",
+      "event_id": "E009-03",
+      "sku": "00009",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E009-04-r2",
+      "event_id": "E009-04",
+      "sku": "00009",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E009-04-r1",
+      "event_id": "E009-04",
+      "sku": "00009",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E009-04-r9",
+      "event_id": "E009-04",
+      "sku": "00009",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E009-05-r2",
+      "event_id": "E009-05",
+      "sku": "00009",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E009-05-r1",
+      "event_id": "E009-05",
+      "sku": "00009",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E009-05-r9",
+      "event_id": "E009-05",
+      "sku": "00009",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E009-06-r2",
+      "event_id": "E009-06",
+      "sku": "00009",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E009-06-r1",
+      "event_id": "E009-06",
+      "sku": "00009",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E009-06-r9",
+      "event_id": "E009-06",
+      "sku": "00009",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E009-07-r2",
+      "event_id": "E009-07",
+      "sku": "00009",
+      "reason": "insufficient_stock"
+    },
+    {
+      "record_id": "E009-07-r1",
+      "event_id": "E009-07",
+      "sku": "00009",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E009-07-r9",
+      "event_id": "E009-07",
+      "sku": "00009",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E009-08-r2",
+      "event_id": "E009-08",
+      "sku": "00009",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E009-08-r1",
+      "event_id": "E009-08",
+      "sku": "00009",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E009-08-r9",
+      "event_id": "E009-08",
+      "sku": "00009",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E009-09-r2",
+      "event_id": "E009-09",
+      "sku": "00009",
+      "reason": "cancelled"
+    },
+    {
+      "record_id": "E009-09-r1",
+      "event_id": "E009-09",
+      "sku": "00009",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E009-09-r9",
+      "event_id": "E009-09",
+      "sku": "00009",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E009-10-r2",
+      "event_id": "E009-10",
+      "sku": "MISSING",
+      "reason": "after_close"
+    },
+    {
+      "record_id": "E009-11-r2",
+      "event_id": "E009-11",
+      "sku": "MISSING",
+      "reason": "unknown_warehouse"
+    },
+    {
+      "record_id": "E009-12-r2",
+      "event_id": "E009-12",
+      "sku": "MISSING",
+      "reason": "unknown_sku"
+    },
+    {
+      "record_id": "E009-13-r2",
+      "event_id": "E009-13",
+      "sku": "99999",
+      "reason": "inactive_sku"
+    },
+    {
+      "record_id": "E009-14-r2",
+      "event_id": "E009-14",
+      "sku": "00009",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E010-01-r2",
+      "event_id": "E010-01",
+      "sku": "00010",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E010-01-r1",
+      "event_id": "E010-01",
+      "sku": "00010",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E010-01-r9",
+      "event_id": "E010-01",
+      "sku": "00010",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E010-02-r2",
+      "event_id": "E010-02",
+      "sku": "00010",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E010-02-r1",
+      "event_id": "E010-02",
+      "sku": "00010",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E010-02-r9",
+      "event_id": "E010-02",
+      "sku": "00010",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E010-03-r2",
+      "event_id": "E010-03",
+      "sku": "00010",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E010-03-r1",
+      "event_id": "E010-03",
+      "sku": "00010",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E010-03-r9",
+      "event_id": "E010-03",
+      "sku": "00010",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E010-04-r2",
+      "event_id": "E010-04",
+      "sku": "00010",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E010-04-r1",
+      "event_id": "E010-04",
+      "sku": "00010",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E010-04-r9",
+      "event_id": "E010-04",
+      "sku": "00010",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E010-05-r2",
+      "event_id": "E010-05",
+      "sku": "00010",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E010-05-r1",
+      "event_id": "E010-05",
+      "sku": "00010",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E010-05-r9",
+      "event_id": "E010-05",
+      "sku": "00010",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E010-06-r2",
+      "event_id": "E010-06",
+      "sku": "00010",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E010-06-r1",
+      "event_id": "E010-06",
+      "sku": "00010",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E010-06-r9",
+      "event_id": "E010-06",
+      "sku": "00010",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E010-07-r2",
+      "event_id": "E010-07",
+      "sku": "00010",
+      "reason": "insufficient_stock"
+    },
+    {
+      "record_id": "E010-07-r1",
+      "event_id": "E010-07",
+      "sku": "00010",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E010-07-r9",
+      "event_id": "E010-07",
+      "sku": "00010",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E010-08-r2",
+      "event_id": "E010-08",
+      "sku": "00010",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E010-08-r1",
+      "event_id": "E010-08",
+      "sku": "00010",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E010-08-r9",
+      "event_id": "E010-08",
+      "sku": "00010",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E010-09-r2",
+      "event_id": "E010-09",
+      "sku": "00010",
+      "reason": "cancelled"
+    },
+    {
+      "record_id": "E010-09-r1",
+      "event_id": "E010-09",
+      "sku": "00010",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E010-09-r9",
+      "event_id": "E010-09",
+      "sku": "00010",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E010-10-r2",
+      "event_id": "E010-10",
+      "sku": "MISSING",
+      "reason": "after_close"
+    },
+    {
+      "record_id": "E010-11-r2",
+      "event_id": "E010-11",
+      "sku": "MISSING",
+      "reason": "unknown_warehouse"
+    },
+    {
+      "record_id": "E010-12-r2",
+      "event_id": "E010-12",
+      "sku": "MISSING",
+      "reason": "unknown_sku"
+    },
+    {
+      "record_id": "E010-13-r2",
+      "event_id": "E010-13",
+      "sku": "99999",
+      "reason": "inactive_sku"
+    },
+    {
+      "record_id": "E010-14-r2",
+      "event_id": "E010-14",
+      "sku": "00010",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E011-01-r2",
+      "event_id": "E011-01",
+      "sku": "00011",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E011-01-r1",
+      "event_id": "E011-01",
+      "sku": "00011",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E011-01-r9",
+      "event_id": "E011-01",
+      "sku": "00011",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E011-02-r2",
+      "event_id": "E011-02",
+      "sku": "00011",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E011-02-r1",
+      "event_id": "E011-02",
+      "sku": "00011",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E011-02-r9",
+      "event_id": "E011-02",
+      "sku": "00011",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E011-03-r2",
+      "event_id": "E011-03",
+      "sku": "00011",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E011-03-r1",
+      "event_id": "E011-03",
+      "sku": "00011",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E011-03-r9",
+      "event_id": "E011-03",
+      "sku": "00011",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E011-04-r2",
+      "event_id": "E011-04",
+      "sku": "00011",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E011-04-r1",
+      "event_id": "E011-04",
+      "sku": "00011",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E011-04-r9",
+      "event_id": "E011-04",
+      "sku": "00011",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E011-05-r2",
+      "event_id": "E011-05",
+      "sku": "00011",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E011-05-r1",
+      "event_id": "E011-05",
+      "sku": "00011",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E011-05-r9",
+      "event_id": "E011-05",
+      "sku": "00011",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E011-06-r2",
+      "event_id": "E011-06",
+      "sku": "00011",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E011-06-r1",
+      "event_id": "E011-06",
+      "sku": "00011",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E011-06-r9",
+      "event_id": "E011-06",
+      "sku": "00011",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E011-07-r2",
+      "event_id": "E011-07",
+      "sku": "00011",
+      "reason": "insufficient_stock"
+    },
+    {
+      "record_id": "E011-07-r1",
+      "event_id": "E011-07",
+      "sku": "00011",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E011-07-r9",
+      "event_id": "E011-07",
+      "sku": "00011",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E011-08-r2",
+      "event_id": "E011-08",
+      "sku": "00011",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E011-08-r1",
+      "event_id": "E011-08",
+      "sku": "00011",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E011-08-r9",
+      "event_id": "E011-08",
+      "sku": "00011",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E011-09-r2",
+      "event_id": "E011-09",
+      "sku": "00011",
+      "reason": "cancelled"
+    },
+    {
+      "record_id": "E011-09-r1",
+      "event_id": "E011-09",
+      "sku": "00011",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E011-09-r9",
+      "event_id": "E011-09",
+      "sku": "00011",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E011-10-r2",
+      "event_id": "E011-10",
+      "sku": "MISSING",
+      "reason": "after_close"
+    },
+    {
+      "record_id": "E011-11-r2",
+      "event_id": "E011-11",
+      "sku": "MISSING",
+      "reason": "unknown_warehouse"
+    },
+    {
+      "record_id": "E011-12-r2",
+      "event_id": "E011-12",
+      "sku": "MISSING",
+      "reason": "unknown_sku"
+    },
+    {
+      "record_id": "E011-13-r2",
+      "event_id": "E011-13",
+      "sku": "99999",
+      "reason": "inactive_sku"
+    },
+    {
+      "record_id": "E011-14-r2",
+      "event_id": "E011-14",
+      "sku": "00011",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E012-01-r2",
+      "event_id": "E012-01",
+      "sku": "00012",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E012-01-r1",
+      "event_id": "E012-01",
+      "sku": "00012",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E012-01-r9",
+      "event_id": "E012-01",
+      "sku": "00012",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E012-02-r2",
+      "event_id": "E012-02",
+      "sku": "00012",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E012-02-r1",
+      "event_id": "E012-02",
+      "sku": "00012",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E012-02-r9",
+      "event_id": "E012-02",
+      "sku": "00012",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E012-03-r2",
+      "event_id": "E012-03",
+      "sku": "00012",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E012-03-r1",
+      "event_id": "E012-03",
+      "sku": "00012",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E012-03-r9",
+      "event_id": "E012-03",
+      "sku": "00012",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E012-04-r2",
+      "event_id": "E012-04",
+      "sku": "00012",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E012-04-r1",
+      "event_id": "E012-04",
+      "sku": "00012",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E012-04-r9",
+      "event_id": "E012-04",
+      "sku": "00012",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E012-05-r2",
+      "event_id": "E012-05",
+      "sku": "00012",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E012-05-r1",
+      "event_id": "E012-05",
+      "sku": "00012",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E012-05-r9",
+      "event_id": "E012-05",
+      "sku": "00012",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E012-06-r2",
+      "event_id": "E012-06",
+      "sku": "00012",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E012-06-r1",
+      "event_id": "E012-06",
+      "sku": "00012",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E012-06-r9",
+      "event_id": "E012-06",
+      "sku": "00012",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E012-07-r2",
+      "event_id": "E012-07",
+      "sku": "00012",
+      "reason": "insufficient_stock"
+    },
+    {
+      "record_id": "E012-07-r1",
+      "event_id": "E012-07",
+      "sku": "00012",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E012-07-r9",
+      "event_id": "E012-07",
+      "sku": "00012",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E012-08-r2",
+      "event_id": "E012-08",
+      "sku": "00012",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E012-08-r1",
+      "event_id": "E012-08",
+      "sku": "00012",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E012-08-r9",
+      "event_id": "E012-08",
+      "sku": "00012",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E012-09-r2",
+      "event_id": "E012-09",
+      "sku": "00012",
+      "reason": "cancelled"
+    },
+    {
+      "record_id": "E012-09-r1",
+      "event_id": "E012-09",
+      "sku": "00012",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E012-09-r9",
+      "event_id": "E012-09",
+      "sku": "00012",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E012-10-r2",
+      "event_id": "E012-10",
+      "sku": "MISSING",
+      "reason": "after_close"
+    },
+    {
+      "record_id": "E012-11-r2",
+      "event_id": "E012-11",
+      "sku": "MISSING",
+      "reason": "unknown_warehouse"
+    },
+    {
+      "record_id": "E012-12-r2",
+      "event_id": "E012-12",
+      "sku": "MISSING",
+      "reason": "unknown_sku"
+    },
+    {
+      "record_id": "E012-13-r2",
+      "event_id": "E012-13",
+      "sku": "99999",
+      "reason": "inactive_sku"
+    },
+    {
+      "record_id": "E012-14-r2",
+      "event_id": "E012-14",
+      "sku": "00012",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E013-01-r2",
+      "event_id": "E013-01",
+      "sku": "00013",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E013-01-r1",
+      "event_id": "E013-01",
+      "sku": "00013",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E013-01-r9",
+      "event_id": "E013-01",
+      "sku": "00013",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E013-02-r2",
+      "event_id": "E013-02",
+      "sku": "00013",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E013-02-r1",
+      "event_id": "E013-02",
+      "sku": "00013",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E013-02-r9",
+      "event_id": "E013-02",
+      "sku": "00013",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E013-03-r2",
+      "event_id": "E013-03",
+      "sku": "00013",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E013-03-r1",
+      "event_id": "E013-03",
+      "sku": "00013",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E013-03-r9",
+      "event_id": "E013-03",
+      "sku": "00013",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E013-04-r2",
+      "event_id": "E013-04",
+      "sku": "00013",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E013-04-r1",
+      "event_id": "E013-04",
+      "sku": "00013",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E013-04-r9",
+      "event_id": "E013-04",
+      "sku": "00013",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E013-05-r2",
+      "event_id": "E013-05",
+      "sku": "00013",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E013-05-r1",
+      "event_id": "E013-05",
+      "sku": "00013",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E013-05-r9",
+      "event_id": "E013-05",
+      "sku": "00013",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E013-06-r2",
+      "event_id": "E013-06",
+      "sku": "00013",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E013-06-r1",
+      "event_id": "E013-06",
+      "sku": "00013",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E013-06-r9",
+      "event_id": "E013-06",
+      "sku": "00013",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E013-07-r2",
+      "event_id": "E013-07",
+      "sku": "00013",
+      "reason": "insufficient_stock"
+    },
+    {
+      "record_id": "E013-07-r1",
+      "event_id": "E013-07",
+      "sku": "00013",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E013-07-r9",
+      "event_id": "E013-07",
+      "sku": "00013",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E013-08-r2",
+      "event_id": "E013-08",
+      "sku": "00013",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E013-08-r1",
+      "event_id": "E013-08",
+      "sku": "00013",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E013-08-r9",
+      "event_id": "E013-08",
+      "sku": "00013",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E013-09-r2",
+      "event_id": "E013-09",
+      "sku": "00013",
+      "reason": "cancelled"
+    },
+    {
+      "record_id": "E013-09-r1",
+      "event_id": "E013-09",
+      "sku": "00013",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E013-09-r9",
+      "event_id": "E013-09",
+      "sku": "00013",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E013-10-r2",
+      "event_id": "E013-10",
+      "sku": "MISSING",
+      "reason": "after_close"
+    },
+    {
+      "record_id": "E013-11-r2",
+      "event_id": "E013-11",
+      "sku": "MISSING",
+      "reason": "unknown_warehouse"
+    },
+    {
+      "record_id": "E013-12-r2",
+      "event_id": "E013-12",
+      "sku": "MISSING",
+      "reason": "unknown_sku"
+    },
+    {
+      "record_id": "E013-13-r2",
+      "event_id": "E013-13",
+      "sku": "99999",
+      "reason": "inactive_sku"
+    },
+    {
+      "record_id": "E013-14-r2",
+      "event_id": "E013-14",
+      "sku": "00013",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E014-01-r2",
+      "event_id": "E014-01",
+      "sku": "00014",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E014-01-r1",
+      "event_id": "E014-01",
+      "sku": "00014",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E014-01-r9",
+      "event_id": "E014-01",
+      "sku": "00014",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E014-02-r2",
+      "event_id": "E014-02",
+      "sku": "00014",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E014-02-r1",
+      "event_id": "E014-02",
+      "sku": "00014",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E014-02-r9",
+      "event_id": "E014-02",
+      "sku": "00014",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E014-03-r2",
+      "event_id": "E014-03",
+      "sku": "00014",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E014-03-r1",
+      "event_id": "E014-03",
+      "sku": "00014",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E014-03-r9",
+      "event_id": "E014-03",
+      "sku": "00014",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E014-04-r2",
+      "event_id": "E014-04",
+      "sku": "00014",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E014-04-r1",
+      "event_id": "E014-04",
+      "sku": "00014",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E014-04-r9",
+      "event_id": "E014-04",
+      "sku": "00014",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E014-05-r2",
+      "event_id": "E014-05",
+      "sku": "00014",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E014-05-r1",
+      "event_id": "E014-05",
+      "sku": "00014",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E014-05-r9",
+      "event_id": "E014-05",
+      "sku": "00014",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E014-06-r2",
+      "event_id": "E014-06",
+      "sku": "00014",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E014-06-r1",
+      "event_id": "E014-06",
+      "sku": "00014",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E014-06-r9",
+      "event_id": "E014-06",
+      "sku": "00014",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E014-07-r2",
+      "event_id": "E014-07",
+      "sku": "00014",
+      "reason": "insufficient_stock"
+    },
+    {
+      "record_id": "E014-07-r1",
+      "event_id": "E014-07",
+      "sku": "00014",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E014-07-r9",
+      "event_id": "E014-07",
+      "sku": "00014",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E014-08-r2",
+      "event_id": "E014-08",
+      "sku": "00014",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E014-08-r1",
+      "event_id": "E014-08",
+      "sku": "00014",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E014-08-r9",
+      "event_id": "E014-08",
+      "sku": "00014",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E014-09-r2",
+      "event_id": "E014-09",
+      "sku": "00014",
+      "reason": "cancelled"
+    },
+    {
+      "record_id": "E014-09-r1",
+      "event_id": "E014-09",
+      "sku": "00014",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E014-09-r9",
+      "event_id": "E014-09",
+      "sku": "00014",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E014-10-r2",
+      "event_id": "E014-10",
+      "sku": "MISSING",
+      "reason": "after_close"
+    },
+    {
+      "record_id": "E014-11-r2",
+      "event_id": "E014-11",
+      "sku": "MISSING",
+      "reason": "unknown_warehouse"
+    },
+    {
+      "record_id": "E014-12-r2",
+      "event_id": "E014-12",
+      "sku": "MISSING",
+      "reason": "unknown_sku"
+    },
+    {
+      "record_id": "E014-13-r2",
+      "event_id": "E014-13",
+      "sku": "99999",
+      "reason": "inactive_sku"
+    },
+    {
+      "record_id": "E014-14-r2",
+      "event_id": "E014-14",
+      "sku": "00014",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E015-01-r2",
+      "event_id": "E015-01",
+      "sku": "00015",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E015-01-r1",
+      "event_id": "E015-01",
+      "sku": "00015",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E015-01-r9",
+      "event_id": "E015-01",
+      "sku": "00015",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E015-02-r2",
+      "event_id": "E015-02",
+      "sku": "00015",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E015-02-r1",
+      "event_id": "E015-02",
+      "sku": "00015",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E015-02-r9",
+      "event_id": "E015-02",
+      "sku": "00015",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E015-03-r2",
+      "event_id": "E015-03",
+      "sku": "00015",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E015-03-r1",
+      "event_id": "E015-03",
+      "sku": "00015",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E015-03-r9",
+      "event_id": "E015-03",
+      "sku": "00015",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E015-04-r2",
+      "event_id": "E015-04",
+      "sku": "00015",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E015-04-r1",
+      "event_id": "E015-04",
+      "sku": "00015",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E015-04-r9",
+      "event_id": "E015-04",
+      "sku": "00015",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E015-05-r2",
+      "event_id": "E015-05",
+      "sku": "00015",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E015-05-r1",
+      "event_id": "E015-05",
+      "sku": "00015",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E015-05-r9",
+      "event_id": "E015-05",
+      "sku": "00015",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E015-06-r2",
+      "event_id": "E015-06",
+      "sku": "00015",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E015-06-r1",
+      "event_id": "E015-06",
+      "sku": "00015",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E015-06-r9",
+      "event_id": "E015-06",
+      "sku": "00015",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E015-07-r2",
+      "event_id": "E015-07",
+      "sku": "00015",
+      "reason": "insufficient_stock"
+    },
+    {
+      "record_id": "E015-07-r1",
+      "event_id": "E015-07",
+      "sku": "00015",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E015-07-r9",
+      "event_id": "E015-07",
+      "sku": "00015",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E015-08-r2",
+      "event_id": "E015-08",
+      "sku": "00015",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E015-08-r1",
+      "event_id": "E015-08",
+      "sku": "00015",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E015-08-r9",
+      "event_id": "E015-08",
+      "sku": "00015",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E015-09-r2",
+      "event_id": "E015-09",
+      "sku": "00015",
+      "reason": "cancelled"
+    },
+    {
+      "record_id": "E015-09-r1",
+      "event_id": "E015-09",
+      "sku": "00015",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E015-09-r9",
+      "event_id": "E015-09",
+      "sku": "00015",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E015-10-r2",
+      "event_id": "E015-10",
+      "sku": "MISSING",
+      "reason": "after_close"
+    },
+    {
+      "record_id": "E015-11-r2",
+      "event_id": "E015-11",
+      "sku": "MISSING",
+      "reason": "unknown_warehouse"
+    },
+    {
+      "record_id": "E015-12-r2",
+      "event_id": "E015-12",
+      "sku": "MISSING",
+      "reason": "unknown_sku"
+    },
+    {
+      "record_id": "E015-13-r2",
+      "event_id": "E015-13",
+      "sku": "99999",
+      "reason": "inactive_sku"
+    },
+    {
+      "record_id": "E015-14-r2",
+      "event_id": "E015-14",
+      "sku": "00015",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E016-01-r2",
+      "event_id": "E016-01",
+      "sku": "00016",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E016-01-r1",
+      "event_id": "E016-01",
+      "sku": "00016",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E016-01-r9",
+      "event_id": "E016-01",
+      "sku": "00016",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E016-02-r2",
+      "event_id": "E016-02",
+      "sku": "00016",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E016-02-r1",
+      "event_id": "E016-02",
+      "sku": "00016",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E016-02-r9",
+      "event_id": "E016-02",
+      "sku": "00016",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E016-03-r2",
+      "event_id": "E016-03",
+      "sku": "00016",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E016-03-r1",
+      "event_id": "E016-03",
+      "sku": "00016",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E016-03-r9",
+      "event_id": "E016-03",
+      "sku": "00016",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E016-04-r2",
+      "event_id": "E016-04",
+      "sku": "00016",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E016-04-r1",
+      "event_id": "E016-04",
+      "sku": "00016",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E016-04-r9",
+      "event_id": "E016-04",
+      "sku": "00016",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E016-05-r2",
+      "event_id": "E016-05",
+      "sku": "00016",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E016-05-r1",
+      "event_id": "E016-05",
+      "sku": "00016",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E016-05-r9",
+      "event_id": "E016-05",
+      "sku": "00016",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E016-06-r2",
+      "event_id": "E016-06",
+      "sku": "00016",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E016-06-r1",
+      "event_id": "E016-06",
+      "sku": "00016",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E016-06-r9",
+      "event_id": "E016-06",
+      "sku": "00016",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E016-07-r2",
+      "event_id": "E016-07",
+      "sku": "00016",
+      "reason": "insufficient_stock"
+    },
+    {
+      "record_id": "E016-07-r1",
+      "event_id": "E016-07",
+      "sku": "00016",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E016-07-r9",
+      "event_id": "E016-07",
+      "sku": "00016",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E016-08-r2",
+      "event_id": "E016-08",
+      "sku": "00016",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E016-08-r1",
+      "event_id": "E016-08",
+      "sku": "00016",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E016-08-r9",
+      "event_id": "E016-08",
+      "sku": "00016",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E016-09-r2",
+      "event_id": "E016-09",
+      "sku": "00016",
+      "reason": "cancelled"
+    },
+    {
+      "record_id": "E016-09-r1",
+      "event_id": "E016-09",
+      "sku": "00016",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E016-09-r9",
+      "event_id": "E016-09",
+      "sku": "00016",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E016-10-r2",
+      "event_id": "E016-10",
+      "sku": "MISSING",
+      "reason": "after_close"
+    },
+    {
+      "record_id": "E016-11-r2",
+      "event_id": "E016-11",
+      "sku": "MISSING",
+      "reason": "unknown_warehouse"
+    },
+    {
+      "record_id": "E016-12-r2",
+      "event_id": "E016-12",
+      "sku": "MISSING",
+      "reason": "unknown_sku"
+    },
+    {
+      "record_id": "E016-13-r2",
+      "event_id": "E016-13",
+      "sku": "99999",
+      "reason": "inactive_sku"
+    },
+    {
+      "record_id": "E016-14-r2",
+      "event_id": "E016-14",
+      "sku": "00016",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E017-01-r2",
+      "event_id": "E017-01",
+      "sku": "00017",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E017-01-r1",
+      "event_id": "E017-01",
+      "sku": "00017",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E017-01-r9",
+      "event_id": "E017-01",
+      "sku": "00017",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E017-02-r2",
+      "event_id": "E017-02",
+      "sku": "00017",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E017-02-r1",
+      "event_id": "E017-02",
+      "sku": "00017",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E017-02-r9",
+      "event_id": "E017-02",
+      "sku": "00017",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E017-03-r2",
+      "event_id": "E017-03",
+      "sku": "00017",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E017-03-r1",
+      "event_id": "E017-03",
+      "sku": "00017",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E017-03-r9",
+      "event_id": "E017-03",
+      "sku": "00017",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E017-04-r2",
+      "event_id": "E017-04",
+      "sku": "00017",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E017-04-r1",
+      "event_id": "E017-04",
+      "sku": "00017",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E017-04-r9",
+      "event_id": "E017-04",
+      "sku": "00017",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E017-05-r2",
+      "event_id": "E017-05",
+      "sku": "00017",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E017-05-r1",
+      "event_id": "E017-05",
+      "sku": "00017",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E017-05-r9",
+      "event_id": "E017-05",
+      "sku": "00017",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E017-06-r2",
+      "event_id": "E017-06",
+      "sku": "00017",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E017-06-r1",
+      "event_id": "E017-06",
+      "sku": "00017",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E017-06-r9",
+      "event_id": "E017-06",
+      "sku": "00017",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E017-07-r2",
+      "event_id": "E017-07",
+      "sku": "00017",
+      "reason": "insufficient_stock"
+    },
+    {
+      "record_id": "E017-07-r1",
+      "event_id": "E017-07",
+      "sku": "00017",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E017-07-r9",
+      "event_id": "E017-07",
+      "sku": "00017",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E017-08-r2",
+      "event_id": "E017-08",
+      "sku": "00017",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E017-08-r1",
+      "event_id": "E017-08",
+      "sku": "00017",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E017-08-r9",
+      "event_id": "E017-08",
+      "sku": "00017",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E017-09-r2",
+      "event_id": "E017-09",
+      "sku": "00017",
+      "reason": "cancelled"
+    },
+    {
+      "record_id": "E017-09-r1",
+      "event_id": "E017-09",
+      "sku": "00017",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E017-09-r9",
+      "event_id": "E017-09",
+      "sku": "00017",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E017-10-r2",
+      "event_id": "E017-10",
+      "sku": "MISSING",
+      "reason": "after_close"
+    },
+    {
+      "record_id": "E017-11-r2",
+      "event_id": "E017-11",
+      "sku": "MISSING",
+      "reason": "unknown_warehouse"
+    },
+    {
+      "record_id": "E017-12-r2",
+      "event_id": "E017-12",
+      "sku": "MISSING",
+      "reason": "unknown_sku"
+    },
+    {
+      "record_id": "E017-13-r2",
+      "event_id": "E017-13",
+      "sku": "99999",
+      "reason": "inactive_sku"
+    },
+    {
+      "record_id": "E017-14-r2",
+      "event_id": "E017-14",
+      "sku": "00017",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E018-01-r2",
+      "event_id": "E018-01",
+      "sku": "00018",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E018-01-r1",
+      "event_id": "E018-01",
+      "sku": "00018",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E018-01-r9",
+      "event_id": "E018-01",
+      "sku": "00018",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E018-02-r2",
+      "event_id": "E018-02",
+      "sku": "00018",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E018-02-r1",
+      "event_id": "E018-02",
+      "sku": "00018",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E018-02-r9",
+      "event_id": "E018-02",
+      "sku": "00018",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E018-03-r2",
+      "event_id": "E018-03",
+      "sku": "00018",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E018-03-r1",
+      "event_id": "E018-03",
+      "sku": "00018",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E018-03-r9",
+      "event_id": "E018-03",
+      "sku": "00018",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E018-04-r2",
+      "event_id": "E018-04",
+      "sku": "00018",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E018-04-r1",
+      "event_id": "E018-04",
+      "sku": "00018",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E018-04-r9",
+      "event_id": "E018-04",
+      "sku": "00018",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E018-05-r2",
+      "event_id": "E018-05",
+      "sku": "00018",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E018-05-r1",
+      "event_id": "E018-05",
+      "sku": "00018",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E018-05-r9",
+      "event_id": "E018-05",
+      "sku": "00018",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E018-06-r2",
+      "event_id": "E018-06",
+      "sku": "00018",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E018-06-r1",
+      "event_id": "E018-06",
+      "sku": "00018",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E018-06-r9",
+      "event_id": "E018-06",
+      "sku": "00018",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E018-07-r2",
+      "event_id": "E018-07",
+      "sku": "00018",
+      "reason": "insufficient_stock"
+    },
+    {
+      "record_id": "E018-07-r1",
+      "event_id": "E018-07",
+      "sku": "00018",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E018-07-r9",
+      "event_id": "E018-07",
+      "sku": "00018",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E018-08-r2",
+      "event_id": "E018-08",
+      "sku": "00018",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E018-08-r1",
+      "event_id": "E018-08",
+      "sku": "00018",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E018-08-r9",
+      "event_id": "E018-08",
+      "sku": "00018",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E018-09-r2",
+      "event_id": "E018-09",
+      "sku": "00018",
+      "reason": "cancelled"
+    },
+    {
+      "record_id": "E018-09-r1",
+      "event_id": "E018-09",
+      "sku": "00018",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E018-09-r9",
+      "event_id": "E018-09",
+      "sku": "00018",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E018-10-r2",
+      "event_id": "E018-10",
+      "sku": "MISSING",
+      "reason": "after_close"
+    },
+    {
+      "record_id": "E018-11-r2",
+      "event_id": "E018-11",
+      "sku": "MISSING",
+      "reason": "unknown_warehouse"
+    },
+    {
+      "record_id": "E018-12-r2",
+      "event_id": "E018-12",
+      "sku": "MISSING",
+      "reason": "unknown_sku"
+    },
+    {
+      "record_id": "E018-13-r2",
+      "event_id": "E018-13",
+      "sku": "99999",
+      "reason": "inactive_sku"
+    },
+    {
+      "record_id": "E018-14-r2",
+      "event_id": "E018-14",
+      "sku": "00018",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E019-01-r2",
+      "event_id": "E019-01",
+      "sku": "00019",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E019-01-r1",
+      "event_id": "E019-01",
+      "sku": "00019",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E019-01-r9",
+      "event_id": "E019-01",
+      "sku": "00019",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E019-02-r2",
+      "event_id": "E019-02",
+      "sku": "00019",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E019-02-r1",
+      "event_id": "E019-02",
+      "sku": "00019",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E019-02-r9",
+      "event_id": "E019-02",
+      "sku": "00019",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E019-03-r2",
+      "event_id": "E019-03",
+      "sku": "00019",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E019-03-r1",
+      "event_id": "E019-03",
+      "sku": "00019",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E019-03-r9",
+      "event_id": "E019-03",
+      "sku": "00019",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E019-04-r2",
+      "event_id": "E019-04",
+      "sku": "00019",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E019-04-r1",
+      "event_id": "E019-04",
+      "sku": "00019",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E019-04-r9",
+      "event_id": "E019-04",
+      "sku": "00019",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E019-05-r2",
+      "event_id": "E019-05",
+      "sku": "00019",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E019-05-r1",
+      "event_id": "E019-05",
+      "sku": "00019",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E019-05-r9",
+      "event_id": "E019-05",
+      "sku": "00019",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E019-06-r2",
+      "event_id": "E019-06",
+      "sku": "00019",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E019-06-r1",
+      "event_id": "E019-06",
+      "sku": "00019",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E019-06-r9",
+      "event_id": "E019-06",
+      "sku": "00019",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E019-07-r2",
+      "event_id": "E019-07",
+      "sku": "00019",
+      "reason": "insufficient_stock"
+    },
+    {
+      "record_id": "E019-07-r1",
+      "event_id": "E019-07",
+      "sku": "00019",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E019-07-r9",
+      "event_id": "E019-07",
+      "sku": "00019",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E019-08-r2",
+      "event_id": "E019-08",
+      "sku": "00019",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E019-08-r1",
+      "event_id": "E019-08",
+      "sku": "00019",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E019-08-r9",
+      "event_id": "E019-08",
+      "sku": "00019",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E019-09-r2",
+      "event_id": "E019-09",
+      "sku": "00019",
+      "reason": "cancelled"
+    },
+    {
+      "record_id": "E019-09-r1",
+      "event_id": "E019-09",
+      "sku": "00019",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E019-09-r9",
+      "event_id": "E019-09",
+      "sku": "00019",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E019-10-r2",
+      "event_id": "E019-10",
+      "sku": "MISSING",
+      "reason": "after_close"
+    },
+    {
+      "record_id": "E019-11-r2",
+      "event_id": "E019-11",
+      "sku": "MISSING",
+      "reason": "unknown_warehouse"
+    },
+    {
+      "record_id": "E019-12-r2",
+      "event_id": "E019-12",
+      "sku": "MISSING",
+      "reason": "unknown_sku"
+    },
+    {
+      "record_id": "E019-13-r2",
+      "event_id": "E019-13",
+      "sku": "99999",
+      "reason": "inactive_sku"
+    },
+    {
+      "record_id": "E019-14-r2",
+      "event_id": "E019-14",
+      "sku": "00019",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E020-01-r2",
+      "event_id": "E020-01",
+      "sku": "00020",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E020-01-r1",
+      "event_id": "E020-01",
+      "sku": "00020",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E020-01-r9",
+      "event_id": "E020-01",
+      "sku": "00020",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E020-02-r2",
+      "event_id": "E020-02",
+      "sku": "00020",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E020-02-r1",
+      "event_id": "E020-02",
+      "sku": "00020",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E020-02-r9",
+      "event_id": "E020-02",
+      "sku": "00020",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E020-03-r2",
+      "event_id": "E020-03",
+      "sku": "00020",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E020-03-r1",
+      "event_id": "E020-03",
+      "sku": "00020",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E020-03-r9",
+      "event_id": "E020-03",
+      "sku": "00020",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E020-04-r2",
+      "event_id": "E020-04",
+      "sku": "00020",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E020-04-r1",
+      "event_id": "E020-04",
+      "sku": "00020",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E020-04-r9",
+      "event_id": "E020-04",
+      "sku": "00020",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E020-05-r2",
+      "event_id": "E020-05",
+      "sku": "00020",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E020-05-r1",
+      "event_id": "E020-05",
+      "sku": "00020",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E020-05-r9",
+      "event_id": "E020-05",
+      "sku": "00020",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E020-06-r2",
+      "event_id": "E020-06",
+      "sku": "00020",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E020-06-r1",
+      "event_id": "E020-06",
+      "sku": "00020",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E020-06-r9",
+      "event_id": "E020-06",
+      "sku": "00020",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E020-07-r2",
+      "event_id": "E020-07",
+      "sku": "00020",
+      "reason": "insufficient_stock"
+    },
+    {
+      "record_id": "E020-07-r1",
+      "event_id": "E020-07",
+      "sku": "00020",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E020-07-r9",
+      "event_id": "E020-07",
+      "sku": "00020",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E020-08-r2",
+      "event_id": "E020-08",
+      "sku": "00020",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E020-08-r1",
+      "event_id": "E020-08",
+      "sku": "00020",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E020-08-r9",
+      "event_id": "E020-08",
+      "sku": "00020",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E020-09-r2",
+      "event_id": "E020-09",
+      "sku": "00020",
+      "reason": "cancelled"
+    },
+    {
+      "record_id": "E020-09-r1",
+      "event_id": "E020-09",
+      "sku": "00020",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E020-09-r9",
+      "event_id": "E020-09",
+      "sku": "00020",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E020-10-r2",
+      "event_id": "E020-10",
+      "sku": "MISSING",
+      "reason": "after_close"
+    },
+    {
+      "record_id": "E020-11-r2",
+      "event_id": "E020-11",
+      "sku": "MISSING",
+      "reason": "unknown_warehouse"
+    },
+    {
+      "record_id": "E020-12-r2",
+      "event_id": "E020-12",
+      "sku": "MISSING",
+      "reason": "unknown_sku"
+    },
+    {
+      "record_id": "E020-13-r2",
+      "event_id": "E020-13",
+      "sku": "99999",
+      "reason": "inactive_sku"
+    },
+    {
+      "record_id": "E020-14-r2",
+      "event_id": "E020-14",
+      "sku": "00020",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E021-01-r2",
+      "event_id": "E021-01",
+      "sku": "00021",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E021-01-r1",
+      "event_id": "E021-01",
+      "sku": "00021",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E021-01-r9",
+      "event_id": "E021-01",
+      "sku": "00021",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E021-02-r2",
+      "event_id": "E021-02",
+      "sku": "00021",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E021-02-r1",
+      "event_id": "E021-02",
+      "sku": "00021",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E021-02-r9",
+      "event_id": "E021-02",
+      "sku": "00021",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E021-03-r2",
+      "event_id": "E021-03",
+      "sku": "00021",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E021-03-r1",
+      "event_id": "E021-03",
+      "sku": "00021",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E021-03-r9",
+      "event_id": "E021-03",
+      "sku": "00021",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E021-04-r2",
+      "event_id": "E021-04",
+      "sku": "00021",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E021-04-r1",
+      "event_id": "E021-04",
+      "sku": "00021",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E021-04-r9",
+      "event_id": "E021-04",
+      "sku": "00021",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E021-05-r2",
+      "event_id": "E021-05",
+      "sku": "00021",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E021-05-r1",
+      "event_id": "E021-05",
+      "sku": "00021",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E021-05-r9",
+      "event_id": "E021-05",
+      "sku": "00021",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E021-06-r2",
+      "event_id": "E021-06",
+      "sku": "00021",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E021-06-r1",
+      "event_id": "E021-06",
+      "sku": "00021",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E021-06-r9",
+      "event_id": "E021-06",
+      "sku": "00021",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E021-07-r2",
+      "event_id": "E021-07",
+      "sku": "00021",
+      "reason": "insufficient_stock"
+    },
+    {
+      "record_id": "E021-07-r1",
+      "event_id": "E021-07",
+      "sku": "00021",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E021-07-r9",
+      "event_id": "E021-07",
+      "sku": "00021",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E021-08-r2",
+      "event_id": "E021-08",
+      "sku": "00021",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E021-08-r1",
+      "event_id": "E021-08",
+      "sku": "00021",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E021-08-r9",
+      "event_id": "E021-08",
+      "sku": "00021",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E021-09-r2",
+      "event_id": "E021-09",
+      "sku": "00021",
+      "reason": "cancelled"
+    },
+    {
+      "record_id": "E021-09-r1",
+      "event_id": "E021-09",
+      "sku": "00021",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E021-09-r9",
+      "event_id": "E021-09",
+      "sku": "00021",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E021-10-r2",
+      "event_id": "E021-10",
+      "sku": "MISSING",
+      "reason": "after_close"
+    },
+    {
+      "record_id": "E021-11-r2",
+      "event_id": "E021-11",
+      "sku": "MISSING",
+      "reason": "unknown_warehouse"
+    },
+    {
+      "record_id": "E021-12-r2",
+      "event_id": "E021-12",
+      "sku": "MISSING",
+      "reason": "unknown_sku"
+    },
+    {
+      "record_id": "E021-13-r2",
+      "event_id": "E021-13",
+      "sku": "99999",
+      "reason": "inactive_sku"
+    },
+    {
+      "record_id": "E021-14-r2",
+      "event_id": "E021-14",
+      "sku": "00021",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E022-01-r2",
+      "event_id": "E022-01",
+      "sku": "00022",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E022-01-r1",
+      "event_id": "E022-01",
+      "sku": "00022",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E022-01-r9",
+      "event_id": "E022-01",
+      "sku": "00022",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E022-02-r2",
+      "event_id": "E022-02",
+      "sku": "00022",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E022-02-r1",
+      "event_id": "E022-02",
+      "sku": "00022",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E022-02-r9",
+      "event_id": "E022-02",
+      "sku": "00022",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E022-03-r2",
+      "event_id": "E022-03",
+      "sku": "00022",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E022-03-r1",
+      "event_id": "E022-03",
+      "sku": "00022",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E022-03-r9",
+      "event_id": "E022-03",
+      "sku": "00022",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E022-04-r2",
+      "event_id": "E022-04",
+      "sku": "00022",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E022-04-r1",
+      "event_id": "E022-04",
+      "sku": "00022",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E022-04-r9",
+      "event_id": "E022-04",
+      "sku": "00022",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E022-05-r2",
+      "event_id": "E022-05",
+      "sku": "00022",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E022-05-r1",
+      "event_id": "E022-05",
+      "sku": "00022",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E022-05-r9",
+      "event_id": "E022-05",
+      "sku": "00022",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E022-06-r2",
+      "event_id": "E022-06",
+      "sku": "00022",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E022-06-r1",
+      "event_id": "E022-06",
+      "sku": "00022",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E022-06-r9",
+      "event_id": "E022-06",
+      "sku": "00022",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E022-07-r2",
+      "event_id": "E022-07",
+      "sku": "00022",
+      "reason": "insufficient_stock"
+    },
+    {
+      "record_id": "E022-07-r1",
+      "event_id": "E022-07",
+      "sku": "00022",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E022-07-r9",
+      "event_id": "E022-07",
+      "sku": "00022",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E022-08-r2",
+      "event_id": "E022-08",
+      "sku": "00022",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E022-08-r1",
+      "event_id": "E022-08",
+      "sku": "00022",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E022-08-r9",
+      "event_id": "E022-08",
+      "sku": "00022",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E022-09-r2",
+      "event_id": "E022-09",
+      "sku": "00022",
+      "reason": "cancelled"
+    },
+    {
+      "record_id": "E022-09-r1",
+      "event_id": "E022-09",
+      "sku": "00022",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E022-09-r9",
+      "event_id": "E022-09",
+      "sku": "00022",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E022-10-r2",
+      "event_id": "E022-10",
+      "sku": "MISSING",
+      "reason": "after_close"
+    },
+    {
+      "record_id": "E022-11-r2",
+      "event_id": "E022-11",
+      "sku": "MISSING",
+      "reason": "unknown_warehouse"
+    },
+    {
+      "record_id": "E022-12-r2",
+      "event_id": "E022-12",
+      "sku": "MISSING",
+      "reason": "unknown_sku"
+    },
+    {
+      "record_id": "E022-13-r2",
+      "event_id": "E022-13",
+      "sku": "99999",
+      "reason": "inactive_sku"
+    },
+    {
+      "record_id": "E022-14-r2",
+      "event_id": "E022-14",
+      "sku": "00022",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E023-01-r2",
+      "event_id": "E023-01",
+      "sku": "00023",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E023-01-r1",
+      "event_id": "E023-01",
+      "sku": "00023",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E023-01-r9",
+      "event_id": "E023-01",
+      "sku": "00023",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E023-02-r2",
+      "event_id": "E023-02",
+      "sku": "00023",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E023-02-r1",
+      "event_id": "E023-02",
+      "sku": "00023",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E023-02-r9",
+      "event_id": "E023-02",
+      "sku": "00023",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E023-03-r2",
+      "event_id": "E023-03",
+      "sku": "00023",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E023-03-r1",
+      "event_id": "E023-03",
+      "sku": "00023",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E023-03-r9",
+      "event_id": "E023-03",
+      "sku": "00023",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E023-04-r2",
+      "event_id": "E023-04",
+      "sku": "00023",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E023-04-r1",
+      "event_id": "E023-04",
+      "sku": "00023",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E023-04-r9",
+      "event_id": "E023-04",
+      "sku": "00023",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E023-05-r2",
+      "event_id": "E023-05",
+      "sku": "00023",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E023-05-r1",
+      "event_id": "E023-05",
+      "sku": "00023",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E023-05-r9",
+      "event_id": "E023-05",
+      "sku": "00023",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E023-06-r2",
+      "event_id": "E023-06",
+      "sku": "00023",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E023-06-r1",
+      "event_id": "E023-06",
+      "sku": "00023",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E023-06-r9",
+      "event_id": "E023-06",
+      "sku": "00023",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E023-07-r2",
+      "event_id": "E023-07",
+      "sku": "00023",
+      "reason": "insufficient_stock"
+    },
+    {
+      "record_id": "E023-07-r1",
+      "event_id": "E023-07",
+      "sku": "00023",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E023-07-r9",
+      "event_id": "E023-07",
+      "sku": "00023",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E023-08-r2",
+      "event_id": "E023-08",
+      "sku": "00023",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E023-08-r1",
+      "event_id": "E023-08",
+      "sku": "00023",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E023-08-r9",
+      "event_id": "E023-08",
+      "sku": "00023",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E023-09-r2",
+      "event_id": "E023-09",
+      "sku": "00023",
+      "reason": "cancelled"
+    },
+    {
+      "record_id": "E023-09-r1",
+      "event_id": "E023-09",
+      "sku": "00023",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E023-09-r9",
+      "event_id": "E023-09",
+      "sku": "00023",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E023-10-r2",
+      "event_id": "E023-10",
+      "sku": "MISSING",
+      "reason": "after_close"
+    },
+    {
+      "record_id": "E023-11-r2",
+      "event_id": "E023-11",
+      "sku": "MISSING",
+      "reason": "unknown_warehouse"
+    },
+    {
+      "record_id": "E023-12-r2",
+      "event_id": "E023-12",
+      "sku": "MISSING",
+      "reason": "unknown_sku"
+    },
+    {
+      "record_id": "E023-13-r2",
+      "event_id": "E023-13",
+      "sku": "99999",
+      "reason": "inactive_sku"
+    },
+    {
+      "record_id": "E023-14-r2",
+      "event_id": "E023-14",
+      "sku": "00023",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E024-01-r2",
+      "event_id": "E024-01",
+      "sku": "00024",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E024-01-r1",
+      "event_id": "E024-01",
+      "sku": "00024",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E024-01-r9",
+      "event_id": "E024-01",
+      "sku": "00024",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E024-02-r2",
+      "event_id": "E024-02",
+      "sku": "00024",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E024-02-r1",
+      "event_id": "E024-02",
+      "sku": "00024",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E024-02-r9",
+      "event_id": "E024-02",
+      "sku": "00024",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E024-03-r2",
+      "event_id": "E024-03",
+      "sku": "00024",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E024-03-r1",
+      "event_id": "E024-03",
+      "sku": "00024",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E024-03-r9",
+      "event_id": "E024-03",
+      "sku": "00024",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E024-04-r2",
+      "event_id": "E024-04",
+      "sku": "00024",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E024-04-r1",
+      "event_id": "E024-04",
+      "sku": "00024",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E024-04-r9",
+      "event_id": "E024-04",
+      "sku": "00024",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E024-05-r2",
+      "event_id": "E024-05",
+      "sku": "00024",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E024-05-r1",
+      "event_id": "E024-05",
+      "sku": "00024",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E024-05-r9",
+      "event_id": "E024-05",
+      "sku": "00024",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E024-06-r2",
+      "event_id": "E024-06",
+      "sku": "00024",
+      "reason": "applied"
+    },
+    {
+      "record_id": "E024-06-r1",
+      "event_id": "E024-06",
+      "sku": "00024",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E024-06-r9",
+      "event_id": "E024-06",
+      "sku": "00024",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E024-07-r2",
+      "event_id": "E024-07",
+      "sku": "00024",
+      "reason": "insufficient_stock"
+    },
+    {
+      "record_id": "E024-07-r1",
+      "event_id": "E024-07",
+      "sku": "00024",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E024-07-r9",
+      "event_id": "E024-07",
+      "sku": "00024",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E024-08-r2",
+      "event_id": "E024-08",
+      "sku": "00024",
+      "reason": "invalid_return"
+    },
+    {
+      "record_id": "E024-08-r1",
+      "event_id": "E024-08",
+      "sku": "00024",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E024-08-r9",
+      "event_id": "E024-08",
+      "sku": "00024",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E024-09-r2",
+      "event_id": "E024-09",
+      "sku": "00024",
+      "reason": "cancelled"
+    },
+    {
+      "record_id": "E024-09-r1",
+      "event_id": "E024-09",
+      "sku": "00024",
+      "reason": "superseded"
+    },
+    {
+      "record_id": "E024-09-r9",
+      "event_id": "E024-09",
+      "sku": "00024",
+      "reason": "late_received"
+    },
+    {
+      "record_id": "E024-10-r2",
+      "event_id": "E024-10",
+      "sku": "MISSING",
+      "reason": "after_close"
+    },
+    {
+      "record_id": "E024-11-r2",
+      "event_id": "E024-11",
+      "sku": "MISSING",
+      "reason": "unknown_warehouse"
+    },
+    {
+      "record_id": "E024-12-r2",
+      "event_id": "E024-12",
+      "sku": "MISSING",
+      "reason": "unknown_sku"
+    },
+    {
+      "record_id": "E024-13-r2",
+      "event_id": "E024-13",
+      "sku": "99999",
+      "reason": "inactive_sku"
+    },
+    {
+      "record_id": "E024-14-r2",
+      "event_id": "E024-14",
+      "sku": "00024",
+      "reason": "invalid_return"
+    }
+  ],
+  "allocations.csv": [
+    {
+      "event_id": "E001-01",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E001-01",
+      "warehouse": "001",
+      "sku": "00001",
+      "quantity": 10,
+      "unit_cost": 100,
+      "value": 1000
+    },
+    {
+      "event_id": "E001-02",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E001-02",
+      "warehouse": "001",
+      "sku": "00001",
+      "quantity": 6,
+      "unit_cost": 140,
+      "value": 840
+    },
+    {
+      "event_id": "E001-03",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E001-01",
+      "warehouse": "001",
+      "sku": "00001",
+      "quantity": 10,
+      "unit_cost": 100,
+      "value": 1000
+    },
+    {
+      "event_id": "E001-03",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E001-02",
+      "warehouse": "001",
+      "sku": "00001",
+      "quantity": 2,
+      "unit_cost": 140,
+      "value": 280
+    },
+    {
+      "event_id": "E001-04",
+      "leg": "return",
+      "fragment": 1,
+      "lot_id": "E001-02",
+      "warehouse": "001",
+      "sku": "00001",
+      "quantity": 2,
+      "unit_cost": 140,
+      "value": 280
+    },
+    {
+      "event_id": "E001-04",
+      "leg": "return",
+      "fragment": 2,
+      "lot_id": "E001-01",
+      "warehouse": "001",
+      "sku": "00001",
+      "quantity": 1,
+      "unit_cost": 100,
+      "value": 100
+    },
+    {
+      "event_id": "E001-05",
+      "leg": "transfer_out",
+      "fragment": 1,
+      "lot_id": "E001-01",
+      "warehouse": "001",
+      "sku": "00001",
+      "quantity": 1,
+      "unit_cost": 100,
+      "value": 100
+    },
+    {
+      "event_id": "E001-05",
+      "leg": "transfer_out",
+      "fragment": 2,
+      "lot_id": "E001-02",
+      "warehouse": "001",
+      "sku": "00001",
+      "quantity": 4,
+      "unit_cost": 140,
+      "value": 560
+    },
+    {
+      "event_id": "E001-05",
+      "leg": "transfer_in",
+      "fragment": 1,
+      "lot_id": "E001-01",
+      "warehouse": "002",
+      "sku": "00001",
+      "quantity": 1,
+      "unit_cost": 100,
+      "value": 100
+    },
+    {
+      "event_id": "E001-05",
+      "leg": "transfer_in",
+      "fragment": 2,
+      "lot_id": "E001-02",
+      "warehouse": "002",
+      "sku": "00001",
+      "quantity": 4,
+      "unit_cost": 140,
+      "value": 560
+    },
+    {
+      "event_id": "E001-06",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E001-01",
+      "warehouse": "002",
+      "sku": "00001",
+      "quantity": 1,
+      "unit_cost": 100,
+      "value": 100
+    },
+    {
+      "event_id": "E001-06",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E001-02",
+      "warehouse": "002",
+      "sku": "00001",
+      "quantity": 2,
+      "unit_cost": 140,
+      "value": 280
+    },
+    {
+      "event_id": "E002-01",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E002-01",
+      "warehouse": "001",
+      "sku": "00002",
+      "quantity": 11,
+      "unit_cost": 107,
+      "value": 1177
+    },
+    {
+      "event_id": "E002-02",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E002-02",
+      "warehouse": "001",
+      "sku": "00002",
+      "quantity": 6,
+      "unit_cost": 147,
+      "value": 882
+    },
+    {
+      "event_id": "E002-03",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E002-01",
+      "warehouse": "001",
+      "sku": "00002",
+      "quantity": 11,
+      "unit_cost": 107,
+      "value": 1177
+    },
+    {
+      "event_id": "E002-03",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E002-02",
+      "warehouse": "001",
+      "sku": "00002",
+      "quantity": 2,
+      "unit_cost": 147,
+      "value": 294
+    },
+    {
+      "event_id": "E002-04",
+      "leg": "return",
+      "fragment": 1,
+      "lot_id": "E002-02",
+      "warehouse": "001",
+      "sku": "00002",
+      "quantity": 2,
+      "unit_cost": 147,
+      "value": 294
+    },
+    {
+      "event_id": "E002-04",
+      "leg": "return",
+      "fragment": 2,
+      "lot_id": "E002-01",
+      "warehouse": "001",
+      "sku": "00002",
+      "quantity": 1,
+      "unit_cost": 107,
+      "value": 107
+    },
+    {
+      "event_id": "E002-05",
+      "leg": "transfer_out",
+      "fragment": 1,
+      "lot_id": "E002-01",
+      "warehouse": "001",
+      "sku": "00002",
+      "quantity": 1,
+      "unit_cost": 107,
+      "value": 107
+    },
+    {
+      "event_id": "E002-05",
+      "leg": "transfer_out",
+      "fragment": 2,
+      "lot_id": "E002-02",
+      "warehouse": "001",
+      "sku": "00002",
+      "quantity": 4,
+      "unit_cost": 147,
+      "value": 588
+    },
+    {
+      "event_id": "E002-05",
+      "leg": "transfer_in",
+      "fragment": 1,
+      "lot_id": "E002-01",
+      "warehouse": "002",
+      "sku": "00002",
+      "quantity": 1,
+      "unit_cost": 107,
+      "value": 107
+    },
+    {
+      "event_id": "E002-05",
+      "leg": "transfer_in",
+      "fragment": 2,
+      "lot_id": "E002-02",
+      "warehouse": "002",
+      "sku": "00002",
+      "quantity": 4,
+      "unit_cost": 147,
+      "value": 588
+    },
+    {
+      "event_id": "E002-06",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E002-01",
+      "warehouse": "002",
+      "sku": "00002",
+      "quantity": 1,
+      "unit_cost": 107,
+      "value": 107
+    },
+    {
+      "event_id": "E002-06",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E002-02",
+      "warehouse": "002",
+      "sku": "00002",
+      "quantity": 2,
+      "unit_cost": 147,
+      "value": 294
+    },
+    {
+      "event_id": "E003-01",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E003-01",
+      "warehouse": "001",
+      "sku": "00003",
+      "quantity": 12,
+      "unit_cost": 114,
+      "value": 1368
+    },
+    {
+      "event_id": "E003-02",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E003-02",
+      "warehouse": "001",
+      "sku": "00003",
+      "quantity": 6,
+      "unit_cost": 154,
+      "value": 924
+    },
+    {
+      "event_id": "E003-03",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E003-01",
+      "warehouse": "001",
+      "sku": "00003",
+      "quantity": 12,
+      "unit_cost": 114,
+      "value": 1368
+    },
+    {
+      "event_id": "E003-03",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E003-02",
+      "warehouse": "001",
+      "sku": "00003",
+      "quantity": 2,
+      "unit_cost": 154,
+      "value": 308
+    },
+    {
+      "event_id": "E003-04",
+      "leg": "return",
+      "fragment": 1,
+      "lot_id": "E003-02",
+      "warehouse": "001",
+      "sku": "00003",
+      "quantity": 2,
+      "unit_cost": 154,
+      "value": 308
+    },
+    {
+      "event_id": "E003-04",
+      "leg": "return",
+      "fragment": 2,
+      "lot_id": "E003-01",
+      "warehouse": "001",
+      "sku": "00003",
+      "quantity": 1,
+      "unit_cost": 114,
+      "value": 114
+    },
+    {
+      "event_id": "E003-05",
+      "leg": "transfer_out",
+      "fragment": 1,
+      "lot_id": "E003-01",
+      "warehouse": "001",
+      "sku": "00003",
+      "quantity": 1,
+      "unit_cost": 114,
+      "value": 114
+    },
+    {
+      "event_id": "E003-05",
+      "leg": "transfer_out",
+      "fragment": 2,
+      "lot_id": "E003-02",
+      "warehouse": "001",
+      "sku": "00003",
+      "quantity": 4,
+      "unit_cost": 154,
+      "value": 616
+    },
+    {
+      "event_id": "E003-05",
+      "leg": "transfer_in",
+      "fragment": 1,
+      "lot_id": "E003-01",
+      "warehouse": "002",
+      "sku": "00003",
+      "quantity": 1,
+      "unit_cost": 114,
+      "value": 114
+    },
+    {
+      "event_id": "E003-05",
+      "leg": "transfer_in",
+      "fragment": 2,
+      "lot_id": "E003-02",
+      "warehouse": "002",
+      "sku": "00003",
+      "quantity": 4,
+      "unit_cost": 154,
+      "value": 616
+    },
+    {
+      "event_id": "E003-06",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E003-01",
+      "warehouse": "002",
+      "sku": "00003",
+      "quantity": 1,
+      "unit_cost": 114,
+      "value": 114
+    },
+    {
+      "event_id": "E003-06",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E003-02",
+      "warehouse": "002",
+      "sku": "00003",
+      "quantity": 2,
+      "unit_cost": 154,
+      "value": 308
+    },
+    {
+      "event_id": "E004-01",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E004-01",
+      "warehouse": "001",
+      "sku": "00004",
+      "quantity": 10,
+      "unit_cost": 121,
+      "value": 1210
+    },
+    {
+      "event_id": "E004-02",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E004-02",
+      "warehouse": "001",
+      "sku": "00004",
+      "quantity": 6,
+      "unit_cost": 161,
+      "value": 966
+    },
+    {
+      "event_id": "E004-03",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E004-01",
+      "warehouse": "001",
+      "sku": "00004",
+      "quantity": 10,
+      "unit_cost": 121,
+      "value": 1210
+    },
+    {
+      "event_id": "E004-03",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E004-02",
+      "warehouse": "001",
+      "sku": "00004",
+      "quantity": 2,
+      "unit_cost": 161,
+      "value": 322
+    },
+    {
+      "event_id": "E004-04",
+      "leg": "return",
+      "fragment": 1,
+      "lot_id": "E004-02",
+      "warehouse": "001",
+      "sku": "00004",
+      "quantity": 2,
+      "unit_cost": 161,
+      "value": 322
+    },
+    {
+      "event_id": "E004-04",
+      "leg": "return",
+      "fragment": 2,
+      "lot_id": "E004-01",
+      "warehouse": "001",
+      "sku": "00004",
+      "quantity": 1,
+      "unit_cost": 121,
+      "value": 121
+    },
+    {
+      "event_id": "E004-05",
+      "leg": "transfer_out",
+      "fragment": 1,
+      "lot_id": "E004-01",
+      "warehouse": "001",
+      "sku": "00004",
+      "quantity": 1,
+      "unit_cost": 121,
+      "value": 121
+    },
+    {
+      "event_id": "E004-05",
+      "leg": "transfer_out",
+      "fragment": 2,
+      "lot_id": "E004-02",
+      "warehouse": "001",
+      "sku": "00004",
+      "quantity": 4,
+      "unit_cost": 161,
+      "value": 644
+    },
+    {
+      "event_id": "E004-05",
+      "leg": "transfer_in",
+      "fragment": 1,
+      "lot_id": "E004-01",
+      "warehouse": "002",
+      "sku": "00004",
+      "quantity": 1,
+      "unit_cost": 121,
+      "value": 121
+    },
+    {
+      "event_id": "E004-05",
+      "leg": "transfer_in",
+      "fragment": 2,
+      "lot_id": "E004-02",
+      "warehouse": "002",
+      "sku": "00004",
+      "quantity": 4,
+      "unit_cost": 161,
+      "value": 644
+    },
+    {
+      "event_id": "E004-06",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E004-01",
+      "warehouse": "002",
+      "sku": "00004",
+      "quantity": 1,
+      "unit_cost": 121,
+      "value": 121
+    },
+    {
+      "event_id": "E004-06",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E004-02",
+      "warehouse": "002",
+      "sku": "00004",
+      "quantity": 2,
+      "unit_cost": 161,
+      "value": 322
+    },
+    {
+      "event_id": "E005-01",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E005-01",
+      "warehouse": "001",
+      "sku": "00005",
+      "quantity": 11,
+      "unit_cost": 128,
+      "value": 1408
+    },
+    {
+      "event_id": "E005-02",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E005-02",
+      "warehouse": "001",
+      "sku": "00005",
+      "quantity": 6,
+      "unit_cost": 168,
+      "value": 1008
+    },
+    {
+      "event_id": "E005-03",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E005-01",
+      "warehouse": "001",
+      "sku": "00005",
+      "quantity": 11,
+      "unit_cost": 128,
+      "value": 1408
+    },
+    {
+      "event_id": "E005-03",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E005-02",
+      "warehouse": "001",
+      "sku": "00005",
+      "quantity": 2,
+      "unit_cost": 168,
+      "value": 336
+    },
+    {
+      "event_id": "E005-04",
+      "leg": "return",
+      "fragment": 1,
+      "lot_id": "E005-02",
+      "warehouse": "001",
+      "sku": "00005",
+      "quantity": 2,
+      "unit_cost": 168,
+      "value": 336
+    },
+    {
+      "event_id": "E005-04",
+      "leg": "return",
+      "fragment": 2,
+      "lot_id": "E005-01",
+      "warehouse": "001",
+      "sku": "00005",
+      "quantity": 1,
+      "unit_cost": 128,
+      "value": 128
+    },
+    {
+      "event_id": "E005-05",
+      "leg": "transfer_out",
+      "fragment": 1,
+      "lot_id": "E005-01",
+      "warehouse": "001",
+      "sku": "00005",
+      "quantity": 1,
+      "unit_cost": 128,
+      "value": 128
+    },
+    {
+      "event_id": "E005-05",
+      "leg": "transfer_out",
+      "fragment": 2,
+      "lot_id": "E005-02",
+      "warehouse": "001",
+      "sku": "00005",
+      "quantity": 4,
+      "unit_cost": 168,
+      "value": 672
+    },
+    {
+      "event_id": "E005-05",
+      "leg": "transfer_in",
+      "fragment": 1,
+      "lot_id": "E005-01",
+      "warehouse": "002",
+      "sku": "00005",
+      "quantity": 1,
+      "unit_cost": 128,
+      "value": 128
+    },
+    {
+      "event_id": "E005-05",
+      "leg": "transfer_in",
+      "fragment": 2,
+      "lot_id": "E005-02",
+      "warehouse": "002",
+      "sku": "00005",
+      "quantity": 4,
+      "unit_cost": 168,
+      "value": 672
+    },
+    {
+      "event_id": "E005-06",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E005-01",
+      "warehouse": "002",
+      "sku": "00005",
+      "quantity": 1,
+      "unit_cost": 128,
+      "value": 128
+    },
+    {
+      "event_id": "E005-06",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E005-02",
+      "warehouse": "002",
+      "sku": "00005",
+      "quantity": 2,
+      "unit_cost": 168,
+      "value": 336
+    },
+    {
+      "event_id": "E006-01",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E006-01",
+      "warehouse": "001",
+      "sku": "00006",
+      "quantity": 12,
+      "unit_cost": 135,
+      "value": 1620
+    },
+    {
+      "event_id": "E006-02",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E006-02",
+      "warehouse": "001",
+      "sku": "00006",
+      "quantity": 6,
+      "unit_cost": 175,
+      "value": 1050
+    },
+    {
+      "event_id": "E006-03",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E006-01",
+      "warehouse": "001",
+      "sku": "00006",
+      "quantity": 12,
+      "unit_cost": 135,
+      "value": 1620
+    },
+    {
+      "event_id": "E006-03",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E006-02",
+      "warehouse": "001",
+      "sku": "00006",
+      "quantity": 2,
+      "unit_cost": 175,
+      "value": 350
+    },
+    {
+      "event_id": "E006-04",
+      "leg": "return",
+      "fragment": 1,
+      "lot_id": "E006-02",
+      "warehouse": "001",
+      "sku": "00006",
+      "quantity": 2,
+      "unit_cost": 175,
+      "value": 350
+    },
+    {
+      "event_id": "E006-04",
+      "leg": "return",
+      "fragment": 2,
+      "lot_id": "E006-01",
+      "warehouse": "001",
+      "sku": "00006",
+      "quantity": 1,
+      "unit_cost": 135,
+      "value": 135
+    },
+    {
+      "event_id": "E006-05",
+      "leg": "transfer_out",
+      "fragment": 1,
+      "lot_id": "E006-01",
+      "warehouse": "001",
+      "sku": "00006",
+      "quantity": 1,
+      "unit_cost": 135,
+      "value": 135
+    },
+    {
+      "event_id": "E006-05",
+      "leg": "transfer_out",
+      "fragment": 2,
+      "lot_id": "E006-02",
+      "warehouse": "001",
+      "sku": "00006",
+      "quantity": 4,
+      "unit_cost": 175,
+      "value": 700
+    },
+    {
+      "event_id": "E006-05",
+      "leg": "transfer_in",
+      "fragment": 1,
+      "lot_id": "E006-01",
+      "warehouse": "002",
+      "sku": "00006",
+      "quantity": 1,
+      "unit_cost": 135,
+      "value": 135
+    },
+    {
+      "event_id": "E006-05",
+      "leg": "transfer_in",
+      "fragment": 2,
+      "lot_id": "E006-02",
+      "warehouse": "002",
+      "sku": "00006",
+      "quantity": 4,
+      "unit_cost": 175,
+      "value": 700
+    },
+    {
+      "event_id": "E006-06",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E006-01",
+      "warehouse": "002",
+      "sku": "00006",
+      "quantity": 1,
+      "unit_cost": 135,
+      "value": 135
+    },
+    {
+      "event_id": "E006-06",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E006-02",
+      "warehouse": "002",
+      "sku": "00006",
+      "quantity": 2,
+      "unit_cost": 175,
+      "value": 350
+    },
+    {
+      "event_id": "E007-01",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E007-01",
+      "warehouse": "001",
+      "sku": "00007",
+      "quantity": 10,
+      "unit_cost": 142,
+      "value": 1420
+    },
+    {
+      "event_id": "E007-02",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E007-02",
+      "warehouse": "001",
+      "sku": "00007",
+      "quantity": 6,
+      "unit_cost": 182,
+      "value": 1092
+    },
+    {
+      "event_id": "E007-03",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E007-01",
+      "warehouse": "001",
+      "sku": "00007",
+      "quantity": 10,
+      "unit_cost": 142,
+      "value": 1420
+    },
+    {
+      "event_id": "E007-03",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E007-02",
+      "warehouse": "001",
+      "sku": "00007",
+      "quantity": 2,
+      "unit_cost": 182,
+      "value": 364
+    },
+    {
+      "event_id": "E007-04",
+      "leg": "return",
+      "fragment": 1,
+      "lot_id": "E007-02",
+      "warehouse": "001",
+      "sku": "00007",
+      "quantity": 2,
+      "unit_cost": 182,
+      "value": 364
+    },
+    {
+      "event_id": "E007-04",
+      "leg": "return",
+      "fragment": 2,
+      "lot_id": "E007-01",
+      "warehouse": "001",
+      "sku": "00007",
+      "quantity": 1,
+      "unit_cost": 142,
+      "value": 142
+    },
+    {
+      "event_id": "E007-05",
+      "leg": "transfer_out",
+      "fragment": 1,
+      "lot_id": "E007-01",
+      "warehouse": "001",
+      "sku": "00007",
+      "quantity": 1,
+      "unit_cost": 142,
+      "value": 142
+    },
+    {
+      "event_id": "E007-05",
+      "leg": "transfer_out",
+      "fragment": 2,
+      "lot_id": "E007-02",
+      "warehouse": "001",
+      "sku": "00007",
+      "quantity": 4,
+      "unit_cost": 182,
+      "value": 728
+    },
+    {
+      "event_id": "E007-05",
+      "leg": "transfer_in",
+      "fragment": 1,
+      "lot_id": "E007-01",
+      "warehouse": "002",
+      "sku": "00007",
+      "quantity": 1,
+      "unit_cost": 142,
+      "value": 142
+    },
+    {
+      "event_id": "E007-05",
+      "leg": "transfer_in",
+      "fragment": 2,
+      "lot_id": "E007-02",
+      "warehouse": "002",
+      "sku": "00007",
+      "quantity": 4,
+      "unit_cost": 182,
+      "value": 728
+    },
+    {
+      "event_id": "E007-06",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E007-01",
+      "warehouse": "002",
+      "sku": "00007",
+      "quantity": 1,
+      "unit_cost": 142,
+      "value": 142
+    },
+    {
+      "event_id": "E007-06",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E007-02",
+      "warehouse": "002",
+      "sku": "00007",
+      "quantity": 2,
+      "unit_cost": 182,
+      "value": 364
+    },
+    {
+      "event_id": "E008-01",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E008-01",
+      "warehouse": "001",
+      "sku": "00008",
+      "quantity": 11,
+      "unit_cost": 149,
+      "value": 1639
+    },
+    {
+      "event_id": "E008-02",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E008-02",
+      "warehouse": "001",
+      "sku": "00008",
+      "quantity": 6,
+      "unit_cost": 189,
+      "value": 1134
+    },
+    {
+      "event_id": "E008-03",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E008-01",
+      "warehouse": "001",
+      "sku": "00008",
+      "quantity": 11,
+      "unit_cost": 149,
+      "value": 1639
+    },
+    {
+      "event_id": "E008-03",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E008-02",
+      "warehouse": "001",
+      "sku": "00008",
+      "quantity": 2,
+      "unit_cost": 189,
+      "value": 378
+    },
+    {
+      "event_id": "E008-04",
+      "leg": "return",
+      "fragment": 1,
+      "lot_id": "E008-02",
+      "warehouse": "001",
+      "sku": "00008",
+      "quantity": 2,
+      "unit_cost": 189,
+      "value": 378
+    },
+    {
+      "event_id": "E008-04",
+      "leg": "return",
+      "fragment": 2,
+      "lot_id": "E008-01",
+      "warehouse": "001",
+      "sku": "00008",
+      "quantity": 1,
+      "unit_cost": 149,
+      "value": 149
+    },
+    {
+      "event_id": "E008-05",
+      "leg": "transfer_out",
+      "fragment": 1,
+      "lot_id": "E008-01",
+      "warehouse": "001",
+      "sku": "00008",
+      "quantity": 1,
+      "unit_cost": 149,
+      "value": 149
+    },
+    {
+      "event_id": "E008-05",
+      "leg": "transfer_out",
+      "fragment": 2,
+      "lot_id": "E008-02",
+      "warehouse": "001",
+      "sku": "00008",
+      "quantity": 4,
+      "unit_cost": 189,
+      "value": 756
+    },
+    {
+      "event_id": "E008-05",
+      "leg": "transfer_in",
+      "fragment": 1,
+      "lot_id": "E008-01",
+      "warehouse": "002",
+      "sku": "00008",
+      "quantity": 1,
+      "unit_cost": 149,
+      "value": 149
+    },
+    {
+      "event_id": "E008-05",
+      "leg": "transfer_in",
+      "fragment": 2,
+      "lot_id": "E008-02",
+      "warehouse": "002",
+      "sku": "00008",
+      "quantity": 4,
+      "unit_cost": 189,
+      "value": 756
+    },
+    {
+      "event_id": "E008-06",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E008-01",
+      "warehouse": "002",
+      "sku": "00008",
+      "quantity": 1,
+      "unit_cost": 149,
+      "value": 149
+    },
+    {
+      "event_id": "E008-06",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E008-02",
+      "warehouse": "002",
+      "sku": "00008",
+      "quantity": 2,
+      "unit_cost": 189,
+      "value": 378
+    },
+    {
+      "event_id": "E009-01",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E009-01",
+      "warehouse": "001",
+      "sku": "00009",
+      "quantity": 12,
+      "unit_cost": 156,
+      "value": 1872
+    },
+    {
+      "event_id": "E009-02",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E009-02",
+      "warehouse": "001",
+      "sku": "00009",
+      "quantity": 6,
+      "unit_cost": 196,
+      "value": 1176
+    },
+    {
+      "event_id": "E009-03",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E009-01",
+      "warehouse": "001",
+      "sku": "00009",
+      "quantity": 12,
+      "unit_cost": 156,
+      "value": 1872
+    },
+    {
+      "event_id": "E009-03",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E009-02",
+      "warehouse": "001",
+      "sku": "00009",
+      "quantity": 2,
+      "unit_cost": 196,
+      "value": 392
+    },
+    {
+      "event_id": "E009-04",
+      "leg": "return",
+      "fragment": 1,
+      "lot_id": "E009-02",
+      "warehouse": "001",
+      "sku": "00009",
+      "quantity": 2,
+      "unit_cost": 196,
+      "value": 392
+    },
+    {
+      "event_id": "E009-04",
+      "leg": "return",
+      "fragment": 2,
+      "lot_id": "E009-01",
+      "warehouse": "001",
+      "sku": "00009",
+      "quantity": 1,
+      "unit_cost": 156,
+      "value": 156
+    },
+    {
+      "event_id": "E009-05",
+      "leg": "transfer_out",
+      "fragment": 1,
+      "lot_id": "E009-01",
+      "warehouse": "001",
+      "sku": "00009",
+      "quantity": 1,
+      "unit_cost": 156,
+      "value": 156
+    },
+    {
+      "event_id": "E009-05",
+      "leg": "transfer_out",
+      "fragment": 2,
+      "lot_id": "E009-02",
+      "warehouse": "001",
+      "sku": "00009",
+      "quantity": 4,
+      "unit_cost": 196,
+      "value": 784
+    },
+    {
+      "event_id": "E009-05",
+      "leg": "transfer_in",
+      "fragment": 1,
+      "lot_id": "E009-01",
+      "warehouse": "002",
+      "sku": "00009",
+      "quantity": 1,
+      "unit_cost": 156,
+      "value": 156
+    },
+    {
+      "event_id": "E009-05",
+      "leg": "transfer_in",
+      "fragment": 2,
+      "lot_id": "E009-02",
+      "warehouse": "002",
+      "sku": "00009",
+      "quantity": 4,
+      "unit_cost": 196,
+      "value": 784
+    },
+    {
+      "event_id": "E009-06",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E009-01",
+      "warehouse": "002",
+      "sku": "00009",
+      "quantity": 1,
+      "unit_cost": 156,
+      "value": 156
+    },
+    {
+      "event_id": "E009-06",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E009-02",
+      "warehouse": "002",
+      "sku": "00009",
+      "quantity": 2,
+      "unit_cost": 196,
+      "value": 392
+    },
+    {
+      "event_id": "E010-01",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E010-01",
+      "warehouse": "001",
+      "sku": "00010",
+      "quantity": 10,
+      "unit_cost": 163,
+      "value": 1630
+    },
+    {
+      "event_id": "E010-02",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E010-02",
+      "warehouse": "001",
+      "sku": "00010",
+      "quantity": 6,
+      "unit_cost": 203,
+      "value": 1218
+    },
+    {
+      "event_id": "E010-03",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E010-01",
+      "warehouse": "001",
+      "sku": "00010",
+      "quantity": 10,
+      "unit_cost": 163,
+      "value": 1630
+    },
+    {
+      "event_id": "E010-03",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E010-02",
+      "warehouse": "001",
+      "sku": "00010",
+      "quantity": 2,
+      "unit_cost": 203,
+      "value": 406
+    },
+    {
+      "event_id": "E010-04",
+      "leg": "return",
+      "fragment": 1,
+      "lot_id": "E010-02",
+      "warehouse": "001",
+      "sku": "00010",
+      "quantity": 2,
+      "unit_cost": 203,
+      "value": 406
+    },
+    {
+      "event_id": "E010-04",
+      "leg": "return",
+      "fragment": 2,
+      "lot_id": "E010-01",
+      "warehouse": "001",
+      "sku": "00010",
+      "quantity": 1,
+      "unit_cost": 163,
+      "value": 163
+    },
+    {
+      "event_id": "E010-05",
+      "leg": "transfer_out",
+      "fragment": 1,
+      "lot_id": "E010-01",
+      "warehouse": "001",
+      "sku": "00010",
+      "quantity": 1,
+      "unit_cost": 163,
+      "value": 163
+    },
+    {
+      "event_id": "E010-05",
+      "leg": "transfer_out",
+      "fragment": 2,
+      "lot_id": "E010-02",
+      "warehouse": "001",
+      "sku": "00010",
+      "quantity": 4,
+      "unit_cost": 203,
+      "value": 812
+    },
+    {
+      "event_id": "E010-05",
+      "leg": "transfer_in",
+      "fragment": 1,
+      "lot_id": "E010-01",
+      "warehouse": "002",
+      "sku": "00010",
+      "quantity": 1,
+      "unit_cost": 163,
+      "value": 163
+    },
+    {
+      "event_id": "E010-05",
+      "leg": "transfer_in",
+      "fragment": 2,
+      "lot_id": "E010-02",
+      "warehouse": "002",
+      "sku": "00010",
+      "quantity": 4,
+      "unit_cost": 203,
+      "value": 812
+    },
+    {
+      "event_id": "E010-06",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E010-01",
+      "warehouse": "002",
+      "sku": "00010",
+      "quantity": 1,
+      "unit_cost": 163,
+      "value": 163
+    },
+    {
+      "event_id": "E010-06",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E010-02",
+      "warehouse": "002",
+      "sku": "00010",
+      "quantity": 2,
+      "unit_cost": 203,
+      "value": 406
+    },
+    {
+      "event_id": "E011-01",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E011-01",
+      "warehouse": "001",
+      "sku": "00011",
+      "quantity": 11,
+      "unit_cost": 170,
+      "value": 1870
+    },
+    {
+      "event_id": "E011-02",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E011-02",
+      "warehouse": "001",
+      "sku": "00011",
+      "quantity": 6,
+      "unit_cost": 210,
+      "value": 1260
+    },
+    {
+      "event_id": "E011-03",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E011-01",
+      "warehouse": "001",
+      "sku": "00011",
+      "quantity": 11,
+      "unit_cost": 170,
+      "value": 1870
+    },
+    {
+      "event_id": "E011-03",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E011-02",
+      "warehouse": "001",
+      "sku": "00011",
+      "quantity": 2,
+      "unit_cost": 210,
+      "value": 420
+    },
+    {
+      "event_id": "E011-04",
+      "leg": "return",
+      "fragment": 1,
+      "lot_id": "E011-02",
+      "warehouse": "001",
+      "sku": "00011",
+      "quantity": 2,
+      "unit_cost": 210,
+      "value": 420
+    },
+    {
+      "event_id": "E011-04",
+      "leg": "return",
+      "fragment": 2,
+      "lot_id": "E011-01",
+      "warehouse": "001",
+      "sku": "00011",
+      "quantity": 1,
+      "unit_cost": 170,
+      "value": 170
+    },
+    {
+      "event_id": "E011-05",
+      "leg": "transfer_out",
+      "fragment": 1,
+      "lot_id": "E011-01",
+      "warehouse": "001",
+      "sku": "00011",
+      "quantity": 1,
+      "unit_cost": 170,
+      "value": 170
+    },
+    {
+      "event_id": "E011-05",
+      "leg": "transfer_out",
+      "fragment": 2,
+      "lot_id": "E011-02",
+      "warehouse": "001",
+      "sku": "00011",
+      "quantity": 4,
+      "unit_cost": 210,
+      "value": 840
+    },
+    {
+      "event_id": "E011-05",
+      "leg": "transfer_in",
+      "fragment": 1,
+      "lot_id": "E011-01",
+      "warehouse": "002",
+      "sku": "00011",
+      "quantity": 1,
+      "unit_cost": 170,
+      "value": 170
+    },
+    {
+      "event_id": "E011-05",
+      "leg": "transfer_in",
+      "fragment": 2,
+      "lot_id": "E011-02",
+      "warehouse": "002",
+      "sku": "00011",
+      "quantity": 4,
+      "unit_cost": 210,
+      "value": 840
+    },
+    {
+      "event_id": "E011-06",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E011-01",
+      "warehouse": "002",
+      "sku": "00011",
+      "quantity": 1,
+      "unit_cost": 170,
+      "value": 170
+    },
+    {
+      "event_id": "E011-06",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E011-02",
+      "warehouse": "002",
+      "sku": "00011",
+      "quantity": 2,
+      "unit_cost": 210,
+      "value": 420
+    },
+    {
+      "event_id": "E012-01",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E012-01",
+      "warehouse": "001",
+      "sku": "00012",
+      "quantity": 12,
+      "unit_cost": 177,
+      "value": 2124
+    },
+    {
+      "event_id": "E012-02",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E012-02",
+      "warehouse": "001",
+      "sku": "00012",
+      "quantity": 6,
+      "unit_cost": 217,
+      "value": 1302
+    },
+    {
+      "event_id": "E012-03",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E012-01",
+      "warehouse": "001",
+      "sku": "00012",
+      "quantity": 12,
+      "unit_cost": 177,
+      "value": 2124
+    },
+    {
+      "event_id": "E012-03",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E012-02",
+      "warehouse": "001",
+      "sku": "00012",
+      "quantity": 2,
+      "unit_cost": 217,
+      "value": 434
+    },
+    {
+      "event_id": "E012-04",
+      "leg": "return",
+      "fragment": 1,
+      "lot_id": "E012-02",
+      "warehouse": "001",
+      "sku": "00012",
+      "quantity": 2,
+      "unit_cost": 217,
+      "value": 434
+    },
+    {
+      "event_id": "E012-04",
+      "leg": "return",
+      "fragment": 2,
+      "lot_id": "E012-01",
+      "warehouse": "001",
+      "sku": "00012",
+      "quantity": 1,
+      "unit_cost": 177,
+      "value": 177
+    },
+    {
+      "event_id": "E012-05",
+      "leg": "transfer_out",
+      "fragment": 1,
+      "lot_id": "E012-01",
+      "warehouse": "001",
+      "sku": "00012",
+      "quantity": 1,
+      "unit_cost": 177,
+      "value": 177
+    },
+    {
+      "event_id": "E012-05",
+      "leg": "transfer_out",
+      "fragment": 2,
+      "lot_id": "E012-02",
+      "warehouse": "001",
+      "sku": "00012",
+      "quantity": 4,
+      "unit_cost": 217,
+      "value": 868
+    },
+    {
+      "event_id": "E012-05",
+      "leg": "transfer_in",
+      "fragment": 1,
+      "lot_id": "E012-01",
+      "warehouse": "002",
+      "sku": "00012",
+      "quantity": 1,
+      "unit_cost": 177,
+      "value": 177
+    },
+    {
+      "event_id": "E012-05",
+      "leg": "transfer_in",
+      "fragment": 2,
+      "lot_id": "E012-02",
+      "warehouse": "002",
+      "sku": "00012",
+      "quantity": 4,
+      "unit_cost": 217,
+      "value": 868
+    },
+    {
+      "event_id": "E012-06",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E012-01",
+      "warehouse": "002",
+      "sku": "00012",
+      "quantity": 1,
+      "unit_cost": 177,
+      "value": 177
+    },
+    {
+      "event_id": "E012-06",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E012-02",
+      "warehouse": "002",
+      "sku": "00012",
+      "quantity": 2,
+      "unit_cost": 217,
+      "value": 434
+    },
+    {
+      "event_id": "E013-01",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E013-01",
+      "warehouse": "001",
+      "sku": "00013",
+      "quantity": 10,
+      "unit_cost": 184,
+      "value": 1840
+    },
+    {
+      "event_id": "E013-02",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E013-02",
+      "warehouse": "001",
+      "sku": "00013",
+      "quantity": 6,
+      "unit_cost": 224,
+      "value": 1344
+    },
+    {
+      "event_id": "E013-03",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E013-01",
+      "warehouse": "001",
+      "sku": "00013",
+      "quantity": 10,
+      "unit_cost": 184,
+      "value": 1840
+    },
+    {
+      "event_id": "E013-03",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E013-02",
+      "warehouse": "001",
+      "sku": "00013",
+      "quantity": 2,
+      "unit_cost": 224,
+      "value": 448
+    },
+    {
+      "event_id": "E013-04",
+      "leg": "return",
+      "fragment": 1,
+      "lot_id": "E013-02",
+      "warehouse": "001",
+      "sku": "00013",
+      "quantity": 2,
+      "unit_cost": 224,
+      "value": 448
+    },
+    {
+      "event_id": "E013-04",
+      "leg": "return",
+      "fragment": 2,
+      "lot_id": "E013-01",
+      "warehouse": "001",
+      "sku": "00013",
+      "quantity": 1,
+      "unit_cost": 184,
+      "value": 184
+    },
+    {
+      "event_id": "E013-05",
+      "leg": "transfer_out",
+      "fragment": 1,
+      "lot_id": "E013-01",
+      "warehouse": "001",
+      "sku": "00013",
+      "quantity": 1,
+      "unit_cost": 184,
+      "value": 184
+    },
+    {
+      "event_id": "E013-05",
+      "leg": "transfer_out",
+      "fragment": 2,
+      "lot_id": "E013-02",
+      "warehouse": "001",
+      "sku": "00013",
+      "quantity": 4,
+      "unit_cost": 224,
+      "value": 896
+    },
+    {
+      "event_id": "E013-05",
+      "leg": "transfer_in",
+      "fragment": 1,
+      "lot_id": "E013-01",
+      "warehouse": "002",
+      "sku": "00013",
+      "quantity": 1,
+      "unit_cost": 184,
+      "value": 184
+    },
+    {
+      "event_id": "E013-05",
+      "leg": "transfer_in",
+      "fragment": 2,
+      "lot_id": "E013-02",
+      "warehouse": "002",
+      "sku": "00013",
+      "quantity": 4,
+      "unit_cost": 224,
+      "value": 896
+    },
+    {
+      "event_id": "E013-06",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E013-01",
+      "warehouse": "002",
+      "sku": "00013",
+      "quantity": 1,
+      "unit_cost": 184,
+      "value": 184
+    },
+    {
+      "event_id": "E013-06",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E013-02",
+      "warehouse": "002",
+      "sku": "00013",
+      "quantity": 2,
+      "unit_cost": 224,
+      "value": 448
+    },
+    {
+      "event_id": "E014-01",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E014-01",
+      "warehouse": "001",
+      "sku": "00014",
+      "quantity": 11,
+      "unit_cost": 191,
+      "value": 2101
+    },
+    {
+      "event_id": "E014-02",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E014-02",
+      "warehouse": "001",
+      "sku": "00014",
+      "quantity": 6,
+      "unit_cost": 231,
+      "value": 1386
+    },
+    {
+      "event_id": "E014-03",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E014-01",
+      "warehouse": "001",
+      "sku": "00014",
+      "quantity": 11,
+      "unit_cost": 191,
+      "value": 2101
+    },
+    {
+      "event_id": "E014-03",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E014-02",
+      "warehouse": "001",
+      "sku": "00014",
+      "quantity": 2,
+      "unit_cost": 231,
+      "value": 462
+    },
+    {
+      "event_id": "E014-04",
+      "leg": "return",
+      "fragment": 1,
+      "lot_id": "E014-02",
+      "warehouse": "001",
+      "sku": "00014",
+      "quantity": 2,
+      "unit_cost": 231,
+      "value": 462
+    },
+    {
+      "event_id": "E014-04",
+      "leg": "return",
+      "fragment": 2,
+      "lot_id": "E014-01",
+      "warehouse": "001",
+      "sku": "00014",
+      "quantity": 1,
+      "unit_cost": 191,
+      "value": 191
+    },
+    {
+      "event_id": "E014-05",
+      "leg": "transfer_out",
+      "fragment": 1,
+      "lot_id": "E014-01",
+      "warehouse": "001",
+      "sku": "00014",
+      "quantity": 1,
+      "unit_cost": 191,
+      "value": 191
+    },
+    {
+      "event_id": "E014-05",
+      "leg": "transfer_out",
+      "fragment": 2,
+      "lot_id": "E014-02",
+      "warehouse": "001",
+      "sku": "00014",
+      "quantity": 4,
+      "unit_cost": 231,
+      "value": 924
+    },
+    {
+      "event_id": "E014-05",
+      "leg": "transfer_in",
+      "fragment": 1,
+      "lot_id": "E014-01",
+      "warehouse": "002",
+      "sku": "00014",
+      "quantity": 1,
+      "unit_cost": 191,
+      "value": 191
+    },
+    {
+      "event_id": "E014-05",
+      "leg": "transfer_in",
+      "fragment": 2,
+      "lot_id": "E014-02",
+      "warehouse": "002",
+      "sku": "00014",
+      "quantity": 4,
+      "unit_cost": 231,
+      "value": 924
+    },
+    {
+      "event_id": "E014-06",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E014-01",
+      "warehouse": "002",
+      "sku": "00014",
+      "quantity": 1,
+      "unit_cost": 191,
+      "value": 191
+    },
+    {
+      "event_id": "E014-06",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E014-02",
+      "warehouse": "002",
+      "sku": "00014",
+      "quantity": 2,
+      "unit_cost": 231,
+      "value": 462
+    },
+    {
+      "event_id": "E015-01",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E015-01",
+      "warehouse": "001",
+      "sku": "00015",
+      "quantity": 12,
+      "unit_cost": 198,
+      "value": 2376
+    },
+    {
+      "event_id": "E015-02",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E015-02",
+      "warehouse": "001",
+      "sku": "00015",
+      "quantity": 6,
+      "unit_cost": 238,
+      "value": 1428
+    },
+    {
+      "event_id": "E015-03",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E015-01",
+      "warehouse": "001",
+      "sku": "00015",
+      "quantity": 12,
+      "unit_cost": 198,
+      "value": 2376
+    },
+    {
+      "event_id": "E015-03",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E015-02",
+      "warehouse": "001",
+      "sku": "00015",
+      "quantity": 2,
+      "unit_cost": 238,
+      "value": 476
+    },
+    {
+      "event_id": "E015-04",
+      "leg": "return",
+      "fragment": 1,
+      "lot_id": "E015-02",
+      "warehouse": "001",
+      "sku": "00015",
+      "quantity": 2,
+      "unit_cost": 238,
+      "value": 476
+    },
+    {
+      "event_id": "E015-04",
+      "leg": "return",
+      "fragment": 2,
+      "lot_id": "E015-01",
+      "warehouse": "001",
+      "sku": "00015",
+      "quantity": 1,
+      "unit_cost": 198,
+      "value": 198
+    },
+    {
+      "event_id": "E015-05",
+      "leg": "transfer_out",
+      "fragment": 1,
+      "lot_id": "E015-01",
+      "warehouse": "001",
+      "sku": "00015",
+      "quantity": 1,
+      "unit_cost": 198,
+      "value": 198
+    },
+    {
+      "event_id": "E015-05",
+      "leg": "transfer_out",
+      "fragment": 2,
+      "lot_id": "E015-02",
+      "warehouse": "001",
+      "sku": "00015",
+      "quantity": 4,
+      "unit_cost": 238,
+      "value": 952
+    },
+    {
+      "event_id": "E015-05",
+      "leg": "transfer_in",
+      "fragment": 1,
+      "lot_id": "E015-01",
+      "warehouse": "002",
+      "sku": "00015",
+      "quantity": 1,
+      "unit_cost": 198,
+      "value": 198
+    },
+    {
+      "event_id": "E015-05",
+      "leg": "transfer_in",
+      "fragment": 2,
+      "lot_id": "E015-02",
+      "warehouse": "002",
+      "sku": "00015",
+      "quantity": 4,
+      "unit_cost": 238,
+      "value": 952
+    },
+    {
+      "event_id": "E015-06",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E015-01",
+      "warehouse": "002",
+      "sku": "00015",
+      "quantity": 1,
+      "unit_cost": 198,
+      "value": 198
+    },
+    {
+      "event_id": "E015-06",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E015-02",
+      "warehouse": "002",
+      "sku": "00015",
+      "quantity": 2,
+      "unit_cost": 238,
+      "value": 476
+    },
+    {
+      "event_id": "E016-01",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E016-01",
+      "warehouse": "001",
+      "sku": "00016",
+      "quantity": 10,
+      "unit_cost": 205,
+      "value": 2050
+    },
+    {
+      "event_id": "E016-02",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E016-02",
+      "warehouse": "001",
+      "sku": "00016",
+      "quantity": 6,
+      "unit_cost": 245,
+      "value": 1470
+    },
+    {
+      "event_id": "E016-03",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E016-01",
+      "warehouse": "001",
+      "sku": "00016",
+      "quantity": 10,
+      "unit_cost": 205,
+      "value": 2050
+    },
+    {
+      "event_id": "E016-03",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E016-02",
+      "warehouse": "001",
+      "sku": "00016",
+      "quantity": 2,
+      "unit_cost": 245,
+      "value": 490
+    },
+    {
+      "event_id": "E016-04",
+      "leg": "return",
+      "fragment": 1,
+      "lot_id": "E016-02",
+      "warehouse": "001",
+      "sku": "00016",
+      "quantity": 2,
+      "unit_cost": 245,
+      "value": 490
+    },
+    {
+      "event_id": "E016-04",
+      "leg": "return",
+      "fragment": 2,
+      "lot_id": "E016-01",
+      "warehouse": "001",
+      "sku": "00016",
+      "quantity": 1,
+      "unit_cost": 205,
+      "value": 205
+    },
+    {
+      "event_id": "E016-05",
+      "leg": "transfer_out",
+      "fragment": 1,
+      "lot_id": "E016-01",
+      "warehouse": "001",
+      "sku": "00016",
+      "quantity": 1,
+      "unit_cost": 205,
+      "value": 205
+    },
+    {
+      "event_id": "E016-05",
+      "leg": "transfer_out",
+      "fragment": 2,
+      "lot_id": "E016-02",
+      "warehouse": "001",
+      "sku": "00016",
+      "quantity": 4,
+      "unit_cost": 245,
+      "value": 980
+    },
+    {
+      "event_id": "E016-05",
+      "leg": "transfer_in",
+      "fragment": 1,
+      "lot_id": "E016-01",
+      "warehouse": "002",
+      "sku": "00016",
+      "quantity": 1,
+      "unit_cost": 205,
+      "value": 205
+    },
+    {
+      "event_id": "E016-05",
+      "leg": "transfer_in",
+      "fragment": 2,
+      "lot_id": "E016-02",
+      "warehouse": "002",
+      "sku": "00016",
+      "quantity": 4,
+      "unit_cost": 245,
+      "value": 980
+    },
+    {
+      "event_id": "E016-06",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E016-01",
+      "warehouse": "002",
+      "sku": "00016",
+      "quantity": 1,
+      "unit_cost": 205,
+      "value": 205
+    },
+    {
+      "event_id": "E016-06",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E016-02",
+      "warehouse": "002",
+      "sku": "00016",
+      "quantity": 2,
+      "unit_cost": 245,
+      "value": 490
+    },
+    {
+      "event_id": "E017-01",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E017-01",
+      "warehouse": "001",
+      "sku": "00017",
+      "quantity": 11,
+      "unit_cost": 212,
+      "value": 2332
+    },
+    {
+      "event_id": "E017-02",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E017-02",
+      "warehouse": "001",
+      "sku": "00017",
+      "quantity": 6,
+      "unit_cost": 252,
+      "value": 1512
+    },
+    {
+      "event_id": "E017-03",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E017-01",
+      "warehouse": "001",
+      "sku": "00017",
+      "quantity": 11,
+      "unit_cost": 212,
+      "value": 2332
+    },
+    {
+      "event_id": "E017-03",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E017-02",
+      "warehouse": "001",
+      "sku": "00017",
+      "quantity": 2,
+      "unit_cost": 252,
+      "value": 504
+    },
+    {
+      "event_id": "E017-04",
+      "leg": "return",
+      "fragment": 1,
+      "lot_id": "E017-02",
+      "warehouse": "001",
+      "sku": "00017",
+      "quantity": 2,
+      "unit_cost": 252,
+      "value": 504
+    },
+    {
+      "event_id": "E017-04",
+      "leg": "return",
+      "fragment": 2,
+      "lot_id": "E017-01",
+      "warehouse": "001",
+      "sku": "00017",
+      "quantity": 1,
+      "unit_cost": 212,
+      "value": 212
+    },
+    {
+      "event_id": "E017-05",
+      "leg": "transfer_out",
+      "fragment": 1,
+      "lot_id": "E017-01",
+      "warehouse": "001",
+      "sku": "00017",
+      "quantity": 1,
+      "unit_cost": 212,
+      "value": 212
+    },
+    {
+      "event_id": "E017-05",
+      "leg": "transfer_out",
+      "fragment": 2,
+      "lot_id": "E017-02",
+      "warehouse": "001",
+      "sku": "00017",
+      "quantity": 4,
+      "unit_cost": 252,
+      "value": 1008
+    },
+    {
+      "event_id": "E017-05",
+      "leg": "transfer_in",
+      "fragment": 1,
+      "lot_id": "E017-01",
+      "warehouse": "002",
+      "sku": "00017",
+      "quantity": 1,
+      "unit_cost": 212,
+      "value": 212
+    },
+    {
+      "event_id": "E017-05",
+      "leg": "transfer_in",
+      "fragment": 2,
+      "lot_id": "E017-02",
+      "warehouse": "002",
+      "sku": "00017",
+      "quantity": 4,
+      "unit_cost": 252,
+      "value": 1008
+    },
+    {
+      "event_id": "E017-06",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E017-01",
+      "warehouse": "002",
+      "sku": "00017",
+      "quantity": 1,
+      "unit_cost": 212,
+      "value": 212
+    },
+    {
+      "event_id": "E017-06",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E017-02",
+      "warehouse": "002",
+      "sku": "00017",
+      "quantity": 2,
+      "unit_cost": 252,
+      "value": 504
+    },
+    {
+      "event_id": "E018-01",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E018-01",
+      "warehouse": "001",
+      "sku": "00018",
+      "quantity": 12,
+      "unit_cost": 219,
+      "value": 2628
+    },
+    {
+      "event_id": "E018-02",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E018-02",
+      "warehouse": "001",
+      "sku": "00018",
+      "quantity": 6,
+      "unit_cost": 259,
+      "value": 1554
+    },
+    {
+      "event_id": "E018-03",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E018-01",
+      "warehouse": "001",
+      "sku": "00018",
+      "quantity": 12,
+      "unit_cost": 219,
+      "value": 2628
+    },
+    {
+      "event_id": "E018-03",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E018-02",
+      "warehouse": "001",
+      "sku": "00018",
+      "quantity": 2,
+      "unit_cost": 259,
+      "value": 518
+    },
+    {
+      "event_id": "E018-04",
+      "leg": "return",
+      "fragment": 1,
+      "lot_id": "E018-02",
+      "warehouse": "001",
+      "sku": "00018",
+      "quantity": 2,
+      "unit_cost": 259,
+      "value": 518
+    },
+    {
+      "event_id": "E018-04",
+      "leg": "return",
+      "fragment": 2,
+      "lot_id": "E018-01",
+      "warehouse": "001",
+      "sku": "00018",
+      "quantity": 1,
+      "unit_cost": 219,
+      "value": 219
+    },
+    {
+      "event_id": "E018-05",
+      "leg": "transfer_out",
+      "fragment": 1,
+      "lot_id": "E018-01",
+      "warehouse": "001",
+      "sku": "00018",
+      "quantity": 1,
+      "unit_cost": 219,
+      "value": 219
+    },
+    {
+      "event_id": "E018-05",
+      "leg": "transfer_out",
+      "fragment": 2,
+      "lot_id": "E018-02",
+      "warehouse": "001",
+      "sku": "00018",
+      "quantity": 4,
+      "unit_cost": 259,
+      "value": 1036
+    },
+    {
+      "event_id": "E018-05",
+      "leg": "transfer_in",
+      "fragment": 1,
+      "lot_id": "E018-01",
+      "warehouse": "002",
+      "sku": "00018",
+      "quantity": 1,
+      "unit_cost": 219,
+      "value": 219
+    },
+    {
+      "event_id": "E018-05",
+      "leg": "transfer_in",
+      "fragment": 2,
+      "lot_id": "E018-02",
+      "warehouse": "002",
+      "sku": "00018",
+      "quantity": 4,
+      "unit_cost": 259,
+      "value": 1036
+    },
+    {
+      "event_id": "E018-06",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E018-01",
+      "warehouse": "002",
+      "sku": "00018",
+      "quantity": 1,
+      "unit_cost": 219,
+      "value": 219
+    },
+    {
+      "event_id": "E018-06",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E018-02",
+      "warehouse": "002",
+      "sku": "00018",
+      "quantity": 2,
+      "unit_cost": 259,
+      "value": 518
+    },
+    {
+      "event_id": "E019-01",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E019-01",
+      "warehouse": "001",
+      "sku": "00019",
+      "quantity": 10,
+      "unit_cost": 226,
+      "value": 2260
+    },
+    {
+      "event_id": "E019-02",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E019-02",
+      "warehouse": "001",
+      "sku": "00019",
+      "quantity": 6,
+      "unit_cost": 266,
+      "value": 1596
+    },
+    {
+      "event_id": "E019-03",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E019-01",
+      "warehouse": "001",
+      "sku": "00019",
+      "quantity": 10,
+      "unit_cost": 226,
+      "value": 2260
+    },
+    {
+      "event_id": "E019-03",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E019-02",
+      "warehouse": "001",
+      "sku": "00019",
+      "quantity": 2,
+      "unit_cost": 266,
+      "value": 532
+    },
+    {
+      "event_id": "E019-04",
+      "leg": "return",
+      "fragment": 1,
+      "lot_id": "E019-02",
+      "warehouse": "001",
+      "sku": "00019",
+      "quantity": 2,
+      "unit_cost": 266,
+      "value": 532
+    },
+    {
+      "event_id": "E019-04",
+      "leg": "return",
+      "fragment": 2,
+      "lot_id": "E019-01",
+      "warehouse": "001",
+      "sku": "00019",
+      "quantity": 1,
+      "unit_cost": 226,
+      "value": 226
+    },
+    {
+      "event_id": "E019-05",
+      "leg": "transfer_out",
+      "fragment": 1,
+      "lot_id": "E019-01",
+      "warehouse": "001",
+      "sku": "00019",
+      "quantity": 1,
+      "unit_cost": 226,
+      "value": 226
+    },
+    {
+      "event_id": "E019-05",
+      "leg": "transfer_out",
+      "fragment": 2,
+      "lot_id": "E019-02",
+      "warehouse": "001",
+      "sku": "00019",
+      "quantity": 4,
+      "unit_cost": 266,
+      "value": 1064
+    },
+    {
+      "event_id": "E019-05",
+      "leg": "transfer_in",
+      "fragment": 1,
+      "lot_id": "E019-01",
+      "warehouse": "002",
+      "sku": "00019",
+      "quantity": 1,
+      "unit_cost": 226,
+      "value": 226
+    },
+    {
+      "event_id": "E019-05",
+      "leg": "transfer_in",
+      "fragment": 2,
+      "lot_id": "E019-02",
+      "warehouse": "002",
+      "sku": "00019",
+      "quantity": 4,
+      "unit_cost": 266,
+      "value": 1064
+    },
+    {
+      "event_id": "E019-06",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E019-01",
+      "warehouse": "002",
+      "sku": "00019",
+      "quantity": 1,
+      "unit_cost": 226,
+      "value": 226
+    },
+    {
+      "event_id": "E019-06",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E019-02",
+      "warehouse": "002",
+      "sku": "00019",
+      "quantity": 2,
+      "unit_cost": 266,
+      "value": 532
+    },
+    {
+      "event_id": "E020-01",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E020-01",
+      "warehouse": "001",
+      "sku": "00020",
+      "quantity": 11,
+      "unit_cost": 233,
+      "value": 2563
+    },
+    {
+      "event_id": "E020-02",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E020-02",
+      "warehouse": "001",
+      "sku": "00020",
+      "quantity": 6,
+      "unit_cost": 273,
+      "value": 1638
+    },
+    {
+      "event_id": "E020-03",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E020-01",
+      "warehouse": "001",
+      "sku": "00020",
+      "quantity": 11,
+      "unit_cost": 233,
+      "value": 2563
+    },
+    {
+      "event_id": "E020-03",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E020-02",
+      "warehouse": "001",
+      "sku": "00020",
+      "quantity": 2,
+      "unit_cost": 273,
+      "value": 546
+    },
+    {
+      "event_id": "E020-04",
+      "leg": "return",
+      "fragment": 1,
+      "lot_id": "E020-02",
+      "warehouse": "001",
+      "sku": "00020",
+      "quantity": 2,
+      "unit_cost": 273,
+      "value": 546
+    },
+    {
+      "event_id": "E020-04",
+      "leg": "return",
+      "fragment": 2,
+      "lot_id": "E020-01",
+      "warehouse": "001",
+      "sku": "00020",
+      "quantity": 1,
+      "unit_cost": 233,
+      "value": 233
+    },
+    {
+      "event_id": "E020-05",
+      "leg": "transfer_out",
+      "fragment": 1,
+      "lot_id": "E020-01",
+      "warehouse": "001",
+      "sku": "00020",
+      "quantity": 1,
+      "unit_cost": 233,
+      "value": 233
+    },
+    {
+      "event_id": "E020-05",
+      "leg": "transfer_out",
+      "fragment": 2,
+      "lot_id": "E020-02",
+      "warehouse": "001",
+      "sku": "00020",
+      "quantity": 4,
+      "unit_cost": 273,
+      "value": 1092
+    },
+    {
+      "event_id": "E020-05",
+      "leg": "transfer_in",
+      "fragment": 1,
+      "lot_id": "E020-01",
+      "warehouse": "002",
+      "sku": "00020",
+      "quantity": 1,
+      "unit_cost": 233,
+      "value": 233
+    },
+    {
+      "event_id": "E020-05",
+      "leg": "transfer_in",
+      "fragment": 2,
+      "lot_id": "E020-02",
+      "warehouse": "002",
+      "sku": "00020",
+      "quantity": 4,
+      "unit_cost": 273,
+      "value": 1092
+    },
+    {
+      "event_id": "E020-06",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E020-01",
+      "warehouse": "002",
+      "sku": "00020",
+      "quantity": 1,
+      "unit_cost": 233,
+      "value": 233
+    },
+    {
+      "event_id": "E020-06",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E020-02",
+      "warehouse": "002",
+      "sku": "00020",
+      "quantity": 2,
+      "unit_cost": 273,
+      "value": 546
+    },
+    {
+      "event_id": "E021-01",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E021-01",
+      "warehouse": "001",
+      "sku": "00021",
+      "quantity": 12,
+      "unit_cost": 240,
+      "value": 2880
+    },
+    {
+      "event_id": "E021-02",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E021-02",
+      "warehouse": "001",
+      "sku": "00021",
+      "quantity": 6,
+      "unit_cost": 280,
+      "value": 1680
+    },
+    {
+      "event_id": "E021-03",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E021-01",
+      "warehouse": "001",
+      "sku": "00021",
+      "quantity": 12,
+      "unit_cost": 240,
+      "value": 2880
+    },
+    {
+      "event_id": "E021-03",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E021-02",
+      "warehouse": "001",
+      "sku": "00021",
+      "quantity": 2,
+      "unit_cost": 280,
+      "value": 560
+    },
+    {
+      "event_id": "E021-04",
+      "leg": "return",
+      "fragment": 1,
+      "lot_id": "E021-02",
+      "warehouse": "001",
+      "sku": "00021",
+      "quantity": 2,
+      "unit_cost": 280,
+      "value": 560
+    },
+    {
+      "event_id": "E021-04",
+      "leg": "return",
+      "fragment": 2,
+      "lot_id": "E021-01",
+      "warehouse": "001",
+      "sku": "00021",
+      "quantity": 1,
+      "unit_cost": 240,
+      "value": 240
+    },
+    {
+      "event_id": "E021-05",
+      "leg": "transfer_out",
+      "fragment": 1,
+      "lot_id": "E021-01",
+      "warehouse": "001",
+      "sku": "00021",
+      "quantity": 1,
+      "unit_cost": 240,
+      "value": 240
+    },
+    {
+      "event_id": "E021-05",
+      "leg": "transfer_out",
+      "fragment": 2,
+      "lot_id": "E021-02",
+      "warehouse": "001",
+      "sku": "00021",
+      "quantity": 4,
+      "unit_cost": 280,
+      "value": 1120
+    },
+    {
+      "event_id": "E021-05",
+      "leg": "transfer_in",
+      "fragment": 1,
+      "lot_id": "E021-01",
+      "warehouse": "002",
+      "sku": "00021",
+      "quantity": 1,
+      "unit_cost": 240,
+      "value": 240
+    },
+    {
+      "event_id": "E021-05",
+      "leg": "transfer_in",
+      "fragment": 2,
+      "lot_id": "E021-02",
+      "warehouse": "002",
+      "sku": "00021",
+      "quantity": 4,
+      "unit_cost": 280,
+      "value": 1120
+    },
+    {
+      "event_id": "E021-06",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E021-01",
+      "warehouse": "002",
+      "sku": "00021",
+      "quantity": 1,
+      "unit_cost": 240,
+      "value": 240
+    },
+    {
+      "event_id": "E021-06",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E021-02",
+      "warehouse": "002",
+      "sku": "00021",
+      "quantity": 2,
+      "unit_cost": 280,
+      "value": 560
+    },
+    {
+      "event_id": "E022-01",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E022-01",
+      "warehouse": "001",
+      "sku": "00022",
+      "quantity": 10,
+      "unit_cost": 247,
+      "value": 2470
+    },
+    {
+      "event_id": "E022-02",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E022-02",
+      "warehouse": "001",
+      "sku": "00022",
+      "quantity": 6,
+      "unit_cost": 287,
+      "value": 1722
+    },
+    {
+      "event_id": "E022-03",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E022-01",
+      "warehouse": "001",
+      "sku": "00022",
+      "quantity": 10,
+      "unit_cost": 247,
+      "value": 2470
+    },
+    {
+      "event_id": "E022-03",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E022-02",
+      "warehouse": "001",
+      "sku": "00022",
+      "quantity": 2,
+      "unit_cost": 287,
+      "value": 574
+    },
+    {
+      "event_id": "E022-04",
+      "leg": "return",
+      "fragment": 1,
+      "lot_id": "E022-02",
+      "warehouse": "001",
+      "sku": "00022",
+      "quantity": 2,
+      "unit_cost": 287,
+      "value": 574
+    },
+    {
+      "event_id": "E022-04",
+      "leg": "return",
+      "fragment": 2,
+      "lot_id": "E022-01",
+      "warehouse": "001",
+      "sku": "00022",
+      "quantity": 1,
+      "unit_cost": 247,
+      "value": 247
+    },
+    {
+      "event_id": "E022-05",
+      "leg": "transfer_out",
+      "fragment": 1,
+      "lot_id": "E022-01",
+      "warehouse": "001",
+      "sku": "00022",
+      "quantity": 1,
+      "unit_cost": 247,
+      "value": 247
+    },
+    {
+      "event_id": "E022-05",
+      "leg": "transfer_out",
+      "fragment": 2,
+      "lot_id": "E022-02",
+      "warehouse": "001",
+      "sku": "00022",
+      "quantity": 4,
+      "unit_cost": 287,
+      "value": 1148
+    },
+    {
+      "event_id": "E022-05",
+      "leg": "transfer_in",
+      "fragment": 1,
+      "lot_id": "E022-01",
+      "warehouse": "002",
+      "sku": "00022",
+      "quantity": 1,
+      "unit_cost": 247,
+      "value": 247
+    },
+    {
+      "event_id": "E022-05",
+      "leg": "transfer_in",
+      "fragment": 2,
+      "lot_id": "E022-02",
+      "warehouse": "002",
+      "sku": "00022",
+      "quantity": 4,
+      "unit_cost": 287,
+      "value": 1148
+    },
+    {
+      "event_id": "E022-06",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E022-01",
+      "warehouse": "002",
+      "sku": "00022",
+      "quantity": 1,
+      "unit_cost": 247,
+      "value": 247
+    },
+    {
+      "event_id": "E022-06",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E022-02",
+      "warehouse": "002",
+      "sku": "00022",
+      "quantity": 2,
+      "unit_cost": 287,
+      "value": 574
+    },
+    {
+      "event_id": "E023-01",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E023-01",
+      "warehouse": "001",
+      "sku": "00023",
+      "quantity": 11,
+      "unit_cost": 254,
+      "value": 2794
+    },
+    {
+      "event_id": "E023-02",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E023-02",
+      "warehouse": "001",
+      "sku": "00023",
+      "quantity": 6,
+      "unit_cost": 294,
+      "value": 1764
+    },
+    {
+      "event_id": "E023-03",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E023-01",
+      "warehouse": "001",
+      "sku": "00023",
+      "quantity": 11,
+      "unit_cost": 254,
+      "value": 2794
+    },
+    {
+      "event_id": "E023-03",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E023-02",
+      "warehouse": "001",
+      "sku": "00023",
+      "quantity": 2,
+      "unit_cost": 294,
+      "value": 588
+    },
+    {
+      "event_id": "E023-04",
+      "leg": "return",
+      "fragment": 1,
+      "lot_id": "E023-02",
+      "warehouse": "001",
+      "sku": "00023",
+      "quantity": 2,
+      "unit_cost": 294,
+      "value": 588
+    },
+    {
+      "event_id": "E023-04",
+      "leg": "return",
+      "fragment": 2,
+      "lot_id": "E023-01",
+      "warehouse": "001",
+      "sku": "00023",
+      "quantity": 1,
+      "unit_cost": 254,
+      "value": 254
+    },
+    {
+      "event_id": "E023-05",
+      "leg": "transfer_out",
+      "fragment": 1,
+      "lot_id": "E023-01",
+      "warehouse": "001",
+      "sku": "00023",
+      "quantity": 1,
+      "unit_cost": 254,
+      "value": 254
+    },
+    {
+      "event_id": "E023-05",
+      "leg": "transfer_out",
+      "fragment": 2,
+      "lot_id": "E023-02",
+      "warehouse": "001",
+      "sku": "00023",
+      "quantity": 4,
+      "unit_cost": 294,
+      "value": 1176
+    },
+    {
+      "event_id": "E023-05",
+      "leg": "transfer_in",
+      "fragment": 1,
+      "lot_id": "E023-01",
+      "warehouse": "002",
+      "sku": "00023",
+      "quantity": 1,
+      "unit_cost": 254,
+      "value": 254
+    },
+    {
+      "event_id": "E023-05",
+      "leg": "transfer_in",
+      "fragment": 2,
+      "lot_id": "E023-02",
+      "warehouse": "002",
+      "sku": "00023",
+      "quantity": 4,
+      "unit_cost": 294,
+      "value": 1176
+    },
+    {
+      "event_id": "E023-06",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E023-01",
+      "warehouse": "002",
+      "sku": "00023",
+      "quantity": 1,
+      "unit_cost": 254,
+      "value": 254
+    },
+    {
+      "event_id": "E023-06",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E023-02",
+      "warehouse": "002",
+      "sku": "00023",
+      "quantity": 2,
+      "unit_cost": 294,
+      "value": 588
+    },
+    {
+      "event_id": "E024-01",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E024-01",
+      "warehouse": "001",
+      "sku": "00024",
+      "quantity": 12,
+      "unit_cost": 261,
+      "value": 3132
+    },
+    {
+      "event_id": "E024-02",
+      "leg": "receipt",
+      "fragment": 1,
+      "lot_id": "E024-02",
+      "warehouse": "001",
+      "sku": "00024",
+      "quantity": 6,
+      "unit_cost": 301,
+      "value": 1806
+    },
+    {
+      "event_id": "E024-03",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E024-01",
+      "warehouse": "001",
+      "sku": "00024",
+      "quantity": 12,
+      "unit_cost": 261,
+      "value": 3132
+    },
+    {
+      "event_id": "E024-03",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E024-02",
+      "warehouse": "001",
+      "sku": "00024",
+      "quantity": 2,
+      "unit_cost": 301,
+      "value": 602
+    },
+    {
+      "event_id": "E024-04",
+      "leg": "return",
+      "fragment": 1,
+      "lot_id": "E024-02",
+      "warehouse": "001",
+      "sku": "00024",
+      "quantity": 2,
+      "unit_cost": 301,
+      "value": 602
+    },
+    {
+      "event_id": "E024-04",
+      "leg": "return",
+      "fragment": 2,
+      "lot_id": "E024-01",
+      "warehouse": "001",
+      "sku": "00024",
+      "quantity": 1,
+      "unit_cost": 261,
+      "value": 261
+    },
+    {
+      "event_id": "E024-05",
+      "leg": "transfer_out",
+      "fragment": 1,
+      "lot_id": "E024-01",
+      "warehouse": "001",
+      "sku": "00024",
+      "quantity": 1,
+      "unit_cost": 261,
+      "value": 261
+    },
+    {
+      "event_id": "E024-05",
+      "leg": "transfer_out",
+      "fragment": 2,
+      "lot_id": "E024-02",
+      "warehouse": "001",
+      "sku": "00024",
+      "quantity": 4,
+      "unit_cost": 301,
+      "value": 1204
+    },
+    {
+      "event_id": "E024-05",
+      "leg": "transfer_in",
+      "fragment": 1,
+      "lot_id": "E024-01",
+      "warehouse": "002",
+      "sku": "00024",
+      "quantity": 1,
+      "unit_cost": 261,
+      "value": 261
+    },
+    {
+      "event_id": "E024-05",
+      "leg": "transfer_in",
+      "fragment": 2,
+      "lot_id": "E024-02",
+      "warehouse": "002",
+      "sku": "00024",
+      "quantity": 4,
+      "unit_cost": 301,
+      "value": 1204
+    },
+    {
+      "event_id": "E024-06",
+      "leg": "issue",
+      "fragment": 1,
+      "lot_id": "E024-01",
+      "warehouse": "002",
+      "sku": "00024",
+      "quantity": 1,
+      "unit_cost": 261,
+      "value": 261
+    },
+    {
+      "event_id": "E024-06",
+      "leg": "issue",
+      "fragment": 2,
+      "lot_id": "E024-02",
+      "warehouse": "002",
+      "sku": "00024",
+      "quantity": 2,
+      "unit_cost": 301,
+      "value": 602
+    }
+  ],
+  "lots.csv": [
+    {
+      "warehouse": "001",
+      "sku": "00001",
+      "lot_id": "E001-02",
+      "quantity": 2,
+      "unit_cost": 140,
+      "value": 280
+    },
+    {
+      "warehouse": "002",
+      "sku": "00001",
+      "lot_id": "E001-02",
+      "quantity": 2,
+      "unit_cost": 140,
+      "value": 280
+    },
+    {
+      "warehouse": "001",
+      "sku": "00002",
+      "lot_id": "E002-02",
+      "quantity": 2,
+      "unit_cost": 147,
+      "value": 294
+    },
+    {
+      "warehouse": "002",
+      "sku": "00002",
+      "lot_id": "E002-02",
+      "quantity": 2,
+      "unit_cost": 147,
+      "value": 294
+    },
+    {
+      "warehouse": "001",
+      "sku": "00003",
+      "lot_id": "E003-02",
+      "quantity": 2,
+      "unit_cost": 154,
+      "value": 308
+    },
+    {
+      "warehouse": "002",
+      "sku": "00003",
+      "lot_id": "E003-02",
+      "quantity": 2,
+      "unit_cost": 154,
+      "value": 308
+    },
+    {
+      "warehouse": "001",
+      "sku": "00004",
+      "lot_id": "E004-02",
+      "quantity": 2,
+      "unit_cost": 161,
+      "value": 322
+    },
+    {
+      "warehouse": "002",
+      "sku": "00004",
+      "lot_id": "E004-02",
+      "quantity": 2,
+      "unit_cost": 161,
+      "value": 322
+    },
+    {
+      "warehouse": "001",
+      "sku": "00005",
+      "lot_id": "E005-02",
+      "quantity": 2,
+      "unit_cost": 168,
+      "value": 336
+    },
+    {
+      "warehouse": "002",
+      "sku": "00005",
+      "lot_id": "E005-02",
+      "quantity": 2,
+      "unit_cost": 168,
+      "value": 336
+    },
+    {
+      "warehouse": "001",
+      "sku": "00006",
+      "lot_id": "E006-02",
+      "quantity": 2,
+      "unit_cost": 175,
+      "value": 350
+    },
+    {
+      "warehouse": "002",
+      "sku": "00006",
+      "lot_id": "E006-02",
+      "quantity": 2,
+      "unit_cost": 175,
+      "value": 350
+    },
+    {
+      "warehouse": "001",
+      "sku": "00007",
+      "lot_id": "E007-02",
+      "quantity": 2,
+      "unit_cost": 182,
+      "value": 364
+    },
+    {
+      "warehouse": "002",
+      "sku": "00007",
+      "lot_id": "E007-02",
+      "quantity": 2,
+      "unit_cost": 182,
+      "value": 364
+    },
+    {
+      "warehouse": "001",
+      "sku": "00008",
+      "lot_id": "E008-02",
+      "quantity": 2,
+      "unit_cost": 189,
+      "value": 378
+    },
+    {
+      "warehouse": "002",
+      "sku": "00008",
+      "lot_id": "E008-02",
+      "quantity": 2,
+      "unit_cost": 189,
+      "value": 378
+    },
+    {
+      "warehouse": "001",
+      "sku": "00009",
+      "lot_id": "E009-02",
+      "quantity": 2,
+      "unit_cost": 196,
+      "value": 392
+    },
+    {
+      "warehouse": "002",
+      "sku": "00009",
+      "lot_id": "E009-02",
+      "quantity": 2,
+      "unit_cost": 196,
+      "value": 392
+    },
+    {
+      "warehouse": "001",
+      "sku": "00010",
+      "lot_id": "E010-02",
+      "quantity": 2,
+      "unit_cost": 203,
+      "value": 406
+    },
+    {
+      "warehouse": "002",
+      "sku": "00010",
+      "lot_id": "E010-02",
+      "quantity": 2,
+      "unit_cost": 203,
+      "value": 406
+    },
+    {
+      "warehouse": "001",
+      "sku": "00011",
+      "lot_id": "E011-02",
+      "quantity": 2,
+      "unit_cost": 210,
+      "value": 420
+    },
+    {
+      "warehouse": "002",
+      "sku": "00011",
+      "lot_id": "E011-02",
+      "quantity": 2,
+      "unit_cost": 210,
+      "value": 420
+    },
+    {
+      "warehouse": "001",
+      "sku": "00012",
+      "lot_id": "E012-02",
+      "quantity": 2,
+      "unit_cost": 217,
+      "value": 434
+    },
+    {
+      "warehouse": "002",
+      "sku": "00012",
+      "lot_id": "E012-02",
+      "quantity": 2,
+      "unit_cost": 217,
+      "value": 434
+    },
+    {
+      "warehouse": "001",
+      "sku": "00013",
+      "lot_id": "E013-02",
+      "quantity": 2,
+      "unit_cost": 224,
+      "value": 448
+    },
+    {
+      "warehouse": "002",
+      "sku": "00013",
+      "lot_id": "E013-02",
+      "quantity": 2,
+      "unit_cost": 224,
+      "value": 448
+    },
+    {
+      "warehouse": "001",
+      "sku": "00014",
+      "lot_id": "E014-02",
+      "quantity": 2,
+      "unit_cost": 231,
+      "value": 462
+    },
+    {
+      "warehouse": "002",
+      "sku": "00014",
+      "lot_id": "E014-02",
+      "quantity": 2,
+      "unit_cost": 231,
+      "value": 462
+    },
+    {
+      "warehouse": "001",
+      "sku": "00015",
+      "lot_id": "E015-02",
+      "quantity": 2,
+      "unit_cost": 238,
+      "value": 476
+    },
+    {
+      "warehouse": "002",
+      "sku": "00015",
+      "lot_id": "E015-02",
+      "quantity": 2,
+      "unit_cost": 238,
+      "value": 476
+    },
+    {
+      "warehouse": "001",
+      "sku": "00016",
+      "lot_id": "E016-02",
+      "quantity": 2,
+      "unit_cost": 245,
+      "value": 490
+    },
+    {
+      "warehouse": "002",
+      "sku": "00016",
+      "lot_id": "E016-02",
+      "quantity": 2,
+      "unit_cost": 245,
+      "value": 490
+    },
+    {
+      "warehouse": "001",
+      "sku": "00017",
+      "lot_id": "E017-02",
+      "quantity": 2,
+      "unit_cost": 252,
+      "value": 504
+    },
+    {
+      "warehouse": "002",
+      "sku": "00017",
+      "lot_id": "E017-02",
+      "quantity": 2,
+      "unit_cost": 252,
+      "value": 504
+    },
+    {
+      "warehouse": "001",
+      "sku": "00018",
+      "lot_id": "E018-02",
+      "quantity": 2,
+      "unit_cost": 259,
+      "value": 518
+    },
+    {
+      "warehouse": "002",
+      "sku": "00018",
+      "lot_id": "E018-02",
+      "quantity": 2,
+      "unit_cost": 259,
+      "value": 518
+    },
+    {
+      "warehouse": "001",
+      "sku": "00019",
+      "lot_id": "E019-02",
+      "quantity": 2,
+      "unit_cost": 266,
+      "value": 532
+    },
+    {
+      "warehouse": "002",
+      "sku": "00019",
+      "lot_id": "E019-02",
+      "quantity": 2,
+      "unit_cost": 266,
+      "value": 532
+    },
+    {
+      "warehouse": "001",
+      "sku": "00020",
+      "lot_id": "E020-02",
+      "quantity": 2,
+      "unit_cost": 273,
+      "value": 546
+    },
+    {
+      "warehouse": "002",
+      "sku": "00020",
+      "lot_id": "E020-02",
+      "quantity": 2,
+      "unit_cost": 273,
+      "value": 546
+    },
+    {
+      "warehouse": "001",
+      "sku": "00021",
+      "lot_id": "E021-02",
+      "quantity": 2,
+      "unit_cost": 280,
+      "value": 560
+    },
+    {
+      "warehouse": "002",
+      "sku": "00021",
+      "lot_id": "E021-02",
+      "quantity": 2,
+      "unit_cost": 280,
+      "value": 560
+    },
+    {
+      "warehouse": "001",
+      "sku": "00022",
+      "lot_id": "E022-02",
+      "quantity": 2,
+      "unit_cost": 287,
+      "value": 574
+    },
+    {
+      "warehouse": "002",
+      "sku": "00022",
+      "lot_id": "E022-02",
+      "quantity": 2,
+      "unit_cost": 287,
+      "value": 574
+    },
+    {
+      "warehouse": "001",
+      "sku": "00023",
+      "lot_id": "E023-02",
+      "quantity": 2,
+      "unit_cost": 294,
+      "value": 588
+    },
+    {
+      "warehouse": "002",
+      "sku": "00023",
+      "lot_id": "E023-02",
+      "quantity": 2,
+      "unit_cost": 294,
+      "value": 588
+    },
+    {
+      "warehouse": "001",
+      "sku": "00024",
+      "lot_id": "E024-02",
+      "quantity": 2,
+      "unit_cost": 301,
+      "value": 602
+    },
+    {
+      "warehouse": "002",
+      "sku": "00024",
+      "lot_id": "E024-02",
+      "quantity": 2,
+      "unit_cost": 301,
+      "value": 602
+    }
+  ],
+  "stock.csv": [
+    {
+      "warehouse": "001",
+      "sku": "00001",
+      "quantity": 2,
+      "value": 280
+    },
+    {
+      "warehouse": "002",
+      "sku": "00001",
+      "quantity": 2,
+      "value": 280
+    },
+    {
+      "warehouse": "003",
+      "sku": "00001",
+      "quantity": 0,
+      "value": 0
+    },
+    {
+      "warehouse": "001",
+      "sku": "00002",
+      "quantity": 2,
+      "value": 294
+    },
+    {
+      "warehouse": "002",
+      "sku": "00002",
+      "quantity": 2,
+      "value": 294
+    },
+    {
+      "warehouse": "003",
+      "sku": "00002",
+      "quantity": 0,
+      "value": 0
+    },
+    {
+      "warehouse": "001",
+      "sku": "00003",
+      "quantity": 2,
+      "value": 308
+    },
+    {
+      "warehouse": "002",
+      "sku": "00003",
+      "quantity": 2,
+      "value": 308
+    },
+    {
+      "warehouse": "003",
+      "sku": "00003",
+      "quantity": 0,
+      "value": 0
+    },
+    {
+      "warehouse": "001",
+      "sku": "00004",
+      "quantity": 2,
+      "value": 322
+    },
+    {
+      "warehouse": "002",
+      "sku": "00004",
+      "quantity": 2,
+      "value": 322
+    },
+    {
+      "warehouse": "003",
+      "sku": "00004",
+      "quantity": 0,
+      "value": 0
+    },
+    {
+      "warehouse": "001",
+      "sku": "00005",
+      "quantity": 2,
+      "value": 336
+    },
+    {
+      "warehouse": "002",
+      "sku": "00005",
+      "quantity": 2,
+      "value": 336
+    },
+    {
+      "warehouse": "003",
+      "sku": "00005",
+      "quantity": 0,
+      "value": 0
+    },
+    {
+      "warehouse": "001",
+      "sku": "00006",
+      "quantity": 2,
+      "value": 350
+    },
+    {
+      "warehouse": "002",
+      "sku": "00006",
+      "quantity": 2,
+      "value": 350
+    },
+    {
+      "warehouse": "003",
+      "sku": "00006",
+      "quantity": 0,
+      "value": 0
+    },
+    {
+      "warehouse": "001",
+      "sku": "00007",
+      "quantity": 2,
+      "value": 364
+    },
+    {
+      "warehouse": "002",
+      "sku": "00007",
+      "quantity": 2,
+      "value": 364
+    },
+    {
+      "warehouse": "003",
+      "sku": "00007",
+      "quantity": 0,
+      "value": 0
+    },
+    {
+      "warehouse": "001",
+      "sku": "00008",
+      "quantity": 2,
+      "value": 378
+    },
+    {
+      "warehouse": "002",
+      "sku": "00008",
+      "quantity": 2,
+      "value": 378
+    },
+    {
+      "warehouse": "003",
+      "sku": "00008",
+      "quantity": 0,
+      "value": 0
+    },
+    {
+      "warehouse": "001",
+      "sku": "00009",
+      "quantity": 2,
+      "value": 392
+    },
+    {
+      "warehouse": "002",
+      "sku": "00009",
+      "quantity": 2,
+      "value": 392
+    },
+    {
+      "warehouse": "003",
+      "sku": "00009",
+      "quantity": 0,
+      "value": 0
+    },
+    {
+      "warehouse": "001",
+      "sku": "00010",
+      "quantity": 2,
+      "value": 406
+    },
+    {
+      "warehouse": "002",
+      "sku": "00010",
+      "quantity": 2,
+      "value": 406
+    },
+    {
+      "warehouse": "003",
+      "sku": "00010",
+      "quantity": 0,
+      "value": 0
+    },
+    {
+      "warehouse": "001",
+      "sku": "00011",
+      "quantity": 2,
+      "value": 420
+    },
+    {
+      "warehouse": "002",
+      "sku": "00011",
+      "quantity": 2,
+      "value": 420
+    },
+    {
+      "warehouse": "003",
+      "sku": "00011",
+      "quantity": 0,
+      "value": 0
+    },
+    {
+      "warehouse": "001",
+      "sku": "00012",
+      "quantity": 2,
+      "value": 434
+    },
+    {
+      "warehouse": "002",
+      "sku": "00012",
+      "quantity": 2,
+      "value": 434
+    },
+    {
+      "warehouse": "003",
+      "sku": "00012",
+      "quantity": 0,
+      "value": 0
+    },
+    {
+      "warehouse": "001",
+      "sku": "00013",
+      "quantity": 2,
+      "value": 448
+    },
+    {
+      "warehouse": "002",
+      "sku": "00013",
+      "quantity": 2,
+      "value": 448
+    },
+    {
+      "warehouse": "003",
+      "sku": "00013",
+      "quantity": 0,
+      "value": 0
+    },
+    {
+      "warehouse": "001",
+      "sku": "00014",
+      "quantity": 2,
+      "value": 462
+    },
+    {
+      "warehouse": "002",
+      "sku": "00014",
+      "quantity": 2,
+      "value": 462
+    },
+    {
+      "warehouse": "003",
+      "sku": "00014",
+      "quantity": 0,
+      "value": 0
+    },
+    {
+      "warehouse": "001",
+      "sku": "00015",
+      "quantity": 2,
+      "value": 476
+    },
+    {
+      "warehouse": "002",
+      "sku": "00015",
+      "quantity": 2,
+      "value": 476
+    },
+    {
+      "warehouse": "003",
+      "sku": "00015",
+      "quantity": 0,
+      "value": 0
+    },
+    {
+      "warehouse": "001",
+      "sku": "00016",
+      "quantity": 2,
+      "value": 490
+    },
+    {
+      "warehouse": "002",
+      "sku": "00016",
+      "quantity": 2,
+      "value": 490
+    },
+    {
+      "warehouse": "003",
+      "sku": "00016",
+      "quantity": 0,
+      "value": 0
+    },
+    {
+      "warehouse": "001",
+      "sku": "00017",
+      "quantity": 2,
+      "value": 504
+    },
+    {
+      "warehouse": "002",
+      "sku": "00017",
+      "quantity": 2,
+      "value": 504
+    },
+    {
+      "warehouse": "003",
+      "sku": "00017",
+      "quantity": 0,
+      "value": 0
+    },
+    {
+      "warehouse": "001",
+      "sku": "00018",
+      "quantity": 2,
+      "value": 518
+    },
+    {
+      "warehouse": "002",
+      "sku": "00018",
+      "quantity": 2,
+      "value": 518
+    },
+    {
+      "warehouse": "003",
+      "sku": "00018",
+      "quantity": 0,
+      "value": 0
+    },
+    {
+      "warehouse": "001",
+      "sku": "00019",
+      "quantity": 2,
+      "value": 532
+    },
+    {
+      "warehouse": "002",
+      "sku": "00019",
+      "quantity": 2,
+      "value": 532
+    },
+    {
+      "warehouse": "003",
+      "sku": "00019",
+      "quantity": 0,
+      "value": 0
+    },
+    {
+      "warehouse": "001",
+      "sku": "00020",
+      "quantity": 2,
+      "value": 546
+    },
+    {
+      "warehouse": "002",
+      "sku": "00020",
+      "quantity": 2,
+      "value": 546
+    },
+    {
+      "warehouse": "003",
+      "sku": "00020",
+      "quantity": 0,
+      "value": 0
+    },
+    {
+      "warehouse": "001",
+      "sku": "00021",
+      "quantity": 2,
+      "value": 560
+    },
+    {
+      "warehouse": "002",
+      "sku": "00021",
+      "quantity": 2,
+      "value": 560
+    },
+    {
+      "warehouse": "003",
+      "sku": "00021",
+      "quantity": 0,
+      "value": 0
+    },
+    {
+      "warehouse": "001",
+      "sku": "00022",
+      "quantity": 2,
+      "value": 574
+    },
+    {
+      "warehouse": "002",
+      "sku": "00022",
+      "quantity": 2,
+      "value": 574
+    },
+    {
+      "warehouse": "003",
+      "sku": "00022",
+      "quantity": 0,
+      "value": 0
+    },
+    {
+      "warehouse": "001",
+      "sku": "00023",
+      "quantity": 2,
+      "value": 588
+    },
+    {
+      "warehouse": "002",
+      "sku": "00023",
+      "quantity": 2,
+      "value": 588
+    },
+    {
+      "warehouse": "003",
+      "sku": "00023",
+      "quantity": 0,
+      "value": 0
+    },
+    {
+      "warehouse": "001",
+      "sku": "00024",
+      "quantity": 2,
+      "value": 602
+    },
+    {
+      "warehouse": "002",
+      "sku": "00024",
+      "quantity": 2,
+      "value": 602
+    },
+    {
+      "warehouse": "003",
+      "sku": "00024",
+      "quantity": 0,
+      "value": 0
+    }
+  ],
+  "report.json": {
+    "effective_cutoff": "2025-02-28",
+    "received_cutoff": "2025-03-05",
+    "active_skus": 24,
+    "warehouses": 3,
+    "received_units": 408,
+    "issued_units": 384,
+    "returned_units": 72,
+    "transferred_units": 120,
+    "closing_units": 96,
+    "received_value": 79516,
+    "net_cogs": 58348,
+    "closing_value": 21168,
+    "audit_reasons": {
+      "late_received": 216,
+      "superseded": 216,
+      "cancelled": 24,
+      "after_close": 24,
+      "unknown_warehouse": 24,
+      "unknown_sku": 24,
+      "inactive_sku": 24,
+      "invalid_return": 48,
+      "insufficient_stock": 24,
+      "applied": 144
+    }
+  }
+}
