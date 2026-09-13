@@ -14,6 +14,7 @@
     "llm:skill-retrieval-gating": "node --env-file=.env --conditions=@org/source --import @swc-node/register/esm-register scripts/skill-retrieval-gating/index.mjs",
     "llm:p0-planning-ablation": "node --env-file=.env --conditions=@org/source --import @swc-node/register/esm-register scripts/p0-planning-ablation/index.mjs",
     "llm:p0-planning-rejudge": "node --env-file=.env --conditions=@org/source --import @swc-node/register/esm-register scripts/p0-planning-ablation/rejudge.mjs",
+    "llm:mosaic-e2e": "node --env-file=.env --conditions=@org/source --import @swc-node/register/esm-register scripts/mosaic-e2e/index.mjs",
     "okf": "node --conditions=@org/source --import @swc-node/register/esm-register scripts/okf.mjs"
   },
   "private": true,

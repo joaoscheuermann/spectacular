@@ -749,6 +749,60 @@ that historical association from the ignored run artifacts alone. Fresh
 generation outputs include their mode, full current experiment-source hash,
 and comparison-contract hash directly.
 
+The private `scripts/mosaic-e2e` experiment exercises the proposed separate
+acceptance-criteria and completion-judge architecture without the production
+Mosaic state machine. It reuses the retrieval lab's local skill catalog and
+public `llms`, `victor`, `agent`, `messages`, and `tool` APIs. A single request
+passes through P0 goals, hybrid retrieval and reranking, a global keep/drop
+gate, fresh P1 graph synthesis without P0, and a separate criteria call for each
+node in topological order. Each criteria call receives the request, kept skill
+bodies, full P1 graph, and current node and returns only that node's criteria.
+Nodes execute sequentially in topological order with independent final
+skill retrieval and selection, a real local terminal, and a fresh completion
+judge after each submission. Criteria remain fixed; only all-satisfied judge
+evaluations permit completion. Each executor receives the original request, the
+complete goal list as Markdown bullets containing only goal text, and its current
+node goal as the initial user message, with environment and selected skill bodies in its system
+prompt alongside always-available instructions. Executor instructions scope work
+and verification to the current goal, preserve earlier results and intermediate
+artifacts, and request submission once that goal is verified. Each fresh judge receives only
+the current node ID, goal, fixed criteria and candidate Markdown result, with
+environment and always-available instructions in its system prompt. It receives
+no original request, ancestor results, executor observation ledger or previous
+judgments. Goals and criteria must therefore supply the stage's requirements.
+Feedback continues the executor's conversation. A maximum of two submissions allows execution
+feedback, while an unfinished node stops the experiment without automatic
+replanning. Observations are runtime-owned; judgment references are validated
+only against that fresh judge's own dynamically available tool records. Complete
+executor and judge observations remain in traces and node results for external
+analysis, without being forwarded to subsequent judges. One Docker-backed `sandbox.createSandbox`
+session owns `/workspace` per run, with local inputs copied through the sandbox
+file API, no host bind mounts, and networking disabled. Executor and judge share
+that session; judge inspection-only behavior is prompt-based. The experiment loads
+the compiled `core` bundle through `bundle.loadBundles`, binds all seven tool
+factories to the session, and uses no experiment-owned terminal. Optional core
+skills join the existing retrieval catalog; always-available core skills are
+included as complete bodies in P1 planning context and injected into executor
+and judge instructions. They remain excluded from retrieval and selection.
+The manifest snapshots core skill
+records and tool definitions. Core `web` requests run on the host and are not
+restricted by the container's disabled networking. The runner exports
+the workspace as a tar archive before disposing the container in `finally`, on
+success or failure. Provider credentials stay in the host process. A self-contained CSV
+case and a provider-free preparation command support initial validation. UUID
+outputs preserve inputs, source hashes, intermediate traces, observations,
+judgments and provider usage. Stage results are also written incrementally to
+individual JSON files under each run's `stages/` directory, with sequential,
+sanitized filenames that preserve repeated stages. These files retain the
+trace entry's timestamp, stage, and data; all entries remain in `trace.jsonl`,
+including inputs, usage, and tool observations that have no individual file.
+This diagnostic neither changes the production
+Mosaic contracts nor establishes comparative or statistical superiority.
+Its default planning and skill-selection profile is `google/gemini-3.8-flash`
+with high effort; execution independently uses `openai/gpt-6-astra` with low
+effort. Criteria use `openai/gpt-5.6-sol` and completion judging uses
+`openai/gpt-5.6-sol`, both with high effort.
+
 The SkillsBench composition condition scans a caller-verified clean checkout of
 the existing v1.1 pin into a deterministic global catalog, hashes every package,
 namespaces same-name/different-body collisions, and preserves task-to-skill gold
